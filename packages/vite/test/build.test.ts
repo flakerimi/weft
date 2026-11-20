@@ -616,6 +616,47 @@ describe('buildSite with an app build', { timeout: 30_000 }, () => {
     expect(snapshot(app)).toEqual(before)
   })
 
+  it('copies the app into the folder its prefix names, so its URLs are its files', async () => {
+    const app = tempDir()
+    appFiles(app)
+    for (const [prefix, folder] of [
+      ['/admin', 'admin'],
+      ['/tools/admin', 'tools/admin'],
+      ['/constructor', 'constructor'],
+    ]) {
+      const out = tempDir()
+      const manifest = await buildSite({ root: fixture('static-site'), outDir: out, appPrefix: prefix, appDir: app })
+      expect(readFileSync(join(out, folder, 'index.html'), 'utf8')).toBe('<!doctype html><div id="app"></div>')
+      expect(readFileSync(join(out, folder, 'assets/main.js'), 'utf8')).toBe('console.log("app")')
+      expect(existsSync(join(out, 'app'))).toBe(false)
+      expect(manifest.files[`${prefix}/index.html`]).toMatchObject({ type: 'text/html; charset=utf-8', br: true, gz: true })
+      expect(manifest.files[`${prefix}/assets/main.js`]).toMatchObject({ br: true, gz: true })
+      const routes = JSON.parse(readFileSync(join(out, 'routes.json'), 'utf8')) as RoutesJson
+      expect(routes.app).toEqual({ prefix, index: `${folder}/index.html` })
+    }
+  })
+
+  it('refuses an appPrefix that is not a folder of its own, in one sentence', async () => {
+    const app = tempDir()
+    appFiles(app)
+    const build = (appPrefix: string) => buildSite({ root: fixture('static-site'), outDir: tempDir(), appPrefix, appDir: app })
+    for (const prefix of ['app', '/app/', '//app']) {
+      await expect(build(prefix)).rejects.toThrow(`buildSite: appPrefix "${prefix}" must start with "/" and not end with one, like "/app".`)
+    }
+    for (const prefix of ['/a//b', '/a/./b', '/a/../b', '/a\\b']) {
+      await expect(build(prefix)).rejects.toThrow(`buildSite: appPrefix "${prefix}" has an empty, ".", ".." or backslashed segment.`)
+    }
+    for (const [prefix, why] of [
+      ['/pages', 'holds the built pages'],
+      ['/Pages/x', 'holds the built pages'],
+      ['/api', 'the Go server sends to the API'],
+      ['/api/app', 'the Go server sends to the API'],
+    ]) {
+      const first = prefix.split('/')[1]
+      await expect(build(prefix)).rejects.toThrow(`buildSite: appPrefix "${prefix}" is under /${first}, which ${why}; use another prefix, like "/app".`)
+    }
+  })
+
   it('takes the app from <root>/app-dist unless told otherwise', async () => {
     const root = linkedSite('static-site')
     appFiles(join(root, 'app-dist'))

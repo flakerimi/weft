@@ -55,10 +55,11 @@ type resource struct {
 	links              []string
 }
 
-// A variant is one encoding of a file, with the values of its headers in
-// header order; Content-Encoding is there only when it is compressed.
+// A variant is one encoding of a file: its bytes, its ETag, and the values of
+// its headers in variantHeaders order (Content-Encoding only when compressed).
 type variant struct {
 	body   []byte
+	etag   string
 	values []string
 }
 
@@ -72,7 +73,26 @@ const notModifiedHeaders = 3
 // anything under /pages/.
 var buildOnly = map[string]bool{"/manifest.json": true, "/routes.json": true, "/.weft-build": true}
 
-// loadSite reads the build that raw, dist's manifest.json, describes:
+// pageManifest returns dist's manifest.json when dist is a page build: it has
+// a routes.json file, and a manifest.json whose files member is a JSON object.
+// A single-page app's web app manifest.json is not one.
+func pageManifest(dist fs.FS) ([]byte, bool) {
+	if fi, err := fs.Stat(dist, "routes.json"); err != nil || !fi.Mode().IsRegular() {
+		return nil, false
+	}
+	raw, err := fs.ReadFile(dist, "manifest.json")
+	if err != nil {
+		return nil, false
+	}
+	var top map[string]json.RawMessage
+	if json.Unmarshal(raw, &top) != nil {
+		return nil, false
+	}
+	files := top["files"]
+	return raw, len(files) > 0 && files[0] == '{'
+}
+
+// loadSite reads the page build that raw, dist's manifest.json, describes:
 // routes.json and every listed file with its variants. It panics, naming the
 // file, if any of it is missing or malformed.
 func loadSite(dist fs.FS, raw []byte) *site {
@@ -81,9 +101,7 @@ func loadSite(dist fs.FS, raw []byte) *site {
 		panic(fmt.Sprintf("weft.Serve: dist/manifest.json is not a Weft build manifest (%v).", err))
 	}
 	rawRoutes, err := fs.ReadFile(dist, "routes.json")
-	if errors.Is(err, fs.ErrNotExist) {
-		panic("weft.Serve: dist has manifest.json but no routes.json.")
-	} else if err != nil {
+	if err != nil {
 		panic(fmt.Sprintf("weft.Serve: dist/routes.json cannot be read (%v).", err))
 	}
 	var routes buildRoutes
@@ -96,8 +114,8 @@ func loadSite(dist fs.FS, raw []byte) *site {
 		if name := strings.TrimPrefix(key, "/"); !strings.HasPrefix(key, "/") || !fs.ValidPath(name) || name == "." {
 			panic(fmt.Sprintf(`weft.Serve: manifest.json lists %s, which is not a path like "/assets/app.js".`, key))
 		}
-		if len(f.ETag) < 2 || !strings.HasSuffix(f.ETag, `"`) || !strings.HasPrefix(strings.TrimPrefix(f.ETag, "W/"), `"`) {
-			panic(fmt.Sprintf(`weft.Serve: manifest.json gives %s the ETag %s, which is not a quoted entity tag like "abc".`, key, f.ETag))
+		if !entityTag(f.ETag) {
+			panic(fmt.Sprintf(`weft.Serve: manifest.json gives %s the ETag %s, which is not an entity tag like "abc" with no quote, comma, space or control character inside.`, key, f.ETag))
 		}
 		s.files[key] = &resource{
 			identity: readVariant(dist, key, f, ""),
@@ -114,6 +132,9 @@ func loadSite(dist fs.FS, raw []byte) *site {
 		return &resource{identity: res.identity, br: res.br, gzip: res.gzip, links: links}
 	}
 	for _, p := range routes.Pages {
+		if s.pages[p.Path] != nil {
+			panic(fmt.Sprintf("weft.Serve: routes.json lists the page %s twice.", p.Path))
+		}
 		s.pages[p.Path] = route(p.Path, p.HTML, m.Hints[p.Path])
 	}
 	if routes.NotFound != nil {
@@ -124,6 +145,21 @@ func loadSite(dist fs.FS, raw []byte) *site {
 		s.app = route(routes.App.Prefix, routes.App.Index, nil)
 	}
 	return s
+}
+
+// entityTag reports whether t is an entity tag (RFC 9110 §8.8.3), "abc" or
+// W/"abc", whose opaque part has no comma: etagMatch splits on commas.
+func entityTag(t string) bool {
+	t = strings.TrimPrefix(t, "W/")
+	if len(t) < 2 || t[0] != '"' || t[len(t)-1] != '"' {
+		return false
+	}
+	for _, c := range []byte(t[1 : len(t)-1]) {
+		if c <= ' ' || c == '"' || c == ',' || c == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 // readVariant reads the listed file at URL path key in one encoding ("" for
@@ -155,7 +191,7 @@ func readVariant(dist fs.FS, key string, f manifestFile, encoding string) *varia
 	if encoding != "" {
 		values = append(values, encoding)
 	}
-	return &variant{body: body, values: values}
+	return &variant{body: body, etag: etag, values: values}
 }
 
 // ServeHTTP serves a request that is not for the API: a page, a listed file,
@@ -198,8 +234,8 @@ func (s *site) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // serve writes res with status: the 304 when it is a 200 the client already
-// has, else a 103 with its Link values when it has some, then the variant the
-// client accepts best. Its only allocation is the one slice that holds the
+// has, else a 103 with its Link values when it has some (and the client
+// speaks HTTP/1.1 or later), then the variant the client accepts best. Its only allocation is the one slice that holds the
 // header values, so a handler after it may change them without changing res.
 func (res *resource) serve(w http.ResponseWriter, r *http.Request, status int) {
 	v := res.pick(r.Header["Accept-Encoding"])
@@ -208,7 +244,7 @@ func (res *resource) serve(w http.ResponseWriter, r *http.Request, status int) {
 	copy(values, v.values)
 	copy(values[n:], res.links)
 	h := w.Header()
-	if status == http.StatusOK && etagMatch(r.Header["If-None-Match"], v.values[1]) {
+	if status == http.StatusOK && etagMatch(r.Header["If-None-Match"], v.etag) {
 		for i := range notModifiedHeaders {
 			h[variantHeaders[i]] = values[i : i+1 : i+1]
 		}
@@ -217,7 +253,10 @@ func (res *resource) serve(w http.ResponseWriter, r *http.Request, status int) {
 	}
 	if len(res.links) > 0 {
 		h["Link"] = values[n:len(values):len(values)]
-		w.WriteHeader(http.StatusEarlyHints)
+		// RFC 9110 §15.2: no 1xx response to an HTTP/1.0 client.
+		if r.ProtoAtLeast(1, 1) {
+			w.WriteHeader(http.StatusEarlyHints)
+		}
 	}
 	for i := range n {
 		h[variantHeaders[i]] = values[i : i+1 : i+1]
@@ -229,26 +268,33 @@ func (res *resource) serve(w http.ResponseWriter, r *http.Request, status int) {
 }
 
 // pick returns the variant to send for these Accept-Encoding values: the
-// accepted encoding with the highest q-value, br when br and gzip tie, else
-// the file as it is.
+// accepted encoding with the highest q-value, br when br and gzip tie, unless
+// the client names identity with a higher q-value still; else the file as it
+// is, which is also what a client that accepts nothing gets (RFC 9110 §12.5.3).
 func (res *resource) pick(accept []string) *variant {
-	brQ, gzQ := acceptQ(accept)
+	brQ, gzQ, idQ := acceptQ(accept)
 	br := brQ > 0 && res.br != nil
 	gz := gzQ > 0 && res.gzip != nil
+	v, q := res.identity, 0.0
 	switch {
 	case br && (!gz || brQ >= gzQ):
-		return res.br
+		v, q = res.br, brQ
 	case gz:
-		return res.gzip
+		v, q = res.gzip, gzQ
 	}
-	return res.identity
+	if idQ > q {
+		return res.identity
+	}
+	return v
 }
 
-// acceptQ returns the q-values Accept-Encoding gives br and gzip: from their
-// own entries, else from "*", else -1. An entry without a q-value has 1, and
-// one whose q-value is not a number has 0.
-func acceptQ(accept []string) (br, gz float64) {
-	br, gz, star := -1.0, -1.0, -1.0
+// acceptQ returns the q-values Accept-Encoding gives br and gzip (from their
+// own entries, else from "*") and identity (from its own entry only), or -1
+// for none. An entry without a q-value has 1, and one whose q-value is not a
+// number has 0.
+func acceptQ(accept []string) (br, gz, identity float64) {
+	br, gz, identity = -1.0, -1.0, -1.0
+	star := -1.0
 	for _, line := range accept {
 		for line != "" {
 			var item string
@@ -260,6 +306,8 @@ func acceptQ(accept []string) (br, gz float64) {
 				br = qValue(params)
 			case strings.EqualFold(name, "gzip"), strings.EqualFold(name, "x-gzip"):
 				gz = qValue(params)
+			case strings.EqualFold(name, "identity"):
+				identity = qValue(params)
 			case name == "*":
 				star = qValue(params)
 			}
@@ -271,7 +319,7 @@ func acceptQ(accept []string) (br, gz float64) {
 	if gz < 0 {
 		gz = star
 	}
-	return br, gz
+	return br, gz, identity
 }
 
 func qValue(params string) float64 {
@@ -291,7 +339,9 @@ func qValue(params string) float64 {
 }
 
 // etagMatch reports whether If-None-Match lists etag, compared weakly
-// (a W/ prefix is ignored), or is "*".
+// (a W/ prefix is ignored), or is "*". The list is split on commas, which an
+// entity tag may contain in general but never does here: the build's tags are
+// hex digits, and loadSite refuses any tag with a comma.
 func etagMatch(ifNoneMatch []string, etag string) bool {
 	etag = strings.TrimPrefix(etag, "W/")
 	for _, line := range ifNoneMatch {

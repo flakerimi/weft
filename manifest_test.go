@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"maps"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"testing/fstest"
@@ -50,6 +51,12 @@ var siteHints = map[string][]string{
 // variants, routes.json, manifest.json and the .weft-build marker.
 func pageBuild(t testing.TB) fstest.MapFS {
 	t.Helper()
+	return buildOf(t, siteFiles, siteRoutes)
+}
+
+// buildOf returns a page build of these files and this routes.json.
+func buildOf(t testing.TB, siteFiles []siteFile, siteRoutes string) fstest.MapFS {
+	t.Helper()
 	dist := fstest.MapFS{}
 	files := map[string]any{}
 	for _, f := range siteFiles {
@@ -85,6 +92,13 @@ func editManifest(t *testing.T, dist fstest.MapFS, edit func(m map[string]any)) 
 	}
 	out := maps.Clone(dist)
 	out["manifest.json"] = &fstest.MapFile{Data: b}
+	return out
+}
+
+// editRaw returns dist with the file name holding data.
+func editRaw(dist fstest.MapFS, name, data string) fstest.MapFS {
+	out := maps.Clone(dist)
+	out[name] = &fstest.MapFile{Data: []byte(data)}
 	return out
 }
 
@@ -127,17 +141,59 @@ func TestManifestMissingVariantPanics(t *testing.T) {
 	})
 }
 
-func TestManifestUnreadablePanics(t *testing.T) {
-	dist := pageBuild(t)
-	dist["manifest.json"] = &fstest.MapFile{Data: []byte(`{"files":`)}
-	wantPanic(t, "weft.Serve: dist/manifest.json is not a Weft build manifest (unexpected end of JSON input).", func() {
-		Serve(dist, nil)
+// A dist is a page build only with routes.json and a manifest.json whose
+// files is an object; anything else is a single-page app, which needs its
+// index.html.
+func TestManifestNotAPageBuild(t *testing.T) {
+	for name, dist := range map[string]fstest.MapFS{
+		"no routes.json":     without(pageBuild(t), "routes.json"),
+		"invalid JSON":       editRaw(pageBuild(t), "manifest.json", `{"files":`),
+		"no files":           editRaw(pageBuild(t), "manifest.json", `{"hints":{}}`),
+		"files not object":   editRaw(pageBuild(t), "manifest.json", `{"files":[]}`),
+		"files null":         editRaw(pageBuild(t), "manifest.json", `{"files":null}`),
+		"manifest is array":  editRaw(pageBuild(t), "manifest.json", `[]`),
+		"Files, not files":   editRaw(pageBuild(t), "manifest.json", `{"Files":{}}`),
+		"routes.json folder": editRaw(without(pageBuild(t), "routes.json"), "routes.json/x", `{}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			wantPanic(t, "weft.Serve: dist has no index.html", func() { Serve(dist, nil) })
+		})
+	}
+}
+
+// A single-page app with a web app manifest is served as before.
+func TestManifestWebAppManifestIsSPA(t *testing.T) {
+	webManifest := `{"name":"Weft","icons":[{"src":"/icon.png","sizes":"192x192"}],"start_url":"/"}`
+	dist := fstest.MapFS{
+		"index.html":        {Data: []byte(`<!doctype html><div id="app"></div>`)},
+		"manifest.json":     {Data: []byte(webManifest)},
+		"assets/app-abc.js": {Data: []byte(`console.log(1)`)},
+	}
+	h := Serve(dist, nil)
+	if r := do(t, h, "GET", "/manifest.json"); r.StatusCode != 200 || r.body != webManifest {
+		t.Fatalf("manifest.json: status %d body %q", r.StatusCode, r.body)
+	}
+	if r := do(t, h, "GET", "/customers/42"); r.StatusCode != 200 || !strings.Contains(r.body, `id="app"`) {
+		t.Fatalf("client route: status %d body %q", r.StatusCode, r.body)
+	}
+	if r := do(t, h, "GET", "/assets/app-abc.js"); r.Header.Get("Cache-Control") != cacheImmutable {
+		t.Fatalf("asset: cache-control %q", r.Header.Get("Cache-Control"))
+	}
+}
+
+func TestManifestBadRoutesPanics(t *testing.T) {
+	wantPanic(t, "weft.Serve: dist/routes.json is not a Weft route map (unexpected end of JSON input).", func() {
+		Serve(editRaw(pageBuild(t), "routes.json", `{"pages":`), nil)
+	})
+	wantPanic(t, "weft.Serve: dist/manifest.json is not a Weft build manifest (json: cannot unmarshal number into Go struct field buildManifest.files of type weft.manifestFile).", func() {
+		Serve(editRaw(pageBuild(t), "manifest.json", `{"files":{"/x":5}}`), nil)
 	})
 }
 
-func TestManifestNeedsRoutes(t *testing.T) {
-	wantPanic(t, "weft.Serve: dist has manifest.json but no routes.json.", func() {
-		Serve(without(pageBuild(t), "routes.json"), nil)
+func TestManifestDuplicatePagePanics(t *testing.T) {
+	routes := `{"pages":[{"path":"/about","html":"pages/about/index.html"},{"path":"/about","html":"pages/counter/index.html"}],"notFound":null,"app":null}`
+	wantPanic(t, "weft.Serve: routes.json lists the page /about twice.", func() {
+		Serve(editRaw(pageBuild(t), "routes.json", routes), nil)
 	})
 }
 
@@ -153,12 +209,20 @@ func TestManifestBadPathPanics(t *testing.T) {
 }
 
 func TestManifestBadETagPanics(t *testing.T) {
-	dist := editManifest(t, pageBuild(t), func(m map[string]any) {
-		m["files"].(map[string]any)["/robots.txt"].(map[string]any)["etag"] = "robots"
-	})
-	wantPanic(t, `weft.Serve: manifest.json gives /robots.txt the ETag robots, which is not a quoted entity tag like "abc".`, func() {
-		Serve(dist, nil)
-	})
+	setETag := func(etag string) fstest.MapFS {
+		return editManifest(t, pageBuild(t), func(m map[string]any) {
+			m["files"].(map[string]any)["/robots.txt"].(map[string]any)["etag"] = etag
+		})
+	}
+	for _, etag := range []string{"robots", `"`, `"a"b"`, `"a,b"`, `"a b"`, `W/robots`, `"robots`, `robots"`, "\"a\x01\"", "\"a\x7f\"", `x"a"`} {
+		wantPanic(t, `weft.Serve: manifest.json gives /robots.txt the ETag `+etag+`, which is not an entity tag like "abc" with no quote, comma, space or control character inside.`, func() {
+			Serve(setETag(etag), nil)
+		})
+	}
+	// The shortest tag, a weak one, and one with obs-text are entity tags.
+	for _, etag := range []string{`""`, `W/"robots"`, "\"r\u00e9\""} {
+		Serve(setETag(etag), nil)
+	}
 }
 
 func TestManifestRouteToUnlistedFilePanics(t *testing.T) {

@@ -177,6 +177,15 @@ func TestManifestEncoding(t *testing.T) {
 		{[]string{"br;q=nope, gzip"}, "gzip"},
 		{[]string{"br;q=2, gzip;q=0.5"}, "gzip"},
 		{[]string{"compress, deflate"}, ""},
+		// identity wins only when ranked above every compressed option accepted.
+		{[]string{"identity;q=1, br;q=0.5"}, ""},
+		{[]string{"identity;q=0.5, br;q=0.5"}, "br"},
+		{[]string{"br;q=0.4, gzip;q=0.6, identity;q=0.5"}, "gzip"},
+		{[]string{"identity, *;q=0.9"}, ""},
+		// identity;q=0 with nothing else acceptable still gets identity (RFC 9110 §12.5.3).
+		{[]string{"identity;q=0"}, ""},
+		{[]string{"identity;q=0, br;q=0, gzip;q=0"}, ""},
+		{[]string{"identity;q=0, gzip;q=0.1"}, "gzip"},
 	} {
 		req := httptest.NewRequest("GET", "/about", nil)
 		for _, v := range c.accept {
@@ -321,6 +330,33 @@ func TestManifestApp(t *testing.T) {
 	}
 }
 
+// The build puts the app in the folder its prefix names; the same rules hold.
+func TestManifestAppUnderOwnPrefix(t *testing.T) {
+	h := Serve(buildOf(t, []siteFile{
+		{"/admin/index.html", `<div id="admin"></div>`, `"admin"`, "text/html; charset=utf-8", true, false},
+		{"/admin/assets/main-abc.js", "admin()", `"adminmain"`, "text/javascript; charset=utf-8", true, false},
+		{"/assets/main-abc.js", "site()", `"sitemain"`, "text/javascript; charset=utf-8", true, true},
+	}, `{"pages":[],"notFound":null,"app":{"prefix":"/admin","index":"admin/index.html"}}`), nil)
+	for _, c := range []struct {
+		path   string
+		status int
+		body   string
+	}{
+		{"/admin", 200, `<div id="admin"></div>`},
+		{"/admin/", 200, `<div id="admin"></div>`},
+		{"/admin/users/7", 200, `<div id="admin"></div>`},
+		{"/admin/assets/main-abc.js", 200, "admin()"},
+		{"/admin/assets/gone.js", 404, "404 page not found\n"},
+		{"/assets/main-abc.js", 200, "site()"},
+		{"/app/x", 404, "404 page not found\n"},
+		{"/administrator", 404, "404 page not found\n"},
+	} {
+		if r := do(t, h, "GET", c.path); r.StatusCode != c.status || r.body != c.body {
+			t.Errorf("%s: status %d body %q", c.path, r.StatusCode, r.body)
+		}
+	}
+}
+
 func TestManifestFiles(t *testing.T) {
 	h := Serve(pageBuild(t), nil)
 	for _, c := range []struct{ path, body, cache string }{
@@ -433,6 +469,21 @@ func TestManifestEarlyHintsHeaders(t *testing.T) {
 	// A page without hints sends no 103.
 	if r := do(t, h, "GET", "/about"); len(r.early) != 0 || r.Header.Get("Link") != "" {
 		t.Fatalf("about: 103s %v Link %q", r.early, r.Header.Get("Link"))
+	}
+}
+
+// RFC 9110 §15.2: no 1xx to an HTTP/1.0 client. The Link headers stay on the 200.
+func TestManifestNoEarlyHintsForHTTP10(t *testing.T) {
+	req := httptest.NewRequest("GET", "/counter", nil)
+	req.Proto, req.ProtoMajor, req.ProtoMinor = "HTTP/1.0", 1, 0
+	rec := &recorder{ResponseRecorder: httptest.NewRecorder()}
+	Serve(pageBuild(t), nil).ServeHTTP(rec, req)
+	res := rec.Result()
+	if len(rec.early) != 0 {
+		t.Fatalf("103s to HTTP/1.0: %v", rec.early)
+	}
+	if res.StatusCode != 200 || !slices.Equal(res.Header.Values("Link"), siteHints["/counter"]) {
+		t.Fatalf("status %d, Link %q", res.StatusCode, res.Header.Values("Link"))
 	}
 }
 

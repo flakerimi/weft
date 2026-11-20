@@ -26,7 +26,11 @@ export interface BuildOptions {
    * folders.
    */
   outDir: string
-  /** The client-rendered app's path prefix, e.g. `/app`; its build is copied from `appDir` into `app/`. */
+  /**
+   * The client-rendered app's path prefix, e.g. `/app`; its build is copied from
+   * `appDir` into the folder the prefix names (`/admin` into `admin/`), so its
+   * files are served at their own URLs.
+   */
   appPrefix?: string
   /** Where the app's own build is, with its `index.html`; read, never changed. Default `<root>/app-dist`. */
   appDir?: string
@@ -231,7 +235,7 @@ async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssI
   }
   await write('routes.json', JSON.stringify(routesJson, null, 2) + '\n')
   // The app's own .br/.gz would be stale beside the ones made here; public/ is copied as it is.
-  if (appDir) await copyTree(appDir, appDir, dir, 'app', taken, { variants: false })
+  if (app && appDir) await copyTree(appDir, appDir, dir, app.prefix.slice(1), taken, { variants: false })
   await copyTree(join(root, 'public'), 'public', dir, '', taken, { variants: true })
 
   // The .br and .gz the build makes may not be names already taken.
@@ -512,11 +516,26 @@ function checkOutDir(outDir: string, root: string, appDir: string | null, vueFil
   }
 }
 
+/** First path segments the app may not have, and why. */
+const RESERVED_PREFIXES = new Map([
+  ['pages', 'holds the built pages'],
+  ['api', 'the Go server sends to the API'],
+])
+
+/** The app's route; its build goes into the folder its prefix names. */
 function appRoute(prefix: string): NonNullable<RoutesJson['app']> {
   if (!/^\/[^/]/.test(prefix) || prefix.endsWith('/')) {
     throw new Error(`buildSite: appPrefix "${prefix}" must start with "/" and not end with one, like "/app".`)
   }
-  return { prefix, index: 'app/index.html' }
+  const segments = prefix.slice(1).split('/')
+  if (segments.some((s) => s === '' || s === '.' || s === '..' || /[\\\0]/.test(s))) {
+    throw new Error(`buildSite: appPrefix "${prefix}" has an empty, ".", ".." or backslashed segment.`)
+  }
+  // The Go server sends /api/ to the API and never serves the page files under /pages/ as they are.
+  const first = segments[0]!
+  const taken = RESERVED_PREFIXES.get(first.toLowerCase())
+  if (taken) throw new Error(`buildSite: appPrefix "${prefix}" is under /${first}, which ${taken}; use another prefix, like "/app".`)
+  return { prefix, index: `${segments.join('/')}/index.html` }
 }
 
 /** The theme stylesheet, then `weft.css`: the CSS every page starts with, and their files. */
