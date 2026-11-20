@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weft — one UI system for Go and Vue apps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ground: #E8ECF4;
+  --ink: #141C3A;
+  --indigo: #2B3D8F;
+  --muted: #5A6482;
+  --warp: #C9D0E0;
+  --saffron: #E2A11B;
+  --paper: #F4F6FA;
+  --code-bg: #141C3A;
+  --code-ink: #DDE3F2;
+  --warp-gap: 28px;
+  --col: min(1160px, 100vw - 48px);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #0F1530; --ink: #E6EAF5; --indigo: #9FB0F2; --muted: #95A0C2;
+    --warp: #1C2448; --paper: #161E40; --code-bg: #0A0F24; --code-ink: #DDE3F2;
+  }
+}
+* { box-sizing: border-box; }
+html { background: var(--ground); color: var(--ink); overflow-x: clip; }
+body {
+  margin: 0;
+  font: 400 18px/1.55 "Bricolage Grotesque", system-ui, sans-serif;
+  font-optical-sizing: auto;
+  /* the warp: vertical threads behind everything */
+  background-image: repeating-linear-gradient(90deg, var(--warp) 0 1px, transparent 1px var(--warp-gap));
+  background-attachment: fixed;
+}
+a { color: var(--indigo); text-underline-offset: 3px; }
+:focus-visible { outline: 3px solid var(--saffron); outline-offset: 3px; }
+.wrap { width: var(--col); margin-inline: auto; position: relative; }
+code, pre, kbd { font-family: "JetBrains Mono", ui-monospace, monospace; }
+
+/* header */
+.top { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
+.top .mark { height: 26px; width: auto; display: block; }
+.top nav { display: flex; gap: 28px; font-size: 16px; }
+.top nav a { color: var(--ink); text-decoration: none; }
+.top nav a:hover { color: var(--indigo); text-decoration: underline; }
+
+/* hero */
+.hero { padding: 72px 0 48px; }
+.mark-wrap { position: relative; width: min(560px, 78vw); }
+.hero .word { width: 100%; height: auto; display: block; color: var(--ink); }
+/* the e's bar becomes the weft thread: it starts on the bar and pulls across the page */
+.thread-line {
+  position: absolute; left: 38.6%; top: 90.3%; height: 9.02%;
+  border-radius: 999px; background: var(--saffron);
+  width: 24.1%; animation: pull 1.2s cubic-bezier(.2,.7,.1,1) .3s forwards;
+}
+@keyframes pull { to { width: 100vw; } }
+@media (prefers-reduced-motion: reduce) { .thread-line { animation: none; width: 100vw; } }
+.hero h1 {
+  font-size: clamp(34px, 5.4vw, 64px); line-height: 1.04; font-weight: 700;
+  letter-spacing: -0.025em; margin: 44px 0 18px; max-width: 15ch;
+}
+.hero p.lead { font-size: 21px; color: var(--muted); max-width: 46ch; margin: 0 0 34px; }
+.install {
+  display: flex; align-items: stretch; max-width: 620px;
+  background: var(--code-bg); color: var(--code-ink); border-radius: 10px; overflow: hidden;
+}
+.install code { flex: 1; padding: 16px 20px; font-size: 16px; white-space: nowrap; overflow-x: auto; }
+.install code b { color: var(--saffron); font-weight: 600; }
+.install button {
+  font: 600 16px "Bricolage Grotesque", sans-serif; border: 0; padding: 0 22px;
+  background: var(--saffron); color: #141C3A; cursor: pointer;
+}
+.install button:hover { background: #F0B53A; }
+.hero .after { margin-top: 14px; font-size: 15px; color: var(--muted); }
+.hero .after code { font-size: 14px; color: var(--ink); }
+
+/* sections: each starts where a weft thread crosses the warp */
+section.band { padding: 96px 0 40px; position: relative; }
+section.band::before {
+  content: ""; position: absolute; left: calc(50% - 50vw); width: 100vw; top: 56px; height: 3px;
+  background: var(--saffron); opacity: .9;
+}
+.band h2 { font-size: clamp(28px, 3.6vw, 42px); line-height: 1.1; letter-spacing: -0.02em; font-weight: 700; margin: 0 0 14px; max-width: 26ch; text-wrap: balance; }
+.band .intro { font-size: 19px; color: var(--muted); max-width: 58ch; margin: 0 0 36px; }
+
+/* adaptive demo */
+.adapt { display: grid; grid-template-columns: 1.05fr 1fr 0.72fr; gap: 28px; align-items: start; }
+.src { background: var(--code-bg); color: var(--code-ink); border-radius: 10px; padding: 22px 24px; font-size: 15px; line-height: 1.7; margin: 0; }
+.src .t { color: #9FB0F2; } .src .a { color: var(--saffron); } .src .c { color: #6F7AA0; }
+.screen { background: var(--paper); border: 1px solid var(--warp); border-radius: 12px; padding: 18px; position: relative; }
+.screen h3, .phone h3 { font-size: 15px; font-weight: 600; margin: 0 0 12px; color: var(--muted); }
+.field { border: 1.5px solid var(--indigo); border-radius: 8px; padding: 8px 12px; font-size: 15px; display: flex; justify-content: space-between; background: var(--ground); }
+.cal { margin-top: 8px; border: 1px solid var(--warp); border-radius: 10px; padding: 12px; background: var(--ground); box-shadow: 0 12px 30px -14px rgba(20,28,58,.35); }
+.cal .m { font-weight: 600; font-size: 14px; margin-bottom: 8px; }
+.cal .g { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; font-size: 12.5px; text-align: center; }
+.cal .g span { padding: 4px 0; border-radius: 5px; }
+.cal .g .on { background: var(--indigo); color: #fff; }
+.cal .g .dim { color: var(--muted); opacity: .5; }
+.phone {
+  border: 1px solid var(--warp); border-radius: 26px; padding: 14px 12px 12px; background: var(--paper);
+  aspect-ratio: 9 / 17; display: flex; flex-direction: column; position: relative; overflow: hidden;
+}
+.phone .behind { opacity: .45; display: grid; gap: 8px; margin-top: 6px; }
+.phone .behind b { font-size: 17px; }
+.phone .behind .field { font-size: 14px; }
+.phone .behind i { display: block; height: 9px; border-radius: 5px; background: var(--warp); }
+.phone .behind i.s { width: 60%; }
+.phone .sheet { margin-top: auto; position: relative; }
+.sheet { background: var(--ground); border-radius: 16px 16px 10px 10px; padding: 12px 10px; box-shadow: 0 -10px 24px -16px rgba(20,28,58,.5); }
+.sheet .grab { width: 34px; height: 4px; border-radius: 2px; background: var(--warp); margin: 0 auto 10px; }
+.sheet .days { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.sheet .days span { border: 1px solid var(--warp); border-radius: 10px; padding: 10px 0; text-align: center; font-size: 13px; }
+.sheet .days .on { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+.caption { font-size: 14px; color: var(--muted); margin-top: 10px; }
+
+/* speed: bars as threads */
+.bench { display: grid; gap: 16px; max-width: 960px; }
+.bench .row { display: grid; grid-template-columns: 220px 1fr 7.5ch; gap: 22px; align-items: center; }
+.bench .who { font-size: 16px; }
+.bench .who small { display: block; color: var(--muted); font-size: 13.5px; }
+.bench .bar { height: 9px; border-radius: 5px; background: var(--warp); position: relative; }
+.bench .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 5px; background: var(--indigo); }
+.bench .bar.us i { background: var(--saffron); }
+.bench .n { font: 600 16px "JetBrains Mono", monospace; text-align: right; }
+.bench-note { font-size: 15px; color: var(--muted); max-width: 70ch; margin-top: 26px; }
+.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-top: 54px; max-width: 980px; }
+.facts p { margin: 0; color: var(--muted); font-size: 16.5px; }
+.facts strong { display: block; color: var(--ink); font-size: 19px; margin-bottom: 4px; }
+
+/* agents */
+.agents { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; align-items: start; }
+.agents ul { margin: 0; padding: 0; list-style: none; }
+.agents li { padding: 14px 0; border-top: 1px solid var(--warp); }
+.agents li strong { display: block; }
+.agents li span { color: var(--muted); font-size: 16px; }
+
+/* footer */
+footer { padding: 90px 0 60px; }
+footer .wrap { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; color: var(--muted); font-size: 15px; }
+footer img { height: 22px; }
+
+@media (max-width: 880px) {
+  .adapt { grid-template-columns: 1fr 1fr; }
+  .adapt .src { grid-column: 1 / -1; }
+  .agents, .facts { grid-template-columns: 1fr; gap: 20px; }
+  .bench .row { grid-template-columns: 1fr auto; gap: 8px 16px; }
+  .bench .bar { grid-column: 1 / -1; }
+  .top nav { gap: 18px; }
+}
+@media (max-width: 520px) {
+  .adapt { grid-template-columns: 1fr; }
+  .phone { aspect-ratio: auto; min-height: 380px; }
+  .top nav a.hide-s { display: none; }
+  .install code { font-size: 13.5px; padding: 14px; }
+}
+</style>
+</head>
+<body>
+<header class="wrap top">
+  <a href="/" aria-label="Weft home"><svg class="mark" viewBox="0 0 266 122" aria-hidden="true"><use href="#w"/></svg></a>
+  <nav><a href="#docs">Docs</a><a href="#components" class="hide-s">Components</a><a href="#agents">For agents</a><a href="https://github.com/flakerimi/weft" class="hide-s">GitHub</a></nav>
+</header>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="w" viewBox="0 0 266 122">
+    <path fill="currentColor" d="M25.0585 99.968C23.9491 99.968 22.9678 99.6693 22.1145 99.072C21.2611 98.4747 20.6638 97.7067 20.3225 96.768L0.354462 36.864C-0.157538 34.7307 -0.114872 33.0667 0.482462 31.872C1.07979 30.592 2.27446 29.952 4.06646 29.952C5.1758 29.952 6.15713 30.2507 7.01046 30.848C7.8638 31.4453 8.50379 32.384 8.93046 33.664L26.7225 88.064H23.9065L40.4185 33.792C40.7598 32.6827 41.3145 31.7867 42.0825 31.104C42.9358 30.336 44.0025 29.952 45.2825 29.952C46.5625 29.952 47.5865 30.2933 48.3545 30.976C49.2078 31.6587 49.8051 32.5973 50.1465 33.792L65.8905 86.784H63.7145L81.1225 33.664C81.9758 31.1893 83.5545 29.952 85.8585 29.952C87.7358 29.952 89.0158 30.6773 89.6985 32.128C90.3811 33.4933 90.3811 35.072 89.6985 36.864L69.7305 96.768C69.3891 97.7067 68.7918 98.4747 67.9385 99.072C67.1705 99.6693 66.2318 99.968 65.1225 99.968C64.0131 99.968 62.9891 99.6693 62.0505 99.072C61.1971 98.4747 60.6425 97.7067 60.3865 96.768L44.2585 43.264H45.7945L29.6665 96.768C29.3251 97.792 28.7278 98.6027 27.8745 99.2C27.0211 99.712 26.0825 99.968 25.0585 99.968Z"/>
+    <path fill="currentColor" d="M136.832 100.48C129.75 100.48 123.435 98.9867 117.888 96C112.427 92.928 108.118 88.7467 104.96 83.456C101.888 78.08 100.352 71.936 100.352 65.024C100.352 58.0267 101.803 51.8827 104.704 46.592C107.691 41.216 111.787 37.0347 116.992 34.048C122.198 30.976 128.171 29.44 134.912 29.44C141.568 29.44 147.286 30.9333 152.064 33.92C156.843 36.8213 160.47 40.8747 162.944 46.08C165.504 51.2 166.784 57.1307 166.784 63.872C166.784 65.4933 166.23 66.8587 165.12 67.968C164.011 68.992 162.603 69.504 160.896 69.504H109.312V59.264H160.512L155.264 62.848C155.179 58.5813 154.326 54.784 152.704 51.456C151.083 48.0427 148.779 45.3547 145.792 43.392C142.806 41.4293 139.179 40.448 134.912 40.448C130.048 40.448 125.867 41.5147 122.368 43.648C118.955 45.7813 116.352 48.7253 114.56 52.48C112.768 56.1493 111.872 60.3307 111.872 65.024C111.872 69.7173 112.939 73.8987 115.072 77.568C117.206 81.2373 120.15 84.1387 123.904 86.272C127.659 88.4053 131.968 89.472 136.832 89.472C139.478 89.472 142.166 89.0027 144.896 88.064C147.712 87.04 149.974 85.888 151.68 84.608C152.96 83.6693 154.326 83.2 155.776 83.2C157.312 83.1147 158.635 83.5413 159.744 84.48C161.195 85.76 161.963 87.168 162.048 88.704C162.134 90.24 161.451 91.5627 160 92.672C157.099 94.976 153.472 96.8533 149.12 98.304C144.854 99.7547 140.758 100.48 136.832 100.48Z"/>
+    <path fill="currentColor" d="M192.14 99.968C190.86 99.968 189.751 99.5413 188.812 98.688C187.874 97.7493 187.404 96.512 187.404 94.976V30.08C187.404 24.1067 188.428 18.8587 190.476 14.336C192.524 9.81333 195.554 6.31466 199.564 3.84C203.575 1.28 208.482 0 214.284 0C215.735 0 216.93 0.426666 217.868 1.28C218.807 2.13333 219.276 3.2 219.276 4.48C219.276 5.76 218.807 6.82667 217.868 7.68C216.93 8.53333 215.735 8.96 214.284 8.96C210.444 8.96 207.244 9.856 204.684 11.648C202.21 13.3547 200.332 15.7867 199.052 18.944C197.858 22.016 197.26 25.5573 197.26 29.568V94.976C197.26 96.512 196.791 97.7493 195.852 98.688C194.999 99.5413 193.762 99.968 192.14 99.968ZM179.212 41.088C177.847 41.088 176.738 40.704 175.884 39.936C175.116 39.0827 174.732 38.0587 174.732 36.864C174.732 35.584 175.116 34.56 175.884 33.792C176.738 32.9387 177.847 32.512 179.212 32.512H212.62C213.986 32.512 215.052 32.9387 215.82 33.792C216.674 34.56 217.1 35.584 217.1 36.864C217.1 38.0587 216.674 39.0827 215.82 39.936C215.052 40.704 213.986 41.088 212.62 41.088H179.212Z"/>
+    <path fill="currentColor" d="M257.703 99.968C253.181 99.968 249.127 98.9013 245.543 96.768C242.045 94.6347 239.271 91.7333 237.223 88.064C235.175 84.3093 234.151 80.0427 234.151 75.264V12.672C234.151 11.2213 234.578 10.0267 235.431 9.088C236.37 8.14933 237.565 7.68 239.015 7.68C240.466 7.68 241.661 8.14933 242.599 9.088C243.538 10.0267 244.007 11.2213 244.007 12.672V75.264C244.007 79.616 245.287 83.2 247.847 86.016C250.407 88.7467 253.693 90.112 257.703 90.112H261.159C262.525 90.112 263.634 90.5813 264.487 91.52C265.341 92.4587 265.767 93.6533 265.767 95.104C265.767 96.5547 265.255 97.7493 264.231 98.688C263.207 99.5413 261.927 99.968 260.391 99.968H257.703ZM225.831 41.088C224.551 41.088 223.485 40.704 222.631 39.936C221.778 39.0827 221.351 38.0587 221.351 36.864C221.351 35.584 221.778 34.56 222.631 33.792C223.485 32.9387 224.551 32.512 225.831 32.512H258.471C259.751 32.512 260.818 32.9387 261.671 33.792C262.525 34.56 262.951 35.584 262.951 36.864C262.951 38.0587 262.525 39.0827 261.671 39.936C260.818 40.704 259.751 41.088 258.471 41.088H225.831Z"/>
+    <path class="thread" fill="#E2A11B" d="M102.666 116.468C102.666 113.43 105.129 110.968 108.166 110.968H161.166C164.204 110.968 166.666 113.43 166.666 116.468C166.666 119.506 164.204 121.968 161.166 121.968H108.166C105.129 121.968 102.666 119.506 102.666 116.468Z"/>
+  </symbol>
+  <symbol id="w-letters" viewBox="0 0 266 122">
+    <path fill="currentColor" d="M25.0585 99.968C23.9491 99.968 22.9678 99.6693 22.1145 99.072C21.2611 98.4747 20.6638 97.7067 20.3225 96.768L0.354462 36.864C-0.157538 34.7307 -0.114872 33.0667 0.482462 31.872C1.07979 30.592 2.27446 29.952 4.06646 29.952C5.1758 29.952 6.15713 30.2507 7.01046 30.848C7.8638 31.4453 8.50379 32.384 8.93046 33.664L26.7225 88.064H23.9065L40.4185 33.792C40.7598 32.6827 41.3145 31.7867 42.0825 31.104C42.9358 30.336 44.0025 29.952 45.2825 29.952C46.5625 29.952 47.5865 30.2933 48.3545 30.976C49.2078 31.6587 49.8051 32.5973 50.1465 33.792L65.8905 86.784H63.7145L81.1225 33.664C81.9758 31.1893 83.5545 29.952 85.8585 29.952C87.7358 29.952 89.0158 30.6773 89.6985 32.128C90.3811 33.4933 90.3811 35.072 89.6985 36.864L69.7305 96.768C69.3891 97.7067 68.7918 98.4747 67.9385 99.072C67.1705 99.6693 66.2318 99.968 65.1225 99.968C64.0131 99.968 62.9891 99.6693 62.0505 99.072C61.1971 98.4747 60.6425 97.7067 60.3865 96.768L44.2585 43.264H45.7945L29.6665 96.768C29.3251 97.792 28.7278 98.6027 27.8745 99.2C27.0211 99.712 26.0825 99.968 25.0585 99.968Z"/>
+    <path fill="currentColor" d="M136.832 100.48C129.75 100.48 123.435 98.9867 117.888 96C112.427 92.928 108.118 88.7467 104.96 83.456C101.888 78.08 100.352 71.936 100.352 65.024C100.352 58.0267 101.803 51.8827 104.704 46.592C107.691 41.216 111.787 37.0347 116.992 34.048C122.198 30.976 128.171 29.44 134.912 29.44C141.568 29.44 147.286 30.9333 152.064 33.92C156.843 36.8213 160.47 40.8747 162.944 46.08C165.504 51.2 166.784 57.1307 166.784 63.872C166.784 65.4933 166.23 66.8587 165.12 67.968C164.011 68.992 162.603 69.504 160.896 69.504H109.312V59.264H160.512L155.264 62.848C155.179 58.5813 154.326 54.784 152.704 51.456C151.083 48.0427 148.779 45.3547 145.792 43.392C142.806 41.4293 139.179 40.448 134.912 40.448C130.048 40.448 125.867 41.5147 122.368 43.648C118.955 45.7813 116.352 48.7253 114.56 52.48C112.768 56.1493 111.872 60.3307 111.872 65.024C111.872 69.7173 112.939 73.8987 115.072 77.568C117.206 81.2373 120.15 84.1387 123.904 86.272C127.659 88.4053 131.968 89.472 136.832 89.472C139.478 89.472 142.166 89.0027 144.896 88.064C147.712 87.04 149.974 85.888 151.68 84.608C152.96 83.6693 154.326 83.2 155.776 83.2C157.312 83.1147 158.635 83.5413 159.744 84.48C161.195 85.76 161.963 87.168 162.048 88.704C162.134 90.24 161.451 91.5627 160 92.672C157.099 94.976 153.472 96.8533 149.12 98.304C144.854 99.7547 140.758 100.48 136.832 100.48Z"/>
+    <path fill="currentColor" d="M192.14 99.968C190.86 99.968 189.751 99.5413 188.812 98.688C187.874 97.7493 187.404 96.512 187.404 94.976V30.08C187.404 24.1067 188.428 18.8587 190.476 14.336C192.524 9.81333 195.554 6.31466 199.564 3.84C203.575 1.28 208.482 0 214.284 0C215.735 0 216.93 0.426666 217.868 1.28C218.807 2.13333 219.276 3.2 219.276 4.48C219.276 5.76 218.807 6.82667 217.868 7.68C216.93 8.53333 215.735 8.96 214.284 8.96C210.444 8.96 207.244 9.856 204.684 11.648C202.21 13.3547 200.332 15.7867 199.052 18.944C197.858 22.016 197.26 25.5573 197.26 29.568V94.976C197.26 96.512 196.791 97.7493 195.852 98.688C194.999 99.5413 193.762 99.968 192.14 99.968ZM179.212 41.088C177.847 41.088 176.738 40.704 175.884 39.936C175.116 39.0827 174.732 38.0587 174.732 36.864C174.732 35.584 175.116 34.56 175.884 33.792C176.738 32.9387 177.847 32.512 179.212 32.512H212.62C213.986 32.512 215.052 32.9387 215.82 33.792C216.674 34.56 217.1 35.584 217.1 36.864C217.1 38.0587 216.674 39.0827 215.82 39.936C215.052 40.704 213.986 41.088 212.62 41.088H179.212Z"/>
+    <path fill="currentColor" d="M257.703 99.968C253.181 99.968 249.127 98.9013 245.543 96.768C242.045 94.6347 239.271 91.7333 237.223 88.064C235.175 84.3093 234.151 80.0427 234.151 75.264V12.672C234.151 11.2213 234.578 10.0267 235.431 9.088C236.37 8.14933 237.565 7.68 239.015 7.68C240.466 7.68 241.661 8.14933 242.599 9.088C243.538 10.0267 244.007 11.2213 244.007 12.672V75.264C244.007 79.616 245.287 83.2 247.847 86.016C250.407 88.7467 253.693 90.112 257.703 90.112H261.159C262.525 90.112 263.634 90.5813 264.487 91.52C265.341 92.4587 265.767 93.6533 265.767 95.104C265.767 96.5547 265.255 97.7493 264.231 98.688C263.207 99.5413 261.927 99.968 260.391 99.968H257.703ZM225.831 41.088C224.551 41.088 223.485 40.704 222.631 39.936C221.778 39.0827 221.351 38.0587 221.351 36.864C221.351 35.584 221.778 34.56 222.631 33.792C223.485 32.9387 224.551 32.512 225.831 32.512H258.471C259.751 32.512 260.818 32.9387 261.671 33.792C262.525 34.56 262.951 35.584 262.951 36.864C262.951 38.0587 262.525 39.0827 261.671 39.936C260.818 40.704 259.751 41.088 258.471 41.088H225.831Z"/>
+    </symbol>
+</svg>
+
+<main>
+  <section class="wrap hero">
+    <div class="mark-wrap">
+      <svg class="word" viewBox="0 0 266 122" role="img" aria-label="weft"><use href="#w-letters"/></svg>
+      <div class="thread-line" aria-hidden="true"></div>
+    </div>
+    <h1>One UI system for Go and Vue apps.</h1>
+    <p class="lead">Components that know whether they're under a finger or a mouse, on a landing page or in an app. Your site and your API ship as one Go binary.</p>
+    <div class="install">
+      <code><b>$</b> curl -fsSL https://weft.base.al/install | sh</code>
+      <button type="button">Copy</button>
+    </div>
+    <p class="after">Already installed? <code>weft update</code> moves you to the newest release.</p>
+  </section>
+
+  <section class="wrap band" id="components">
+    <h2>Write a component once. It adapts.</h2>
+    <p class="intro">You write <code>&lt;DatePicker&gt;</code>. On a trackpad it opens a calendar beside the field; under a thumb it rises as a sheet with targets big enough to hit. No mobile variant to remember.</p>
+    <div class="adapt">
+<pre class="src"><span class="c">&lt;!-- pages/booking.vue --&gt;</span>
+<span class="t">&lt;Page</span> <span class="a">title</span>="Book a visit"<span class="t">&gt;</span>
+  <span class="t">&lt;DatePicker</span>
+    <span class="a">v-model</span>="day"
+    <span class="a">label</span>="Day"
+  <span class="t">/&gt;</span>
+<span class="t">&lt;/Page&gt;</span></pre>
+      <div>
+        <div class="screen">
+          <h3>Mouse and keyboard</h3>
+          <div class="field"><span>Thu 3 Dec</span><span>▾</span></div>
+          <div class="cal">
+            <div class="m">December 2026</div>
+            <div class="g">
+              <span class="dim">30</span><span>1</span><span>2</span><span class="on">3</span><span>4</span><span>5</span><span>6</span>
+              <span>7</span><span>8</span><span>9</span><span>10</span><span>11</span><span>12</span><span>13</span>
+              <span>14</span><span>15</span><span>16</span><span>17</span><span>18</span><span>19</span><span>20</span>
+            </div>
+          </div>
+        </div>
+        <p class="caption">A popover calendar, typed dates welcome.</p>
+      </div>
+      <div>
+        <div class="phone">
+          <h3>Touch</h3>
+          <div class="behind" aria-hidden="true">
+            <b>Book a visit</b>
+            <div class="field"><span>Day</span><span>▾</span></div>
+            <i></i><i class="s"></i>
+          </div>
+          <div class="sheet">
+            <div class="grab"></div>
+            <div class="days">
+              <span>Tue 1</span><span>Wed 2</span><span class="on">Thu 3</span><span>Fri 4</span>
+              <span>Sat 5</span><span>Sun 6</span><span>Mon 7</span><span>Tue 8</span>
+            </div>
+          </div>
+        </div>
+        <p class="caption">A sheet with 44&nbsp;px targets.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap band" id="speed">
+    <h2>One binary, nothing left to do per request.</h2>
+    <p class="intro">Pages are rendered and compressed when you build. The Go binary keeps every byte in memory and only sends it. Same landing page, one CPU core:</p>
+    <div class="bench" role="table" aria-label="Requests per second on one core">
+      <div class="row" role="row"><div class="who" role="cell">Weft<small>its own binary</small></div><div class="bar us" role="cell"><i style="width:100%"></i></div><div class="n" role="cell">124,503</div></div>
+      <div class="row" role="row"><div class="who" role="cell">Astro, plain script<small>astro preview</small></div><div class="bar " role="cell"><i style="width:10.0%"></i></div><div class="n" role="cell">12,465</div></div>
+      <div class="row" role="row"><div class="who" role="cell">Astro, Vue island<small>astro preview</small></div><div class="bar " role="cell"><i style="width:8.7%"></i></div><div class="n" role="cell">10,875</div></div>
+    </div>
+    <p class="bench-note">Requests per second, median of three runs on an Apple M4. Part of the gap is the server: Weft sends brotli it made at build time, Astro's servers compress each response. Astro's plain-script page still ships less JavaScript than ours, and we say where in <a href="https://github.com/flakerimi/weft/tree/main/bench">the benchmark</a>.</p>
+    <div class="facts">
+      <p><strong>No JavaScript unless you ask</strong>A page ships script only for the parts you mark interactive.</p>
+      <p><strong>0.16 ms to first byte</strong>Pages come from memory, already compressed.</p>
+      <p><strong>Deploy one file</strong>No Node in production. Copy it, run it.</p>
+    </div>
+  </section>
+
+  <section class="wrap band" id="agents">
+    <h2>Made to be built with an agent.</h2>
+    <p class="intro">Agents do best with big pieces and one right way. Weft gives them both, and tells them when they're wrong before you see it.</p>
+    <div class="agents">
+      <ul>
+        <li><strong>A catalogue they can read</strong><span>Every component's props, slots and how it adapts, as JSON, from <code>weft catalog</code> or <code>weft mcp</code>.</span></li>
+        <li><strong>Mistakes fail the build</strong><span>Wrong frontmatter, a missing env value or an off-system <code>&lt;button&gt;</code> stops the build at the file and line.</span></li>
+        <li><strong>Skills, ready to install</strong><span>Building a page, adding a CRUD screen, theming, live data from Go.</span></li>
+      </ul>
+<pre class="src"><span class="c">$ weft catalog DatePicker</span>
+{
+  <span class="a">"name"</span>: "DatePicker",
+  <span class="a">"use"</span>: "choose one day",
+  <span class="a">"adapts"</span>: {
+    <span class="a">"pointer"</span>: "popover calendar",
+    <span class="a">"touch"</span>: "bottom sheet"
+  },
+  <span class="a">"props"</span>: ["v-model", "label", "min", "max"]
+}</pre>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <svg width="58" height="27" viewBox="0 0 266 122" aria-label="weft"><use href="#w"/></svg>
+    <span>MIT licensed. This page is built with Weft and served by its binary.</span>
+  </div>
+</footer>
+</body>
+</html>
