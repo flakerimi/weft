@@ -349,6 +349,35 @@ describe('buildSite into the outDir of an earlier build', () => {
   })
 })
 
+const refusal = (outDir: string) =>
+  `buildSite: outDir ${outDir} is the site root, contains it, or is one of its source folders; build into a folder of its own, like dist.`
+
+/** A copy of a fixture in a temp folder that resolves packages through this package's node_modules. */
+function linkedSite(name: string): string {
+  const root = join(tempDir(), name)
+  cpSync(fixture(name), root, { recursive: true })
+  symlinkSync(fileURLToPath(new URL('../node_modules', import.meta.url)), join(root, 'node_modules'))
+  return root
+}
+
+describe('buildSite into a folder inside the site', () => {
+  it('builds into <root>/dist, and a rebuild deletes only what the previous manifest listed', async () => {
+    const root = linkedSite('site')
+    const out = join(root, 'dist')
+    const first = await buildSite({ root, outDir: out })
+    expect(first.files['/pages/escape/index.html']).toBeDefined()
+    writeFileSync(join(out, 'owner.txt'), 'owner')
+    // The page goes from the (temporary) site; its built files go with the next build.
+    rmSync(join(root, 'pages/escape.vue'))
+    const second = await buildSite({ root, outDir: out })
+    expect(second.files['/pages/escape/index.html']).toBeUndefined()
+    expect(existsSync(join(out, 'pages/escape'))).toBe(false)
+    expect(readFileSync(join(out, 'owner.txt'), 'utf8')).toBe('owner')
+    expect(existsSync(join(out, 'pages/counter/index.html'))).toBe(true)
+    expect(existsSync(join(root, 'pages/counter.vue'))).toBe(true)
+  })
+})
+
 describe('buildSite refuses', () => {
   it('a public file that would overwrite a generated one', async () => {
     await expect(buildSite({ root: fixture('public-clash'), outDir: tempDir() })).rejects.toThrow(
@@ -363,16 +392,29 @@ describe('buildSite refuses', () => {
     cpSync(fixture('static-site'), root, { recursive: true })
     return root
   }
-  const refused = async (root: string, outDir: string) => {
-    await expect(buildSite({ root, outDir })).rejects.toThrow(
-      `buildSite: outDir ${outDir} is the site root, inside it, or contains it; build into a directory of its own.`,
-    )
-    expect(files(root)).toEqual(['env.d.ts', 'pages/index.vue', 'vite.config.ts'])
+  const refused = async (root: string, outDir: string, fixtureFiles = ['env.d.ts', 'pages/index.vue', 'vite.config.ts']) => {
+    await expect(buildSite({ root, outDir })).rejects.toThrow(refusal(outDir))
+    expect(files(root)).toEqual(fixtureFiles)
   }
 
-  it('an outDir that is the site root, contains it, or is inside it', async () => {
+  it('an outDir that is the site root, contains it, or is one of its source folders', async () => {
     const root = site()
-    for (const outDir of [root, join(root, '..'), join(root, 'pages'), join(root, 'dist')]) await refused(root, outDir)
+    const sources = ['pages', 'public', 'components', 'src', 'node_modules', 'pages/blog'].map((d) => join(root, d))
+    for (const outDir of [root, join(root, '..'), ...sources]) await refused(root, outDir)
+  })
+
+  it('an outDir in a folder holding .vue files the build uses, writing nothing', async () => {
+    const root = linkedSite('static-site')
+    mkdirSync(join(root, 'lib'))
+    writeFileSync(join(root, 'lib/Note.vue'), '<script setup vapor lang="ts"></script>\n<template><p>note</p></template>\n')
+    writeFileSync(
+      join(root, 'pages/note.vue'),
+      '<script setup vapor lang="ts">\nimport Note from \'../lib/Note.vue\'\n</script>\n<template><Note /></template>\n',
+    )
+    for (const outDir of [join(root, 'lib'), join(root, 'lib/out')]) {
+      await expect(buildSite({ root, outDir })).rejects.toThrow(refusal(outDir))
+    }
+    expect(readdirSync(join(root, 'lib'))).toEqual(['Note.vue'])
   })
 
   it('an outDir that reaches the site root through a symlink', async () => {

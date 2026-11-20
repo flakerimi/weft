@@ -17,10 +17,10 @@ export interface BuildOptions {
   /** The site's root directory; its pages are `<root>/pages/**.vue`. */
   root: string
   /**
-   * Where the build goes (the `dist` the Go binary embeds). The build removes
-   * the files its previous build there listed in `manifest.json` (keeping `app/`
-   * when `appPrefix` is set) and nothing else. It may not be the site root, be
-   * inside it, or contain it.
+   * Where the build goes (the `dist` the Go binary embeds), e.g. `<root>/dist`.
+   * The build removes the files its previous build there listed in
+   * `manifest.json` (keeping `app/` when `appPrefix` is set) and nothing else.
+   * It may not be the site root, contain it, or be in one of its source folders.
    */
   outDir: string
   /** The client-rendered app's path prefix, e.g. `/app`; its build must already be in `<outDir>/app`. */
@@ -98,11 +98,7 @@ const posix = (p: string) => p.split('\\').join('/')
 export async function buildSite(opts: BuildOptions): Promise<Manifest> {
   const root = resolve(opts.root)
   const outDir = resolve(opts.outDir)
-  if (overlaps(realish(outDir), realish(root))) {
-    throw new Error(
-      `buildSite: outDir ${opts.outDir} is the site root, inside it, or contains it; build into a directory of its own.`,
-    )
-  }
+  checkOutDir(opts.outDir, root)
   const theme = opts.theme ?? 'neutral'
   if (!THEMES.includes(theme)) throw new Error(`buildSite: unknown theme "${theme}"; use ${THEMES.join(' or ')}.`)
   const app = opts.appPrefix === undefined ? null : appRoute(opts.appPrefix, outDir)
@@ -124,6 +120,12 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
       const rendered = await renderPage({ root, page, props: route.params, server, providedCSS: baseFiles })
       pages.push({ ...route, ...rendered })
     }
+    // Nor may it be a folder of .vue files the pages were built from.
+    const vueDirs = new Set<string>()
+    for (const mod of server.environments.ssr.moduleGraph.idToModuleMap.values()) {
+      if (mod.file?.endsWith('.vue')) vueDirs.add(dirname(mod.file))
+    }
+    checkOutDir(opts.outDir, root, [...vueDirs])
   } finally {
     await server.close()
   }
@@ -226,8 +228,25 @@ function contains(outer: string, inner: string): boolean {
   return o.length <= i.length && o.every((s, n) => s === i[n])
 }
 
-/** Whether one path is the other or inside it. */
-const overlaps = (a: string, b: string) => contains(a, b) || contains(b, a)
+/** The site's source folders; an outDir in one of them is refused. */
+const SOURCE_DIRS = ['pages', 'public', 'components', 'src', 'node_modules']
+
+/**
+ * Refuse an outDir that is the site root or contains it, or is inside one of
+ * its source folders (or `sourceDirs`, given as absolute paths). Real paths are
+ * compared, so a symlink does not hide either. A folder of its own inside the
+ * root, such as `dist`, is fine: the build deletes only what it wrote.
+ */
+function checkOutDir(outDir: string, root: string, sourceDirs: string[] = []) {
+  const out = realish(outDir)
+  const site = realish(root)
+  const sources = [...SOURCE_DIRS.map((d) => join(site, d)), ...sourceDirs.map(realish)]
+  if (contains(out, site) || sources.some((d) => contains(d, out))) {
+    throw new Error(
+      `buildSite: outDir ${outDir} is the site root, contains it, or is one of its source folders; build into a folder of its own, like dist.`,
+    )
+  }
+}
 
 /** A manifest path that stays inside outDir: `/` then segments, none empty, `.` or `..`. */
 const safePath = (p: string) =>
