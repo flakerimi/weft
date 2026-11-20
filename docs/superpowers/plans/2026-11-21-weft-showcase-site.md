@@ -19,7 +19,7 @@
 ## Global Constraints
 
 - **Inherited:** everything in the fast-pages plan's Global Constraints, plus the final fix-wave rules on what a build may write.
-- **Wordmark:** use the owner's SVG exactly, as stored in `site-src/public/weft.svg`. Do not redraw it or substitute a font for it.
+- **Wordmark:** use the owner's SVG exactly, as stored in `docs/design/weft-wordmark.svg` (copied to `site-src/public/weft.svg`). Do not redraw it or substitute a font for it.
 - **Colours and type:**
   - Ground `#E8ECF4`, ink `#141C3A`, indigo `#2B3D8F`, saffron `#E2A11B`, warp line `#C9D0E0`.
   - Dark ground `#0F1530`, dark warp line `#1C2448`.
@@ -43,6 +43,15 @@
 
 ### Task 1: Releases out of the binary
 `weft.Serve` gains `WithFiles(prefix string, dir fs.FS)`, which serves a read-only disk directory under a path prefix with ETags computed at start. `site-src/main.go` serves `/releases/` and `/install` from `$WEFT_RELEASES_DIR` (default `/data/releases`). The Dockerfile copies releases into the image under that path instead of embedding them. The publish script and its tests are updated, and the binary size test asserts under 15 MB. Tests cover the ETag, the 304 response and path traversal.
+
+Also in this task, carried from the fast-pages final review:
+- Make `build` a non-configurable accessor on every Vite environment's options and on the top-level config, so a site plugin cannot replace the whole build object mid-build.
+- Check the environment Vite actually builds (`ssr` when `build.ssr` is set), not only `client`.
+- Stop the refusal sentence from sticking when a plugin catches the setter's throw, and allow assigning the same value.
+- In `publish-site.sh`, move the pushed tree before listing the version.
+- Treat only Vite-emitted app assets as content-hashed, not hand-placed names.
+- Refuse symbol keys and `-0` in island props.
+- Stop kept trees from duplicating every release tarball (keep releases once, beside the trees).
 
 ### Task 2: Markdown docs pipeline
 - **Rendering:** `@weft/vite` gets `content.ts`. It reads `content/<collection>/**/*.md` and checks frontmatter against a schema per collection (`title` required, `description` required, `order?` number). It renders the Markdown with `markdown-it`, turns heading anchors into ids, and highlights code blocks at build time with no client JavaScript (pick a highlighter that runs in Node only, and check the latest version).
