@@ -48,7 +48,9 @@ binary, with screens that look like they belong together.
 
 - Migrating the existing Nuxt apps. Weft targets new apps only.
 - A Nuxt module. Possible later; not built now.
-- Server-side rendering per request. Apps are client-rendered and served by Go.
+- Server-side rendering per request. Pages are rendered at build time and
+  served by Go from memory; app routes are client-rendered.
+- Other component frameworks (React, Svelte…). Weft is Vue only.
 - Native mobile apps. "Mobile" means a phone browser.
 - Supporting Svelte, Solid or React.
 
@@ -372,6 +374,9 @@ checked at `pointer` and `touch` with both themes.
 1. Repository, README, licence, monorepo tooling, CI, install script and a
    first page at `weft.base.al`.
 2. Tokens, themes, `useWeft()` adaptive core, layout tier.
+2b. Fast pages: build-time rendering with Vapor hydration, islands,
+   pre-compressed embedded assets, ETags, 103 Early Hints, prefetch and view
+   transitions in `weft.Serve`, and the Astro benchmark in `bench/`.
 3. Headless layer (focus, dismiss, roving focus, floating, typeahead), then
    primitives on it, each adaptive from the start, with keyboard and
    screen-reader tests, built as Vapor and as the virtual-DOM fallback.
@@ -381,7 +386,9 @@ checked at `pointer` and `touch` with both themes.
 5. App blocks (`DataTable` on the wire format, `EntityDialog`, `weft add crud`)
    and charts with `useLive`.
 6. Agent kit: catalogue, skills, lint rules, `check`, `mcp`.
-7. Landing blocks; first public release (`0.1.0`).
+6b. Site features: content collections, `<Image>`, actions, env, dev overlay,
+   `weft deploy`.
+7. Landing blocks; benchmark beats Astro on every row; first public release (`0.1.0`).
 
 Alpha releases (`0.0.x`) are cut from the end of phase 4. Before that,
 `weft create --local` points the app at the working repository.
@@ -412,13 +419,65 @@ Weft is never published to npm. Everything ships as one versioned thing:
 Cost: Weft cannot be added to an existing Vite app with a package install;
 `weft add-to` (later) would copy it in. Accepted, since Weft targets new apps.
 
-### Public pages and search engines
+## Speed: faster than Astro, because the server is a compiled binary
 
-No per-request rendering. For landing routes, Go fills the title,
-description and link-preview meta tags into `index.html` per route, from
-route metadata emitted by the build, so link previews and basic indexing work
-without Node. Full build-time prerendering of landing routes is a later
-option, not in the first release.
+Owner's goal (2026-11-20): Weft should be faster than Astro, using what a
+single compiled Go binary can do, and should have Astro's feature set,
+especially the parts where an agent does well.
+
+The binary does all expensive work at build time and none per request:
+
+- **Pages rendered at build.** `weft build` renders every page that does not
+  need a signed-in user to HTML (Vue SSR, Vapor hydration), Node at build only.
+  Go serves those bytes from memory. App routes behind login stay client-rendered.
+- **Zero JavaScript by default.** A page ships no script unless it contains an
+  island. `<Island when="visible|idle|load|media">` wraps an interactive
+  component; only islands hydrate, each on its own.
+- **Pre-compressed at build.** Every HTML, CSS and JS file is stored embedded as
+  brotli (maximum level) and gzip, chosen per `Accept-Encoding`; strong ETags
+  from the build hash answer `304` with no body. Nothing is compressed per request.
+- **103 Early Hints.** Go sends the route's CSS and font preloads before the
+  page, from a manifest written at build.
+- **Critical CSS inlined** into each page; the rest loaded without blocking.
+- **Instant navigation.** Pages prefetch on hover or when visible, and the
+  browser's Speculation Rules prerender likely next pages; View Transitions
+  between pages (cross-document for pages, `startViewTransition` in the app router).
+- **Optimised images.** `<Image>` is resized at build into modern formats with
+  width and height set, so nothing shifts; Go serves the variants embedded.
+
+### Proof: a benchmark in the repository
+
+`bench/` holds the same reference landing page built with Astro (current
+version at the time) and with Weft, measured the same way: JavaScript bytes,
+total transfer, time to first byte, Largest Contentful Paint, and requests per
+second on one core. Weft's numbers must beat Astro's on every row before
+`0.1.0`. `weft check` enforces a budget per page (JS bytes, total bytes, image
+size) and fails the build when a page grows past it.
+
+### Astro's features, the Weft way
+
+| Astro | Weft | Where agents gain |
+|---|---|---|
+| Content collections | `content/` Markdown with frontmatter, its schema a Go struct with `weft` tags (the same tags as the API contract); `weft build` validates every file and generates typed data | a wrong field fails the build with file and line, so an agent fixes it without a person |
+| Zero JS by default | build-time pages plus islands (above) | |
+| View transitions | built in, on by default | |
+| Optimised images | `<Image>` at build (above) | |
+| UI integrations | not offered: Vue only, one way to do things | one framework means no guessing |
+| File-based routing | `web/pages/` for pages, `[slug].vue` and `404.vue`; the route map is generated and readable as JSON | an agent reads the whole site map in one call |
+| Middleware | plain Go `net/http` middleware, `weft.Use(...)` | |
+| Actions | `weft.Action[In, Out](fn)` in Go; `weft gen` writes a typed TypeScript function per action, validation from the same tags | change Go, regenerate, and type errors show every call site to fix |
+| Deployment adapters | none needed: one binary. `weft deploy` targets the Lisa server (`lisa server deploy`), a `FROM scratch` container, or a systemd unit | one command, no platform config to get wrong |
+| Simple templating | Vue single-file components | |
+| Prefetching | built in (above) | |
+| AI-ready (MCP, context files) | `weft mcp`, skills, `llms.txt` and `AGENTS.md` in every app, the component catalogue | see the agent kit |
+| Environment variables | a Go struct with `env` tags, checked at startup with one sentence per missing value; values marked public are generated into a typed client module | missing configuration is an error, not a runtime surprise |
+| Dev toolbar | a dev overlay: switch input, surface, theme and scheme, see each component's width class, page budget and island list; the same state through `weft mcp` | an agent can ask the running app what is on screen and how it adapts |
+
+Agents get the most from anything that turns a mistake into a checked
+error before a person sees it, which is why the contract, content schemas,
+env, budgets and route map are generated or validated rather than conventions.
+The MCP server also lets an agent query a running app: routes, components on a
+page, page budgets, and a capture of a page at `touch` or `landing`.
 
 ## Decided by the owner
 
@@ -453,7 +512,8 @@ option, not in the first release.
   shared validation), with server-side paging.
 - Templates include login, sessions, permissions; no database.
 - GitHub repository private until `0.1.0`, then public.
-- Per-route meta tags injected by Go for landing pages; no prerendering yet.
+- Pages rendered at build (replaces per-route meta injection): owner asked for faster than Astro.
+- Next plan is phase 2b (fast pages), before primitives, to prove Vapor build-time rendering early.
 
 ## Left to the builder
 
