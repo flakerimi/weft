@@ -47,7 +47,8 @@ export function startIslands(registry: IslandRegistry, opts: IslandOptions = {})
         query.addEventListener('change', check)
         check()
       } else {
-        if (when !== 'load') console.warn(`weft: island ${id} has unknown when "${when}"; starting on load`)
+        // No data-when means load; anything else unknown is reported once.
+        if (when !== undefined && when !== 'load') console.warn(`weft: island ${id} has unknown when "${when}"; starting on load`)
         start()
       }
     } catch (e) {

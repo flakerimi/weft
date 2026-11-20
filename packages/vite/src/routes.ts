@@ -52,20 +52,23 @@ export async function discoverRoutes(pagesDir: string): Promise<Route[]> {
   return routes.sort(byOrder)
 }
 
+/** A concrete page: its path, its file, and the params that made the path (the page's props). */
+export type ExpandedRoute = { path: string; file: string; params: Record<string, string> }
+
 /** Turns routes into concrete paths, calling each dynamic page's `getPaths()`. */
 export async function expandRoutes(
   routes: Route[],
   loadPage: (file: string) => Promise<PageModule>,
-): Promise<{ path: string; file: string }[]> {
-  const out: { path: string; file: string }[] = []
+): Promise<ExpandedRoute[]> {
+  const out: ExpandedRoute[] = []
   const owner = new Map<string, string>()
-  const add = (path: string, file: string) => {
+  const add = (path: string, file: string, params: Record<string, string>) => {
     const other = owner.get(path)
     if (other !== undefined) throw collision(other, file, path)
     owner.set(path, file)
-    out.push({ path, file })
+    out.push({ path, file, params })
   }
-  for (const r of routes) if (!r.dynamic) add(r.path, r.file)
+  for (const r of routes) if (!r.dynamic) add(r.path, r.file, {})
   for (const r of routes) {
     if (!r.dynamic) continue
     const { getPaths } = await loadPage(r.file)
@@ -78,7 +81,7 @@ export async function expandRoutes(
         if (v === undefined) throw new Error(`getPaths() of "${r.file}" returned no "${name}"`)
         return v
       })
-      add(path, r.file)
+      add(path, r.file, params)
     }
   }
   return out

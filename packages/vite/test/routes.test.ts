@@ -34,7 +34,8 @@ describe('expandRoutes', () => {
       getPaths: async () => [{ slug: 'a' }, { slug: 'b' }],
     }))
     expect(out.map((r) => r.path)).toEqual(['/', '/404', '/about', '/blog', '/blog/a', '/blog/b'])
-    expect(out.at(-1)).toEqual({ path: '/blog/b', file: 'blog/[slug].vue' })
+    expect(out.at(-1)).toEqual({ path: '/blog/b', file: 'blog/[slug].vue', params: { slug: 'b' } })
+    expect(out[0]).toEqual({ path: '/', file: 'index.vue', params: {} })
   })
 
   it('throws when a dynamic page yields a path a static page owns', async () => {
@@ -64,6 +65,6 @@ describe('expandRoutes', () => {
     const out = await expandRoutes(routes, async () => ({
       getPaths: async () => [{ year: '2026', slug: 'hi' }],
     }))
-    expect(out).toEqual([{ path: '/2026/hi', file: '[year]/[slug].vue' }])
+    expect(out).toEqual([{ path: '/2026/hi', file: '[year]/[slug].vue', params: { year: '2026', slug: 'hi' } }])
   })
 })

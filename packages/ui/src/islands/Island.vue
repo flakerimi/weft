@@ -20,7 +20,7 @@ const server = import.meta.env.SSR
 const id = (p.component as { __name?: string }).__name
 let json = ''
 if (server) {
-  if (!id) throw new Error('Island: the component has no SFC __name; give it a .vue file of its own.')
+  if (!id) throw new Error('Island: the component has no SFC __name; an island must be a <script setup> single-file component.')
   if (p.when === 'media' && !p.media) throw new Error('Island: when="media" needs a media query in the media prop.')
   // Escape what could end the <script> element or open a comment inside it.
   json = JSON.stringify(p.props ?? {})

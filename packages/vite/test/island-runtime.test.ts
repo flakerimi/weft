@@ -222,6 +222,17 @@ describe('startIslands', () => {
     expect(await clickCounter(island, button)).toEqual({ text: 'n is 3', same: true })
   })
 
+  it('starts an island without data-when on load, silently', async () => {
+    page(counterHTML('load').replace(' data-when="load"', ''))
+    const island = document.querySelector('weft-island')!
+    const button = island.querySelector('button')!
+
+    startIslands(registry)
+    await settle()
+    expect(warn).not.toHaveBeenCalled()
+    expect(await clickCounter(island, button)).toEqual({ text: 'n is 3', same: true })
+  })
+
   it('warns once for an island the registry does not know', async () => {
     page(counterHTML('load').replace('data-id="Counter"', 'data-id="Missing"'))
     const island = document.querySelector('weft-island')!

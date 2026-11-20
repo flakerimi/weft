@@ -1,6 +1,7 @@
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { renderPage } from '../src/render.ts'
+import { createRenderServer, renderPage } from '../src/render.ts'
 
 const root = fileURLToPath(new URL('./fixtures/site', import.meta.url))
 
@@ -25,6 +26,18 @@ describe('renderPage', () => {
     expect(islands).toEqual(['Counter'])
   })
 
+  it('names the file of each island, and renders through a server it is given', async () => {
+    const server = await createRenderServer(root)
+    try {
+      const counter = await renderPage({ root, page: 'pages/counter.vue', server })
+      const plain = await renderPage({ root, page: 'pages/index.vue', server })
+      expect(counter.islandFiles).toEqual({ Counter: join(root, 'components/Counter.vue') })
+      expect(plain.islandFiles).toEqual({})
+    } finally {
+      await server.close()
+    }
+  })
+
   it('keeps island props from ending their script element', async () => {
     const { html } = await renderPage({ root, page: 'pages/escape.vue' })
     expect(html).toContain('<weft-island data-id="Counter" data-when="media" data-media="(min-width: 40rem)">')
@@ -43,7 +56,7 @@ describe('renderPage', () => {
   it('refuses an island component without an SFC name', async () => {
     const bad = fileURLToPath(new URL('./fixtures/bad-island', import.meta.url))
     await expect(renderPage({ root: bad, page: 'pages/unnamed.vue' })).rejects.toThrow(
-      'Island: the component has no SFC __name; give it a .vue file of its own.',
+      'Island: the component has no SFC __name; an island must be a <script setup> single-file component.',
     )
   })
 })
