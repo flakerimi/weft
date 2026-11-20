@@ -1,6 +1,8 @@
 package weft
 
 import (
+	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"path"
@@ -12,28 +14,57 @@ const (
 	cacheNone      = "no-cache"
 )
 
-// Serve returns a handler for a Weft application: paths under /api/ go to api,
-// files in dist are served as they are, and every other path gets dist's
-// index.html so the Vue router can handle it. Files under /assets/ are
-// content-hashed by Vite, so they are cached for a year; everything else is
-// revalidated. A missing file under /assets/ is a 404, never index.html.
+// Serve returns a handler for a Weft application. Paths under /api/ go to api.
 //
-// It panics if dist has no index.html.
+// When dist is a page build (it has the manifest.json weft build writes), the
+// whole build is read into memory once, here, and each request is answered
+// from it: a page at its path, with or without a trailing slash; a file the
+// manifest lists, at its path; a path under the app's prefix, except under
+// its assets/, gets the app's index.html; anything else gets the not-found page with status 404, or a
+// plain 404. Each answer is the stored brotli or gzip variant the client
+// accepts best, or the file as it is, with the manifest's ETag (a variant's
+// with -br or -gz added), so If-None-Match gets a 304; hashed files are cached
+// for a year and the rest revalidated; a page with Early Hints first gets a
+// 103 with its Link headers. The build's own files (manifest.json,
+// routes.json, .weft-build and the page files under /pages/) are never served
+// as they are. It panics, naming the file, if the build is incomplete.
+//
+// Otherwise dist is a single-page app: files in dist are served as they are,
+// and every other path gets dist's index.html so the Vue router can handle
+// it. Files under /assets/ are content-hashed by Vite, so they are cached for
+// a year; everything else is revalidated. A missing file under /assets/ is a
+// 404, never index.html. It panics if dist has no index.html.
 func Serve(dist fs.FS, api http.Handler) http.Handler {
-	index, err := fs.ReadFile(dist, "index.html")
-	if err != nil {
-		panic("weft.Serve: dist has no index.html")
-	}
 	if api == nil {
 		api = http.HandlerFunc(noAPI)
 	}
-	files := http.FileServerFS(dist)
-
+	var pages http.Handler
+	switch manifest, err := fs.ReadFile(dist, "manifest.json"); {
+	case err == nil:
+		pages = loadSite(dist, manifest)
+	case errors.Is(err, fs.ErrNotExist):
+		pages = spa(dist)
+	default:
+		panic(fmt.Sprintf("weft.Serve: dist/manifest.json cannot be read (%v).", err))
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
 			api.ServeHTTP(w, r)
 			return
 		}
+		pages.ServeHTTP(w, r)
+	})
+}
+
+// spa serves a single-page app's dist, as Serve describes.
+func spa(dist fs.FS) http.Handler {
+	index, err := fs.ReadFile(dist, "index.html")
+	if err != nil {
+		panic("weft.Serve: dist has no index.html")
+	}
+	files := http.FileServerFS(dist)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
 		isAsset := strings.HasPrefix(name, "assets/")
 		if name != "" && name != "index.html" {
