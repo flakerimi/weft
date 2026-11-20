@@ -235,8 +235,9 @@ func (s *site) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // serve writes res with status: the 304 when it is a 200 the client already
 // has, else a 103 with its Link values when it has some (and the client
-// speaks HTTP/1.1 or later), then the variant the client accepts best. Its only allocation is the one slice that holds the
-// header values, so a handler after it may change them without changing res.
+// speaks HTTP/1.1 or later), then the variant the client accepts best. Its
+// only allocation is the one slice that holds the header values, so a handler
+// after it may change them without changing res.
 func (res *resource) serve(w http.ResponseWriter, r *http.Request, status int) {
 	v := res.pick(r.Header["Accept-Encoding"])
 	n := len(v.values)

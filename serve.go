@@ -15,8 +15,8 @@ const (
 // Serve returns a handler for a Weft application. Paths under /api/ go to api.
 //
 // When dist is a page build (it has routes.json, and the manifest.json that
-// weft build writes), the whole build is read into memory once, here, and
-// each request is answered from it:
+// the page build, weft-build-pages, writes), the whole build is read into
+// memory once, here, and each request is answered from it:
 //   - a page at its path, with or without a trailing slash;
 //   - a file the manifest lists, at its path;
 //   - a path under the app's prefix, except under its assets/, gets the

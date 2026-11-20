@@ -316,7 +316,7 @@ func TestManifestApp(t *testing.T) {
 		}
 	}
 	// A listed file under the prefix is that file, not the app index.
-	r := do(t, h, "GET", "/app/assets/main-abc.js")
+	r := do(t, h, "GET", "/app/assets/main-Bx4kQ9zA.js")
 	if r.StatusCode != 200 || r.body != "app()" || !strings.Contains(r.Header.Get("Content-Type"), "javascript") {
 		t.Fatalf("app asset: status %d body %q type %q", r.StatusCode, r.body, r.Header.Get("Content-Type"))
 	}
@@ -362,7 +362,7 @@ func TestManifestFiles(t *testing.T) {
 	for _, c := range []struct{ path, body, cache string }{
 		{"/assets/client-abc.js", "export const a=1", "public, max-age=31536000, immutable"},
 		{"/robots.txt", "User-agent: *", "no-cache"},
-		{"/app/assets/main-abc.js", "app()", "no-cache"},
+		{"/app/assets/main-Bx4kQ9zA.js", "app()", "public, max-age=31536000, immutable"},
 	} {
 		r := do(t, h, "GET", c.path)
 		if r.StatusCode != 200 || r.body != c.body || r.Header.Get("Cache-Control") != c.cache {

@@ -25,7 +25,7 @@ var siteFiles = []siteFile{
 	{"/pages/404/index.html", "<p>not here</p>", `"lost"`, "text/html; charset=utf-8", true, false},
 	{"/assets/client-abc.js", "export const a=1", `"client"`, "text/javascript; charset=utf-8", true, true},
 	{"/app/index.html", `<div id="app"></div>`, `"appindex"`, "text/html; charset=utf-8", true, false},
-	{"/app/assets/main-abc.js", "app()", `"appmain"`, "text/javascript; charset=utf-8", true, false},
+	{"/app/assets/main-Bx4kQ9zA.js", "app()", `"appmain"`, "text/javascript; charset=utf-8", true, true},
 	{"/robots.txt", "User-agent: *", `"robots"`, "text/plain; charset=utf-8", true, false},
 	{"/icon.bin", "\x00\x01\x02", `"icon"`, "application/octet-stream", false, false},
 	{"/routes.json", "{}", `"routes"`, "application/json", true, false},
@@ -47,7 +47,7 @@ var siteHints = map[string][]string{
 	"404":      {"</assets/client-abc.js>; rel=modulepreload"},
 }
 
-// pageBuild returns a build as weft build writes it: the files with their
+// pageBuild returns a build as weft-build-pages writes it: the files with their
 // variants, routes.json, manifest.json and the .weft-build marker.
 func pageBuild(t testing.TB) fstest.MapFS {
 	t.Helper()

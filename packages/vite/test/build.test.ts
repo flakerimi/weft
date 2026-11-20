@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { brotliDecompressSync, gunzipSync } from 'node:zlib'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { buildSite, contentType, type Manifest } from '../src/build.ts'
+import { buildSite, contentType, removeBuilt, type Manifest } from '../src/build.ts'
 import type { RoutesJson } from '../src/routes.ts'
 
 const fixture = (n: string) => fileURLToPath(new URL(`./fixtures/${n}`, import.meta.url))
@@ -71,6 +71,9 @@ function linkedSite(name: string): string {
 const scripts = (html: string) => [...html.matchAll(/<script\b([^>]*)>/g)].map((m) => m[1]!)
 const typeOf = (attrs: string) => /\btype="([^"]*)"/.exec(attrs)?.[1]
 const styleOf = (html: string) => /<style>([\s\S]*?)<\/style>/.exec(html)?.[1]
+/** The JSON of the page's one speculation rules script. */
+const speculationRules = (html: string) =>
+  JSON.parse(/<script type="speculationrules">([\s\S]*?)<\/script>/.exec(html)![1]!) as unknown
 const etagOf = (bytes: Buffer) => `"${createHash('sha256').update(bytes).digest('hex').slice(0, 16)}"`
 
 describe('buildSite on a site with islands', () => {
@@ -190,9 +193,9 @@ describe('buildSite on a site with islands', () => {
       expect(css).toContain('box-sizing:border-box') // weft.css
       expect(css).toContain('@view-transition { navigation: auto; }')
       expect(html).not.toContain('rel="stylesheet"')
-      expect(html).toContain(
-        '<script type="speculationrules">{"prefetch":[{"where":{"href_matches":"/*"},"eagerness":"moderate"}]}</script>',
-      )
+      expect(speculationRules(html)).toEqual({
+        prefetch: [{ where: { and: [{ href_matches: '/*' }, { not: { href_matches: ['/api', '/api/*'] } }] }, eagerness: 'moderate' }],
+      })
     }
   })
 
@@ -293,6 +296,18 @@ describe('buildSite on a site without islands', () => {
     expect(existsSync(join(out, 'assets'))).toBe(false)
     const html = readFileSync(join(out, 'pages/index/index.html'), 'utf8')
     expect(scripts(html).map(typeOf)).toEqual(['speculationrules'])
+  })
+
+  it('prefetches no API or app URL', () => {
+    const html = readFileSync(join(out, 'pages/index/index.html'), 'utf8')
+    expect(speculationRules(html)).toEqual({
+      prefetch: [
+        {
+          where: { and: [{ href_matches: '/*' }, { not: { href_matches: ['/api', '/api/*', '/app', '/app/*'] } }] },
+          eagerness: 'moderate',
+        },
+      ],
+    })
   })
 
   it('inlines the chosen theme', () => {
@@ -616,6 +631,20 @@ describe('buildSite with an app build', { timeout: 30_000 }, () => {
     expect(snapshot(app)).toEqual(before)
   })
 
+  it("marks the app's content-hashed assets immutable, and nothing else of it", async () => {
+    const app = tempDir()
+    appFiles(app)
+    writeFileSync(join(app, 'assets/index-FeUbVT--.js'), 'hashed')
+    writeFileSync(join(app, 'assets/logo-D9x2kQ7a.svg'), '<svg/>')
+    writeFileSync(join(app, 'assets/app-settings.js'), 'a name, not a hash')
+    writeFileSync(join(app, 'boot-Ab12Cd34.js'), 'outside assets/')
+    const manifest = await buildSite({ root: fixture('static-site'), outDir: tempDir(), appPrefix: '/admin', appDir: app })
+    const immutable = Object.keys(manifest.files).filter((f) => manifest.files[f]!.immutable).sort()
+    expect(immutable).toEqual(['/admin/assets/index-FeUbVT--.js', '/admin/assets/logo-D9x2kQ7a.svg'])
+    expect(manifest.files['/admin/assets/main.js']).toMatchObject({ immutable: false })
+    expect(manifest.files['/admin/index.html']).toMatchObject({ immutable: false })
+  })
+
   it('copies the app into the folder its prefix names, so its URLs are its files', async () => {
     const app = tempDir()
     appFiles(app)
@@ -645,6 +674,11 @@ describe('buildSite with an app build', { timeout: 30_000 }, () => {
     }
     for (const prefix of ['/a//b', '/a/./b', '/a/../b', '/a\\b']) {
       await expect(build(prefix)).rejects.toThrow(`buildSite: appPrefix "${prefix}" has an empty, ".", ".." or backslashed segment.`)
+    }
+    for (const prefix of ['/a?b', '/a#b', '/a%20b', '/a b', '/app/x?y']) {
+      await expect(build(prefix)).rejects.toThrow(
+        `buildSite: appPrefix "${prefix}" has a character other than A-Z, a-z, 0-9, ".", "_", "~" and "-"; use a plain path, like "/app".`,
+      )
     }
     for (const [prefix, why] of [
       ['/pages', 'holds the built pages'],
@@ -798,6 +832,103 @@ describe('buildSite with a site config that moves the client build', { timeout: 
       expect(readdirSync(parent)).toEqual(['dist'])
     })
   }
+})
+
+describe('buildSite with a plugin that changes the client build late', { timeout: 30_000 }, () => {
+  const sentence = (setting: string) =>
+    `buildSite: the site's Vite config or a plugin sets ${setting} for the client build; the page build alone decides where that goes, so remove it.`
+
+  /** A copy of the site whose vite.config has this plugin besides the external, built once into outDir. */
+  const withPlugin = async (plugin: (owner: string) => string) => {
+    const root = linkedSite('site')
+    const parent = tempDir()
+    const out = join(parent, 'dist')
+    await buildSite({ root, outDir: out })
+    // The owner's folder beside outDir.
+    const owner = join(parent, 'owner')
+    mkdirSync(owner)
+    writeFileSync(join(owner, 'keep.txt'), 'owner')
+    writeFileSync(
+      join(root, 'vite.config.ts'),
+      `import { defineConfig } from 'vite'\nexport default defineConfig({ build: { rollupOptions: { external: ['weft-test-external'] } }, plugins: [${plugin(owner)}] })\n`,
+    )
+    return { root, parent, out, owner, before: snapshot(out) }
+  }
+
+  for (const [name, hook, setting] of [
+    ['outDir and emptyOutDir', (o: string) => `this.environment.config.build.outDir = ${JSON.stringify(o)}; this.environment.config.build.emptyOutDir = true`, 'build.outDir'],
+    ['emptyOutDir', () => 'this.environment.config.build.emptyOutDir = true', 'build.emptyOutDir'],
+    ['copyPublicDir', () => 'this.environment.config.build.copyPublicDir = true', 'build.copyPublicDir'],
+    ['publicDir', (o: string) => `this.environment.config.publicDir = ${JSON.stringify(o)}`, 'publicDir'],
+  ] as const) {
+    it(`refuses ${name} set in buildStart, and leaves the owner's folder and outDir as they were`, async () => {
+      const { root, parent, out, owner, before } = await withPlugin((o) => `{ name: 'late', buildStart() { ${hook(o)} } }`)
+      await expect(buildSite({ root, outDir: out })).rejects.toThrow(new Error(sentence(setting)))
+      expect(snapshot(owner)).toEqual({ 'keep.txt': Buffer.from('owner').toString('base64') })
+      expect(snapshot(out)).toEqual(before)
+      expect(readdirSync(parent).sort()).toEqual(['dist', 'owner'])
+    })
+  }
+
+  it('refuses a watching client build, in one sentence', async () => {
+    const root = linkedSite('site')
+    writeFileSync(
+      join(root, 'vite.config.ts'),
+      `import { defineConfig } from 'vite'\nexport default defineConfig({ build: { watch: {}, rollupOptions: { external: ['weft-test-external'] } } })\n`,
+    )
+    const parent = tempDir()
+    await expect(buildSite({ root, outDir: join(parent, 'dist') })).rejects.toThrow(
+      new Error(`buildSite: the site's Vite config or a plugin sets build.watch for the client build; the page build builds once, so remove it.`),
+    )
+    expect(readdirSync(parent)).toEqual([])
+  })
+
+  it("does not refuse another environment's output settings: only the client is built", async () => {
+    const root = linkedSite('site')
+    const elsewhere = tempDir()
+    writeFileSync(join(elsewhere, 'keep.txt'), 'owner')
+    writeFileSync(
+      join(root, 'vite.config.ts'),
+      `import { defineConfig } from 'vite'
+export default defineConfig({
+  build: { rollupOptions: { external: ['weft-test-external'] } },
+  environments: { ssr: { build: { outDir: ${JSON.stringify(elsewhere)}, emptyOutDir: true } } },
+})
+`,
+    )
+    const out = join(tempDir(), 'dist')
+    const manifest = await buildSite({ root, outDir: out })
+    expect(manifest.files['/pages/counter/index.html']).toBeDefined()
+    expect(readdirSync(elsewhere)).toEqual(['keep.txt'])
+  })
+})
+
+describe('removeBuilt', { timeout: 30_000 }, () => {
+  it('deletes only the listed files that still match, then their emptied folders', async () => {
+    const out = join(tempDir(), 'dist')
+    await buildSite({ root: fixture('static-site'), outDir: out })
+    const { files: listed } = JSON.parse(readFileSync(join(out, '.weft-build'), 'utf8')) as { files: { path: string; size: number; sha256: string }[] }
+    // Between the check and the delete, the owner adds a file and changes one.
+    writeFileSync(join(out, 'pages/index/owner.txt'), 'owner')
+    writeFileSync(join(out, 'routes.json'), 'OWNER EDIT')
+    expect(await removeBuilt(out, listed)).toBe(false)
+    expect(snapshot(out)).toEqual({
+      '.weft-build': readFileSync(join(out, '.weft-build'), 'base64'),
+      pages: 'dir',
+      'pages/index': 'dir',
+      'pages/index/owner.txt': Buffer.from('owner').toString('base64'),
+      'routes.json': Buffer.from('OWNER EDIT').toString('base64'),
+    })
+  })
+
+  it('removes the whole folder when everything in it is as listed', async () => {
+    const parent = tempDir()
+    const out = join(parent, 'dist')
+    await buildSite({ root: fixture('static-site'), outDir: out })
+    const { files: listed } = JSON.parse(readFileSync(join(out, '.weft-build'), 'utf8')) as { files: { path: string; size: number; sha256: string }[] }
+    expect(await removeBuilt(out, listed)).toBe(true)
+    expect(readdirSync(parent)).toEqual([])
+  })
 })
 
 describe('buildSite with public files', { timeout: 30_000 }, () => {
@@ -962,6 +1093,20 @@ describe('buildSite refuses', { timeout: 30_000 }, () => {
   )
 })
 
+describe('buildSite without pages', () => {
+  it('refuses a site with no pages folder, in one sentence', async () => {
+    const root = tempDir()
+    await expect(buildSite({ root, outDir: join(root, 'dist') })).rejects.toThrow(
+      new Error(`buildSite: ${join(root, 'pages')} does not exist; a site's pages are .vue files in it, like pages/index.vue.`),
+    )
+    writeFileSync(join(root, 'pages'), 'not a folder')
+    await expect(buildSite({ root, outDir: join(root, 'dist') })).rejects.toThrow(
+      new Error(`buildSite: ${join(root, 'pages')} is not a folder; a site's pages are .vue files in it, like pages/index.vue.`),
+    )
+    expect(readdirSync(root)).toEqual(['pages'])
+  })
+})
+
 describe('contentType', () => {
   it('knows the types a site serves', () => {
     expect(
@@ -989,7 +1134,7 @@ describe('bin/weft-build-pages.mjs', () => {
   it('makes a production build from the command line', async () => {
     const out = tempDir()
     const bin = fileURLToPath(new URL('../bin/weft-build-pages.mjs', import.meta.url))
-    // As `weft build` runs it: no NODE_ENV (vitest sets "test").
+    // As a site runs it: no NODE_ENV (vitest sets "test").
     const env = { ...process.env, NODE_ENV: undefined }
     const { stdout } = await promisify(execFile)(process.execPath, [bin, '--root', fixture('site'), '--out', out], { env })
     expect(stdout).toBe(`weft: built 8 pages into ${out}\n`)

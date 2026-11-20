@@ -1,8 +1,26 @@
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import { discoverRoutes, expandRoutes } from '../src/routes.ts'
 
 const dir = (n: string) => fileURLToPath(new URL(`./fixtures/${n}`, import.meta.url))
+
+const temps: string[] = []
+afterAll(() => {
+  for (const t of temps) rmSync(t, { recursive: true, force: true })
+})
+/** A pages folder in a temp folder holding these files (each an empty page). */
+const pagesWith = (...files: string[]) => {
+  const pages = join(mkdtempSync(join(tmpdir(), 'weft-routes-')), 'pages')
+  temps.push(join(pages, '..'))
+  for (const f of files) {
+    mkdirSync(join(pages, f, '..'), { recursive: true })
+    writeFileSync(join(pages, f), '<template><p /></template>\n')
+  }
+  return pages
+}
 
 describe('discoverRoutes', () => {
   it('maps files to paths, static before dynamic, alphabetical', async () => {
@@ -25,6 +43,27 @@ describe('discoverRoutes', () => {
       'pages "about.vue" and "about/index.vue" both make /about',
     )
   })
+
+  it('throws when two files make paths that differ only in case, on every OS', async () => {
+    await expect(discoverRoutes(pagesWith('About.vue', 'about/index.vue'))).rejects.toThrow(
+      new Error('pages "About.vue" and "about/index.vue" both make /about'),
+    )
+  })
+
+  it('refuses a symlinked page or folder, in one sentence', async () => {
+    const elsewhere = pagesWith('real.vue', 'blog/post.vue')
+    const file = pagesWith('index.vue')
+    symlinkSync(join(elsewhere, 'real.vue'), join(file, 'linked.vue'))
+    await expect(discoverRoutes(file)).rejects.toThrow(
+      new Error('pages/linked.vue is a symlink, which Weft does not follow; put the page itself in pages/.'),
+    )
+    const folder = pagesWith('index.vue')
+    mkdirSync(join(folder, 'docs'))
+    symlinkSync(join(elsewhere, 'blog'), join(folder, 'docs/blog'))
+    await expect(discoverRoutes(folder)).rejects.toThrow(
+      new Error('pages/docs/blog is a symlink, which Weft does not follow; put the folder itself in pages/.'),
+    )
+  })
 })
 
 describe('expandRoutes', () => {
@@ -43,6 +82,13 @@ describe('expandRoutes', () => {
     await expect(
       expandRoutes(routes, async () => ({ getPaths: async () => [{ slug: 'about' }] })),
     ).rejects.toThrow('pages "about.vue" and "[slug].vue" both make /about')
+  })
+
+  it('throws when a dynamic page yields a path a static page owns in another case', async () => {
+    const routes = await discoverRoutes(dir('routes-dynamic'))
+    await expect(
+      expandRoutes(routes, async () => ({ getPaths: async () => [{ slug: 'About' }] })),
+    ).rejects.toThrow(new Error('pages "about.vue" and "[slug].vue" both make /About'))
   })
 
   it('throws, naming the file, when getPaths is missing', async () => {

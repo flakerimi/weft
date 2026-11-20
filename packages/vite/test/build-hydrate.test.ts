@@ -14,7 +14,7 @@ let out: string
 beforeAll(async () => {
   temp = mkdtempSync(join(tmpdir(), 'weft-hydrate-'))
   out = join(temp, 'dist')
-  // Built as `weft build` builds it: the bin, with no NODE_ENV.
+  // Built as a site builds it: the bin, with no NODE_ENV.
   const bin = here('../bin/weft-build-pages.mjs')
   await run(process.execPath, [bin, '--root', here('./fixtures/modules-site'), '--out', out], {
     env: { ...process.env, NODE_ENV: undefined },

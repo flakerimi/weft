@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { constants as fs, existsSync, realpathSync, type Dirent } from 'node:fs'
-import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, rmdir, stat, unlink, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -61,8 +61,15 @@ export interface Manifest {
   hints: Record<string, string[]>
 }
 
-const SPECULATION_RULES =
-  '<script type="speculationrules">{"prefetch":[{"where":{"href_matches":"/*"},"eagerness":"moderate"}]}</script>'
+/**
+ * Prefetch same-site links as the pointer settles on them, except the API's and
+ * the app's: an API call may change something, and the app is not a page.
+ */
+function speculationRules(app: RoutesJson['app']): string {
+  const skip = ['/api', ...(app ? [app.prefix] : [])].flatMap((p) => [p, `${p}/*`])
+  const rules = { prefetch: [{ where: { and: [{ href_matches: '/*' }, { not: { href_matches: skip } }] }, eagerness: 'moderate' }] }
+  return `<script type="speculationrules">${JSON.stringify(rules)}</script>`
+}
 const VIEW_TRANSITION = '@view-transition { navigation: auto; }'
 const THEMES: Theme[] = ['neutral', 'lisa']
 const CLIENT_ENTRY = fileURLToPath(new URL('./client.ts', import.meta.url))
@@ -111,13 +118,20 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
   const app = opts.appPrefix === undefined ? null : appRoute(opts.appPrefix)
   const appDir = app ? resolve(opts.appDir ?? join(root, 'app-dist')) : null
   checkOutDir(outDir, root, appDir)
+  const pagesDir = join(root, 'pages')
+  const pagesStat = await stat(pagesDir).catch(() => null)
+  if (!pagesStat?.isDirectory()) {
+    throw new Error(
+      `buildSite: ${pagesDir} ${pagesStat ? 'is not a folder' : 'does not exist'}; a site's pages are .vue files in it, like pages/index.vue.`,
+    )
+  }
   if (app && appDir && !existsSync(join(appDir, 'index.html'))) {
     throw new Error(
       `buildSite: appPrefix is ${app.prefix} but ${join(appDir, 'index.html')} is missing; build the app into ${appDir} first, or set appDir.`,
     )
   }
   const { css: baseCSS, files: baseFiles } = await readStyles(root, theme)
-  const routes = await discoverRoutes(join(root, 'pages'))
+  const routes = await discoverRoutes(pagesDir)
 
   // A production build, as `vite build` makes one: the first Vite server sets
   // NODE_ENV for the whole process, so it must not be the dev server's default.
@@ -210,6 +224,7 @@ async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssI
 
   const hints: Manifest['hints'] = {}
   const routesJson: RoutesJson = { pages: [], notFound: null, app }
+  const rules = speculationRules(app)
   for (const page of pages) {
     // The theme, weft.css, the page's component CSS, then view transitions.
     const css = [baseCSS, page.css, VIEW_TRANSITION].filter(Boolean).join('\n') + '\n'
@@ -222,7 +237,7 @@ async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssI
     }
     const scripts = page.islands.length > 0 ? client : null
     const file = htmlFile(page.path)
-    await write(file, pageHTML({ body: page.html, head: page.head, css, stylesheet, scripts }))
+    await write(file, pageHTML({ body: page.html, head: page.head, css, stylesheet, scripts, rules }))
 
     const links = [
       ...(stylesheet ? [`<${stylesheet}>; rel=preload; as=style`] : []),
@@ -235,7 +250,14 @@ async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssI
   }
   await write('routes.json', JSON.stringify(routesJson, null, 2) + '\n')
   // The app's own .br/.gz would be stale beside the ones made here; public/ is copied as it is.
-  if (app && appDir) await copyTree(appDir, appDir, dir, app.prefix.slice(1), taken, { variants: false })
+  if (app && appDir) {
+    await copyTree(appDir, appDir, dir, app.prefix.slice(1), taken, { variants: false })
+    // Vite names the app's built assets <name>-<hash>.<ext>: those are cached forever, as an SPA's are.
+    const assets = `${app.prefix.slice(1)}/assets/`
+    for (const { path } of taken.values()) {
+      if (path.startsWith(assets) && hashedName(path.slice(assets.length))) immutable.add(path)
+    }
+  }
   await copyTree(join(root, 'public'), 'public', dir, '', taken, { variants: true })
 
   // The .br and .gz the build makes may not be names already taken.
@@ -347,6 +369,16 @@ async function walk(dir: string, prefix = ''): Promise<Entry[]> {
   return out
 }
 
+/**
+ * Whether a file name carries a content hash as Vite writes one: `name-<8 of
+ * A-Z a-z 0-9 _ ->.ext`, the eight with a capital or a digit, so that a word
+ * such as `app-settings.js` is not taken for one. A miss is only revalidated.
+ */
+const hashedName = (name: string) => {
+  const hash = /^[^/]+-([A-Za-z0-9_-]{8})\.[A-Za-z0-9]+$/.exec(name)?.[1]
+  return hash !== undefined && /[A-Z0-9]/.test(hash)
+}
+
 /** A relative path in a marker: segments, none empty, `.` or `..`, no backslash or NUL. */
 const safePath = (p: unknown) =>
   typeof p === 'string' && !/[\\\0]/.test(p) && p.split('/').every((s) => s !== '' && s !== '.' && s !== '..')
@@ -364,13 +396,19 @@ const markedFile = (f: unknown): f is MarkedFile => {
   )
 }
 
+/** Whether the build may take a folder's place, and for a built one, its files as named on disk. */
+interface Replaceable {
+  state: 'missing' | 'empty' | 'built'
+  files: MarkedFile[]
+}
+
 /**
  * Whether the build may take `dir`'s place: `missing`, `empty`, or `built`
  * (its marker lists exactly the files in it, each with the size and SHA-256
  * it has, with no symlink and no other folder). Anything else is refused in
  * one sentence naming `shown`.
  */
-async function replaceable(dir: string, shown = dir): Promise<'missing' | 'empty' | 'built'> {
+async function replaceable(dir: string, shown = dir): Promise<Replaceable> {
   const refuse = (why: string, then = 'Weft replaces only an empty folder or one it built, so move that out or build into a new folder'): never => {
     throw new Error(`buildSite: outDir ${shown} ${why}; ${then}.`)
   }
@@ -382,12 +420,12 @@ async function replaceable(dir: string, shown = dir): Promise<'missing' | 'empty
     if (e.code === 'ENOENT') return null
     throw e
   })
-  if (!self) return 'missing'
+  if (!self) return { state: 'missing', files: [] }
   if (self.isSymbolicLink()) refuse('is a symlink')
   if (!self.isDirectory()) refuse('is not a folder')
   try {
     const top = (await readdir(dir)).sort()
-    if (top.length === 0) return 'empty'
+    if (top.length === 0) return { state: 'empty', files: [] }
     // Without a marker, the first entry is the foreign one; the rest is not walked.
     const marker = await lstat(join(dir, MARKER)).catch(() => null)
     if (marker && !marker.isFile()) refuse(`has a ${MARKER} that is not a regular file`)
@@ -416,13 +454,15 @@ async function replaceable(dir: string, shown = dir): Promise<'missing' | 'empty
       if (e.kind === 'dir' ? !dirs.has(path) : e.kind !== 'file' || !want.has(path)) foreign(e.path)
       if (e.kind === 'file') found.set(path, e.path)
     }
+    const files: MarkedFile[] = []
     for (const f of listed) {
       const name = found.get(nfc(f.path))
       if (name === undefined) return refuse(`no longer holds ${f.path}, which Weft built`)
       const bytes = await readFile(join(dir, name))
       if (bytes.length !== f.size || sha256(bytes) !== f.sha256) refuse(`holds ${name}, changed since Weft built it`)
+      files.push({ ...f, path: name })
     }
-    return 'built'
+    return { state: 'built', files }
   } catch (e) {
     const { code, path } = e as NodeJS.ErrnoException
     if (code !== 'EACCES' && code !== 'EPERM') throw e
@@ -437,26 +477,51 @@ async function replaceable(dir: string, shown = dir): Promise<'missing' | 'empty
  * checked once more, and only then removed.
  */
 async function swap(staging: string, outDir: string) {
-  const state = await replaceable(outDir)
+  const { state } = await replaceable(outDir)
   if (state === 'empty') await rmdir(outDir)
   if (state !== 'built') return rename(staging, outDir)
   const old = await mkdtemp(join(dirname(outDir), `.${basename(outDir)}.weft-old-`))
   await rmdir(old)
   await rename(outDir, old)
+  let files: MarkedFile[]
   try {
-    await replaceable(old, outDir)
+    ;({ files } = await replaceable(old, outDir))
     await rename(staging, outDir)
   } catch (e) {
     await rename(old, outDir)
     throw e
   }
-  // Exactly what the marker lists, and no symlink: all of it is Weft's. The
-  // build is done by now, so a folder that will not go is reported, not fatal.
-  try {
-    await rm(old, { recursive: true })
-  } catch {
+  // The build is done by now, so a folder that will not go is reported, not fatal.
+  if (!(await removeBuilt(old, files))) {
     console.warn(`buildSite: the build is in ${outDir}, but the earlier build moved to ${old} could not be removed; remove that folder by hand.`)
   }
+}
+
+/**
+ * Delete the build in `dir` by its marker's list, `files` (paths as named on
+ * disk): each file only if it still has its listed size and SHA-256, then the
+ * marker, then the folders the list names, deepest first, and `dir` itself,
+ * each only if it is empty. Anything else (a file added or changed since the
+ * build was checked, one that will not go) stays. Never throws; reports
+ * whether `dir` is gone.
+ */
+export async function removeBuilt(dir: string, files: MarkedFile[]): Promise<boolean> {
+  let kept = false
+  for (const f of files) {
+    const path = join(dir, f.path)
+    try {
+      const bytes = await readFile(path)
+      if (bytes.length === f.size && sha256(bytes) === f.sha256) await unlink(path)
+      else kept = true
+    } catch {
+      kept = true
+    }
+  }
+  if (!kept) await unlink(join(dir, MARKER)).catch(() => {})
+  const dirs = [...new Set(files.flatMap((f) => f.path.split('/').slice(0, -1).map((_, n, s) => s.slice(0, n + 1).join('/'))))]
+  dirs.sort((a, b) => b.split('/').length - a.split('/').length)
+  for (const d of [...dirs, '']) await rmdir(join(dir, d)).catch(() => {})
+  return !existsSync(dir)
 }
 
 const foldCase = process.platform === 'darwin' || process.platform === 'win32'
@@ -531,6 +596,12 @@ function appRoute(prefix: string): NonNullable<RoutesJson['app']> {
   if (segments.some((s) => s === '' || s === '.' || s === '..' || /[\\\0]/.test(s))) {
     throw new Error(`buildSite: appPrefix "${prefix}" has an empty, ".", ".." or backslashed segment.`)
   }
+  // Plain URL characters only: the prefix is a folder name, a URL path and a speculation rules pattern.
+  if (segments.some((s) => !/^[A-Za-z0-9._~-]+$/.test(s))) {
+    throw new Error(
+      `buildSite: appPrefix "${prefix}" has a character other than A-Z, a-z, 0-9, ".", "_", "~" and "-"; use a plain path, like "/app".`,
+    )
+  }
   // The Go server sends /api/ to the API and never serves the page files under /pages/ as they are.
   const first = segments[0]!
   const taken = RESERVED_PREFIXES.get(first.toLowerCase())
@@ -598,35 +669,64 @@ const noCSS: Plugin = {
 
 type OutputOptions = Rolldown.OutputOptions
 
+/** The client build's lock: its plugin, and the refusal it made, if any. */
+interface OutputLock {
+  plugin: Plugin
+  /** The sentence the lock refused the build with, when it did. */
+  refused: () => string | null
+}
+
 /**
  * Hold the client build to `dir`: after every other plugin has had its say,
- * each environment must still build into `dir`, without emptying it and with
- * no output folder or file of its own; otherwise the build stops, before
- * anything is written, with one sentence naming the setting.
+ * the client environment, the one `build()` builds, must still build into
+ * `dir` once, without emptying it and with no output folder or file of its
+ * own; otherwise the build stops, before anything is written, with one
+ * sentence naming the setting. Then the settings that say where files go are
+ * frozen on every environment, so a plugin that changes one later, in
+ * `buildStart` say, is refused the same way.
  */
-function lockOutput(dir: string): Plugin {
-  const refuse = (setting: string, env = 'client'): never => {
-    throw new Error(
-      `buildSite: the site's Vite config or a plugin sets ${setting} for the ${env} build; the page build alone decides where that goes, so remove it.`,
-    )
+function lockOutput(dir: string): OutputLock {
+  let refused: string | null = null
+  const refuse = (setting: string, then = 'the page build alone decides where that goes'): never => {
+    refused = `buildSite: the site's Vite config or a plugin sets ${setting} for the client build; ${then}, so remove it.`
+    throw new Error(refused)
   }
   const outputs = (o: OutputOptions | OutputOptions[] | undefined) => (Array.isArray(o) ? o : o ? [o] : [])
-  const check = (root: string, env: string, b: ResolvedConfig['build']) => {
+  const check = (root: string, b: ResolvedConfig['build']) => {
     for (const name of ['rollupOptions', 'rolldownOptions'] as const) {
       for (const o of outputs((b[name] as { output?: OutputOptions | OutputOptions[] } | undefined)?.output)) {
-        if (o.dir !== undefined) refuse(`build.${name}.output.dir`, env)
-        if (o.file !== undefined) refuse(`build.${name}.output.file`, env)
+        if (o.dir !== undefined) refuse(`build.${name}.output.dir`)
+        if (o.file !== undefined) refuse(`build.${name}.output.file`)
       }
     }
-    if (resolve(root, b.outDir) !== dir) refuse('build.outDir', env)
-    if (b.emptyOutDir !== false) refuse('build.emptyOutDir', env)
+    if (resolve(root, b.outDir) !== dir) refuse('build.outDir')
+    if (b.emptyOutDir !== false) refuse('build.emptyOutDir')
+    if (b.watch != null) refuse('build.watch', 'the page build builds once')
   }
-  return {
+  /** Make `obj[key]` keep the value it has: reading it gives that, setting it is refused, redefining it fails. */
+  const freeze = (obj: object, key: string, setting: string) => {
+    if (Object.getOwnPropertyDescriptor(obj, key)?.configurable === false) return
+    const value = (obj as Record<string, unknown>)[key]
+    Object.defineProperty(obj, key, {
+      get: () => value,
+      set: () => refuse(setting),
+      enumerable: true,
+      configurable: false,
+    })
+  }
+  const plugin: Plugin = {
     name: 'weft:lock-output',
     enforce: 'post',
-    // The top-level build options are the client environment's; each environment is checked.
     configResolved(config) {
-      for (const [name, env] of Object.entries(config.environments)) check(config.root, name, env.build)
+      check(config.root, config.environments.client!.build)
+      // The top-level options and every environment's. An environment reads
+      // publicDir from the top level unless it has its own, and setting it on
+      // the environment's config gives it one: each gets its own, frozen.
+      for (const target of [config, ...Object.values(config.environments)]) {
+        for (const key of ['outDir', 'emptyOutDir', 'copyPublicDir']) freeze(target.build, key, `build.${key}`)
+        if (!('publicDir' in target)) Object.assign(target, { publicDir: config.publicDir })
+        freeze(target, 'publicDir', 'publicDir')
+      }
     },
     outputOptions: {
       order: 'post',
@@ -635,6 +735,7 @@ function lockOutput(dir: string): Plugin {
       },
     },
   }
+  return { plugin, refused: () => refused }
 }
 
 /** The site's output options without those that say where files go or what they are called. */
@@ -642,11 +743,12 @@ const placeless = ({ dir, file, entryFileNames, chunkFileNames, assetFileNames, 
 
 /** Build the island runtime and one chunk per island into `<dir>/assets`. */
 async function buildClient(root: string, dir: string, islands: string[]): Promise<ClientBuild> {
+  const lock = lockOutput(dir)
   const config = await siteConfig(root, { command: 'build', mode: 'production' }, {
     base: '/',
     logLevel: 'warn',
     publicDir: false,
-    plugins: [noCSS, weft({ islands }), lockOutput(dir)],
+    plugins: [noCSS, weft({ islands }), lock.plugin],
     // The runtime lives in this package; its `vue` must be the site's.
     resolve: { dedupe: ['vue'] },
     build: {
@@ -673,7 +775,14 @@ async function buildClient(root: string, dir: string, islands: string[]): Promis
   }
   const output = Array.isArray(options.output) ? options.output.map(placeless) : placeless(options.output ?? {})
   b.rolldownOptions = b.rollupOptions = { ...options, input: { client: CLIENT_ENTRY }, output }
-  const result = (await build(config)) as Rolldown.RolldownOutput | Rolldown.RolldownOutput[]
+  let result: Rolldown.RolldownOutput | Rolldown.RolldownOutput[]
+  try {
+    result = (await build(config)) as typeof result
+  } catch (e) {
+    // Vite and Rolldown wrap a hook's error in their own words; the lock's sentence is the one to give.
+    const refused = lock.refused()
+    throw refused ? new Error(refused) : e
+  }
   const chunks = (Array.isArray(result) ? result : [result]).flatMap((r) => r.output)
   const entry = chunks.find((o): o is Rolldown.OutputChunk => o.type === 'chunk' && o.isEntry)
   if (!entry) throw new Error('buildSite: the client build produced no entry chunk.')
@@ -706,6 +815,8 @@ function pageHTML(p: {
   css: string
   stylesheet: string | null
   scripts: ClientBuild | null
+  /** The speculation rules script. */
+  rules: string
 }): string {
   return [
     '<!doctype html>',
@@ -715,7 +826,7 @@ function pageHTML(p: {
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     ...headTags(p.head),
     p.stylesheet === null ? `<style>${p.css}</style>` : `<link rel="stylesheet" href="${p.stylesheet}">`,
-    SPECULATION_RULES,
+    p.rules,
     ...(p.scripts
       ? [
           ...p.scripts.imports.map((m) => `<link rel="modulepreload" href="${m}">`),

@@ -1,4 +1,4 @@
-import { readdir } from 'node:fs/promises'
+import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
 export type Route = { path: string; file: string; dynamic: boolean }
@@ -19,10 +19,26 @@ async function walk(dir: string, prefix: string, out: string[]): Promise<void> {
   const entries = await readdir(dir, { withFileTypes: true })
   for (const e of entries) {
     if (e.name.startsWith('_') || e.name.startsWith('.')) continue
-    if (e.isDirectory()) await walk(join(dir, e.name), `${prefix}${e.name}/`, out)
+    if (e.isSymbolicLink()) {
+      // A linked page or folder would be built from somewhere else, or twice; say so rather than skip it.
+      const isDir = await stat(join(dir, e.name)).then((s) => s.isDirectory(), () => false)
+      if (e.name.endsWith('.vue') || isDir) {
+        throw new Error(
+          `pages/${prefix}${e.name} is a symlink, which Weft does not follow; put the ${isDir ? 'folder' : 'page'} itself in pages/.`,
+        )
+      }
+    } else if (e.isDirectory()) await walk(join(dir, e.name), `${prefix}${e.name}/`, out)
     else if (e.isFile() && e.name.endsWith('.vue')) out.push(`${prefix}${e.name}`)
   }
 }
+
+/**
+ * A path as the server and the file systems compare it: the build writes each
+ * page to a folder named after its path, and a file system that ignores case or
+ * Unicode form would take two such folders for one, so paths that differ only
+ * there clash on every OS.
+ */
+const pathKey = (path: string) => path.normalize('NFC').toLowerCase()
 
 function toPath(file: string): string {
   const parts = file.slice(0, -'.vue'.length).split('/')
@@ -45,9 +61,9 @@ export async function discoverRoutes(pagesDir: string): Promise<Route[]> {
   })
   const seen = new Map<string, string>()
   for (const r of routes) {
-    const other = seen.get(r.path)
+    const other = seen.get(pathKey(r.path))
     if (other !== undefined) throw collision(other, r.file, r.path)
-    seen.set(r.path, r.file)
+    seen.set(pathKey(r.path), r.file)
   }
   return routes.sort(byOrder)
 }
@@ -63,9 +79,9 @@ export async function expandRoutes(
   const out: ExpandedRoute[] = []
   const owner = new Map<string, string>()
   const add = (path: string, file: string, params: Record<string, string>) => {
-    const other = owner.get(path)
+    const other = owner.get(pathKey(path))
     if (other !== undefined) throw collision(other, file, path)
-    owner.set(path, file)
+    owner.set(pathKey(path), file)
     out.push({ path, file, params })
   }
   for (const r of routes) if (!r.dynamic) add(r.path, r.file, {})

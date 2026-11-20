@@ -53,6 +53,36 @@ describe('renderPage', () => {
     )
   })
 
+  it('refuses island props that JSON would drop or change, naming the island and the prop', async () => {
+    const bad = fileURLToPath(new URL('./fixtures/bad-island', import.meta.url))
+    class Thing {}
+    const loop: Record<string, unknown> = {}
+    loop.self = loop
+    const sentence = (path: string, what: string) =>
+      `Island: prop ${path} of island Counter is ${what}, which JSON cannot carry to the browser; pass only strings, finite numbers, booleans, null, arrays and plain objects.`
+    for (const [value, path, what] of [
+      [() => 1, 'extra', 'a function'],
+      [Symbol('s'), 'extra', 'a symbol'],
+      [10n, 'extra', 'a bigint'],
+      [undefined, 'extra', 'undefined'],
+      [Number.NaN, 'extra', 'NaN'],
+      [new Date(0), 'extra', 'a Date'],
+      [new Map(), 'extra', 'a Map'],
+      [new Thing(), 'extra', 'a Thing'],
+      [{ deep: [1, () => 1] }, 'extra.deep[1]', 'a function'],
+      [[1, , 3], 'extra[1]', 'an empty array slot'],
+      [loop, 'extra.self', 'an object that contains itself'],
+    ] as const) {
+      await expect(renderPage({ root: bad, page: 'pages/props.vue', props: { value } }), String(path)).rejects.toThrow(
+        new Error(sentence(path, what)),
+      )
+    }
+    // Plain data, a null-prototype object included, renders.
+    const plain = Object.assign(Object.create(null) as object, { a: [1, 'x', true, null, { b: 2 }] })
+    const { html } = await renderPage({ root: bad, page: 'pages/props.vue', props: { value: plain } })
+    expect(/<script type="application\/json">([\s\S]*?)<\/script>/.exec(html)![1]).toBe('{"start":1,"extra":{"a":[1,"x",true,null,{"b":2}]}}')
+  })
+
   it('refuses an island component without an SFC name', async () => {
     const bad = fileURLToPath(new URL('./fixtures/bad-island', import.meta.url))
     await expect(renderPage({ root: bad, page: 'pages/unnamed.vue' })).rejects.toThrow(
