@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { buildCatalog, CATALOG_FILE, parseDocs, serialise, type Catalog, type CatalogComponent } from '../../../scripts/catalog.ts'
+import { compiledOptions } from '../../../scripts/catalog-sfc.ts'
 
 const repo = fileURLToPath(new URL('../../..', import.meta.url))
 const temps: string[] = []
@@ -222,17 +223,51 @@ defineProps<Props & Extra & { last: number }>()
     expect(thing!.slots).toEqual([{ name: '`cell-${c}`', props: ['value'], dynamic: true }])
   })
 
+  it('options from a plain <script> beside <script setup>, with or without TypeScript', () => {
+    const plain = (lang: string) => `<script${lang}>
+const shared = { a: String }
+export default { inheritAttrs: false, props: shared }
+</script>
+<script setup vapor${lang}>
+</script>
+<template><i /></template>
+`
+    for (const lang of [' lang="ts"', '']) {
+      const [thing] = buildCatalog(repoWith({ sfc: plain(lang) })).components
+      expect(thing!.props, lang || 'plain JavaScript').toEqual([
+        { name: 'a', type: 'string', required: false, default: null, description: null },
+      ])
+    }
+  })
+
+  it('setup props beside a plain <script> that sets other options, with or without TypeScript', () => {
+    const sfc = (lang: string, props: string) => `<script${lang}>
+export default { inheritAttrs: false }
+</script>
+<script setup vapor${lang}>
+${props}
+</script>
+<template><i /></template>
+`
+    const ts = buildCatalog(repoWith({ sfc: sfc(' lang="ts"', 'defineProps<{ a?: string }>()') })).components[0]!
+    const js = buildCatalog(repoWith({ sfc: sfc('', 'defineProps({ a: { type: String, default: "x" } })') })).components[0]!
+    expect(ts.props).toEqual([{ name: 'a', type: 'string', required: false, default: null, description: null }])
+    expect(js.props).toEqual([{ name: 'a', type: 'string', required: false, default: '"x"', description: null }])
+  })
+
   it('refuses, in one sentence, options it cannot read', () => {
     const sfc = `<script lang="ts">
-const shared = { a: String }
+import shared from './shared.ts'
 export default { props: shared }
 </script>
 <script setup vapor lang="ts">
 </script>
 <template><i /></template>
 `
-    expect(() => buildCatalog(repoWith({ sfc }))).toThrow(
-      'packages/ui/src/widgets/Thing.vue sets component options in a plain <script> the catalogue cannot read; declare props, emits and slots in <script setup>.',
+    const root = repoWith({ sfc })
+    writeFileSync(join(root, 'packages/ui/src/widgets/shared.ts'), 'export default { a: String }\n')
+    expect(() => buildCatalog(root)).toThrow(
+      'packages/ui/src/widgets/Thing.vue sets component options the catalogue cannot read; declare props, emits and slots in <script setup>, or as object literals in a plain <script>.',
     )
   })
 
@@ -243,6 +278,33 @@ export default { props: shared }
       { name: 'row', props: ['item', 'index'], dynamic: false },
       { name: 'default', props: [], dynamic: false },
     ])
+  })
+})
+
+describe('the compiled options', () => {
+  const read = (body: string) => compiledOptions(`export default {\n  __name: 'X',\n  ${body},\n}\n`, 'X.vue')
+
+  it('keep destructured defaults through mergeModels inside mergeDefaults', () => {
+    const { props } = read(`props: _mergeDefaults(_mergeModels({ size: String }, { open: { type: Boolean } }), { size: 'md', open: true })`)
+    expect(props).toEqual([
+      { name: 'size', required: false, default: "'md'", runtimeType: 'String' },
+      { name: 'open', required: false, default: 'true', runtimeType: 'Boolean' },
+    ])
+  })
+
+  it('refuse defaults that are not an object literal', () => {
+    expect(() => read('props: _mergeDefaults({ size: String }, defaults)')).toThrow(
+      'X.vue sets component options the catalogue cannot read; declare props, emits and slots in <script setup>, or as object literals in a plain <script>.',
+    )
+  })
+
+  it('refuse a spread of anything but an object literal', () => {
+    expect(() => read('...base(), props: { a: String }')).toThrow('X.vue sets component options the catalogue cannot read')
+    expect(() => read('...imported, props: { a: String }')).toThrow('X.vue sets component options the catalogue cannot read')
+  })
+
+  it('refuse a default export that is not an object', () => {
+    expect(() => compiledOptions('export default makeComponent()\n', 'X.vue')).toThrow('X.vue sets component options the catalogue cannot read')
   })
 })
 

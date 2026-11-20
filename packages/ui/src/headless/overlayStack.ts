@@ -24,8 +24,12 @@
  *   overlay or an overlay above it, or on nothing (it was in an element that
  *   went away). A user who clicked into another field keeps their focus, and
  *   an overlay closed by a press outside it returns no focus at all: the
- *   press put the user's attention elsewhere. (`useFocusTrap` returns focus
- *   itself only when its element is not a stacked overlay.)
+ *   press put the user's attention elsewhere. An overlay that declines the
+ *   press (it stays open past the end of that task) returns focus as usual
+ *   when it closes later. `returnFocus(el)` applies the same rules without
+ *   popping, for an overlay hidden but still mounted (`v-show`);
+ *   `useFocusTrap` calls it, and returns focus itself only when its element
+ *   is not a stacked overlay.
  *
  * Components normally do not call this directly: `useDismiss` pushes and pops
  * while the overlay's element exists. Document listeners exist only while the
@@ -86,9 +90,21 @@ function onKeydown(event: KeyboardEvent) {
 
 /** The top overlay takes a press outside it. */
 function outside(e: Entry, event: PointerEvent | MouseEvent) {
-  // Set first: the handler may close the overlay, and pop it, at once.
+  // Set first: the handler may close the overlay, and pop it, at once. A
+  // component closes in the microtasks that follow (its render, then the pop),
+  // so the flag lasts until the end of this task. If the overlay is still open
+  // then, it declined (an unsaved-changes guard), and a later close returns
+  // focus as usual.
   e.closedOutside = true
   if (e.onOutside?.(event) === false) e.closedOutside = false
+  else setTimeout(() => (e.closedOutside = false), 0)
+}
+
+/** Return focus for `e` by the rules above; `at` is its index, for the overlays above it. */
+function returnFocusFor(e: Entry, at: number) {
+  if (e.closedOutside) return
+  const within = [e, ...entries.slice(at + 1)].map(elOf)
+  restoreFocus(toValue(e.returnTo) ?? e.opener, within)
 }
 
 function onPointerdown(event: PointerEvent) {
@@ -145,13 +161,28 @@ export const overlayStack = {
   pop(id: string): void {
     const at = entries.findIndex((e) => e.id === id)
     if (at < 0) return
-    const [e] = entries.splice(at, 1) as [Entry]
+    const e = entries[at]!
     // Focus may be in this overlay or in one stacked above it, which closes with it.
-    const within = [e, ...entries.slice(at)].map(elOf)
+    returnFocusFor(e, at)
+    entries.splice(at, 1)
     if (pendingTouch === e) pendingTouch = null
     publish()
     if (!entries.length && typeof document !== 'undefined') listen(false)
-    if (!e.closedOutside) restoreFocus(toValue(e.returnTo) ?? e.opener, within)
+  },
+
+  /**
+   * Return focus for the overlay holding `el` as `pop` would, without taking
+   * it off the stack: for an overlay hidden but still mounted (`v-show`).
+   * Returns whether an overlay holds `el`.
+   */
+  returnFocus(el: Element): boolean {
+    let at = -1
+    entries.forEach((e, i) => {
+      if (elOf(e)?.contains(el)) at = i
+    })
+    if (at < 0) return false
+    returnFocusFor(entries[at]!, at)
+    return true
   },
 
   /** The id of the top overlay, or undefined when none is open. Reactive. */

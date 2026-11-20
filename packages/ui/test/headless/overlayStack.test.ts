@@ -122,6 +122,32 @@ describe('overlayStack', () => {
     expect(active()).not.toBe($('.opener', root))
   })
 
+  it('does not return focus after a press outside that closes the overlay a little later', async () => {
+    const root = html('<button class="opener">o</button><div class="panel"><button class="in">i</button></div><p class="out">o</p>')
+    $('.opener', root).focus()
+    // As components close: state changes now, the element goes in a later microtask.
+    overlayStack.push('a', { el: () => $('.panel', root), onOutside: () => queueMicrotask(() => queueMicrotask(() => overlayStack.pop('a'))) })
+    $('.in', root).focus()
+    press($('.out', root))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(overlayStack.ids()).toEqual([])
+    expect(active()).not.toBe($('.opener', root))
+  })
+
+  it('returns focus as usual on a later close when the overlay declined a press outside', async () => {
+    const root = html('<button class="opener">o</button><div class="panel"><button class="in">i</button></div><p class="out">o</p>')
+    $('.opener', root).focus()
+    // An unsaved-changes guard: the press outside is taken, but the overlay stays open.
+    overlayStack.push('a', { el: () => $('.panel', root), onOutside: () => {}, onEscape: () => overlayStack.pop('a') })
+    $('.in', root).focus()
+    press($('.out', root))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(overlayStack.ids()).toEqual(['a'])
+    $('.in', root).focus()
+    key('Escape')
+    expect(active()).toBe($('.opener', root))
+  })
+
   it('takes returnTo as a ref or getter, read at pop', () => {
     const root = html('<button class="later">l</button><div class="panel" tabindex="-1"></div>')
     let target: HTMLElement | null = null

@@ -212,16 +212,29 @@ describe('useFocusTrap', () => {
     for (const id of ['above', 'trap', 'below']) overlayStack.pop(id)
   })
 
-  it('leaves returning focus to the overlay stack when its element is a stacked overlay', async () => {
+  it('returns focus by the overlay stack’s rules when its stacked element stays shown (v-show)', async () => {
     const { on, q, scope } = setup()
     overlayStack.push('dialog', { el: () => q('.trap') }) // pushed while the opener had focus
     on.value = true
     await nextTick()
-    on.value = false
+    expect(active()).toBe(q('.first'))
+    on.value = false // hidden by v-show: the element stays mounted and stacked
     await nextTick()
-    expect(active()).toBe(q('.first')) // the trap did not move it
+    expect(active()).toBe(q('.opener'))
+    overlayStack.pop('dialog') // unmounted later: nothing more to do
+    expect(active()).toBe(q('.opener'))
+    scope.stop()
+  })
+
+  it('returns no focus when a press outside closed its stacked element (v-show)', async () => {
+    const { on, q, scope } = setup()
+    overlayStack.push('dialog', { el: () => q('.trap'), onOutside: () => void (on.value = false) })
+    on.value = true
+    await nextTick()
+    q('.outside').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse' }))
+    await nextTick()
+    expect(active()).not.toBe(q('.opener'))
     overlayStack.pop('dialog')
-    expect(active()).toBe(q('.opener')) // the stack did
     scope.stop()
   })
 

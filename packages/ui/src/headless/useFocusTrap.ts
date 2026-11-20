@@ -21,8 +21,9 @@
  *   below resumes when it ends.
  * - Returning focus: when `el` is a stacked overlay (the same element has
  *   `useDismiss`, as every Weft overlay does), the overlay stack is the one
- *   owner of returning focus and this trap leaves it alone; give `returnTo`
- *   to `useDismiss` there. Otherwise, on deactivation or when the scope ends,
+ *   owner of returning focus: on deactivation the trap asks it to return
+ *   focus by its rules (`overlayStack.returnFocus`), so an overlay hidden with
+ *   `v-show` returns focus too; give `returnTo` to `useDismiss` there. Otherwise, on deactivation or when the scope ends,
  *   focus returns to `returnTo` (an element, ref or getter, read then), by
  *   default the element focused before activation, unless the user has
  *   moved focus out on purpose (see `restoreFocus` in `dom.ts`).
@@ -139,8 +140,9 @@ export function useFocusTrap(el: Readonly<Ref<HTMLElement | null | undefined>>, 
     trap = null
     detach(container)
     lastInside = null
-    // A stacked overlay's focus is returned by the overlay stack when it pops.
-    if (!overlayStack.contains(container)) restoreFocus(toValue(opts.returnTo) ?? before, [container])
+    // A stacked overlay's focus is returned by the overlay stack's rules, now,
+    // since the element may stay mounted (v-show) and so never pop.
+    if (!overlayStack.returnFocus(container)) restoreFocus(toValue(opts.returnTo) ?? before, [container])
     before = null
   }
 

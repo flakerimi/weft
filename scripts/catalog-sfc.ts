@@ -17,8 +17,10 @@
  *   or implied by `defineModel`.
  * - Slots come from `defineSlots<…>()`, else from the template's `<slot>`s;
  *   a `<slot :name="…">` is a dynamic slot, its name the expression.
- * - Options set in a plain `<script>` (`export default { props }`) cannot be
- *   read and stop the build with one sentence.
+ * - Options from a plain `<script>` beside `<script setup>` are read too,
+ *   when they are object literals in that script. Options it cannot read (an
+ *   imported object, a call, defaults that are not an object literal) stop
+ *   the build with one sentence, never an empty list.
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -218,48 +220,117 @@ function calls(body: Node[], name: string): Node[] {
 
 const typeArg = (call: Node) => children(child(call, 'typeParameters') ?? ({} as Node), 'params')[0]
 
-/** The runtime props and emits Vue compiled the SFC to: names, required, defaults. */
-function compiled(content: string, file: string) {
+/** A prop as the compiled runtime declaration gives it. */
+export interface RuntimeProp {
+  name: string
+  required: boolean
+  /** The default's source text. */
+  default: string | null
+  /** The runtime type's source text (`String`, `[Number, Object]`). */
+  runtimeType: string | null
+}
+
+/**
+ * The runtime props and emits in the code Vue compiled an SFC to (`content`):
+ * names, required, defaults. The component options may be an object, wrapped
+ * in `defineVaporComponent(…)`, merged with `Object.assign(__default__, …)`
+ * (a plain `<script>` beside `<script setup>`, in JavaScript) or with
+ * `...__default__` (the same, in TypeScript); a name is followed to the
+ * object literal it is declared with in the same code. Anything else (an
+ * imported value, a call, defaults that are not an object literal) stops with
+ * one sentence naming `file`.
+ */
+export function compiledOptions(content: string, file: string): { props: RuntimeProp[]; emits: string[] } {
   const ast = sfc.babelParse(content, { sourceType: 'module', plugins: ['typescript'] }) as unknown as { program: Node }
-  const exp = children(ast.program, 'body').find((s) => s.type === 'ExportDefaultDeclaration')
-  let decl = exp && child(exp, 'declaration')
-  if (decl?.type === 'CallExpression') decl = children(decl, 'arguments')[0]
-  const props: { name: string; required: boolean; default: string | null; runtimeType: string | null }[] = []
+  const body = children(ast.program, 'body')
+  const props: RuntimeProp[] = []
   const emits: string[] = []
-  if (decl?.type !== 'ObjectExpression') return { props, emits }
   const src = (n: Node) => content.slice(n.start!, n.end!)
   const unreadable = () =>
-    new Error(`${file} sets component options in a plain <script> the catalogue cannot read; declare props, emits and slots in <script setup>.`)
-  const callee = (n: Node) => (child(n, 'callee') as Node & { name?: string } | undefined)?.name ?? ''
-  /** An object expression's properties, with spread object literals (`...{ default: false }`) opened. */
-  const fields = (n: Node): Node[] =>
-    children(n, 'properties').flatMap((f) =>
-      f.type === 'SpreadElement' && child(f, 'argument')?.type === 'ObjectExpression' ? fields(child(f, 'argument')!) : [f],
+    new Error(
+      `${file} sets component options the catalogue cannot read; declare props, emits and slots in <script setup>, or as object literals in a plain <script>.`,
     )
+  const callee = (n: Node) => {
+    const c = child(n, 'callee') as (Node & { name?: string }) | undefined
+    if (c?.type === 'MemberExpression') {
+      const o = child(c, 'object') as Node & { name?: string }
+      const k = child(c, 'property') as Node & { name?: string }
+      return `${o.name ?? ''}.${k.name ?? ''}`
+    }
+    return c?.name ?? ''
+  }
+
+  /**
+   * What `n` stands for: a name declared in this code is followed to its
+   * value. A name declared elsewhere (an import, a global such as `String`)
+   * is refused, unless `loose`, which gives the name back as it is.
+   */
+  function resolveNode(n: Node, loose = false, depth = 0): Node {
+    if (n.type === 'TSAsExpression' || n.type === 'TSSatisfiesExpression' || n.type === 'ParenthesizedExpression') {
+      return resolveNode(child(n, 'expression')!, loose, depth)
+    }
+    if (n.type !== 'Identifier' || depth > 5) return n
+    const name = (n as Node & { name: string }).name
+    for (const st of body) {
+      if (st.type !== 'VariableDeclaration') continue
+      for (const d of children(st, 'declarations')) {
+        if ((child(d, 'id') as Node & { name?: string }).name === name && child(d, 'init')) return resolveNode(child(d, 'init')!, loose, depth + 1)
+      }
+    }
+    if (loose) return n
+    throw unreadable()
+  }
+
+  /** An object expression's properties, with spreads of resolvable object literals opened. */
+  const fields = (n: Node): Node[] =>
+    children(n, 'properties').flatMap((f) => {
+      if (f.type !== 'SpreadElement') return [f]
+      const arg = resolveNode(child(f, 'argument')!)
+      if (arg.type !== 'ObjectExpression') throw unreadable()
+      return fields(arg)
+    })
   const byKey = (n: Node | undefined, k: string) => (n?.type === 'ObjectExpression' ? fields(n).find((f) => keyName(f) === k) : undefined)
 
-  /** Props from a runtime declaration; `defaults` from mergeDefaults' second argument. */
-  function readProps(value: Node, defaults?: Node) {
-    if (value.type === 'CallExpression' && /mergeModels$/.test(callee(value))) {
-      for (const part of children(value, 'arguments')) readProps(part)
-    } else if (value.type === 'CallExpression' && /mergeDefaults$/.test(callee(value))) {
-      const [declared, given] = children(value, 'arguments')
-      if (declared) readProps(declared, given)
-    } else if (value.type === 'ArrayExpression') {
-      for (const e of children(value, 'elements')) {
-        if (e.type === 'StringLiteral') props.push({ name: (e as Node & { value: string }).value, required: false, default: null, runtimeType: null })
+  /** The options object's properties, later ones overriding earlier ones. */
+  function options(n: Node): Node[] {
+    const node = resolveNode(n)
+    if (node.type === 'ObjectExpression') return fields(node)
+    if (node.type === 'CallExpression') {
+      const name = callee(node)
+      // Vue's wrappers and the merge with a plain <script>'s options.
+      if (/define(Vapor)?Component$/.test(name)) return options(children(node, 'arguments')[0] ?? node)
+      if (name === 'Object.assign') return children(node, 'arguments').flatMap(options)
+    }
+    throw unreadable()
+  }
+
+  /** Props from a runtime declaration, with defaults from any mergeDefaults around it. */
+  function readProps(value: Node, defaults: Node[] = []) {
+    const node = resolveNode(value)
+    if (node.type === 'CallExpression' && /mergeModels$/.test(callee(node))) {
+      for (const part of children(node, 'arguments')) readProps(part, defaults)
+    } else if (node.type === 'CallExpression' && /mergeDefaults$/.test(callee(node))) {
+      const [declared, given] = children(node, 'arguments')
+      const literal = given && resolveNode(given)
+      if (!declared || literal?.type !== 'ObjectExpression') throw unreadable()
+      readProps(declared, [literal, ...defaults])
+    } else if (node.type === 'ArrayExpression') {
+      for (const e of children(node, 'elements')) {
+        if (e.type !== 'StringLiteral') throw unreadable()
+        props.push({ name: (e as Node & { value: string }).value, required: false, default: null, runtimeType: null })
       }
-    } else if (value.type === 'ObjectExpression') {
-      for (const prop of fields(value)) {
+    } else if (node.type === 'ObjectExpression') {
+      for (const prop of fields(node)) {
         const name = keyName(prop)
         if (!name) throw unreadable()
         if (name.endsWith('Modifiers')) continue
-        const opts = child(prop, 'value')!
+        const opts = resolveNode(child(prop, 'value')!, true)
         // `size: String` is a type alone; `{ type, required, default }` the full form.
         const full = opts.type === 'ObjectExpression'
         const type = full ? byKey(opts, 'type') : undefined
         const required = full ? byKey(opts, 'required') : undefined
-        const def = byKey(defaults, name) ?? (full ? byKey(opts, 'default') : undefined)
+        const given = defaults.map((d) => byKey(d, name)).find(Boolean)
+        const def = given ?? (full ? byKey(opts, 'default') : undefined)
         props.push({
           name,
           required: required ? src(child(required, 'value')!) === 'true' : false,
@@ -271,26 +342,31 @@ function compiled(content: string, file: string) {
   }
 
   function readEmits(value: Node) {
-    if (value.type === 'CallExpression' && /mergeModels$/.test(callee(value))) {
-      for (const part of children(value, 'arguments')) readEmits(part)
-    } else if (value.type === 'ArrayExpression') {
-      for (const e of children(value, 'elements')) if (e.type === 'StringLiteral') emits.push((e as Node & { value: string }).value)
-    } else if (value.type === 'ObjectExpression') {
-      for (const f of fields(value)) {
+    const node = resolveNode(value)
+    if (node.type === 'CallExpression' && /mergeModels$/.test(callee(node))) {
+      for (const part of children(node, 'arguments')) readEmits(part)
+    } else if (node.type === 'ArrayExpression') {
+      for (const e of children(node, 'elements')) {
+        if (e.type !== 'StringLiteral') throw unreadable()
+        emits.push((e as Node & { value: string }).value)
+      }
+    } else if (node.type === 'ObjectExpression') {
+      for (const f of fields(node)) {
         const name = keyName(f)
-        if (name) emits.push(name)
+        if (!name) throw unreadable()
+        emits.push(name)
       }
     } else throw unreadable()
   }
 
-  for (const p of children(decl, 'properties')) {
-    // Options spread in from a plain <script>'s export default.
-    if (p.type === 'SpreadElement') throw unreadable()
-    const key = keyName(p)
-    const value = child(p, 'value')
-    if (key === 'props' && value) readProps(value)
-    else if (key === 'emits' && value) readEmits(value)
-  }
+  const exp = body.find((st) => st.type === 'ExportDefaultDeclaration')
+  if (!exp) return { props, emits }
+  const opts = options(child(exp, 'declaration')!)
+  const last = (k: string) => [...opts].reverse().find((p) => keyName(p) === k)
+  const propsNode = last('props')
+  const emitsNode = last('emits')
+  if (propsNode) readProps(child(propsNode, 'value') ?? propsNode)
+  if (emitsNode) readEmits(child(emitsNode, 'value') ?? emitsNode)
   return { props, emits }
 }
 
@@ -347,7 +423,7 @@ export function readComponent(file: string, rel = file): ComponentApi {
     id: basename(file),
     fs: { fileExists: existsSync, readFile: (p: string) => readFileSync(p, 'utf8') },
   })
-  const runtime = compiled(block.content, rel)
+  const runtime = compiledOptions(block.content, rel)
   const setup = (block.scriptSetupAst ?? []) as unknown as Node[]
   const scope = descriptor.scriptSetup
     ? scopeOf(descriptor.scriptSetup.content, file, [...((block.scriptAst ?? []) as unknown as Node[]), ...setup])
