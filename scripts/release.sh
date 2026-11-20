@@ -4,13 +4,12 @@
 set -eu
 
 version="${1:-}"
-printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?$' || {
+root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$root"
+scripts/version.sh "$version" || {
 	echo "release: give a version like 0.0.1 or 0.1.0-alpha.1" >&2
 	exit 2
 }
-
-root=$(cd "$(dirname "$0")/.." && pwd)
-cd "$root"
 # The CLI and the serving package; the playground needs a web build and is not shipped.
 go test . ./cmd/weft
 

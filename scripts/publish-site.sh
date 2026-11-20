@@ -4,7 +4,10 @@
 # Weft binary (site-src/main.go). The pushed tree has a Dockerfile, so the
 # server compiles that binary and runs it as a container.
 # Usage: scripts/publish-site.sh [--dry-run] <version>
-#   --dry-run  stop before the push and print the push tree's path
+#   --dry-run  stop before the push and print the push tree's path; it still
+#              builds the release (site/releases/<version>) and the site locally
+# Every version in site/releases.txt must be in site/releases; a verified push
+# adds the new one to that list.
 # Rollback to the static site: scripts/publish-site-static.sh <version>
 set -eu
 dry=
@@ -12,7 +15,7 @@ if [ "${1:-}" = --dry-run ]; then
 	dry=1
 	shift
 fi
-version="${1:?usage: scripts/publish-site.sh [--dry-run] <version>}"
+version="${1:-}"
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
 url=https://weft.base.al
@@ -22,10 +25,16 @@ fail() {
 	exit 1
 }
 
-# A push replaces the whole site, so the release it serves now must be staged
-# again, or WEFT_VERSION pins to it stop working.
+# The version goes into the Dockerfile's -ldflags: nothing but a version may.
+scripts/version.sh "$version" ||
+	fail "give a version like 0.0.1 or 0.1.0-alpha.1 (one line of digits, dots, lowercase letters and hyphens); usage: scripts/publish-site.sh [--dry-run] <version>."
+
+# A push replaces the whole site: every release it has published must be staged again.
+scripts/published-releases.sh check site || exit 1
+
+# The release the site serves now must be staged too, even if the list missed it.
 live=$(curl -fsSL "$url/releases/latest" 2>/dev/null | tr -d ' \r\n') || live=
-if printf '%s' "$live" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?$'; then
+if scripts/version.sh "$live"; then
 	[ "$live" = "$version" ] || [ -f "site/releases/$live/SHA256SUMS" ] ||
 		fail "$url serves release $live, which site/releases does not have; fetch it (SHA256SUMS and the files it lists, from $url/releases/$live/) before publishing"
 elif [ -n "$dry" ]; then
@@ -83,4 +92,6 @@ while :; do
 	[ "$tries" -lt 60 ] || fail "after 5 minutes $url/releases/latest says '$got', expected '$version'$([ -n "$built" ] || echo ', and / is not the Weft-built page'); see lisa server logs weft"
 	sleep 5
 done
-echo "published weft $version at $url"
+# Only now, with the push verified, is the version listed as published.
+scripts/published-releases.sh add site "$version"
+echo "published weft $version at $url; listed in site/releases.txt (commit it)"

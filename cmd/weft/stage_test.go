@@ -146,3 +146,68 @@ func TestStageReleasesRefuses(t *testing.T) {
 		t.Fatalf("test build as latest: err %v, output %q", err, out)
 	}
 }
+
+func publishedReleases(args ...string) (string, error) {
+	b, err := exec.Command("sh", append([]string{"../../scripts/published-releases.sh"}, args...)...).CombinedOutput()
+	return string(b), err
+}
+
+// Every version in site/releases.txt has been published; a push replaces the
+// whole site, so publishing is refused while one of them is not in site/releases.
+func TestPublishedReleasesRefusesAMissingOne(t *testing.T) {
+	skipWindows(t)
+	site := fakeSite(t, "0.0.2", "0.0.2")
+	os.WriteFile(filepath.Join(site, "releases.txt"), []byte("0.0.1\n0.0.2\n"), 0o644)
+	out, err := publishedReleases("check", site)
+	if err == nil || !strings.Contains(out, "0.0.1") || strings.Count(strings.TrimSpace(out), "\n") != 0 {
+		t.Fatalf("missing 0.0.1: err %v, output %q (want one sentence naming it)", err, out)
+	}
+
+	site = fakeSite(t, "0.0.2", "0.0.1", "0.0.2")
+	os.WriteFile(filepath.Join(site, "releases.txt"), []byte("0.0.1\n0.0.2\n"), 0o644)
+	if out, err := publishedReleases("check", site); err != nil {
+		t.Fatalf("all present: %v: %s", err, out)
+	}
+}
+
+// After a verified push the new version is added to the list, once.
+func TestPublishedReleasesAdd(t *testing.T) {
+	skipWindows(t)
+	site := fakeSite(t, "")
+	list := filepath.Join(site, "releases.txt")
+	os.WriteFile(list, []byte("0.0.1\n0.0.2\n"), 0o644)
+	for range 2 {
+		if out, err := publishedReleases("add", site, "0.0.3"); err != nil {
+			t.Fatalf("%v: %s", err, out)
+		}
+	}
+	if b, _ := os.ReadFile(list); string(b) != "0.0.1\n0.0.2\n0.0.3\n" {
+		t.Fatalf("releases.txt %q", b)
+	}
+	if out, err := publishedReleases("add", site, `0.0.4" -X x`); err == nil {
+		t.Fatalf("a bad version was added: %s", out)
+	}
+}
+
+// The version goes into the Dockerfile's -ldflags, so anything that is not a
+// version is refused at once, before anything is built or fetched.
+func TestPublishSiteRefusesABadVersion(t *testing.T) {
+	skipWindows(t)
+	for _, v := range []string{`0.0.3" -X evil`, "0.0.3\nRUN x", "v0.0.3", ""} {
+		b, err := exec.Command("sh", "../../scripts/publish-site.sh", "--dry-run", v).CombinedOutput()
+		out := strings.TrimSpace(string(b))
+		if err == nil || !strings.HasPrefix(out, "publish: ") || strings.Contains(out, "\n") {
+			t.Errorf("version %q: err %v, output %q (want one sentence)", v, err, out)
+		}
+	}
+}
+
+// release.sh checks the whole argument: a version with a second line is refused
+// before anything is built.
+func TestReleaseRefusesAMultiLineVersion(t *testing.T) {
+	skipWindows(t)
+	err := exec.Command("sh", "../../scripts/release.sh", "0.0.3\nRUN x").Run()
+	if e, ok := err.(*exec.ExitError); !ok || e.ExitCode() != 2 {
+		t.Fatalf("release.sh with a two-line version: %v, want exit 2", err)
+	}
+}
