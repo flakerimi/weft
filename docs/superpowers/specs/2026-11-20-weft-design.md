@@ -377,6 +377,10 @@ checked at `pointer` and `touch` with both themes.
 2b. Fast pages: build-time rendering with Vapor hydration, islands,
    pre-compressed embedded assets, ETags, 103 Early Hints, prefetch and view
    transitions in `weft.Serve`, and the Astro benchmark in `bench/`.
+2d. Benchmark set by the owner (2026-11-21): Nuxt UI 4.13.0 for component
+   coverage and quality, Nuxt for app features. The components plan
+   (`docs/superpowers/plans/2026-11-21-weft-components.md`) runs before the
+   showcase site so the `/components` gallery has a full library to show.
 2c. weft.base.al as Weft's showcase (owner request 2026-11-20): a designed
    landing page with live adaptive demos and the Astro numbers; docs written
    in Markdown under `content/docs/` with Go-struct-checked frontmatter (the
