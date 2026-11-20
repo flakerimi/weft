@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, renameSync, symlinkSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -77,7 +77,25 @@ describe('buildSite on a site with islands', () => {
     const assets = files(out).filter((f) => f.startsWith('assets/') && f.endsWith('.js'))
     expect(assets.some((f) => /^assets\/Counter-[\w-]+\.js$/.test(f))).toBe(true)
     // The fixture's vite.config sets input { main: 'index.html' }; only the client entry is built.
-    expect(assets.filter((f) => !/^assets\/(client|Counter)-/.test(f))).toEqual([])
+    expect(assets.filter((f) => /^assets\/main-/.test(f))).toEqual([])
+    expect(existsSync(join(out, 'index.html'))).toBe(false)
+  })
+
+  it("keeps the site config's other build options, such as an external", () => {
+    const lazy = files(out).find((f) => /^assets\/Lazy-[\w-]+\.js$/.test(f))!
+    expect(read(lazy)).toMatch(/import\(\s*["'`]weft-test-external["'`]\s*\)/)
+  })
+
+  it('ships no island CSS from the client build: it is inlined in the pages', () => {
+    expect(files(out).filter((f) => f.endsWith('.css'))).toEqual([])
+    for (const f of files(out).filter((f) => f.endsWith('.js'))) {
+      expect(read(f), f).not.toMatch(/[\w-]+-[\w-]{8}\.css/)
+    }
+  })
+
+  it('inlines a stylesheet a page imports itself only once', () => {
+    const about = styleOf(read('pages/about/index.html'))!
+    expect(about.split('box-sizing:border-box').length - 1).toBe(1)
   })
 
   it('marks only hashed build output immutable, not a page named assets', () => {
@@ -121,6 +139,9 @@ describe('buildSite on a site with islands', () => {
     expect(manifest.files['/robots.txt']).toMatchObject({ type: 'text/plain; charset=utf-8', br: true, gz: true, immutable: false })
     expect(manifest.files['/icon.bin']).toMatchObject({ type: 'application/octet-stream', br: false, gz: false, immutable: false })
     expect(existsSync(join(out, 'icon.bin.br'))).toBe(false)
+    // A public file named like a compressed variant is copied like any other.
+    expect(readFileSync(join(out, 'archive.tar.gz'))).toEqual(readFileSync(fixture('site/public/archive.tar.gz')))
+    expect(manifest.files['/archive.tar.gz']).toMatchObject({ type: 'application/octet-stream', br: false, gz: false })
   })
 
   it('inlines the theme and weft.css with view transitions, and adds speculation rules', () => {
@@ -151,7 +172,9 @@ describe('buildSite on a site with islands', () => {
   it('lists every served file in manifest.json with the hash of its bytes as ETag', () => {
     const written = JSON.parse(read('manifest.json')) as Manifest
     expect(written).toEqual(manifest)
-    const served = files(out).filter((f) => !/\.(br|gz)$/.test(f) && f !== 'manifest.json')
+    const all = files(out)
+    // Leave out compressed variants (a file named like one, from public/, is served).
+    const served = all.filter((f) => !(/\.(br|gz)$/.test(f) && all.includes(f.slice(0, -3))) && f !== 'manifest.json')
     expect(Object.keys(manifest.files).sort()).toEqual(served.map((f) => '/' + f))
     for (const [path, entry] of Object.entries(manifest.files)) {
       expect(entry.etag, path).toBe(etagOf(readFileSync(join(out, path))))
@@ -177,7 +200,7 @@ describe('buildSite on a site with islands', () => {
     expect(routes).toEqual({
       pages: [
         { path: '/', html: 'pages/index/index.html', islands: [] },
-        { path: '/about', html: 'pages/about/index.html', islands: [] },
+        { path: '/about', html: 'pages/about/index.html', islands: ['Lazy'] },
         { path: '/assets', html: 'pages/assets/index.html', islands: [] },
         { path: '/counter', html: 'pages/counter/index.html', islands: ['Counter'] },
         { path: '/escape', html: 'pages/escape/index.html', islands: ['Counter'] },
@@ -198,10 +221,10 @@ describe('buildSite on a site without islands', () => {
     // An app built before the pages: its files join the manifest.
     mkdirSync(join(out, 'app'))
     writeFileSync(join(out, 'app/index.html'), '<!doctype html><div id="app"></div>')
-    // Left from an earlier build: the build empties its outDir (all but the app).
+    // Files the owner put there: no manifest lists them, so the build leaves them.
     mkdirSync(join(out, 'pages/old'), { recursive: true })
-    writeFileSync(join(out, 'pages/old/index.html'), 'stale')
-    writeFileSync(join(out, 'stale.txt'), 'stale')
+    writeFileSync(join(out, 'pages/old/index.html'), 'owner')
+    writeFileSync(join(out, 'notes.txt'), 'owner')
     await buildSite({ root: fixture('static-site'), outDir: out, appPrefix: '/app', theme: 'lisa' })
   })
 
@@ -209,9 +232,9 @@ describe('buildSite on a site without islands', () => {
     expect(readFileSync(join(out, 'pages/index/index.html'), 'utf8')).toContain('<h1>Static from vite.config</h1>')
   })
 
-  it('empties outDir first, keeping the app build', () => {
-    expect(existsSync(join(out, 'pages/old'))).toBe(false)
-    expect(existsSync(join(out, 'stale.txt'))).toBe(false)
+  it('leaves the files it did not write, and the app build', () => {
+    expect(readFileSync(join(out, 'pages/old/index.html'), 'utf8')).toBe('owner')
+    expect(readFileSync(join(out, 'notes.txt'), 'utf8')).toBe('owner')
     expect(readFileSync(join(out, 'app/index.html'), 'utf8')).toBe('<!doctype html><div id="app"></div>')
   })
 
@@ -272,6 +295,60 @@ describe('buildSite with CSS over the inline limit', () => {
   })
 })
 
+describe('buildSite into the outDir of an earlier build', () => {
+  let out: string
+  let first: Manifest
+
+  beforeAll(async () => {
+    out = tempDir()
+    first = await buildSite({ root: fixture('site'), outDir: out })
+    mkdirSync(join(out, 'pages/owner'), { recursive: true })
+    writeFileSync(join(out, 'pages/owner/notes.txt'), 'owner')
+    writeFileSync(join(out, 'assets/owner.css'), 'owner')
+    writeFileSync(join(out, 'owner.txt'), 'owner')
+    await buildSite({ root: fixture('static-site'), outDir: out })
+  })
+
+  it('removes the files of the earlier build that the new one does not make', () => {
+    const now = files(out)
+    for (const f of Object.keys(first.files).map((k) => k.slice(1))) {
+      const kept = ['pages/index/index.html', 'routes.json'].includes(f)
+      for (const v of [f, f + '.br', f + '.gz']) expect(now.includes(v), v).toBe(kept && !v.endsWith('.bin.br') && !v.endsWith('.bin.gz'))
+    }
+    // Directories it emptied go too; ones holding the owner's files stay.
+    for (const d of ['pages/counter', 'pages/blog', 'pages/404']) expect(existsSync(join(out, d)), d).toBe(false)
+    expect(existsSync(join(out, 'assets'))).toBe(true)
+  })
+
+  it('never touches what the owner put there', () => {
+    for (const f of ['pages/owner/notes.txt', 'assets/owner.css', 'owner.txt']) {
+      expect(readFileSync(join(out, f), 'utf8'), f).toBe('owner')
+    }
+  })
+
+  it('leaves files that a symlink in outDir leads to', async () => {
+    const dir = tempDir()
+    const elsewhere = tempDir()
+    const built = await buildSite({ root: fixture('site'), outDir: dir })
+    const client = Object.keys(built.files).find((f) => f.startsWith('/assets/client-'))!.slice(1)
+    // The owner moves the assets out and links them back.
+    renameSync(join(dir, 'assets'), join(elsewhere, 'assets'))
+    symlinkSync(join(elsewhere, 'assets'), join(dir, 'assets'))
+    await buildSite({ root: fixture('static-site'), outDir: dir })
+    expect(existsSync(join(elsewhere, client))).toBe(true)
+  })
+
+  it('refuses an outDir whose manifest.json is not a Weft manifest, and deletes nothing', async () => {
+    const dir = tempDir()
+    writeFileSync(join(dir, 'manifest.json'), '{"name":"not weft"}')
+    writeFileSync(join(dir, 'routes.json'), '{}')
+    await expect(buildSite({ root: fixture('static-site'), outDir: dir })).rejects.toThrow(
+      `buildSite: ${join(dir, 'manifest.json')} is not a Weft build manifest; move it or choose another outDir.`,
+    )
+    expect(files(dir)).toEqual(['manifest.json', 'routes.json'])
+  })
+})
+
 describe('buildSite refuses', () => {
   it('a public file that would overwrite a generated one', async () => {
     await expect(buildSite({ root: fixture('public-clash'), outDir: tempDir() })).rejects.toThrow(
@@ -279,17 +356,54 @@ describe('buildSite refuses', () => {
     )
   })
 
-  it('an outDir that is the site root or contains it, and deletes nothing', async () => {
-    // A copy, so that a build which failed to refuse could not write into the fixtures.
+  // Each case works on a copy of a fixture, so that a build which failed to
+  // refuse could not write into, or delete from, the fixtures.
+  const site = () => {
     const root = join(tempDir(), 'site')
     cpSync(fixture('static-site'), root, { recursive: true })
-    for (const outDir of [root, join(root, '..')]) {
-      await expect(buildSite({ root, outDir })).rejects.toThrow(
-        `buildSite: outDir ${outDir} is the site root or contains it; build into a directory of its own.`,
-      )
-    }
-    expect(existsSync(join(root, 'pages/index.vue'))).toBe(true)
+    return root
+  }
+  const refused = async (root: string, outDir: string) => {
+    await expect(buildSite({ root, outDir })).rejects.toThrow(
+      `buildSite: outDir ${outDir} is the site root, inside it, or contains it; build into a directory of its own.`,
+    )
+    expect(files(root)).toEqual(['env.d.ts', 'pages/index.vue', 'vite.config.ts'])
+  }
+
+  it('an outDir that is the site root, contains it, or is inside it', async () => {
+    const root = site()
+    for (const outDir of [root, join(root, '..'), join(root, 'pages'), join(root, 'dist')]) await refused(root, outDir)
   })
+
+  it('an outDir that reaches the site root through a symlink', async () => {
+    const root = site()
+    const link = join(root, '..', 'link')
+    symlinkSync(root, link)
+    await refused(root, link)
+    await refused(root, join(link, 'pages'))
+  })
+
+  it('a site root reached through a symlink', async () => {
+    const root = site()
+    const link = join(root, '..', 'link')
+    symlinkSync(root, link)
+    await refused(link, join(root, 'pages'))
+  })
+
+  it('an outDir that contains a root whose name starts with ".."', async () => {
+    const parent = tempDir()
+    const root = join(parent, '..site')
+    cpSync(fixture('static-site'), root, { recursive: true })
+    await refused(root, parent)
+  })
+
+  it.runIf(process.platform === 'darwin' || process.platform === 'win32')(
+    'an outDir that differs from the root only in case, where the file system ignores case',
+    async () => {
+      const root = site()
+      await refused(root, join(root, '..', 'SITE'))
+    },
+  )
 })
 
 describe('contentType', () => {

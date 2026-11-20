@@ -1,6 +1,8 @@
 <script setup vapor lang="ts">
-import { useHead } from '@weft/ui'
+import '@weft/ui/weft.css'
+import { Island, useHead } from '@weft/ui'
 import Badge from '../components/Badge.vue'
+import Lazy from '../components/Lazy.vue'
 
 useHead({ title: 'About <Weft>', description: 'A "quoted" & <b>page</b>', image: '/og.png?a=1&b=2' })
 </script>
@@ -9,5 +11,6 @@ useHead({ title: 'About <Weft>', description: 'A "quoted" & <b>page</b>', image:
   <main>
     <h1>About</h1>
     <Badge>new</Badge>
+    <Island when="idle" :component="Lazy" />
   </main>
 </template>

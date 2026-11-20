@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 
-// An input of the site's own (an SPA entry): the page build must not merge it into its client build.
+// The site's own build options: the page build replaces only the input (an SPA
+// entry here) and keeps the rest, such as this external.
 export default defineConfig({
-  build: { rollupOptions: { input: { main: 'index.html' } } },
+  build: { rollupOptions: { input: { main: 'index.html' }, external: ['weft-test-external'] } },
 })

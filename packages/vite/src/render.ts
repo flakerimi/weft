@@ -14,6 +14,8 @@ export interface RenderOptions {
   props?: Record<string, unknown>
   /** A server from `createRenderServer(root)` to render through; without one, renderPage starts and closes its own. */
   server?: ViteDevServer
+  /** Absolute paths of stylesheets the caller already includes; left out of `css`. */
+  providedCSS?: string[]
 }
 
 /** What the page set with `useHead` from @weft/ui. */
@@ -78,7 +80,7 @@ export async function renderPage(opts: RenderOptions): Promise<RenderResult> {
       html,
       islands,
       islandFiles: findIslandFiles(modules, root, file, islands),
-      css: await collectCSS(vite, modules),
+      css: await collectCSS(vite, modules, new Set(opts.providedCSS)),
       head: ctx.head ?? {},
     }
   } finally {
@@ -105,10 +107,11 @@ async function pageModules(vite: ViteDevServer, page: string): Promise<Environme
  * The CSS of the page's style modules, each loaded with `?inline` so Vite
  * returns it processed (scoped, PostCSS) as a string.
  */
-async function collectCSS(vite: ViteDevServer, modules: EnvironmentModuleNode[]): Promise<string> {
+async function collectCSS(vite: ViteDevServer, modules: EnvironmentModuleNode[], provided: Set<string>): Promise<string> {
   const parts: string[] = []
   for (const mod of modules) {
     if (!isCSSRequest(mod.url) || /[?&](inline|raw|url)\b/.test(mod.url)) continue
+    if (mod.file && provided.has(mod.file)) continue
     const url = mod.url.includes('?') ? mod.url.replace('?', '?inline&') : mod.url + '?inline'
     const css = ((await vite.ssrLoadModule(url)) as { default?: string }).default
     if (css?.trim()) parts.push(css.trim())

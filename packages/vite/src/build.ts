@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto'
-import { existsSync } from 'node:fs'
-import { copyFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { existsSync, lstatSync, realpathSync } from 'node:fs'
+import { copyFile, mkdir, readFile, readdir, rm, rmdir, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { brotliCompressSync, constants as zlib, gzipSync } from 'node:zlib'
-import { build, type Rolldown } from 'vite'
+import { build, isCSSRequest, mergeConfig, type Plugin, type Rolldown } from 'vite'
 import { siteConfig } from './config.ts'
 import { weft } from './plugin.ts'
 import { createRenderServer, renderPage, type PageHead, type RenderResult } from './render.ts'
@@ -17,9 +17,10 @@ export interface BuildOptions {
   /** The site's root directory; its pages are `<root>/pages/**.vue`. */
   root: string
   /**
-   * Where the build goes (the `dist` the Go binary embeds). The build empties it
-   * first, all but `app/` when `appPrefix` is set; it may not be the site root
-   * or contain it.
+   * Where the build goes (the `dist` the Go binary embeds). The build removes
+   * the files its previous build there listed in `manifest.json` (keeping `app/`
+   * when `appPrefix` is set) and nothing else. It may not be the site root, be
+   * inside it, or contain it.
    */
   outDir: string
   /** The client-rendered app's path prefix, e.g. `/app`; its build must already be in `<outDir>/app`. */
@@ -97,14 +98,16 @@ const posix = (p: string) => p.split('\\').join('/')
 export async function buildSite(opts: BuildOptions): Promise<Manifest> {
   const root = resolve(opts.root)
   const outDir = resolve(opts.outDir)
-  const inside = relative(outDir, root)
-  if (inside === '' || (!inside.startsWith('..') && !isAbsolute(inside))) {
-    throw new Error(`buildSite: outDir ${opts.outDir} is the site root or contains it; build into a directory of its own.`)
+  if (overlaps(realish(outDir), realish(root))) {
+    throw new Error(
+      `buildSite: outDir ${opts.outDir} is the site root, inside it, or contains it; build into a directory of its own.`,
+    )
   }
   const theme = opts.theme ?? 'neutral'
   if (!THEMES.includes(theme)) throw new Error(`buildSite: unknown theme "${theme}"; use ${THEMES.join(' or ')}.`)
   const app = opts.appPrefix === undefined ? null : appRoute(opts.appPrefix, outDir)
-  const baseCSS = await readStyles(root, theme)
+  const previous = await previousBuild(outDir, app !== null)
+  const { css: baseCSS, files: baseFiles } = await readStyles(root, theme)
   const routes = await discoverRoutes(join(root, 'pages'))
 
   // A production build, as `vite build` makes one: the first Vite server sets
@@ -118,14 +121,15 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
     const load = (file: string) => server.ssrLoadModule(`/pages/${file}`) as Promise<PageModule>
     for (const route of await expandRoutes(routes, load)) {
       const page = join('pages', route.file)
-      pages.push({ ...route, ...(await renderPage({ root, page, props: route.params, server })) })
+      const rendered = await renderPage({ root, page, props: route.params, server, providedCSS: baseFiles })
+      pages.push({ ...route, ...rendered })
     }
   } finally {
     await server.close()
   }
 
-  // Every page rendered, so the previous build can go: outDir is the build's own.
-  await emptyDir(outDir, app ? ['app'] : [])
+  // Every page rendered, so the previous build can go.
+  await removeFiles(outDir, previous)
 
   const written = new Set<string>()
   const immutable = new Set<string>()
@@ -199,11 +203,88 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
   return manifest
 }
 
-/** Remove everything in `dir` but the entries named in `keep`; create `dir` if it is missing. */
-async function emptyDir(dir: string, keep: string[]) {
-  await mkdir(dir, { recursive: true })
-  for (const entry of await readdir(dir)) {
-    if (!keep.includes(entry)) await rm(join(dir, entry), { recursive: true, force: true })
+const foldCase = process.platform === 'darwin' || process.platform === 'win32'
+
+/** The real path of `p` (symlinks resolved), through its nearest existing ancestor if it does not exist. */
+function realish(p: string): string {
+  const rest: string[] = []
+  for (let dir = resolve(p); ; dir = dirname(dir)) {
+    try {
+      return join(realpathSync(dir), ...rest)
+    } catch {
+      if (dirname(dir) === dir) return resolve(p)
+      rest.unshift(basename(dir))
+    }
+  }
+}
+
+const segments = (p: string) => (foldCase ? p.toLowerCase() : p).split(sep).filter(Boolean)
+
+/** Whether `inner` is `outer` or inside it, by whole segments; case-insensitive where the file system is. */
+function contains(outer: string, inner: string): boolean {
+  const [o, i] = [segments(outer), segments(inner)]
+  return o.length <= i.length && o.every((s, n) => s === i[n])
+}
+
+/** Whether one path is the other or inside it. */
+const overlaps = (a: string, b: string) => contains(a, b) || contains(b, a)
+
+/** A manifest path that stays inside outDir: `/` then segments, none empty, `.` or `..`. */
+const safePath = (p: string) =>
+  p.startsWith('/') && !/[\\\0]/.test(p) && p.slice(1).split('/').every((s) => s !== '' && s !== '.' && s !== '..')
+
+/**
+ * The files the previous build in `outDir` wrote, from its `manifest.json`:
+ * each listed file with its `.br` and `.gz`, then `routes.json` and the
+ * manifest. Files under `app/` are the app's when `keepApp`. None when there is
+ * no manifest; a manifest that is not Weft's stops the build.
+ */
+async function previousBuild(outDir: string, keepApp: boolean): Promise<string[]> {
+  const file = join(outDir, 'manifest.json')
+  if (!existsSync(file)) return []
+  let listed: string[]
+  try {
+    const m = JSON.parse(await readFile(file, 'utf8')) as Partial<Manifest> | null
+    const entries = Object.entries(m?.files ?? 0)
+    const ok =
+      typeof m?.hints === 'object' &&
+      m.hints !== null &&
+      entries.length > 0 &&
+      entries.every(([k, v]) => safePath(k) && typeof (v as ManifestFile | null)?.etag === 'string')
+    if (!ok) throw new Error()
+    listed = entries.map(([k]) => k.slice(1))
+  } catch {
+    throw new Error(`buildSite: ${file} is not a Weft build manifest; move it or choose another outDir.`)
+  }
+  const out = listed
+    .filter((f) => !(keepApp && f.startsWith('app/')))
+    .flatMap((f) => [f, f + '.br', f + '.gz'])
+  return [...new Set([...out, 'routes.json', 'manifest.json'])]
+}
+
+/**
+ * Remove `files` (relative to `dir`), then the directories that left empty,
+ * deepest first, never `dir` itself. A file reached through a symlink that
+ * leads out of `dir`, or a directory where a file was, is left alone.
+ */
+async function removeFiles(dir: string, files: string[]) {
+  const real = realish(dir)
+  const dirs = new Set<string>()
+  for (const file of files) {
+    const path = join(dir, file)
+    const stat = lstatSync(path, { throwIfNoEntry: false })
+    if (!stat || stat.isDirectory() || !contains(real, realish(dirname(path)))) continue
+    await rm(path, { force: true })
+    for (let d = dirname(file); d !== '.'; d = dirname(d)) dirs.add(d)
+  }
+  const deepest = [...dirs].sort((a, b) => b.split('/').length - a.split('/').length)
+  for (const d of deepest) {
+    try {
+      await rmdir(join(dir, d))
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code
+      if (code !== 'ENOTEMPTY' && code !== 'EEXIST' && code !== 'ENOENT') throw e
+    }
   }
 }
 
@@ -211,7 +292,7 @@ async function emptyDir(dir: string, keep: string[]) {
 async function copyPublic(root: string, outDir: string, written: Set<string>) {
   const generated = new Set(['manifest.json'])
   for (const f of written) generated.add(f).add(f + '.br').add(f + '.gz')
-  for (const file of await filesUnder(root, 'public')) {
+  for (const file of await filesUnder(root, 'public', { all: true })) {
     const to = file.slice('public/'.length)
     if (generated.has(to)) throw new Error(`buildSite: ${file} would overwrite the generated ${to}; rename or move it.`)
     await mkdir(dirname(join(outDir, to)), { recursive: true })
@@ -231,20 +312,21 @@ function appRoute(prefix: string, outDir: string): RoutesJson['app'] {
 }
 
 /**
- * The files under `<base>/<dir>` as posix paths relative to `base`, without
- * compressed variants an earlier build wrote; none when it does not exist.
+ * The files under `<base>/<dir>` as posix paths relative to `base`; none when
+ * it does not exist. Unless `all`, `.br` and `.gz` files are left out: in a
+ * build directory they are the compressed variants an earlier build wrote.
  */
-async function filesUnder(base: string, dir: string): Promise<string[]> {
+async function filesUnder(base: string, dir: string, { all = false } = {}): Promise<string[]> {
   if (!existsSync(join(base, dir))) return []
   const entries = await readdir(join(base, dir), { recursive: true, withFileTypes: true })
   return entries
-    .filter((e) => e.isFile() && !/\.(br|gz)$/.test(e.name))
+    .filter((e) => e.isFile() && (all || !/\.(br|gz)$/.test(e.name)))
     .map((e) => posix(relative(base, join(e.parentPath, e.name))))
     .sort()
 }
 
-/** The theme stylesheet, then `weft.css`: the CSS every page starts with. */
-async function readStyles(root: string, theme: Theme): Promise<string> {
+/** The theme stylesheet, then `weft.css`: the CSS every page starts with, and their files. */
+async function readStyles(root: string, theme: Theme): Promise<{ css: string; files: string[] }> {
   const read = async (from: string, spec: string, pkg: string) => {
     try {
       const file = createRequire(from).resolve(spec)
@@ -256,8 +338,8 @@ async function readStyles(root: string, theme: Theme): Promise<string> {
   }
   const [uiFile, ui] = await read(join(root, 'package.json'), '@weft/ui/weft.css', '@weft/ui')
   // The theme comes from @weft/ui's own @weft/themes, the version its components expect.
-  const [, themeCss] = await read(uiFile, `@weft/themes/${theme}.css`, '@weft/themes')
-  return `${themeCss}\n${ui}`
+  const [themeFile, themeCss] = await read(uiFile, `@weft/themes/${theme}.css`, '@weft/themes')
+  return { css: `${themeCss}\n${ui}`, files: [themeFile, uiFile] }
 }
 
 /** `/` → `pages/index/index.html`, `/blog/a` → `pages/blog/a/index.html`. */
@@ -278,13 +360,25 @@ interface ClientBuild {
   files: string[]
 }
 
+/**
+ * Island CSS is inlined into the pages that use the island, so the client build
+ * carries none: every stylesheet loads empty, and Vite emits and preloads nothing.
+ */
+const noCSS: Plugin = {
+  name: 'weft:no-client-css',
+  enforce: 'pre',
+  load(id) {
+    if (isCSSRequest(id)) return { code: '' }
+  },
+}
+
 /** Build the island runtime and one chunk per island into `<outDir>/assets`. */
 async function buildClient(root: string, outDir: string, islands: string[]): Promise<ClientBuild> {
   const config = await siteConfig(root, { command: 'build', mode: 'production' }, {
     base: '/',
     logLevel: 'warn',
     publicDir: false,
-    plugins: [weft({ islands })],
+    plugins: [noCSS, weft({ islands })],
     // The runtime lives in this package; its `vue` must be the site's.
     resolve: { dedupe: ['vue'] },
     build: {
@@ -297,13 +391,16 @@ async function buildClient(root: string, outDir: string, islands: string[]): Pro
       ssrManifest: false,
       sourcemap: false,
       modulePreload: { polyfill: false },
+      // With noCSS every island's CSS is empty; unsplit, no chunk imports or preloads a stylesheet.
+      cssCodeSplit: false,
     },
   })
   // Only the runtime entry: an input of the site's config (an SPA's index.html)
-  // would merge with it, under either name Vite accepts.
+  // would merge with it. The site's other options (external, output) stay.
+  // Vite takes either name and prefers rolldownOptions; merge both into one.
   const b = (config.build ??= {})
-  delete b.rollupOptions
-  b.rolldownOptions = { ...b.rolldownOptions, input: { client: CLIENT_ENTRY } }
+  const options = mergeConfig(b.rollupOptions ?? {}, b.rolldownOptions ?? {}, false)
+  b.rolldownOptions = b.rollupOptions = { ...options, input: { client: CLIENT_ENTRY } }
   const result = (await build(config)) as Rolldown.RolldownOutput | Rolldown.RolldownOutput[]
   const output = (Array.isArray(result) ? result : [result]).flatMap((r) => r.output)
   const entry = output.find((o): o is Rolldown.OutputChunk => o.type === 'chunk' && o.isEntry)
