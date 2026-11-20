@@ -9,6 +9,13 @@ export interface IslandOptions {
   matchMedia?: (q: string) => MediaQueryList
 }
 
+/**
+ * The key @weft/ui's useId reads an island's id scope under (its ID_SCOPE).
+ * Each island app gets `{ prefix: 'i<n>', next: 0 }`, n its position among
+ * the page's islands, which is what Island provides on the server.
+ */
+export const ISLAND_ID_SCOPE = 'weft:id-scope'
+
 const reason = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 /**
@@ -18,10 +25,10 @@ const reason = (e: unknown) => (e instanceof Error ? e.message : String(e))
  * warns once and keeps its server HTML; the others are unaffected.
  */
 export function startIslands(registry: IslandRegistry, opts: IslandOptions = {}): void {
-  for (const el of document.querySelectorAll<HTMLElement>('weft-island')) {
+  for (const [index, el] of [...document.querySelectorAll<HTMLElement>('weft-island')].entries()) {
     const { id = '', when, media } = el.dataset
     const warn = (why: string) => console.warn(`weft: island ${id} did not start: ${why}`)
-    const start = () => void hydrate(el, registry[id], warn)
+    const start = () => void hydrate(el, index, registry[id], warn)
 
     // A trigger that cannot be set up (no IntersectionObserver, a throwing
     // scheduler) costs this island only.
@@ -57,7 +64,7 @@ export function startIslands(registry: IslandRegistry, opts: IslandOptions = {})
   }
 }
 
-async function hydrate(el: HTMLElement, load: (() => Promise<Component>) | undefined, warn: (why: string) => void) {
+async function hydrate(el: HTMLElement, index: number, load: (() => Promise<Component>) | undefined, warn: (why: string) => void) {
   try {
     if (!load) throw new Error('no chunk is registered for it.')
     const component = await load()
@@ -72,6 +79,7 @@ async function hydrate(el: HTMLElement, load: (() => Promise<Component>) | undef
     let failed: unknown
     let mounting = true
     const app = createVaporSSRApp(component as never, props)
+    app.provide(ISLAND_ID_SCOPE, { prefix: `i${index}`, next: 0 })
     // Errors during the mount mean the island did not start; later ones are the
     // component's own and are reported as Vue would.
     app.config.errorHandler = (err) => {

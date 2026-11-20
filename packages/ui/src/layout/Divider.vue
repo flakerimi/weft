@@ -1,5 +1,11 @@
 <script setup vapor lang="ts">
-withDefaults(defineProps<{ orientation?: 'horizontal' | 'vertical' }>(), { orientation: 'horizontal' })
+withDefaults(
+  defineProps<{
+    /** `horizontal` separates stacked content; `vertical` separates content in a row. */
+    orientation?: 'horizontal' | 'vertical'
+  }>(),
+  { orientation: 'horizontal' },
+)
 </script>
 
 <template>

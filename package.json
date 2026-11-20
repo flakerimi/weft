@@ -6,6 +6,7 @@
   "scripts": {
     "test": "pnpm --filter \"@weft/ui...\" build && pnpm -r test",
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "catalog": "node scripts/catalog.ts"
   }
 }

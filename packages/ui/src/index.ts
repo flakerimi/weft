@@ -11,3 +11,27 @@ export { default as Divider } from './layout/Divider.vue'
 export type { Gap } from './layout/types.ts'
 export { default as Island, type IslandWhen } from './islands/Island.vue'
 export { useHead, type Head } from './head/useHead.ts'
+export { default as Icon } from './basics/Icon.vue'
+export {
+  ID_SCOPE,
+  overlayStack,
+  useControllable,
+  useDismiss,
+  useFloating,
+  useFocusTrap,
+  useId,
+  useRovingFocus,
+  useScrollLock,
+  useTypeahead,
+  type DismissOptions,
+  type DismissReason,
+  type Floating,
+  type FloatingOptions,
+  type FocusTrapOptions,
+  type IdScope,
+  type OverlayEntry,
+  type Placement,
+  type RovingFocus,
+  type RovingFocusOptions,
+  type Typeahead,
+} from './headless/index.ts'

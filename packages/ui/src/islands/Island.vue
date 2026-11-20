@@ -1,12 +1,17 @@
 <script setup vapor lang="ts">
-import { useSSRContext, type Component } from 'vue'
+import { provide, useSSRContext, type Component } from 'vue'
+import { ID_SCOPE, type IdScope } from '../headless/useId.ts'
 
 export type IslandWhen = 'load' | 'idle' | 'visible' | 'media'
 
 const p = defineProps<{
+  /** When the browser hydrates it: at `load`, when `idle`, when `visible`, or when `media` matches. */
   when: IslandWhen
+  /** The media query for `when="media"`, such as `(min-width: 1024px)`. */
   media?: string
+  /** The `<script setup>` SFC to render and hydrate; its file name is the island's id. */
   component: Component
+  /** Props for the component, sent to the browser as JSON. */
   props?: Record<string, unknown>
 }>()
 
@@ -77,6 +82,9 @@ if (server) {
     .replace(/>/g, '\\u003e')
     .replace(/&/g, '\\u0026')
   const ctx = useSSRContext<{ islands?: string[] }>()
+  // The island's ids count from its position on the page, as the island
+  // runtime counts them when it hydrates the island as an app of its own.
+  provide<IdScope>(ID_SCOPE, { prefix: `i${ctx?.islands?.length ?? 0}`, next: 0 })
   if (ctx) (ctx.islands ??= []).push(id)
 }
 </script>

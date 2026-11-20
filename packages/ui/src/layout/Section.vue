@@ -1,5 +1,10 @@
 <script setup vapor lang="ts">
-defineProps<{ title?: string; description?: string }>()
+defineProps<{
+  /** The section's heading, rendered as an h2. */
+  title?: string
+  /** A line under the title. */
+  description?: string
+}>()
 </script>
 
 <template>

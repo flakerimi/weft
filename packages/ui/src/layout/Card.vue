@@ -1,5 +1,13 @@
 <script setup vapor lang="ts">
-withDefaults(defineProps<{ padding?: 0 | 2 | 3 | 4 | 6; as?: string }>(), { padding: 4, as: 'div' })
+withDefaults(
+  defineProps<{
+    /** Inner space, from the spacing scale; 0 for edge-to-edge content. */
+    padding?: 0 | 2 | 3 | 4 | 6
+    /** The element to render, for semantics: `article`, `li`, `section`. */
+    as?: string
+  }>(),
+  { padding: 4, as: 'div' },
+)
 </script>
 
 <template>

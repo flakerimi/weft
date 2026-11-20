@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./icons": "./src/basics/icons.ts",
     "./weft.css": "./dist/weft.css"
   },
   "scripts": {
@@ -13,6 +14,7 @@
     "typecheck": "vue-tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@floating-ui/dom": "^1.8.0",
     "@weft/themes": "workspace:*",
     "vue": "3.6.0-rc.16"
   },

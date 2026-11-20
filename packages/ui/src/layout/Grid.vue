@@ -5,7 +5,12 @@ import type { Gap } from './types.ts'
 
 type Cols = number | { narrow?: number; regular?: number; wide?: number }
 
-const props = withDefaults(defineProps<{ cols?: Cols; gap?: Gap }>(), {
+const props = withDefaults(defineProps<{
+  /** Columns: one number for every width, or one per width class of the grid's own width. */
+  cols?: Cols
+  /** Space between cells, from the spacing scale (`--weft-space-*`). */
+  gap?: Gap
+}>(), {
   cols: () => ({ narrow: 1, regular: 2, wide: 3 }),
   gap: 4,
 })
