@@ -5,3 +5,4 @@ dist/
 .claude/scheduled_tasks.lock
 .worktrees/
 .superpowers/
+site/releases/
