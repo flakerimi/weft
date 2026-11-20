@@ -149,7 +149,8 @@ with Vite proxying `/api` to Go, and restarts Go on `.go` changes.
 weft/
   go.mod                     module github.com/flakerimi/weft
   cmd/weft/                  the CLI
-  server/                    Go package: Serve, SPA fallback, SSE helpers
+  *.go                       Go package `weft` (module root): Serve, SSE,
+                             Resource, Auth, Validate
   templates/                 what `weft create` writes
   packages/
     ui/                      @weft/ui        components, composables, tokens
@@ -234,9 +235,11 @@ same source as `Lisa/frameworks/ui/lib/tokens.dart`), by a small script in
 `packages/themes`, so web and OS stay in step. (Not from `lib/src/colors.dart`
 and friends: those are forks of Flutter's Material defaults.)
 
-Components are styled with Tailwind v4 internally, mapped to the tokens, and
-ship compiled CSS, so apps do not need Tailwind. Apps may still use Tailwind
-for their own components; `weft create` sets it up with the same tokens.
+Components are styled with plain CSS that reads only the token custom
+properties (`--weft-*`), one stylesheet per component, bundled into
+`weft.css`. Weft itself has no Tailwind dependency. Apps that want Tailwind
+for their own components import `@weft/themes/tailwind.css`, an `@theme`
+block mapping Tailwind's names to the same tokens; `weft create` sets it up.
 
 ### Vapor
 
@@ -256,7 +259,7 @@ for their own components; `weft create` sets it up with the same tokens.
 
 ## Go side
 
-Package `github.com/flakerimi/weft/server`:
+Package `weft`, at the module root (`import "github.com/flakerimi/weft"`):
 
 - `weft.Serve(dist fs.FS, api http.Handler) http.Handler`: API under `/api`,
   static files with cache headers, `index.html` fallback for client routes.
@@ -388,7 +391,9 @@ Alpha releases (`0.0.x`) are cut from the end of phase 4. Before that,
 Weft is never published to npm. Everything ships as one versioned thing:
 
 - `curl -fsSL https://weft.base.al/install | sh` downloads the `weft` binary
-  for the platform from the GitHub release and puts it on the path. (The
+  for the platform from `https://weft.base.al/releases/<version>/`, checks
+  its SHA-256, and puts it on the path. Binaries are hosted on the site rather
+  than GitHub releases so installs work while the repository is private. (The
   domain resolves today but serves nothing yet; the install script and site
   are part of phase 1.)
 - The binary embeds Weft's JavaScript packages (`ui`, `vite`, `themes`,
@@ -432,7 +437,9 @@ option, not in the first release.
 
 - Licence MIT.
 - pnpm workspace inside the repository; CLI in Go.
-- Tailwind used inside components but compiled away for consumers.
+- Plain CSS on tokens inside components; Tailwind only as an optional app-side preset.
+- Go package `weft` at the module root, so `weft.Serve` reads as written.
+- Release binaries hosted on `weft.base.al`, not GitHub releases.
 - Width axis taken from the container, not the window.
 - Charts as an optional subpath so apps without charts do not pull in Unovis.
 - MCP server as a CLI subcommand rather than a separate package.
