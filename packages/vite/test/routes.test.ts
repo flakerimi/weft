@@ -15,6 +15,11 @@ describe('discoverRoutes', () => {
     ])
   })
 
+  it('puts dynamic routes after static ones even when they sort earlier', async () => {
+    const routes = await discoverRoutes(dir('routes-order'))
+    expect(routes.map((r) => r.path)).toEqual(['/', '/about', '/:id'])
+  })
+
   it('throws when two files make the same path', async () => {
     await expect(discoverRoutes(dir('routes-clash'))).rejects.toThrow(
       'pages "about.vue" and "about/index.vue" both make /about',
@@ -44,5 +49,21 @@ describe('expandRoutes', () => {
     await expect(expandRoutes(routes, async () => ({}))).rejects.toThrow(
       'page "[slug].vue" is dynamic but does not export getPaths()',
     )
+  })
+
+  it('throws when getPaths misses a param', async () => {
+    const routes = await discoverRoutes(dir('routes-multi'))
+    await expect(
+      expandRoutes(routes, async () => ({ getPaths: async () => [{ year: '2026' }] })),
+    ).rejects.toThrow('getPaths() of "[year]/[slug].vue" returned no "slug"')
+  })
+
+  it('fills every param of a multi-param route', async () => {
+    const routes = await discoverRoutes(dir('routes-multi'))
+    expect(routes).toEqual([{ path: '/:year/:slug', file: '[year]/[slug].vue', dynamic: true }])
+    const out = await expandRoutes(routes, async () => ({
+      getPaths: async () => [{ year: '2026', slug: 'hi' }],
+    }))
+    expect(out).toEqual([{ path: '/2026/hi', file: '[year]/[slug].vue' }])
   })
 })
