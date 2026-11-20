@@ -39,4 +39,11 @@ describe('renderPage', () => {
       'Island: when="media" needs a media query in the media prop.',
     )
   })
+
+  it('refuses an island component without an SFC name', async () => {
+    const bad = fileURLToPath(new URL('./fixtures/bad-island', import.meta.url))
+    await expect(renderPage({ root: bad, page: 'pages/unnamed.vue' })).rejects.toThrow(
+      'Island: the component has no SFC __name; give it a .vue file of its own.',
+    )
+  })
 })

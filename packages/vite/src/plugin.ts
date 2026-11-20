@@ -27,6 +27,7 @@ export function weft(opts: WeftOptions = {}): Plugin {
       const file = resolve(root, entry)
       const name = sfcName(file)
       const other = byName.get(name)
+      if (other === file) continue
       if (other) {
         throw new Error(
           `Islands ${relative(root, other)} and ${relative(root, file)} are both named ${name}; rename one of them.`,

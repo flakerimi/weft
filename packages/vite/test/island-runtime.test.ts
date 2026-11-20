@@ -1,8 +1,7 @@
 // @vitest-environment happy-dom
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { brotliCompressSync, constants as zlibConstants } from 'node:zlib'
 import { build } from 'vite'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
@@ -194,6 +193,35 @@ describe('startIslands', () => {
     expect(await clickCounter(second!, button)).toEqual({ text: 'n is 3', same: true })
   })
 
+  it('warns and goes on when a trigger cannot be set up', async () => {
+    page(counterHTML('visible') + counterHTML('load'))
+    const [first, second] = document.querySelectorAll('weft-island')
+    const before = first!.innerHTML
+    const button = second!.querySelector('button')!
+    class ThrowingObserver {
+      constructor() {
+        throw new Error('IntersectionObserver is not defined')
+      }
+    }
+
+    startIslands(registry, { observe: ThrowingObserver as unknown as typeof IntersectionObserver })
+    await settle()
+    expect(first!.innerHTML).toBe(before)
+    expect(warn.mock.calls).toEqual([['weft: island Counter did not start: IntersectionObserver is not defined']])
+    expect(await clickCounter(second!, button)).toEqual({ text: 'n is 3', same: true })
+  })
+
+  it('warns once about an unknown trigger and starts the island on load', async () => {
+    page(counterHTML('hover'))
+    const island = document.querySelector('weft-island')!
+    const button = island.querySelector('button')!
+
+    startIslands(registry)
+    await settle()
+    expect(warn.mock.calls).toEqual([['weft: island Counter has unknown when "hover"; starting on load']])
+    expect(await clickCounter(island, button)).toEqual({ text: 'n is 3', same: true })
+  })
+
   it('warns once for an island the registry does not know', async () => {
     page(counterHTML('load').replace('data-id="Counter"', 'data-id="Missing"'))
     const island = document.querySelector('weft-island')!
@@ -260,26 +288,30 @@ describe('startIslands', () => {
 describe('island runtime size', () => {
   it('is at most 1.5 KB minified and brotli-compressed, without Vue', async () => {
     const outDir = mkdtempSync(join(tmpdir(), 'weft-island-runtime-'))
-    await build({
-      configFile: false,
-      logLevel: 'silent',
-      build: {
-        outDir,
-        minify: true,
-        // An app build, as a page ships it: library mode keeps whitespace in ES output.
-        rolldownOptions: {
-          input: join(import.meta.dirname, '../src/island-runtime.ts'),
-          external: ['vue'],
-          preserveEntrySignatures: 'strict',
-          output: { entryFileNames: 'island-runtime.js' },
+    try {
+      await build({
+        configFile: false,
+        logLevel: 'silent',
+        build: {
+          outDir,
+          minify: true,
+          // An app build, as a page ships it: library mode keeps whitespace in ES output.
+          rolldownOptions: {
+            input: join(import.meta.dirname, '../src/island-runtime.ts'),
+            external: ['vue'],
+            preserveEntrySignatures: 'strict',
+            output: { entryFileNames: 'island-runtime.js' },
+          },
         },
-      },
-    })
-    const js = readFileSync(join(outDir, 'island-runtime.js'))
-    expect(js.toString()).toContain('startIslands')
-    expect(js.toString()).toMatch(/from\s*"vue"/) // Vue is imported, not bundled
-    const size = brotliCompressSync(js, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 11 } }).length
-    expect(size).toBeGreaterThan(0)
-    expect(size).toBeLessThanOrEqual(1536)
+      })
+      const js = readFileSync(join(outDir, 'island-runtime.js'))
+      expect(js.toString()).toContain('startIslands')
+      expect(js.toString()).toMatch(/from\s*"vue"/) // Vue is imported, not bundled
+      const size = brotliCompressSync(js, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 11 } }).length
+      expect(size).toBeGreaterThan(0)
+      expect(size).toBeLessThanOrEqual(1536)
+    } finally {
+      rmSync(outDir, { recursive: true, force: true })
+    }
   })
 })

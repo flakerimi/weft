@@ -23,31 +23,35 @@ export function startIslands(registry: IslandRegistry, opts: IslandOptions = {})
     const warn = (why: string) => console.warn(`weft: island ${id} did not start: ${why}`)
     const start = () => void hydrate(el, registry[id], warn)
 
-    if (when === 'visible') {
-      const io = new (opts.observe ?? IntersectionObserver)((entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          io.disconnect()
+    // A trigger that cannot be set up (no IntersectionObserver, a throwing
+    // scheduler) costs this island only.
+    try {
+      if (when === 'visible') {
+        const io = new (opts.observe ?? IntersectionObserver)((entries) => {
+          if (entries.some((e) => e.isIntersecting)) {
+            io.disconnect()
+            start()
+          }
+        })
+        io.observe(el)
+      } else if (when === 'idle') {
+        ;(opts.idle ?? ((cb) => (typeof requestIdleCallback == 'function' ? requestIdleCallback(cb) : setTimeout(cb, 200))))(start)
+      } else if (when === 'media') {
+        if (!media) throw new Error('data-when="media" has no data-media.')
+        const query = (opts.matchMedia ?? matchMedia)(media)
+        const check = () => {
+          if (!query.matches) return
+          query.removeEventListener('change', check)
           start()
         }
-      })
-      io.observe(el)
-    } else if (when === 'idle') {
-      ;(opts.idle ?? ((cb) => (typeof requestIdleCallback == 'function' ? requestIdleCallback(cb) : setTimeout(cb, 200))))(start)
-    } else if (when === 'media') {
-      if (!media) {
-        warn('data-when="media" has no data-media.')
-        continue
-      }
-      const query = (opts.matchMedia ?? matchMedia)(media)
-      const check = () => {
-        if (!query.matches) return
-        query.removeEventListener('change', check)
+        query.addEventListener('change', check)
+        check()
+      } else {
+        if (when !== 'load') console.warn(`weft: island ${id} has unknown when "${when}"; starting on load`)
         start()
       }
-      query.addEventListener('change', check)
-      check()
-    } else {
-      start()
+    } catch (e) {
+      warn(reason(e))
     }
   }
 }

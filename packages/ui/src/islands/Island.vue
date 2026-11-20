@@ -14,13 +14,13 @@ const p = defineProps<{
 // hydrates <weft-island> on its own, so this component renders nothing there.
 const server = import.meta.env.SSR
 
-// The island's id is the component's SFC name (its file name); the island
-// runtime keys its chunk registry by the same name.
-const named = p.component as { __name?: string; name?: string }
-const id = named.__name ?? named.name
+// The island's id is the component's SFC `__name` (its file name), the key the
+// weft() plugin gives its chunk in the registry. A `name` option could differ
+// from the file name, so it is not used.
+const id = (p.component as { __name?: string }).__name
 let json = ''
 if (server) {
-  if (!id) throw new Error('Island: the component has no name; give it a file of its own.')
+  if (!id) throw new Error('Island: the component has no SFC __name; give it a .vue file of its own.')
   if (p.when === 'media' && !p.media) throw new Error('Island: when="media" needs a media query in the media prop.')
   // Escape what could end the <script> element or open a comment inside it.
   json = JSON.stringify(p.props ?? {})

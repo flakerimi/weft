@@ -47,4 +47,11 @@ describe('weft() plugin', () => {
       'Islands site/components/Counter.vue and dup/Counter.vue are both named Counter; rename one of them.',
     )
   })
+
+  it('treats the same file listed twice as one island', async () => {
+    const chunks = await buildRegistry(['site/components/Counter.vue', './site/components/../components/Counter.vue'])
+    const entry = chunks.find((c) => c.isEntry)!
+    expect(chunks.filter((c) => c.facadeModuleId?.endsWith('/site/components/Counter.vue'))).toHaveLength(1)
+    expect(entry.code.match(/"Counter":/g)).toHaveLength(1)
+  })
 })
