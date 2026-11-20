@@ -1,0 +1,11 @@
+{
+  "name": "weft-bench-tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Measurement tools for bench/: Lighthouse and the image script. Not part of the pnpm workspace.",
+  "dependencies": {
+    "lighthouse": "13.6.0",
+    "sharp": "0.35.5"
+  }
+}

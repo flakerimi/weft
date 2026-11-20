@@ -1,0 +1,30 @@
+{
+  "title": "Loom — pages that load before you blink",
+  "description": "A benchmark landing page: the same content, built with Weft and with Astro.",
+  "hero": {
+    "tag": "benchmark",
+    "title": "Pages that load before you blink",
+    "lead": "Loom renders every page at build time and sends the browser only what it needs.",
+    "sub": "Static HTML first, one small island where the page has to react, and assets sized for the screen they land on."
+  },
+  "image": {
+    "alt": "Green hills under a blue sky with a few clouds",
+    "width": 1600,
+    "height": 900
+  },
+  "features": [
+    { "title": "Rendered at build", "text": "Every route is HTML before the first visitor arrives. No server rendering on the hot path." },
+    { "title": "Islands, not apps", "text": "Interactive parts hydrate on their own, when the browser is idle, and nothing else ships JavaScript." },
+    { "title": "Pre-compressed", "text": "Brotli and gzip are made once at build, so a request costs a lookup and a write." }
+  ],
+  "pricing": [
+    { "name": "Starter", "price": "$0", "period": "forever", "items": ["One site", "Community support", "Build previews"] },
+    { "name": "Team", "price": "$12", "period": "per seat / month", "items": ["Unlimited sites", "Email support", "Custom domains", "Analytics"] },
+    { "name": "Enterprise", "price": "Custom", "period": "billed yearly", "items": ["Single sign-on", "Audit log", "Dedicated support", "99.99% uptime"] }
+  ],
+  "counter": {
+    "title": "Try the island",
+    "description": "The only JavaScript on this page: a counter that hydrates when the browser is idle."
+  },
+  "footer": "Built for the Weft benchmark. The same content is built with Astro for comparison."
+}

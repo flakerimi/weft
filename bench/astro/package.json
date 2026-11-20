@@ -1,0 +1,16 @@
+{
+  "name": "weft-bench-astro",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The Astro side of the Weft benchmark. Not part of the pnpm workspace: it has its own lockfile.",
+  "scripts": {
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/vue": "7.1.6",
+    "astro": "7.4.13",
+    "vue": "3.5.46"
+  }
+}

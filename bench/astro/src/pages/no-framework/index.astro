@@ -1,0 +1,10 @@
+---
+// The landing with Astro's own default island: a plain <script> in an .astro
+// component, no framework. Reported as "Astro, no framework island".
+import Landing from '../../layouts/Landing.astro'
+import PlainCounter from '../../components/PlainCounter.astro'
+---
+
+<Landing>
+  <PlainCounter slot="counter" start={0} />
+</Landing>

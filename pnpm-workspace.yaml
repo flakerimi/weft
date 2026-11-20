@@ -2,3 +2,4 @@ packages:
   - packages/*
   - playground/web
   - site-src
+  - bench/weft

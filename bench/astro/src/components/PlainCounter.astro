@@ -1,0 +1,43 @@
+---
+// The counter without a framework: server HTML and a plain <script> that Astro
+// bundles, the way Astro's docs write a small interactive component.
+interface Props {
+  start: number
+}
+const { start } = Astro.props
+---
+
+<div class="counter" data-counter data-start={start}>
+  <button type="button" class="counter__button" aria-label="Decrease" data-step="-1">−</button>
+  <output class="counter__value" aria-live="polite">{start}</output>
+  <button type="button" class="counter__button" aria-label="Increase" data-step="1">+</button>
+</div>
+
+<script>
+  for (const el of document.querySelectorAll<HTMLElement>('[data-counter]')) {
+    const out = el.querySelector('output')!
+    let count = Number(el.dataset.start)
+    el.addEventListener('click', (e) => {
+      const button = (e.target as Element).closest<HTMLElement>('button')
+      if (!button) return
+      count += Number(button.dataset.step)
+      out.textContent = String(count)
+    })
+  }
+</script>
+
+<style>
+  .counter { display: inline-flex; align-items: center; gap: 12px; }
+  .counter__button {
+    width: 44px;
+    height: 44px;
+    font: inherit;
+    font-size: 1.25em;
+    color: #fff;
+    background: #3b5bdb;
+    border: 0;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .counter__value { min-width: 3ch; text-align: center; font-size: 1.5em; font-variant-numeric: tabular-nums; }
+</style>

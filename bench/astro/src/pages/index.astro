@@ -1,0 +1,9 @@
+---
+// The landing with its counter as a Vue island, as on the Weft side.
+import Counter from '../components/Counter.vue'
+import Landing from '../layouts/Landing.astro'
+---
+
+<Landing>
+  <Counter slot="counter" client:idle start={0} />
+</Landing>
