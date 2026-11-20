@@ -119,7 +119,7 @@ generated from Go structs, `weft add crud`), login and permissions,
 
 ## Develop
 
-Needs Go 1.26, Node 22.6+ and pnpm 10.
+Needs Go 1.26, Node 22.18+ and pnpm 10.
 
 ```sh
 pnpm install

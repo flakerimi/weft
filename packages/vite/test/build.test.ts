@@ -1,13 +1,13 @@
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { brotliDecompressSync, gunzipSync } from 'node:zlib'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { buildSite, type Manifest } from '../src/build.ts'
+import { buildSite, contentType, type Manifest } from '../src/build.ts'
 import type { RoutesJson } from '../src/routes.ts'
 
 const fixture = (n: string) => fileURLToPath(new URL(`./fixtures/${n}`, import.meta.url))
@@ -46,7 +46,7 @@ describe('buildSite on a site with islands', () => {
   })
 
   it('writes one HTML file per route, dynamic routes expanded with their params as props', () => {
-    for (const p of ['index', 'counter', 'escape', '404', 'blog/first', 'blog/second']) {
+    for (const p of ['index', 'about', 'assets', 'counter', 'escape', '404', 'blog/first', 'blog/second']) {
       expect(existsSync(join(out, 'pages', p, 'index.html')), p).toBe(true)
     }
     expect(read('pages/blog/first/index.html')).toContain('<h1>Post first</h1>')
@@ -73,9 +73,54 @@ describe('buildSite on a site with islands', () => {
     expect(html).toContain('<weft-island data-id="Counter" data-when="visible">')
   })
 
-  it('builds a client chunk for each island the pages use', () => {
+  it('builds a client chunk for each island the pages use, and nothing from the site config input', () => {
     const assets = files(out).filter((f) => f.startsWith('assets/') && f.endsWith('.js'))
     expect(assets.some((f) => /^assets\/Counter-[\w-]+\.js$/.test(f))).toBe(true)
+    // The fixture's vite.config sets input { main: 'index.html' }; only the client entry is built.
+    expect(assets.filter((f) => !/^assets\/(client|Counter)-/.test(f))).toEqual([])
+  })
+
+  it('marks only hashed build output immutable, not a page named assets', () => {
+    expect(manifest.files['/pages/assets/index.html']).toMatchObject({ immutable: false })
+    const immutable = Object.keys(manifest.files).filter((f) => manifest.files[f]!.immutable)
+    expect(immutable.length).toBeGreaterThan(0)
+    for (const f of immutable) expect(f).toMatch(/^\/assets\/[\w-]+-[\w-]{8}\.(js|css)$/)
+  })
+
+  it("inlines the CSS of the components each page renders, islands' included", () => {
+    const counter = styleOf(read('pages/counter/index.html'))!
+    const about = styleOf(read('pages/about/index.html'))!
+    const index = styleOf(read('pages/index/index.html'))!
+    expect(counter).toMatch(/button \{\s*font-variant-numeric: tabular-nums;\s*\}/)
+    expect(about).toMatch(/\.badge \{\s*letter-spacing: 0\.02em;\s*\}/)
+    expect(index).not.toContain('tabular-nums')
+    expect(index).not.toContain('.badge')
+    // Component CSS comes before view transitions, after the theme and weft.css.
+    expect(about.indexOf('.badge')).toBeGreaterThan(about.indexOf('box-sizing:border-box'))
+  })
+
+  it('writes the head a page sets with useHead, escaped', () => {
+    const html = read('pages/about/index.html')
+    const head = html.slice(0, html.indexOf('</head>'))
+    expect(head).toContain('<title>About &lt;Weft&gt;</title>')
+    expect(head).toContain('<meta name="description" content="A &quot;quoted&quot; &amp; &lt;b&gt;page&lt;/b&gt;">')
+    expect(head).toContain('<meta property="og:title" content="About &lt;Weft&gt;">')
+    expect(head).toContain('<meta property="og:description" content="A &quot;quoted&quot; &amp; &lt;b&gt;page&lt;/b&gt;">')
+    expect(head).toContain('<meta property="og:image" content="/og.png?a=1&amp;b=2">')
+  })
+
+  it('writes no title or description for a page without useHead', () => {
+    const html = read('pages/index/index.html')
+    expect(html).not.toContain('<title')
+    expect(html).not.toContain('name="description"')
+    expect(html).not.toContain('property="og:')
+  })
+
+  it("copies the site's public files to the root of the build, in the manifest", () => {
+    expect(read('robots.txt')).toBe('User-agent: *\nAllow: /\n')
+    expect(manifest.files['/robots.txt']).toMatchObject({ type: 'text/plain; charset=utf-8', br: true, gz: true, immutable: false })
+    expect(manifest.files['/icon.bin']).toMatchObject({ type: 'application/octet-stream', br: false, gz: false, immutable: false })
+    expect(existsSync(join(out, 'icon.bin.br'))).toBe(false)
   })
 
   it('inlines the theme and weft.css with view transitions, and adds speculation rules', () => {
@@ -95,7 +140,7 @@ describe('buildSite on a site with islands', () => {
   it('writes .br and .gz siblings of every text file that decompress to its bytes', () => {
     const all = files(out)
     const text = all.filter((f) => /\.(html|css|js|json|svg|txt|xml)$/.test(f) && f !== 'manifest.json')
-    expect(text.filter((f) => f.endsWith('.html'))).toHaveLength(6)
+    expect(text.filter((f) => f.endsWith('.html'))).toHaveLength(8)
     for (const f of text) {
       const bytes = readFileSync(join(out, f))
       expect(brotliDecompressSync(readFileSync(join(out, f + '.br'))).equals(bytes), f).toBe(true)
@@ -132,6 +177,8 @@ describe('buildSite on a site with islands', () => {
     expect(routes).toEqual({
       pages: [
         { path: '/', html: 'pages/index/index.html', islands: [] },
+        { path: '/about', html: 'pages/about/index.html', islands: [] },
+        { path: '/assets', html: 'pages/assets/index.html', islands: [] },
         { path: '/counter', html: 'pages/counter/index.html', islands: ['Counter'] },
         { path: '/escape', html: 'pages/escape/index.html', islands: ['Counter'] },
         { path: '/blog/first', html: 'pages/blog/first/index.html', islands: [] },
@@ -151,11 +198,21 @@ describe('buildSite on a site without islands', () => {
     // An app built before the pages: its files join the manifest.
     mkdirSync(join(out, 'app'))
     writeFileSync(join(out, 'app/index.html'), '<!doctype html><div id="app"></div>')
+    // Left from an earlier build: the build empties its outDir (all but the app).
+    mkdirSync(join(out, 'pages/old'), { recursive: true })
+    writeFileSync(join(out, 'pages/old/index.html'), 'stale')
+    writeFileSync(join(out, 'stale.txt'), 'stale')
     await buildSite({ root: fixture('static-site'), outDir: out, appPrefix: '/app', theme: 'lisa' })
   })
 
   it("uses the site's own vite.config", () => {
     expect(readFileSync(join(out, 'pages/index/index.html'), 'utf8')).toContain('<h1>Static from vite.config</h1>')
+  })
+
+  it('empties outDir first, keeping the app build', () => {
+    expect(existsSync(join(out, 'pages/old'))).toBe(false)
+    expect(existsSync(join(out, 'stale.txt'))).toBe(false)
+    expect(readFileSync(join(out, 'app/index.html'), 'utf8')).toBe('<!doctype html><div id="app"></div>')
   })
 
   it('makes no client build and no runtime script', () => {
@@ -183,18 +240,78 @@ describe('buildSite on a site without islands', () => {
 })
 
 describe('buildSite with CSS over the inline limit', () => {
-  it('links one hashed stylesheet that keeps view transitions, and hints it', async () => {
-    const out = tempDir()
-    const manifest = await buildSite({ root: fixture('static-site'), outDir: out, cssInlineLimit: 100 })
+  let out: string
+  let manifest: Manifest
+  const hrefOf = (page: string) =>
+    /<link rel="stylesheet" href="([^"]+)">/.exec(readFileSync(join(out, 'pages', page, 'index.html'), 'utf8'))?.[1]
+
+  beforeAll(async () => {
+    out = tempDir()
+    manifest = await buildSite({ root: fixture('site'), outDir: out, cssInlineLimit: 100 })
+  })
+
+  it('links one hashed stylesheet per CSS set that keeps view transitions', () => {
     const html = readFileSync(join(out, 'pages/index/index.html'), 'utf8')
     expect(html).not.toContain('<style>')
-    const href = /<link rel="stylesheet" href="([^"]+)">/.exec(html)?.[1]
+    const href = hrefOf('index')
     expect(href).toMatch(/^\/assets\/weft-[0-9a-f]{8}\.css$/)
     const css = readFileSync(join(out, href!), 'utf8')
     expect(css).toContain('--weft-color-bg: #FAFAFA')
     expect(css).toContain('@view-transition { navigation: auto; }')
     expect(manifest.files[href!]).toMatchObject({ type: 'text/css; charset=utf-8', immutable: true })
-    expect(manifest.hints['/']).toEqual([`<${href}>; rel=preload; as=style`])
+    // Pages with the same CSS share a file; a page with component CSS gets its own.
+    expect(hrefOf('404')).toBe(href)
+    expect(hrefOf('about')).not.toBe(href)
+    expect(readFileSync(join(out, hrefOf('about')!), 'utf8')).toMatch(/\.badge \{\s*letter-spacing: 0\.02em;\s*\}/)
+  })
+
+  it('hints the stylesheet, and keys the not-found page\'s hints "404"', () => {
+    expect(manifest.hints['/']).toEqual([`<${hrefOf('index')}>; rel=preload; as=style`])
+    expect(manifest.hints['404']).toEqual([`<${hrefOf('404')}>; rel=preload; as=style`])
+    expect(manifest.hints['/404']).toBeUndefined()
+  })
+})
+
+describe('buildSite refuses', () => {
+  it('a public file that would overwrite a generated one', async () => {
+    await expect(buildSite({ root: fixture('public-clash'), outDir: tempDir() })).rejects.toThrow(
+      'buildSite: public/routes.json would overwrite the generated routes.json; rename or move it.',
+    )
+  })
+
+  it('an outDir that is the site root or contains it, and deletes nothing', async () => {
+    // A copy, so that a build which failed to refuse could not write into the fixtures.
+    const root = join(tempDir(), 'site')
+    cpSync(fixture('static-site'), root, { recursive: true })
+    for (const outDir of [root, join(root, '..')]) {
+      await expect(buildSite({ root, outDir })).rejects.toThrow(
+        `buildSite: outDir ${outDir} is the site root or contains it; build into a directory of its own.`,
+      )
+    }
+    expect(existsSync(join(root, 'pages/index.vue'))).toBe(true)
+  })
+})
+
+describe('contentType', () => {
+  it('knows the types a site serves', () => {
+    expect(
+      ['a.mjs', 'a.jpeg', 'a.gif', 'a.woff', 'a.woff2', 'a.ttf', 'a.wasm', 'a.webmanifest', 'a.ico', 'a.avif', 'a.webp'].map(
+        contentType,
+      ),
+    ).toEqual([
+      'text/javascript; charset=utf-8',
+      'image/jpeg',
+      'image/gif',
+      'font/woff',
+      'font/woff2',
+      'font/ttf',
+      'application/wasm',
+      'application/manifest+json',
+      'image/x-icon',
+      'image/avif',
+      'image/webp',
+    ])
+    expect(contentType('a.unknown')).toBe('application/octet-stream')
   })
 })
 
@@ -205,11 +322,20 @@ describe('bin/weft-build-pages.mjs', () => {
     // As `weft build` runs it: no NODE_ENV (vitest sets "test").
     const env = { ...process.env, NODE_ENV: undefined }
     const { stdout } = await promisify(execFile)(process.execPath, [bin, '--root', fixture('site'), '--out', out], { env })
-    expect(stdout).toBe(`weft: built 6 pages into ${out}\n`)
+    expect(stdout).toBe(`weft: built 8 pages into ${out}\n`)
     const js = files(out).filter((f) => f.endsWith('.js'))
     expect(js.length).toBeGreaterThan(0)
     // Vue's development build carries its warnings; the production build does not.
     for (const f of js) expect(readFileSync(join(out, f), 'utf8').includes('[Vue warn]'), f).toBe(false)
+  })
+
+  it('fails with one sentence when Node does not strip types', async () => {
+    const bin = fileURLToPath(new URL('../bin/weft-build-pages.mjs', import.meta.url))
+    const args = ['--no-experimental-strip-types', bin, '--root', fixture('static-site'), '--out', tempDir()]
+    await expect(promisify(execFile)(process.execPath, args)).rejects.toMatchObject({
+      code: 1,
+      stderr: `weft-build-pages: Node ${process.version} does not strip TypeScript types; use Node 22.18 or later.\n`,
+    })
   })
 
   it('fails with one sentence when an argument is missing', async () => {

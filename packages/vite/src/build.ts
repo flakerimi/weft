@@ -1,14 +1,14 @@
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, extname, join, relative, resolve } from 'node:path'
+import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { brotliCompressSync, constants as zlib, gzipSync } from 'node:zlib'
 import { build, type Rolldown } from 'vite'
 import { siteConfig } from './config.ts'
 import { weft } from './plugin.ts'
-import { createRenderServer, renderPage, type RenderResult } from './render.ts'
+import { createRenderServer, renderPage, type PageHead, type RenderResult } from './render.ts'
 import { discoverRoutes, expandRoutes, type ExpandedRoute, type PageModule, type RoutesJson } from './routes.ts'
 
 export type Theme = 'neutral' | 'lisa'
@@ -16,13 +16,17 @@ export type Theme = 'neutral' | 'lisa'
 export interface BuildOptions {
   /** The site's root directory; its pages are `<root>/pages/**.vue`. */
   root: string
-  /** Where the build goes (the `dist` the Go binary embeds). */
+  /**
+   * Where the build goes (the `dist` the Go binary embeds). The build empties it
+   * first, all but `app/` when `appPrefix` is set; it may not be the site root
+   * or contain it.
+   */
   outDir: string
   /** The client-rendered app's path prefix, e.g. `/app`; its build must already be in `<outDir>/app`. */
   appPrefix?: string
   /** The theme stylesheet the pages use. Default `neutral`. */
   theme?: Theme
-  /** CSS up to this many bytes is inlined in each page; more is linked. Default 14 KB. */
+  /** A page's CSS up to this many bytes is inlined; more is linked. Default 14 KB. */
   cssInlineLimit?: number
 }
 
@@ -38,7 +42,10 @@ export interface ManifestFile {
   immutable: boolean
 }
 
-/** `manifest.json`: every served file by its URL path, and the Early Hints `Link` values per page path. */
+/**
+ * `manifest.json`: every served file by its URL path, and the Early Hints
+ * `Link` values per page path (`"404"` for the not-found page).
+ */
 export interface Manifest {
   files: Record<string, ManifestFile>
   hints: Record<string, string[]>
@@ -54,18 +61,29 @@ const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
   '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
   '.svg': 'image/svg+xml',
   '.txt': 'text/plain; charset=utf-8',
   '.xml': 'application/xml',
+  '.woff': 'font/woff',
   '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.wasm': 'application/wasm',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
   '.webp': 'image/webp',
   '.avif': 'image/avif',
   '.ico': 'image/x-icon',
 }
-const TEXT = new Set(['.html', '.css', '.js', '.json', '.svg', '.txt', '.xml'])
+/** Files stored with .br and .gz siblings. */
+const TEXT = new Set(['.html', '.css', '.js', '.mjs', '.json', '.webmanifest', '.svg', '.txt', '.xml'])
+
+/** The Content-Type a file is served with, from its extension. */
+export const contentType = (file: string) => TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream'
 
 const sha256 = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex')
 const posix = (p: string) => p.split('\\').join('/')
@@ -79,10 +97,14 @@ const posix = (p: string) => p.split('\\').join('/')
 export async function buildSite(opts: BuildOptions): Promise<Manifest> {
   const root = resolve(opts.root)
   const outDir = resolve(opts.outDir)
+  const inside = relative(outDir, root)
+  if (inside === '' || (!inside.startsWith('..') && !isAbsolute(inside))) {
+    throw new Error(`buildSite: outDir ${opts.outDir} is the site root or contains it; build into a directory of its own.`)
+  }
   const theme = opts.theme ?? 'neutral'
   if (!THEMES.includes(theme)) throw new Error(`buildSite: unknown theme "${theme}"; use ${THEMES.join(' or ')}.`)
   const app = opts.appPrefix === undefined ? null : appRoute(opts.appPrefix, outDir)
-  const css = await readStyles(root, theme)
+  const baseCSS = await readStyles(root, theme)
   const routes = await discoverRoutes(join(root, 'pages'))
 
   // A production build, as `vite build` makes one: the first Vite server sets
@@ -102,50 +124,57 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
     await server.close()
   }
 
-  const written: string[] = []
+  // Every page rendered, so the previous build can go: outDir is the build's own.
+  await emptyDir(outDir, app ? ['app'] : [])
+
+  const written = new Set<string>()
+  const immutable = new Set<string>()
   const write = async (file: string, data: string | Buffer) => {
     await mkdir(dirname(join(outDir, file)), { recursive: true })
     await writeFile(join(outDir, file), data)
-    written.push(file)
+    written.add(file)
   }
 
   const islandFiles = [...new Set(pages.flatMap((p) => Object.values(p.islandFiles)))]
   const client = islandFiles.length ? await buildClient(root, outDir, islandFiles) : null
-  if (client) written.push(...client.files)
-
-  let style: string | null = css
-  let stylesheet: string | null = null
-  if (Buffer.byteLength(css) > (opts.cssInlineLimit ?? 14 * 1024)) {
-    const file = `assets/weft-${sha256(css).slice(0, 8)}.css`
-    await write(file, css)
-    style = null
-    stylesheet = '/' + file
+  for (const file of client?.files ?? []) {
+    written.add(file)
+    immutable.add(file)
   }
 
   const hints: Manifest['hints'] = {}
   const routesJson: RoutesJson = { pages: [], notFound: null, app }
   for (const page of pages) {
+    // The theme, weft.css, the page's component CSS, then view transitions.
+    const css = [baseCSS, page.css, VIEW_TRANSITION].filter(Boolean).join('\n') + '\n'
+    let stylesheet: string | null = null
+    if (Buffer.byteLength(css) > (opts.cssInlineLimit ?? 14 * 1024)) {
+      const file = `assets/weft-${sha256(css).slice(0, 8)}.css`
+      if (!written.has(file)) await write(file, css)
+      immutable.add(file)
+      stylesheet = '/' + file
+    }
     const scripts = page.islands.length > 0 ? client : null
-    const html = pageHTML({ body: page.html, style, stylesheet, scripts })
     const file = htmlFile(page.path)
-    await write(file, html)
+    await write(file, pageHTML({ body: page.html, head: page.head, css, stylesheet, scripts }))
 
     const links = [
       ...(stylesheet ? [`<${stylesheet}>; rel=preload; as=style`] : []),
       ...(scripts ? [scripts.entry, ...scripts.imports].map((m) => `<${m}>; rel=modulepreload`) : []),
     ]
-    if (links.length) hints[page.path] = links
-    if (page.file === '404.vue') routesJson.notFound = file
+    const notFound = page.file === '404.vue'
+    if (links.length) hints[notFound ? '404' : page.path] = links
+    if (notFound) routesJson.notFound = file
     else routesJson.pages.push({ path: page.path, html: file, islands: page.islands })
   }
   await write('routes.json', JSON.stringify(routesJson, null, 2) + '\n')
-  if (app) written.push(...(await appFiles(outDir)))
+  if (app) for (const file of await filesUnder(outDir, 'app')) written.add(file)
+  await copyPublic(root, outDir, written)
 
   const files: Manifest['files'] = {}
-  for (const file of [...new Set(written)].sort()) {
+  for (const file of [...written].sort()) {
     const bytes = await readFile(join(outDir, file))
-    const ext = extname(file)
-    const text = TEXT.has(ext)
+    const text = TEXT.has(extname(file).toLowerCase())
     if (text) {
       const br = brotliCompressSync(bytes, {
         params: {
@@ -159,15 +188,36 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
     }
     files['/' + file] = {
       etag: `"${sha256(bytes).slice(0, 16)}"`,
-      type: TYPES[ext] ?? 'application/octet-stream',
+      type: contentType(file),
       br: text,
       gz: text,
-      immutable: /(^|\/)assets\//.test(file),
+      immutable: immutable.has(file),
     }
   }
   const manifest: Manifest = { files, hints }
   await writeFile(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
   return manifest
+}
+
+/** Remove everything in `dir` but the entries named in `keep`; create `dir` if it is missing. */
+async function emptyDir(dir: string, keep: string[]) {
+  await mkdir(dir, { recursive: true })
+  for (const entry of await readdir(dir)) {
+    if (!keep.includes(entry)) await rm(join(dir, entry), { recursive: true, force: true })
+  }
+}
+
+/** Copy `<root>/public` to the root of the build; a file the build made itself is not overwritten. */
+async function copyPublic(root: string, outDir: string, written: Set<string>) {
+  const generated = new Set(['manifest.json'])
+  for (const f of written) generated.add(f).add(f + '.br').add(f + '.gz')
+  for (const file of await filesUnder(root, 'public')) {
+    const to = file.slice('public/'.length)
+    if (generated.has(to)) throw new Error(`buildSite: ${file} would overwrite the generated ${to}; rename or move it.`)
+    await mkdir(dirname(join(outDir, to)), { recursive: true })
+    await copyFile(join(root, file), join(outDir, to))
+    written.add(to)
+  }
 }
 
 function appRoute(prefix: string, outDir: string): RoutesJson['app'] {
@@ -180,15 +230,20 @@ function appRoute(prefix: string, outDir: string): RoutesJson['app'] {
   return { prefix, index: 'app/index.html' }
 }
 
-/** The app's build output under `<outDir>/app`, without compressed variants a previous build wrote. */
-async function appFiles(outDir: string): Promise<string[]> {
-  const entries = await readdir(join(outDir, 'app'), { recursive: true, withFileTypes: true })
+/**
+ * The files under `<base>/<dir>` as posix paths relative to `base`, without
+ * compressed variants an earlier build wrote; none when it does not exist.
+ */
+async function filesUnder(base: string, dir: string): Promise<string[]> {
+  if (!existsSync(join(base, dir))) return []
+  const entries = await readdir(join(base, dir), { recursive: true, withFileTypes: true })
   return entries
     .filter((e) => e.isFile() && !/\.(br|gz)$/.test(e.name))
-    .map((e) => posix(relative(outDir, join(e.parentPath, e.name))))
+    .map((e) => posix(relative(base, join(e.parentPath, e.name))))
+    .sort()
 }
 
-/** The theme stylesheet, then `weft.css`, then view transitions: the CSS every page gets. */
+/** The theme stylesheet, then `weft.css`: the CSS every page starts with. */
 async function readStyles(root: string, theme: Theme): Promise<string> {
   const read = async (from: string, spec: string, pkg: string) => {
     try {
@@ -202,7 +257,7 @@ async function readStyles(root: string, theme: Theme): Promise<string> {
   const [uiFile, ui] = await read(join(root, 'package.json'), '@weft/ui/weft.css', '@weft/ui')
   // The theme comes from @weft/ui's own @weft/themes, the version its components expect.
   const [, themeCss] = await read(uiFile, `@weft/themes/${theme}.css`, '@weft/themes')
-  return `${themeCss}\n${ui}\n${VIEW_TRANSITION}\n`
+  return `${themeCss}\n${ui}`
 }
 
 /** `/` → `pages/index/index.html`, `/blog/a` → `pages/blog/a/index.html`. */
@@ -242,9 +297,13 @@ async function buildClient(root: string, outDir: string, islands: string[]): Pro
       ssrManifest: false,
       sourcemap: false,
       modulePreload: { polyfill: false },
-      rolldownOptions: { input: { client: CLIENT_ENTRY } },
     },
   })
+  // Only the runtime entry: an input of the site's config (an SPA's index.html)
+  // would merge with it, under either name Vite accepts.
+  const b = (config.build ??= {})
+  delete b.rollupOptions
+  b.rolldownOptions = { ...b.rolldownOptions, input: { client: CLIENT_ENTRY } }
   const result = (await build(config)) as Rolldown.RolldownOutput | Rolldown.RolldownOutput[]
   const output = (Array.isArray(result) ? result : [result]).flatMap((r) => r.output)
   const entry = output.find((o): o is Rolldown.OutputChunk => o.type === 'chunk' && o.isEntry)
@@ -256,9 +315,26 @@ async function buildClient(root: string, outDir: string, islands: string[]): Pro
   }
 }
 
+const escapeHTML = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
+
+/** `<title>`, description and Open Graph tags for what the page set with useHead. */
+function headTags({ title, description, image }: PageHead): string[] {
+  const meta = (attr: string, key: string, value: string | undefined) =>
+    value === undefined ? [] : [`<meta ${attr}="${key}" content="${escapeHTML(value)}">`]
+  return [
+    ...(title === undefined ? [] : [`<title>${escapeHTML(title)}</title>`]),
+    ...meta('name', 'description', description),
+    ...meta('property', 'og:title', title),
+    ...meta('property', 'og:description', description),
+    ...meta('property', 'og:image', image),
+  ]
+}
+
 function pageHTML(p: {
   body: string
-  style: string | null
+  head: PageHead
+  css: string
   stylesheet: string | null
   scripts: ClientBuild | null
 }): string {
@@ -268,7 +344,8 @@ function pageHTML(p: {
     '<head>',
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
-    p.style !== null ? `<style>${p.style}</style>` : `<link rel="stylesheet" href="${p.stylesheet}">`,
+    ...headTags(p.head),
+    p.stylesheet === null ? `<style>${p.css}</style>` : `<link rel="stylesheet" href="${p.stylesheet}">`,
     SPECULATION_RULES,
     ...(p.scripts
       ? [

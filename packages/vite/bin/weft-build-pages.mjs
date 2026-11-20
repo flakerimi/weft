@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 // Build a Weft site's pages into a dist directory; `weft build` runs this.
-// It imports the package's TypeScript source, so Node must strip types
-// (the default from Node 22.18; pass --experimental-strip-types before that).
+// It imports the package's TypeScript source, so Node must strip types,
+// which it does by default from Node 22.18.
 import { parseArgs } from 'node:util'
-import { buildSite } from '../src/build.ts'
+
+if (!process.features.typescript) {
+  process.stderr.write(`weft-build-pages: Node ${process.version} does not strip TypeScript types; use Node 22.18 or later.\n`)
+  process.exit(1)
+}
+const { buildSite } = await import('../src/build.ts')
 
 const usage = 'usage: weft-build-pages --root <site> --out <dist> [--app-prefix /app] [--theme neutral|lisa]'
 
