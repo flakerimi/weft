@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
+  chmodSync,
   cpSync,
   existsSync,
   lstatSync,
@@ -11,6 +12,7 @@ import {
   readlinkSync,
   renameSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs'
@@ -19,7 +21,7 @@ import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { brotliDecompressSync, gunzipSync } from 'node:zlib'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { buildSite, contentType, type Manifest } from '../src/build.ts'
 import type { RoutesJson } from '../src/routes.ts'
 
@@ -228,7 +230,14 @@ describe('buildSite on a site with islands', () => {
   })
 
   it('marks the build with .weft-build, listing every other file it wrote', () => {
-    expect(JSON.parse(read('.weft-build'))).toEqual({ weft: 1, files: files(out).filter((f) => f !== '.weft-build') })
+    const listed = files(out).filter((f) => f !== '.weft-build')
+    expect(JSON.parse(read('.weft-build'))).toEqual({
+      weft: 1,
+      files: listed.map((path) => {
+        const bytes = readFileSync(join(out, path))
+        return { path, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }
+      }),
+    })
     expect(manifest.files['/.weft-build']).toBeUndefined()
     expect(leftovers(join(out, '..'))).toEqual([])
   })
@@ -354,7 +363,10 @@ describe('buildSite replaces only a folder it built', { timeout: 30_000 }, () =>
     expect(existsSync(join(out, 'pages/counter'))).toBe(false)
     expect(existsSync(join(out, 'assets'))).toBe(false)
     expect(readFileSync(join(out, 'pages/index/index.html'), 'utf8')).toContain('<h1>Static from vite.config</h1>')
-    expect(JSON.parse(readFileSync(join(out, '.weft-build'), 'utf8')).files).toEqual(files(out).filter((f) => f !== '.weft-build'))
+    const marker = JSON.parse(readFileSync(join(out, '.weft-build'), 'utf8')) as { files: { path: string }[] }
+    expect(marker.files.map((f) => f.path)).toEqual(files(out).filter((f) => f !== '.weft-build'))
+    // A folder anyone can read, as a build folder is, not mkdtemp's owner-only one.
+    expect(statSync(out).mode & 0o777).toBe(0o755)
     expect(readdirSync(parent)).toEqual(['dist'])
   })
 
@@ -433,12 +445,105 @@ describe('buildSite replaces only a folder it built', { timeout: 30_000 }, () =>
   })
 
   it('refuses a .weft-build it cannot read', async () => {
-    for (const marker of ['not json', '{"weft":2,"files":[]}', '{"weft":1,"files":["../x"]}', '{"weft":1}']) {
+    const entry = (path: string) => JSON.stringify({ path, size: 0, sha256: createHash('sha256').digest('hex') })
+    for (const marker of [
+      'not json',
+      '{"weft":2,"files":[]}',
+      '{"weft":1}',
+      '{"weft":1,"files":["x"]}',
+      `{"weft":1,"files":[${entry('../x')}]}`,
+      `{"weft":1,"files":[${entry('/etc/x')}]}`,
+      '{"weft":1,"files":[{"path":"x","size":0}]}',
+    ]) {
       const out = tempDir()
       writeFileSync(join(out, '.weft-build'), marker)
       await refusedOver(out, 'has a .weft-build that Weft cannot read')
     }
   })
+
+  it('refuses a built folder whose listed file the owner changed, and keeps the change', async () => {
+    const { out } = await built()
+    writeFileSync(join(out, 'routes.json'), 'OWNER HAND EDIT')
+    await refusedOver(out, 'holds routes.json, changed since Weft built it')
+    expect(readFileSync(join(out, 'routes.json'), 'utf8')).toBe('OWNER HAND EDIT')
+  })
+
+  it('refuses a built folder where the owner moved a file of theirs onto a listed name', async () => {
+    const { out } = await built()
+    const mine = join(tempDir(), 'mine.txt')
+    writeFileSync(mine, 'OWNER FILE')
+    renameSync(mine, join(out, 'routes.json.gz'))
+    await refusedOver(out, 'holds routes.json.gz, changed since Weft built it')
+    expect(readFileSync(join(out, 'routes.json.gz'), 'utf8')).toBe('OWNER FILE')
+  })
+
+  it("names a Finder .DS_Store in a built folder", async () => {
+    const { out } = await built()
+    writeFileSync(join(out, 'pages/.DS_Store'), 'finder')
+    const before = snapshot(out)
+    await expect(buildSite({ root: fixture('static-site'), outDir: out })).rejects.toThrow(
+      `buildSite: outDir ${out} holds pages/.DS_Store (made by Finder); remove it or build into a new folder.`,
+    )
+    expect(snapshot(out)).toEqual(before)
+  })
+
+  it('refuses a .weft-build that is a symlink or a folder, naming it', async () => {
+    const real = join(tempDir(), 'marker')
+    writeFileSync(real, '{"weft":1,"files":[]}')
+    const linked = tempDir()
+    symlinkSync(real, join(linked, '.weft-build'))
+    await refusedOver(linked, 'has a .weft-build that is not a regular file')
+    const folder = tempDir()
+    mkdirSync(join(folder, '.weft-build'))
+    await refusedOver(folder, 'has a .weft-build that is not a regular file')
+  })
+
+  it.runIf(process.getuid?.() !== 0)('refuses a built folder with a folder it cannot read, in one sentence', async () => {
+    const { out } = await built()
+    chmodSync(join(out, 'pages'), 0o000)
+    try {
+      await expect(buildSite({ root: fixture('static-site'), outDir: out })).rejects.toThrow(
+        notOurs(out, 'holds pages, which Weft cannot read'),
+      )
+    } finally {
+      chmodSync(join(out, 'pages'), 0o755)
+    }
+    expect(leftovers(join(out, '..'))).toEqual([])
+  })
+
+  it.runIf(process.platform === 'linux')('refuses a built folder holding a second name in another Unicode form', async () => {
+    const root = linkedSite('static-site')
+    mkdirSync(join(root, 'public'))
+    writeFileSync(join(root, 'public/café.txt'), 'built')
+    const out = join(tempDir(), 'dist')
+    await buildSite({ root, outDir: out })
+    writeFileSync(join(out, 'café.txt'), 'built')
+    const before = snapshot(out)
+    await expect(buildSite({ root, outDir: out })).rejects.toThrow(/holds caf.*\.txt, whose name another entry has in another Unicode form/)
+    expect(snapshot(out)).toEqual(before)
+  })
+
+  it.runIf(process.getuid?.() !== 0)(
+    'succeeds, with one warning, when the earlier build cannot be removed after the swap',
+    async () => {
+      const { parent, out } = await built()
+      chmodSync(join(out, 'pages/index'), 0o555)
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        await buildSite({ root: fixture('static-site'), outDir: out })
+        const [old] = leftovers(parent)
+        expect(old).toMatch(/^\.dist\.weft-old-/)
+        expect(warn.mock.calls).toEqual([
+          [`buildSite: the build is in ${out}, but the earlier build moved to ${join(parent, old!)} could not be removed; remove that folder by hand.`],
+        ])
+        chmodSync(join(parent, old!, 'pages/index'), 0o755)
+      } finally {
+        warn.mockRestore()
+      }
+      expect(existsSync(join(out, 'pages/index/index.html'))).toBe(true)
+      expect(statSync(join(out, 'pages/index')).mode & 0o777).not.toBe(0o555)
+    },
+  )
 
   it('leaves outDir as it was, and no staging folder, when the build fails', async () => {
     const root = linkedSite('static-site')
@@ -591,6 +696,69 @@ export default defineConfig({
 const refusal = (outDir: string) =>
   `buildSite: outDir ${outDir} is the site root, contains it, or is one of its source folders; build into a folder of its own, like dist.`
 
+describe('buildSite next to the .vue files it uses', { timeout: 30_000 }, () => {
+  it('builds into <root>/dist when a page uses <root>/Layout.vue', async () => {
+    const root = linkedSite('static-site')
+    writeFileSync(join(root, 'Layout.vue'), '<script setup vapor lang="ts"></script>\n<template><main><slot /></main></template>\n')
+    writeFileSync(
+      join(root, 'pages/index.vue'),
+      "<script setup vapor lang=\"ts\">\nimport Layout from '../Layout.vue'\n</script>\n<template><Layout><h1>hi</h1></Layout></template>\n",
+    )
+    await buildSite({ root, outDir: join(root, 'dist') })
+    expect(readFileSync(join(root, 'dist/pages/index/index.html'), 'utf8')).toMatch(/<main>[\s\S]*<h1>hi<\/h1>[\s\S]*<\/main>/)
+  })
+})
+
+describe('buildSite with a site config that moves the client build', { timeout: 30_000 }, () => {
+  const sentence = (setting: string) =>
+    `buildSite: the site's Vite config or a plugin sets ${setting} for the client build; the page build alone decides where that goes, so remove it.`
+
+  // Each sends the client build to another folder of the owner's, and asks Vite to empty it first.
+  const routes: [string, (owner: string) => string, string][] = [
+    [
+      'an environment outDir',
+      (o) => `environments: { client: { build: { outDir: ${JSON.stringify(o)}, emptyOutDir: true } } }`,
+      'build.outDir',
+    ],
+    [
+      'an environment output.dir',
+      (o) => `environments: { client: { build: { emptyOutDir: true, rollupOptions: { output: { dir: ${JSON.stringify(o)} } } } } }`,
+      'build.rollupOptions.output.dir',
+    ],
+    [
+      "a plugin's config hook",
+      (o) => `plugins: [{ name: 'redirect', config: () => ({ build: { outDir: ${JSON.stringify(o)}, emptyOutDir: true } }) }]`,
+      'build.outDir',
+    ],
+    [
+      "a plugin's outputOptions hook",
+      (o) => `build: { emptyOutDir: true }, plugins: [{ name: 'redirect', outputOptions: (x) => ({ ...x, dir: ${JSON.stringify(o)} }) }]`,
+      'output.dir',
+    ],
+  ]
+
+  for (const [name, config, setting] of routes) {
+    it(`refuses ${name}, and leaves the owner's folder and outDir as they were`, async () => {
+      const root = linkedSite('site')
+      const parent = tempDir()
+      const out = join(parent, 'dist')
+      await buildSite({ root, outDir: out })
+      const before = snapshot(out)
+      const owner = tempDir()
+      writeFileSync(join(owner, 'keep.txt'), 'owner')
+      writeFileSync(join(owner, 'thesis.docx'), 'owner')
+      writeFileSync(
+        join(root, 'vite.config.ts'),
+        `import { defineConfig } from 'vite'\nexport default defineConfig({ build: { rollupOptions: { external: ['weft-test-external'] } }, ${config(owner)} })\n`,
+      )
+      await expect(buildSite({ root, outDir: out })).rejects.toThrow(sentence(setting))
+      expect(snapshot(owner)).toEqual({ 'keep.txt': Buffer.from('owner').toString('base64'), 'thesis.docx': Buffer.from('owner').toString('base64') })
+      expect(snapshot(out)).toEqual(before)
+      expect(readdirSync(parent)).toEqual(['dist'])
+    })
+  }
+})
+
 describe('buildSite with public files', { timeout: 30_000 }, () => {
   /** Build a copy of the static site with these public files; return its outDir's parent. */
   const withPublic = (make: (pub: string) => void) => {
@@ -615,6 +783,19 @@ describe('buildSite with public files', { timeout: 30_000 }, () => {
     })
     await clash(root, parent, 'buildSite: public/x.txt.gz would overwrite the generated x.txt.gz; rename or move it.')
   })
+
+  it.runIf(process.platform === 'darwin' || process.platform === 'win32')(
+    'refuses one that differs from a generated name only in case, where the file system ignores case',
+    async () => {
+      const upper = withPublic((pub) => writeFileSync(join(pub, 'ROUTES.json'), 'owner'))
+      await clash(upper.root, upper.parent, 'buildSite: public/ROUTES.json would overwrite the generated routes.json; rename or move it.')
+      const gz = withPublic((pub) => {
+        writeFileSync(join(pub, 'x.txt'), 'hello')
+        writeFileSync(join(pub, 'x.txt.GZ'), 'owner gz')
+      })
+      await clash(gz.root, gz.parent, 'buildSite: public/x.txt.GZ would overwrite the generated x.txt.gz; rename or move it.')
+    },
+  )
 
   it('refuses one named like the build marker', async () => {
     const { root, parent } = withPublic((pub) => writeFileSync(join(pub, '.weft-build'), '{}'))
@@ -663,7 +844,7 @@ describe('buildSite refuses', { timeout: 30_000 }, () => {
     for (const outDir of [root, join(root, '..'), ...sources]) await refused(root, outDir)
   })
 
-  it('an outDir in a folder holding .vue files the build uses, writing nothing', async () => {
+  it('an outDir holding .vue files the build uses, writing nothing', async () => {
     const root = linkedSite('static-site')
     mkdirSync(join(root, 'lib'))
     writeFileSync(join(root, 'lib/Note.vue'), '<script setup vapor lang="ts"></script>\n<template><p>note</p></template>\n')
@@ -671,9 +852,7 @@ describe('buildSite refuses', { timeout: 30_000 }, () => {
       join(root, 'pages/note.vue'),
       '<script setup vapor lang="ts">\nimport Note from \'../lib/Note.vue\'\n</script>\n<template><Note /></template>\n',
     )
-    for (const outDir of [join(root, 'lib'), join(root, 'lib/out')]) {
-      await expect(buildSite({ root, outDir })).rejects.toThrow(refusal(outDir))
-    }
+    await expect(buildSite({ root, outDir: join(root, 'lib') })).rejects.toThrow(refusal(join(root, 'lib')))
     expect(readdirSync(join(root, 'lib'))).toEqual(['Note.vue'])
   })
 

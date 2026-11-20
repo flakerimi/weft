@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto'
 import { constants as fs, existsSync, realpathSync, type Dirent } from 'node:fs'
-import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { brotliCompressSync, constants as zlib, gzipSync } from 'node:zlib'
-import { build, isCSSRequest, mergeConfig, type Plugin, type Rolldown } from 'vite'
+import { build, isCSSRequest, mergeConfig, type Plugin, type ResolvedConfig, type Rolldown } from 'vite'
 import { siteConfig } from './config.ts'
 import { weft } from './plugin.ts'
 import { createRenderServer, renderPage, type PageHead, type RenderResult } from './render.ts'
@@ -20,9 +20,10 @@ export interface BuildOptions {
    * Where the build goes (the `dist` the Go binary embeds), e.g. `<root>/dist`.
    * The build is made in a staging folder beside it and then takes its place,
    * which it does only when outDir is missing, empty, or exactly what an earlier
-   * build left there (its `.weft-build` lists every file); anything else is
-   * refused and left as it is. It may not be the site root, contain it, or be
-   * in one of its source folders.
+   * build left there (its `.weft-build` lists every file with its size and
+   * SHA-256, and nothing has changed); anything else is refused and left as it
+   * is. It may not be the site root, contain it, or be in one of its source
+   * folders.
    */
   outDir: string
   /** The client-rendered app's path prefix, e.g. `/app`; its build is copied from `appDir` into `app/`. */
@@ -143,6 +144,8 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
   // Everything is written into a fresh folder beside outDir, which then takes its place.
   await mkdir(dirname(outDir), { recursive: true })
   const staging = await mkdtemp(join(dirname(outDir), `.${basename(outDir)}.weft-staging-`))
+  // It becomes outDir: a folder anyone may read, not mkdtemp's owner-only one.
+  await chmod(staging, 0o755)
   try {
     const manifest = await writeBuild(staging, { root, app, appDir, pages, baseCSS, cssInlineLimit: opts.cssInlineLimit })
     await swap(staging, outDir)
@@ -164,27 +167,40 @@ interface BuildInput {
   cssInlineLimit: number | undefined
 }
 
-/** The marker of a folder Weft built: every other file in it. */
+/** The marker of a folder Weft built: every other file in it, with its size and SHA-256. */
 const MARKER = '.weft-build'
+
+/** One file in the marker. */
+interface MarkedFile {
+  path: string
+  size: number
+  sha256: string
+}
+
+/** A name as the file system compares names: in NFC, and in one case where it ignores case. */
+const fsKey = (p: string) => (foldCase ? p.normalize('NFC').toLowerCase() : p.normalize('NFC'))
+
+/** The files of a build by `fsKey`: each one's name, and where it came from ('' for the build itself). */
+type Taken = Map<string, { path: string; source: string }>
+const take = (taken: Taken, path: string, source = '') => taken.set(fsKey(path), { path, source })
 
 /** Write the whole build into `dir`, a fresh folder of its own, and mark it. */
 async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssInlineLimit }: BuildInput): Promise<Manifest> {
-  // Each file in the build → where it came from; none is ever written twice.
-  const from = new Map<string, string>([
-    ['manifest.json', ''],
-    [MARKER, ''],
-  ])
+  // Every file in the build; none is ever written twice, nor under two names the file system takes for one.
+  const taken: Taken = new Map()
+  take(taken, 'manifest.json')
+  take(taken, MARKER)
   const immutable = new Set<string>()
   const write = async (file: string, data: string | Buffer) => {
     await mkdir(dirname(join(dir, file)), { recursive: true })
     await writeFile(join(dir, file), data, { flag: 'wx' })
-    from.set(file, '')
+    take(taken, file)
   }
 
   const islandFiles = [...new Set(pages.flatMap((p) => Object.values(p.islandFiles)))]
   const client = islandFiles.length ? await buildClient(root, dir, islandFiles) : null
   for (const file of client?.files ?? []) {
-    from.set(file, '')
+    take(taken, file)
     immutable.add(file)
   }
 
@@ -196,7 +212,7 @@ async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssI
     let stylesheet: string | null = null
     if (Buffer.byteLength(css) > (cssInlineLimit ?? 14 * 1024)) {
       const file = `assets/weft-${sha256(css).slice(0, 8)}.css`
-      if (!from.has(file)) await write(file, css)
+      if (!taken.has(fsKey(file))) await write(file, css)
       immutable.add(file)
       stylesheet = '/' + file
     }
@@ -215,16 +231,16 @@ async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssI
   }
   await write('routes.json', JSON.stringify(routesJson, null, 2) + '\n')
   // The app's own .br/.gz would be stale beside the ones made here; public/ is copied as it is.
-  if (appDir) await copyTree(appDir, appDir, dir, 'app', from, { variants: false })
-  await copyTree(join(root, 'public'), 'public', dir, '', from, { variants: true })
+  if (appDir) await copyTree(appDir, appDir, dir, 'app', taken, { variants: false })
+  await copyTree(join(root, 'public'), 'public', dir, '', taken, { variants: true })
 
   // The .br and .gz the build makes may not be names already taken.
-  const listed = [...from.keys()].filter((f) => f !== 'manifest.json' && f !== MARKER).sort()
+  const listed = [...taken.values()].map((t) => t.path).filter((f) => f !== 'manifest.json' && f !== MARKER).sort()
   for (const file of listed) {
     if (!TEXT.has(extname(file).toLowerCase())) continue
     for (const variant of [file + '.br', file + '.gz']) {
-      const source = from.get(variant)
-      if (source !== undefined) throw new Error(`buildSite: ${source || variant} would overwrite the generated ${variant}; rename or move it.`)
+      const holder = taken.get(fsKey(variant))
+      if (holder) throw new Error(`buildSite: ${holder.source || holder.path} would overwrite the generated ${variant}; rename or move it.`)
     }
   }
 
@@ -254,19 +270,25 @@ async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssI
   const manifest: Manifest = { files, hints }
   await writeFile(join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' })
   // The marker lists what is really there, whoever wrote it (the client build included).
-  const written = (await walk(dir)).filter((e) => e.kind === 'file' && e.path !== MARKER).map((e) => e.path)
-  await writeFile(join(dir, MARKER), JSON.stringify({ weft: 1, files: written.sort() }, null, 2) + '\n', { flag: 'wx' })
+  const marked: MarkedFile[] = []
+  for (const e of await walk(dir)) {
+    if (e.kind !== 'file' || e.path === MARKER) continue
+    const bytes = await readFile(join(dir, e.path))
+    marked.push({ path: e.path, size: bytes.length, sha256: sha256(bytes) })
+  }
+  marked.sort((a, b) => (a.path < b.path ? -1 : 1))
+  await writeFile(join(dir, MARKER), JSON.stringify({ weft: 1, files: marked }, null, 2) + '\n', { flag: 'wx' })
   return manifest
 }
 
 /**
- * Copy the files under `src` into `<dir>/<prefix>`, recording each in `from`
+ * Copy the files under `src` into `<dir>/<prefix>`, recording each in `taken`
  * under `label`. A symlink is copied as the file it leads to only when that is
  * a file inside `src`; anything else that is not a file or folder is refused.
  * Unless `variants`, a `.br`/`.gz` beside a text file is left out: the build
  * makes its own.
  */
-async function copyTree(src: string, label: string, dir: string, prefix: string, from: Map<string, string>, { variants = true }) {
+async function copyTree(src: string, label: string, dir: string, prefix: string, taken: Taken, { variants = true }) {
   if (!existsSync(src)) return
   const base = canonical(src)
   const entries = await walk(src)
@@ -288,13 +310,14 @@ async function copyTree(src: string, label: string, dir: string, prefix: string,
     const variantOf = /\.(br|gz)$/.test(entry.path) ? entry.path.slice(0, -3) : null
     if (!variants && variantOf && paths.has(variantOf) && TEXT.has(extname(variantOf).toLowerCase())) continue
     const to = prefix ? `${prefix}/${entry.path}` : entry.path
-    if (from.has(to)) {
-      const owner = from.get(to)
-      throw new Error(`buildSite: ${shown} would overwrite ${owner ? `${to} from ${owner}` : `the generated ${to}`}; rename or move it.`)
+    const holder = taken.get(fsKey(to))
+    if (holder) {
+      const what = holder.source ? `${holder.path} from ${holder.source}` : `the generated ${holder.path}`
+      throw new Error(`buildSite: ${shown} would overwrite ${what}; rename or move it.`)
     }
     await mkdir(dirname(join(dir, to)), { recursive: true })
     await copyFile(source, join(dir, to), fs.COPYFILE_EXCL)
-    from.set(to, shown)
+    take(taken, to, shown)
   }
 }
 
@@ -324,17 +347,33 @@ async function walk(dir: string, prefix = ''): Promise<Entry[]> {
 const safePath = (p: unknown) =>
   typeof p === 'string' && !/[\\\0]/.test(p) && p.split('/').every((s) => s !== '' && s !== '.' && s !== '..')
 
+const markedFile = (f: unknown): f is MarkedFile => {
+  const m = f as Partial<MarkedFile> | null
+  return (
+    typeof m === 'object' &&
+    m !== null &&
+    safePath(m.path) &&
+    Number.isSafeInteger(m.size) &&
+    m.size! >= 0 &&
+    typeof m.sha256 === 'string' &&
+    /^[0-9a-f]{64}$/.test(m.sha256)
+  )
+}
+
 /**
  * Whether the build may take `dir`'s place: `missing`, `empty`, or `built`
- * (its marker lists exactly the files in it, with no symlink and no other
- * folder). Anything else is refused in one sentence naming `shown`.
+ * (its marker lists exactly the files in it, each with the size and SHA-256
+ * it has, with no symlink and no other folder). Anything else is refused in
+ * one sentence naming `shown`.
  */
 async function replaceable(dir: string, shown = dir): Promise<'missing' | 'empty' | 'built'> {
-  const refuse = (why: string): never => {
-    throw new Error(
-      `buildSite: outDir ${shown} ${why}; Weft replaces only an empty folder or one it built, so move that out or build into a new folder.`,
-    )
+  const refuse = (why: string, then = 'Weft replaces only an empty folder or one it built, so move that out or build into a new folder'): never => {
+    throw new Error(`buildSite: outDir ${shown} ${why}; ${then}.`)
   }
+  const foreign = (path: string): never =>
+    basename(path) === '.DS_Store'
+      ? refuse(`holds ${path} (made by Finder)`, 'remove it or build into a new folder')
+      : refuse(`holds ${path}, which Weft did not build`)
   const self = await lstat(dir).catch((e: NodeJS.ErrnoException) => {
     if (e.code === 'ENOENT') return null
     throw e
@@ -342,34 +381,50 @@ async function replaceable(dir: string, shown = dir): Promise<'missing' | 'empty
   if (!self) return 'missing'
   if (self.isSymbolicLink()) refuse('is a symlink')
   if (!self.isDirectory()) refuse('is not a folder')
-  const top = (await readdir(dir)).sort()
-  if (top.length === 0) return 'empty'
-  // Without a marker, the first entry is the foreign one; the rest is not walked.
-  const marker = await lstat(join(dir, MARKER)).catch(() => null)
-  if (!marker?.isFile()) refuse(`holds ${top.find((n) => n !== MARKER)}, which Weft did not build`)
-  let listed: string[] = []
   try {
-    const m = JSON.parse(await readFile(join(dir, MARKER), 'utf8')) as { weft?: unknown; files?: unknown } | null
-    if (m?.weft !== 1 || !Array.isArray(m.files) || !m.files.every(safePath)) throw new Error()
-    listed = m.files as string[]
-  } catch {
-    refuse(`has a ${MARKER} that Weft cannot read`)
+    const top = (await readdir(dir)).sort()
+    if (top.length === 0) return 'empty'
+    // Without a marker, the first entry is the foreign one; the rest is not walked.
+    const marker = await lstat(join(dir, MARKER)).catch(() => null)
+    if (marker && !marker.isFile()) refuse(`has a ${MARKER} that is not a regular file`)
+    if (!marker) foreign(top[0]!)
+    let listed: MarkedFile[] = []
+    try {
+      const m = JSON.parse(await readFile(join(dir, MARKER), 'utf8')) as { weft?: unknown; files?: unknown } | null
+      if (m?.weft !== 1 || !Array.isArray(m.files) || !m.files.every(markedFile)) throw new Error()
+      listed = m.files
+    } catch {
+      refuse(`has a ${MARKER} that Weft cannot read`)
+    }
+    // Names are compared in one Unicode form, as file systems that ignore the form see them;
+    // two entries whose names differ only in form are refused where the file system keeps both.
+    const nfc = (p: string) => p.normalize('NFC')
+    const want = new Map(listed.map((f) => [nfc(f.path), f]))
+    const dirs = new Set(listed.flatMap((f) => f.path.split('/').slice(0, -1).map((_, n, s) => nfc(s.slice(0, n + 1).join('/')))))
+    const found = new Map<string, string>()
+    const seen = new Set<string>()
+    for (const e of await walk(dir)) {
+      const path = nfc(e.path)
+      if (seen.has(path)) refuse(`holds ${e.path}, whose name another entry has in another Unicode form`)
+      seen.add(path)
+      if (e.kind === 'link') refuse(`holds the symlink ${e.path}`)
+      if (path === MARKER) continue
+      if (e.kind === 'dir' ? !dirs.has(path) : e.kind !== 'file' || !want.has(path)) foreign(e.path)
+      if (e.kind === 'file') found.set(path, e.path)
+    }
+    for (const f of listed) {
+      const name = found.get(nfc(f.path))
+      if (name === undefined) return refuse(`no longer holds ${f.path}, which Weft built`)
+      const bytes = await readFile(join(dir, name))
+      if (bytes.length !== f.size || sha256(bytes) !== f.sha256) refuse(`holds ${name}, changed since Weft built it`)
+    }
+    return 'built'
+  } catch (e) {
+    const { code, path } = e as NodeJS.ErrnoException
+    if (code !== 'EACCES' && code !== 'EPERM') throw e
+    const inside = path ? relative(dir, path).split(sep).join('/') : ''
+    return refuse(inside ? `holds ${inside}, which Weft cannot read` : 'cannot be read')
   }
-  // Names are compared in one Unicode form, as file systems that ignore the form see them.
-  const nfc = (p: string) => p.normalize('NFC')
-  const want = new Set(listed.map(nfc))
-  const dirs = new Set(listed.flatMap((f) => f.split('/').slice(0, -1).map((_, n, s) => nfc(s.slice(0, n + 1).join('/')))))
-  const found = new Set<string>()
-  for (const e of await walk(dir)) {
-    const path = nfc(e.path)
-    if (e.kind === 'link') refuse(`holds the symlink ${e.path}`)
-    if (path === MARKER) continue
-    if (e.kind === 'dir' ? !dirs.has(path) : e.kind !== 'file' || !want.has(path)) refuse(`holds ${e.path}, which Weft did not build`)
-    if (e.kind === 'file') found.add(path)
-  }
-  const missing = listed.find((f) => !found.has(nfc(f)))
-  if (missing !== undefined) refuse(`no longer holds ${missing}, which Weft built`)
-  return 'built'
 }
 
 /**
@@ -391,8 +446,13 @@ async function swap(staging: string, outDir: string) {
     await rename(old, outDir)
     throw e
   }
-  // Exactly what the marker lists, and no symlink: all of it is Weft's.
-  await rm(old, { recursive: true })
+  // Exactly what the marker lists, and no symlink: all of it is Weft's. The
+  // build is done by now, so a folder that will not go is reported, not fatal.
+  try {
+    await rm(old, { recursive: true })
+  } catch {
+    console.warn(`buildSite: the build is in ${outDir}, but the earlier build moved to ${old} could not be removed; remove that folder by hand.`)
+  }
 }
 
 const foldCase = process.platform === 'darwin' || process.platform === 'win32'
@@ -430,7 +490,7 @@ const SOURCE_DIRS = ['pages', 'public', 'components', 'src', 'node_modules']
 /**
  * Refuse an outDir that is the site root or contains it, is inside one of its
  * source folders (a symlinked one by where it leads), holds a `.vue` file the
- * build used or is inside its folder, or overlaps the app build. A folder of
+ * build used, or overlaps the app build. A folder of
  * its own inside the root, such as `dist`, is fine.
  */
 function checkOutDir(outDir: string, root: string, appDir: string | null, vueFiles: string[] = []) {
@@ -441,7 +501,7 @@ function checkOutDir(outDir: string, root: string, appDir: string | null, vueFil
   if (
     contains(out, site) ||
     sources.some((d) => contains(d, out)) ||
-    vue.some((f) => contains(out, f) || contains(dirname(f), out))
+    vue.some((f) => contains(out, f))
   ) {
     throw new Error(
       `buildSite: outDir ${outDir} is the site root, contains it, or is one of its source folders; build into a folder of its own, like dist.`,
@@ -519,6 +579,45 @@ const noCSS: Plugin = {
 
 type OutputOptions = Rolldown.OutputOptions
 
+/**
+ * Hold the client build to `dir`: after every other plugin has had its say,
+ * each environment must still build into `dir`, without emptying it and with
+ * no output folder or file of its own; otherwise the build stops, before
+ * anything is written, with one sentence naming the setting.
+ */
+function lockOutput(dir: string): Plugin {
+  const refuse = (setting: string, env = 'client'): never => {
+    throw new Error(
+      `buildSite: the site's Vite config or a plugin sets ${setting} for the ${env} build; the page build alone decides where that goes, so remove it.`,
+    )
+  }
+  const outputs = (o: OutputOptions | OutputOptions[] | undefined) => (Array.isArray(o) ? o : o ? [o] : [])
+  const check = (root: string, env: string, b: ResolvedConfig['build']) => {
+    for (const name of ['rollupOptions', 'rolldownOptions'] as const) {
+      for (const o of outputs((b[name] as { output?: OutputOptions | OutputOptions[] } | undefined)?.output)) {
+        if (o.dir !== undefined) refuse(`build.${name}.output.dir`, env)
+        if (o.file !== undefined) refuse(`build.${name}.output.file`, env)
+      }
+    }
+    if (resolve(root, b.outDir) !== dir) refuse('build.outDir', env)
+    if (b.emptyOutDir !== false) refuse('build.emptyOutDir', env)
+  }
+  return {
+    name: 'weft:lock-output',
+    enforce: 'post',
+    // The top-level build options are the client environment's; each environment is checked.
+    configResolved(config) {
+      for (const [name, env] of Object.entries(config.environments)) check(config.root, name, env.build)
+    },
+    outputOptions: {
+      order: 'post',
+      handler(o) {
+        if (o.file !== undefined || (o.dir !== undefined && resolve(o.dir) !== dir)) refuse(o.file !== undefined ? 'output.file' : 'output.dir')
+      },
+    },
+  }
+}
+
 /** The site's output options without those that say where files go or what they are called. */
 const placeless = ({ dir, file, entryFileNames, chunkFileNames, assetFileNames, ...rest }: OutputOptions): OutputOptions => rest
 
@@ -528,7 +627,7 @@ async function buildClient(root: string, dir: string, islands: string[]): Promis
     base: '/',
     logLevel: 'warn',
     publicDir: false,
-    plugins: [noCSS, weft({ islands })],
+    plugins: [noCSS, weft({ islands }), lockOutput(dir)],
     // The runtime lives in this package; its `vue` must be the site's.
     resolve: { dedupe: ['vue'] },
     build: {
