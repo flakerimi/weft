@@ -1,0 +1,29 @@
+/* Weft base: every value comes from a --weft-* token, with a system fallback so a
+   missing token never yields invisible text. */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-family: var(--weft-font-sans, system-ui, sans-serif);
+  font-size: var(--weft-text-base, 14px);
+  font-weight: var(--weft-weight-body, 400);
+  line-height: 1.5;
+  color: var(--weft-color-text, CanvasText);
+  background: var(--weft-color-bg, Canvas);
+  -webkit-text-size-adjust: 100%;
+}
+
+body { margin: 0; }
+
+h1, h2, h3 { font-weight: var(--weft-weight-heading, 600); line-height: 1.25; margin: 0; }
+p { margin: 0; }
+
+:focus-visible {
+  outline: 2px solid var(--weft-color-focus, Highlight);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; }
+}
+
+.weft-provider { display: contents; font-size: var(--weft-text-base, 14px); }

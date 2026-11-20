@@ -1,0 +1,8 @@
+<script setup vapor lang="ts">
+withDefaults(defineProps<{ orientation?: 'horizontal' | 'vertical' }>(), { orientation: 'horizontal' })
+</script>
+
+<template>
+  <hr v-if="orientation === 'horizontal'" class="weft-divider" aria-orientation="horizontal" />
+  <div v-else class="weft-divider" role="separator" aria-orientation="vertical" data-orientation="vertical"></div>
+</template>

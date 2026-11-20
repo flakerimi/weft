@@ -3,11 +3,10 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [vue()],
+  // `vite build` bundles the stylesheet only; components ship as source SFCs.
   build: {
     outDir: 'dist',
-    emptyOutDir: false,
-    cssCodeSplit: false,
-    rollupOptions: {
+    rolldownOptions: {
       input: { weft: 'src/styles/weft.css' },
       output: { assetFileNames: '[name][extname]' },
     },
