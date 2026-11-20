@@ -3,11 +3,36 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Weft</title>
+<title>Weft — one UI system for Go and Vue apps</title>
+<meta name="description" content="Vapor-first Vue components that adapt to touch and pointer, landing and app, shipped inside a single Go binary.">
+<style>
+  :root { color-scheme: light dark; --bg:#F1F5F9; --fg:#0F172A; --muted:#64748B; --card:#F8FAFC; --line:#E2E8F0; --accent:#6B7D2E; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0F172A; --fg:#F8FAFC; --muted:#94A3B8; --card:#1E293B; --line:#334155; --accent:#AEC162; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 17px/1.6 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+  main { max-width: 760px; margin: 0 auto; padding: 72px 24px; }
+  h1 { font-size: 64px; letter-spacing: -0.04em; margin: 0; line-height: 1; }
+  .lead { font-size: 22px; margin: 16px 0 40px; }
+  .muted { color: var(--muted); }
+  pre { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; overflow-x: auto; font: 15px/1.5 ui-monospace, monospace; }
+  ul { padding-left: 1.2em; } li { margin: 6px 0; }
+  .tag { display:inline-block; font: 13px ui-monospace, monospace; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent); }
+  a { color: var(--accent); }
+</style>
 </head>
 <body>
-<h1>Weft</h1>
-<p>One UI system for Go and Vue applications.</p>
-<pre>curl -fsSL https://weft.base.al/install | sh</pre>
+<main>
+  <span class="tag">pre-alpha</span>
+  <h1>weft</h1>
+  <p class="lead">One UI system for Go and Vue apps.<br><span class="muted">Vapor-first components that know whether they're under a finger or a mouse, on a landing page or in an app — shipped inside a single Go binary.</span></p>
+  <pre>curl -fsSL https://weft.base.al/install | sh</pre>
+  <ul>
+    <li><strong>Yours, all the way down.</strong> Every component, API and style is Weft's.</li>
+    <li><strong>Adaptive by default.</strong> Written once; sized and shaped for touch or pointer, landing or app.</li>
+    <li><strong>Go-first.</strong> One binary serves your API and embeds your Vue app.</li>
+    <li><strong>Built for agents.</strong> Big building blocks and one way to do each thing.</li>
+  </ul>
+  <p class="muted">Installs to <code>~/.local/bin</code>. Set <code>WEFT_BIN_DIR</code> to change it, <code>WEFT_VERSION</code> to pin one.</p>
+</main>
 </body>
 </html>
