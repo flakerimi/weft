@@ -6,5 +6,6 @@ dist/
 .worktrees/
 .superpowers/
 site/releases/
+site/pushed/
 site-src/public/install
 site-src/public/releases/

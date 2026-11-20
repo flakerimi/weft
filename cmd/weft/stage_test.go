@@ -211,3 +211,278 @@ func TestReleaseRefusesAMultiLineVersion(t *testing.T) {
 		t.Fatalf("release.sh with a two-line version: %v, want exit 2", err)
 	}
 }
+
+// A staged release that differs from the one in SITE/releases (a file added
+// or changed) is refused, not merged, and left as it was.
+func TestStageReleasesRefusesADifferentStagedRelease(t *testing.T) {
+	skipWindows(t)
+	site := fakeSite(t, "0.0.2", "0.0.1", "0.0.2")
+	for _, change := range []func(dir string){
+		func(dir string) { os.WriteFile(filepath.Join(dir, "extra.tar.gz"), []byte("old"), 0o644) },
+		func(dir string) { os.WriteFile(filepath.Join(dir, "SHA256SUMS"), []byte("changed"), 0o644) },
+	} {
+		public := t.TempDir()
+		if out, err := stageReleases(site, public); err != nil {
+			t.Fatalf("%v: %s", err, out)
+		}
+		change(filepath.Join(public, "releases", "0.0.1"))
+		before := files(t, public)
+		out, err := stageReleases(site, public)
+		msg := strings.TrimSpace(out)
+		if err == nil || !strings.Contains(msg, "releases/0.0.1 differs from") || strings.Contains(msg, "\n") {
+			t.Fatalf("different staged release: err %v, output %q (want one sentence)", err, out)
+		}
+		if got := files(t, public); got != before {
+			t.Fatalf("staging changed %s\nto       %s", before, got)
+		}
+	}
+}
+
+// A list whose last line has no newline still gets the new version on a line of its own.
+func TestPublishedReleasesAddAfterAMissingNewline(t *testing.T) {
+	skipWindows(t)
+	site := fakeSite(t, "")
+	list := filepath.Join(site, "releases.txt")
+	os.WriteFile(list, []byte("0.0.1\n0.0.2"), 0o644)
+	if out, err := publishedReleases("add", site, "0.0.3"); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if b, _ := os.ReadFile(list); string(b) != "0.0.1\n0.0.2\n0.0.3\n" {
+		t.Fatalf("releases.txt %q", b)
+	}
+}
+
+// fakeRepo is a copy of the repository's publishing scripts in a folder of
+// their own, with stand-ins for the slow steps (release.sh, site.sh) and for
+// the network (curl and lisa on PATH), so publish and rollback run end to end
+// without building, fetching or pushing anything real. weft.base.al starts out
+// serving 0.0.2; site/releases.txt lists 0.0.1 and 0.0.2.
+type fakeRepo struct {
+	root, fake, tmp string
+	env             []string
+}
+
+func newFakeRepo(t *testing.T) *fakeRepo {
+	t.Helper()
+	r := &fakeRepo{root: t.TempDir(), fake: t.TempDir(), tmp: t.TempDir()}
+	write := func(dir, name, data string, mode os.FileMode) {
+		p := filepath.Join(dir, name)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(data), mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, s := range []string{"publish-site.sh", "rollback-site.sh", "publish-site-static.sh", "version.sh", "published-releases.sh", "wait-live.sh"} {
+		b, err := os.ReadFile(filepath.Join("../../scripts", s))
+		if err != nil {
+			t.Fatal(err)
+		}
+		write(r.root, "scripts/"+s, string(b), 0o755)
+	}
+	// release.sh and site.sh make what the real ones make, from nothing.
+	write(r.root, "scripts/release.sh", `#!/bin/sh
+set -eu
+mkdir -p "site/releases/$1"
+echo "sums of $1" >"site/releases/$1/SHA256SUMS"
+echo "$1" >site/releases/latest
+echo "$1" >>"$FAKE/built"
+`, 0o755)
+	write(r.root, "scripts/site.sh", `#!/bin/sh
+set -eu
+mkdir -p site-src/dist/releases
+cp -R site/releases/. site-src/dist/releases/
+echo "<p>home</p>" >site-src/dist/index.html
+`, 0o755)
+	write(r.root, "go.mod", "module github.com/flakerimi/weft\n", 0o644)
+	write(r.root, "weft.go", "package weft\n", 0o644)
+	write(r.root, "weft_test.go", "package weft\n", 0o644)
+	write(r.root, "site-src/main.go", "package main\n", 0o644)
+	write(r.root, "site/releases.txt", "0.0.1\n0.0.2\n", 0o644)
+	for _, v := range []string{"0.0.1", "0.0.2"} {
+		write(r.root, "site/releases/"+v+"/SHA256SUMS", "sums of "+v+"\n", 0o644)
+	}
+	// curl answers from the fake's state; lisa logs its arguments and serves
+	// the version the pushed Dockerfile builds.
+	bin := filepath.Join(r.fake, "bin")
+	write(bin, "curl", `#!/bin/sh
+for a; do url=$a; done
+case "$url" in
+*/releases/latest) cat "$FAKE/latest" ;;
+*) cat "$FAKE/home" ;;
+esac
+`, 0o755)
+	write(bin, "lisa", `#!/bin/sh
+echo "$*" >>"$FAKE/lisa.log"
+[ "$1 $2 $3 $4" = "server push --name weft" ] && [ -f "$5/Dockerfile" ] || exit 2
+sed -n 's/.*weft.Version=\([^ "]*\).*/\1/p' "$5/Dockerfile" >"$FAKE/latest"
+(cd "$5" && find . -type f | sort) >"$FAKE/pushed-files"
+echo '<weft-island data-id="CopyCommand" data-when="load">' >"$FAKE/home"
+`, 0o755)
+	write(r.fake, "latest", "0.0.2\n", 0o644)
+	write(r.fake, "home", `<weft-island data-id="CopyCommand" data-when="load">`, 0o644)
+	r.env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"), "FAKE="+r.fake, "TMPDIR="+r.tmp)
+	return r
+}
+
+// run runs one of the repository's scripts; it returns the output, trimmed.
+func (r *fakeRepo) run(script string, args ...string) (string, error) {
+	cmd := exec.Command("sh", append([]string{filepath.Join(r.root, "scripts", script)}, args...)...)
+	cmd.Env = r.env
+	b, err := cmd.CombinedOutput()
+	return strings.TrimSpace(string(b)), err
+}
+
+func (r *fakeRepo) read(name string) string {
+	b, _ := os.ReadFile(filepath.Join(r.root, name))
+	return string(b)
+}
+
+func (r *fakeRepo) lisa() string {
+	b, _ := os.ReadFile(filepath.Join(r.fake, "lisa.log"))
+	return string(b)
+}
+
+func lastLine(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	return lines[len(lines)-1]
+}
+
+// A verified push keeps the tree it pushed as site/pushed/<version>, one per
+// version, and leaves no tree behind in TMPDIR.
+func TestPublishSiteKeepsOneTreePerVersion(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	for _, v := range []string{"0.0.3", "0.0.4"} {
+		if out, err := r.run("publish-site.sh", v); err != nil {
+			t.Fatalf("publish %s: %v\n%s", v, err, out)
+		}
+		if got := lastLine(r.lisa()); !strings.HasPrefix(got, "server push --name weft "+r.tmp+"/") {
+			t.Fatalf("publish %s pushed %q, want a tree in TMPDIR", v, got)
+		}
+		pushed, _ := os.ReadFile(filepath.Join(r.fake, "pushed-files"))
+		var kept []string
+		for _, f := range strings.Split(files(t, filepath.Join(r.root, "site", "pushed", v)), ",") {
+			kept = append(kept, "./"+f)
+		}
+		if got := strings.Join(kept, "\n") + "\n"; got != string(pushed) {
+			t.Fatalf("publish %s kept\n%s\nbut pushed\n%s", v, got, pushed)
+		}
+		if df := r.read("site/pushed/" + v + "/Dockerfile"); !strings.Contains(df, "weft.Version="+v+`"`) {
+			t.Fatalf("site/pushed/%s/Dockerfile:\n%s", v, df)
+		}
+	}
+	if got := files(t, filepath.Join(r.root, "site", "pushed")); !strings.Contains(got, "0.0.3/site-src/dist/releases/0.0.3/SHA256SUMS") ||
+		!strings.Contains(got, "0.0.4/go.mod") || strings.Contains(got, "_test.go") {
+		t.Fatalf("site/pushed holds %s", got)
+	}
+	entries, _ := os.ReadDir(filepath.Join(r.root, "site", "pushed"))
+	if len(entries) != 2 || entries[0].Name() != "0.0.3" || entries[1].Name() != "0.0.4" {
+		t.Fatalf("site/pushed holds %v, want 0.0.3 and 0.0.4", entries)
+	}
+	if left, _ := os.ReadDir(r.tmp); len(left) != 0 {
+		t.Fatalf("TMPDIR keeps %v", left)
+	}
+	if got := r.read("site/releases.txt"); got != "0.0.1\n0.0.2\n0.0.3\n0.0.4\n" {
+		t.Fatalf("releases.txt %q", got)
+	}
+}
+
+// A version already published is refused before anything is built: building
+// it again would change the tarballs its users have checksums for.
+func TestPublishSiteRefusesAPublishedVersion(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	for _, args := range [][]string{{"--dry-run", "0.0.2"}, {"0.0.1"}} {
+		out, err := r.run("publish-site.sh", args...)
+		if err == nil || !strings.HasPrefix(out, "publish: ") || !strings.Contains(out, "site/releases.txt") || strings.Contains(out, "\n") {
+			t.Fatalf("%v: err %v, output %q (want one sentence)", args, err, out)
+		}
+	}
+	if b, err := os.ReadFile(filepath.Join(r.fake, "built")); err == nil {
+		t.Fatalf("release.sh ran for %q", b)
+	}
+	if r.lisa() != "" {
+		t.Fatalf("lisa ran: %s", r.lisa())
+	}
+}
+
+// A dry run stops before the push and keeps nothing under site/pushed.
+func TestPublishSiteDryRunPushesNothing(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	out, err := r.run("publish-site.sh", "--dry-run", "0.0.3")
+	if err != nil || !strings.Contains(out, "dry run: not pushed") {
+		t.Fatalf("dry run: %v\n%s", err, out)
+	}
+	if r.lisa() != "" {
+		t.Fatalf("lisa ran: %s", r.lisa())
+	}
+	if _, err := os.Stat(filepath.Join(r.root, "site", "pushed")); err == nil {
+		t.Fatal("a dry run kept a tree under site/pushed")
+	}
+}
+
+// The static site cannot come back: Lisa keeps the weft app a container.
+func TestPublishSiteStaticRefuses(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	out, err := r.run("publish-site-static.sh", "0.0.3")
+	if err == nil || !strings.Contains(out, "scripts/rollback-site.sh") || strings.Contains(out, "\n") {
+		t.Fatalf("err %v, output %q (want one sentence naming the rollback)", err, out)
+	}
+	if r.lisa() != "" {
+		t.Fatalf("lisa ran: %s", r.lisa())
+	}
+}
+
+// A rollback re-pushes a kept tree, but only one that still serves every
+// published release.
+func TestRollbackSite(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	for _, v := range []string{"0.0.3", "0.0.4"} {
+		if out, err := r.run("publish-site.sh", v); err != nil {
+			t.Fatalf("publish %s: %v\n%s", v, err, out)
+		}
+	}
+	pushes := strings.Count(r.lisa(), "\n")
+	refused := func(why string, args ...string) {
+		t.Helper()
+		out, err := r.run("rollback-site.sh", args...)
+		if err == nil || !strings.Contains(out, why) || strings.Contains(out, "\n") {
+			t.Fatalf("%v: err %v, output %q (want one sentence with %q)", args, err, out, why)
+		}
+		if n := strings.Count(r.lisa(), "\n"); n != pushes {
+			t.Fatalf("%v: lisa ran: %s", args, r.lisa())
+		}
+	}
+	refused("rollback: give a version", "0.0.3\" -X x")
+	refused("rollback: site/pushed/0.0.9 holds no pushed tree", "0.0.9")
+	// 0.0.3's tree has no 0.0.4, which is published: pushing it would drop that.
+	refused("rollback: the tree kept for 0.0.3 does not serve the published release 0.0.4", "0.0.3")
+	// published-releases.sh check runs first.
+	os.Rename(filepath.Join(r.root, "site/releases/0.0.1"), filepath.Join(r.tmp, "0.0.1"))
+	refused("published-releases: site/releases lacks the published release(s) 0.0.1", "0.0.4")
+	os.Rename(filepath.Join(r.tmp, "0.0.1"), filepath.Join(r.root, "site/releases/0.0.1"))
+
+	// A dry run names the tree and pushes nothing.
+	if out, err := r.run("rollback-site.sh", "--dry-run", "0.0.4"); err != nil || !strings.Contains(out, "site/pushed/0.0.4") {
+		t.Fatalf("dry run: %v\n%s", err, out)
+	}
+	if n := strings.Count(r.lisa(), "\n"); n != pushes {
+		t.Fatalf("a dry run ran lisa: %s", r.lisa())
+	}
+
+	// Once 0.0.4 is no longer listed (its push was never verified), 0.0.3 may come back.
+	os.WriteFile(filepath.Join(r.root, "site/releases.txt"), []byte("0.0.1\n0.0.2\n0.0.3\n"), 0o644)
+	out, err := r.run("rollback-site.sh", "0.0.3")
+	if err != nil {
+		t.Fatalf("rollback: %v\n%s", err, out)
+	}
+	if got := lastLine(r.lisa()); got != "server push --name weft "+filepath.Join(r.root, "site/pushed/0.0.3") {
+		t.Fatalf("rollback pushed %q", got)
+	}
+	if b, _ := os.ReadFile(filepath.Join(r.fake, "latest")); strings.TrimSpace(string(b)) != "0.0.3" {
+		t.Fatalf("the site serves %q", b)
+	}
+}

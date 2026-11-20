@@ -28,7 +28,10 @@ check)
 add)
 	version="${3:-}"
 	sh "$(dirname "$0")/version.sh" "$version" || fail "give a version like 0.0.1 or 0.1.0-alpha.1 to add."
-	grep -qxF "$version" "$list" || printf '%s\n' "$version" >>"$list"
+	grep -qxF "$version" "$list" && exit 0
+	# A last line without its newline gets one first, so the version is a line of its own.
+	[ ! -s "$list" ] || [ -z "$(tail -c 1 "$list")" ] || printf '\n' >>"$list"
+	printf '%s\n' "$version" >>"$list"
 	;;
 *)
 	fail "usage: published-releases.sh check|add SITE_DIR [VERSION]"

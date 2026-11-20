@@ -3,8 +3,9 @@
 # every real release in SITE/releases (test builds, versions ending in -test,
 # are left out), with releases/latest naming LATEST. Without LATEST, SITE's own
 # releases/latest is copied when it names a release that was staged.
-# OUT may hold an earlier staging; a release in it that SITE no longer has is
-# refused, never removed, so the site cannot serve a release by mistake.
+# OUT may hold an earlier staging; a release in it that SITE no longer has, or
+# has with other contents, is refused, never removed or merged into, so the
+# site cannot serve a release by mistake.
 # Usage: scripts/stage-releases.sh SITE_DIR OUT_DIR [LATEST_VERSION]
 set -eu
 site="$1"
@@ -25,6 +26,8 @@ for dir in "$out"/releases/*/; do
 	[ -d "$dir" ] || continue
 	v=$(basename "$dir")
 	real "$v" || fail "$out/releases/$v is not a release in $site/releases; remove it by hand"
+	diff -r "$site/releases/$v" "$dir" >/dev/null 2>&1 ||
+		fail "$out/releases/$v differs from $site/releases/$v, so staging would merge two releases; remove it by hand"
 done
 
 mkdir -p "$out"
@@ -33,6 +36,8 @@ for dir in "$site"/releases/*/; do
 	[ -d "$dir" ] || continue
 	v=$(basename "$dir")
 	real "$v" || continue
+	# Already staged, and the same (checked above).
+	[ ! -d "$out/releases/$v" ] || continue
 	mkdir -p "$out/releases"
 	cp -R "$site/releases/$v" "$out/releases/"
 done

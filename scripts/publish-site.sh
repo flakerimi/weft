@@ -6,9 +6,11 @@
 # Usage: scripts/publish-site.sh [--dry-run] <version>
 #   --dry-run  stop before the push and print the push tree's path; it still
 #              builds the release (site/releases/<version>) and the site locally
-# Every version in site/releases.txt must be in site/releases; a verified push
-# adds the new one to that list.
-# Rollback to the static site: scripts/publish-site-static.sh <version>
+# Every version in site/releases.txt must be in site/releases, and the version
+# published must not be one of them (building it again would change tarballs
+# its users have checksums for). A verified push adds it to that list and keeps
+# its tree as site/pushed/<version>/ (git-ignored), one per version.
+# Rollback: scripts/rollback-site.sh <version> pushes such a kept tree again.
 set -eu
 dry=
 if [ "${1:-}" = --dry-run ]; then
@@ -28,6 +30,12 @@ fail() {
 # The version goes into the Dockerfile's -ldflags: nothing but a version may.
 scripts/version.sh "$version" ||
 	fail "give a version like 0.0.1 or 0.1.0-alpha.1 (one line of digits, dots, lowercase letters and hyphens); usage: scripts/publish-site.sh [--dry-run] <version>."
+
+# A published version is never built again; its kept tree is never replaced.
+grep -qxF "$version" site/releases.txt 2>/dev/null &&
+	fail "$version is already published (site/releases.txt lists it), and building it again would change its tarballs; publish a new version, or roll back with scripts/rollback-site.sh $version."
+[ ! -e "site/pushed/$version" ] ||
+	fail "site/pushed/$version already holds a pushed tree, so $version was pushed before; publish a new version, or roll back with scripts/rollback-site.sh $version."
 
 # A push replaces the whole site: every release it has published must be staged again.
 scripts/published-releases.sh check site || exit 1
@@ -82,16 +90,10 @@ fi
 lisa server push --name weft "$tree"
 
 # The server builds the image after the push; wait for the new site to answer.
-tries=0
-while :; do
-	got=$(curl -fsSL "$url/releases/latest" 2>/dev/null | tr -d ' \r\n') || got=
-	home=$(curl -fsSL "$url/" 2>/dev/null) || home=
-	case "$home" in *'<weft-island data-id="CopyCommand"'*) built=1 ;; *) built= ;; esac
-	[ "$got" = "$version" ] && [ -n "$built" ] && break
-	tries=$((tries + 1))
-	[ "$tries" -lt 60 ] || fail "after 5 minutes $url/releases/latest says '$got', expected '$version'$([ -n "$built" ] || echo ', and / is not the Weft-built page'); see lisa server logs weft"
-	sleep 5
-done
-# Only now, with the push verified, is the version listed as published.
+scripts/wait-live.sh "$version" || fail "the push of $version is not verified (see above), so it is not listed as published; its tree stays in $tree."
+# Only now, with the push verified, is the version listed as published, and
+# its tree kept for a rollback.
 scripts/published-releases.sh add site "$version"
-echo "published weft $version at $url; listed in site/releases.txt (commit it)"
+mkdir -p site/pushed
+mv "$tree" "site/pushed/$version"
+echo "published weft $version at $url; listed in site/releases.txt (commit it); its tree is site/pushed/$version"
