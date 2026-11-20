@@ -14,6 +14,7 @@
 
 ```sh
 curl -fsSL https://weft.base.al/install | sh
+weft update            # later: move to the newest release
 ```
 
 ## Why
@@ -103,7 +104,7 @@ stylesheet, not a fork. Want Tailwind for your own components? Import
 
 Pre-alpha. What exists today:
 
-- `weft` CLI (`version`) and the curl installer
+- `weft` CLI (`version`, `update`) and the curl installer
 - tokens and the `neutral` and `lisa` themes
 - the adaptive core: `useWeft`, `WeftProvider`, `useWidth`
 - layout: `Stack`, `Grid`, `Page`, `Section`, `Card`, `Divider`

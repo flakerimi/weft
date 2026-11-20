@@ -15,6 +15,7 @@ type command struct {
 
 var commands = map[string]command{
 	"version": {"print the Weft version", versionCmd},
+	"update":  {"update weft to the latest release (--check, --version X)", updateCmd},
 }
 
 func main() {
