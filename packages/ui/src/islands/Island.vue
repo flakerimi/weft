@@ -21,6 +21,7 @@ const id = named.__name ?? named.name
 let json = ''
 if (server) {
   if (!id) throw new Error('Island: the component has no name; give it a file of its own.')
+  if (p.when === 'media' && !p.media) throw new Error('Island: when="media" needs a media query in the media prop.')
   // Escape what could end the <script> element or open a comment inside it.
   json = JSON.stringify(p.props ?? {})
     .replace(/</g, '\\u003c')

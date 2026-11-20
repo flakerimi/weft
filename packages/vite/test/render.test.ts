@@ -32,4 +32,11 @@ describe('renderPage', () => {
     expect(json).not.toMatch(/[<>&]/)
     expect(JSON.parse(json)).toEqual({ start: 1, note: '</script><!--&' })
   })
+
+  it('refuses a media island without a media query', async () => {
+    const bad = fileURLToPath(new URL('./fixtures/bad-island', import.meta.url))
+    await expect(renderPage({ root: bad, page: 'pages/media-without-query.vue' })).rejects.toThrow(
+      'Island: when="media" needs a media query in the media prop.',
+    )
+  })
 })
