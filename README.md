@@ -125,8 +125,13 @@ Needs Go 1.26, Node 22.18+ and pnpm 10.
 pnpm install
 scripts/playground.sh        # build the web app, run the Go binary on :8080
 scripts/site.sh              # build weft.base.al from site-src, run it on :8080
-pnpm test && go test ./...   # the Go tests need both builds first (`build` argument)
+pnpm test && go test ./...   # the Go tests need all three builds first (below)
 ```
+
+`go test ./...` compiles the three Go binaries that embed a build, so build all
+three first: `scripts/playground.sh build`, `scripts/site.sh build` and
+`pnpm --filter weft-bench build`. `pnpm test` builds `@weft/themes` and
+`@weft/ui` itself, since the page build tests read their CSS.
 
 ## License
 

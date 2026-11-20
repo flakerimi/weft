@@ -18,9 +18,11 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      # The playground and the site embed their builds, so they must exist before Go compiles.
+      # The playground, the site and the benchmark's landing embed their builds,
+      # so all three must exist before Go compiles. site.sh builds @weft/ui first.
       - run: scripts/playground.sh build
       - run: scripts/site.sh build
+      - run: pnpm --filter weft-bench build
       - run: go vet ./...
       - run: go test ./...
 
@@ -37,5 +39,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      # Builds @weft/themes and @weft/ui first: the page build tests read their CSS from dist/.
       - run: pnpm test
       - run: pnpm build
