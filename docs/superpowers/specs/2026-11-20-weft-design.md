@@ -377,6 +377,12 @@ checked at `pointer` and `touch` with both themes.
 2b. Fast pages: build-time rendering with Vapor hydration, islands,
    pre-compressed embedded assets, ETags, 103 Early Hints, prefetch and view
    transitions in `weft.Serve`, and the Astro benchmark in `bench/`.
+2c. weft.base.al as Weft's showcase (owner request 2026-11-20): a designed
+   landing page with live adaptive demos and the Astro numbers; docs written
+   in Markdown under `content/docs/` with Go-struct-checked frontmatter (the
+   first slice of content collections); component pages generated from the
+   catalogue; the Weft skills, `llms.txt` and `AGENTS.md` published from the
+   repository. Built by Weft, served by the Weft binary on the Lisa server.
 3. Headless layer (focus, dismiss, roving focus, floating, typeahead), then
    primitives on it, each adaptive from the start, with keyboard and
    screen-reader tests, built as Vapor and as the virtual-DOM fallback.
