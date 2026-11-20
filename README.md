@@ -124,7 +124,8 @@ Needs Go 1.26, Node 22.18+ and pnpm 10.
 ```sh
 pnpm install
 scripts/playground.sh        # build the web app, run the Go binary on :8080
-pnpm test && go test ./...   # the Go tests need the playground build first
+scripts/site.sh              # build weft.base.al from site-src, run it on :8080
+pnpm test && go test ./...   # the Go tests need both builds first (`build` argument)
 ```
 
 ## License

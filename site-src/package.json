@@ -1,0 +1,21 @@
+{
+  "name": "weft-site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "weft-build-pages --root . --out dist --theme lisa",
+    "typecheck": "vue-tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@weft/ui": "workspace:*",
+    "vue": "3.6.0-rc.16"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.11",
+    "@weft/vite": "workspace:*",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.8",
+    "vue-tsc": "^3.3.14"
+  }
+}

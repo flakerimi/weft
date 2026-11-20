@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "weft-build-pages": "./bin/weft-build-pages.mjs"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./island-runtime": "./src/island-runtime.ts"

@@ -18,8 +18,9 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      # The playground embeds its web build, so it must exist before Go compiles.
+      # The playground and the site embed their builds, so they must exist before Go compiles.
       - run: scripts/playground.sh build
+      - run: scripts/site.sh build
       - run: go vet ./...
       - run: go test ./...
 
