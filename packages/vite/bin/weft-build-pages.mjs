@@ -10,7 +10,8 @@ if (!process.features.typescript) {
 }
 const { buildSite } = await import('../src/build.ts')
 
-const usage = 'usage: weft-build-pages --root <site> --out <dist> [--app-prefix /app] [--theme neutral|lisa]'
+const usage =
+  'usage: weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa]'
 
 function fail(message) {
   process.stderr.write(`weft-build-pages: ${message}\n${usage}\n`)
@@ -24,6 +25,7 @@ try {
       root: { type: 'string' },
       out: { type: 'string' },
       'app-prefix': { type: 'string' },
+      'app-dir': { type: 'string' },
       theme: { type: 'string' },
     },
   }))
@@ -38,6 +40,7 @@ try {
     root: values.root,
     outDir: values.out,
     appPrefix: values['app-prefix'],
+    appDir: values['app-dir'],
     theme: values.theme,
   })
   const pages = Object.keys(manifest.files).filter((f) => /^\/pages\/.*\/index\.html$/.test(f)).length

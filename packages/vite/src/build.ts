@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
-import { existsSync, lstatSync, realpathSync } from 'node:fs'
-import { copyFile, mkdir, readFile, readdir, rm, rmdir, writeFile } from 'node:fs/promises'
+import { constants as fs, existsSync, realpathSync, type Dirent } from 'node:fs'
+import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,13 +18,17 @@ export interface BuildOptions {
   root: string
   /**
    * Where the build goes (the `dist` the Go binary embeds), e.g. `<root>/dist`.
-   * The build removes the files its previous build there listed in
-   * `manifest.json` (keeping `app/` when `appPrefix` is set) and nothing else.
-   * It may not be the site root, contain it, or be in one of its source folders.
+   * The build is made in a staging folder beside it and then takes its place,
+   * which it does only when outDir is missing, empty, or exactly what an earlier
+   * build left there (its `.weft-build` lists every file); anything else is
+   * refused and left as it is. It may not be the site root, contain it, or be
+   * in one of its source folders.
    */
   outDir: string
-  /** The client-rendered app's path prefix, e.g. `/app`; its build must already be in `<outDir>/app`. */
+  /** The client-rendered app's path prefix, e.g. `/app`; its build is copied from `appDir` into `app/`. */
   appPrefix?: string
+  /** Where the app's own build is, with its `index.html`; read, never changed. Default `<root>/app-dist`. */
+  appDir?: string
   /** The theme stylesheet the pages use. Default `neutral`. */
   theme?: Theme
   /** A page's CSS up to this many bytes is inlined; more is linked. Default 14 KB. */
@@ -87,7 +91,6 @@ const TEXT = new Set(['.html', '.css', '.js', '.mjs', '.json', '.webmanifest', '
 export const contentType = (file: string) => TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream'
 
 const sha256 = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex')
-const posix = (p: string) => p.split('\\').join('/')
 
 /**
  * Build a site's pages: render every page to HTML with its CSS inlined (or
@@ -98,11 +101,16 @@ const posix = (p: string) => p.split('\\').join('/')
 export async function buildSite(opts: BuildOptions): Promise<Manifest> {
   const root = resolve(opts.root)
   const outDir = resolve(opts.outDir)
-  checkOutDir(opts.outDir, root)
   const theme = opts.theme ?? 'neutral'
   if (!THEMES.includes(theme)) throw new Error(`buildSite: unknown theme "${theme}"; use ${THEMES.join(' or ')}.`)
-  const app = opts.appPrefix === undefined ? null : appRoute(opts.appPrefix, outDir)
-  const previous = await previousBuild(outDir, app !== null)
+  const app = opts.appPrefix === undefined ? null : appRoute(opts.appPrefix)
+  const appDir = app ? resolve(opts.appDir ?? join(root, 'app-dist')) : null
+  checkOutDir(outDir, root, appDir)
+  if (app && appDir && !existsSync(join(appDir, 'index.html'))) {
+    throw new Error(
+      `buildSite: appPrefix is ${app.prefix} but ${join(appDir, 'index.html')} is missing; build the app into ${appDir} first, or set appDir.`,
+    )
+  }
   const { css: baseCSS, files: baseFiles } = await readStyles(root, theme)
   const routes = await discoverRoutes(join(root, 'pages'))
 
@@ -113,6 +121,7 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
   // One server renders every page, and loads the dynamic pages for getPaths().
   const pages: (ExpandedRoute & RenderResult)[] = []
   const server = await createRenderServer(root, 'production')
+  const vueFiles: string[] = []
   try {
     const load = (file: string) => server.ssrLoadModule(`/pages/${file}`) as Promise<PageModule>
     for (const route of await expandRoutes(routes, load)) {
@@ -120,31 +129,62 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
       const rendered = await renderPage({ root, page, props: route.params, server, providedCSS: baseFiles })
       pages.push({ ...route, ...rendered })
     }
-    // Nor may it be a folder of .vue files the pages were built from.
-    const vueDirs = new Set<string>()
     for (const mod of server.environments.ssr.moduleGraph.idToModuleMap.values()) {
-      if (mod.file?.endsWith('.vue')) vueDirs.add(dirname(mod.file))
+      if (mod.file?.endsWith('.vue')) vueFiles.push(mod.file)
     }
-    checkOutDir(opts.outDir, root, [...vueDirs])
   } finally {
     await server.close()
   }
+  // Nor may outDir hold, or be among, the .vue files the pages were built from.
+  checkOutDir(outDir, root, appDir, vueFiles)
+  // Refused before the client build and the writing; checked again at the swap.
+  await replaceable(outDir)
 
-  // Every page rendered, so the previous build can go.
-  await removeFiles(outDir, previous)
+  // Everything is written into a fresh folder beside outDir, which then takes its place.
+  await mkdir(dirname(outDir), { recursive: true })
+  const staging = await mkdtemp(join(dirname(outDir), `.${basename(outDir)}.weft-staging-`))
+  try {
+    const manifest = await writeBuild(staging, { root, app, appDir, pages, baseCSS, cssInlineLimit: opts.cssInlineLimit })
+    await swap(staging, outDir)
+    return manifest
+  } catch (e) {
+    // Only the staging folder: it is this build's own. After a swap it is gone.
+    await rm(staging, { recursive: true, force: true })
+    throw e
+  }
+}
 
-  const written = new Set<string>()
+/** What goes into the build, besides where it goes. */
+interface BuildInput {
+  root: string
+  app: RoutesJson['app']
+  appDir: string | null
+  pages: (ExpandedRoute & RenderResult)[]
+  baseCSS: string
+  cssInlineLimit: number | undefined
+}
+
+/** The marker of a folder Weft built: every other file in it. */
+const MARKER = '.weft-build'
+
+/** Write the whole build into `dir`, a fresh folder of its own, and mark it. */
+async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssInlineLimit }: BuildInput): Promise<Manifest> {
+  // Each file in the build → where it came from; none is ever written twice.
+  const from = new Map<string, string>([
+    ['manifest.json', ''],
+    [MARKER, ''],
+  ])
   const immutable = new Set<string>()
   const write = async (file: string, data: string | Buffer) => {
-    await mkdir(dirname(join(outDir, file)), { recursive: true })
-    await writeFile(join(outDir, file), data)
-    written.add(file)
+    await mkdir(dirname(join(dir, file)), { recursive: true })
+    await writeFile(join(dir, file), data, { flag: 'wx' })
+    from.set(file, '')
   }
 
   const islandFiles = [...new Set(pages.flatMap((p) => Object.values(p.islandFiles)))]
-  const client = islandFiles.length ? await buildClient(root, outDir, islandFiles) : null
+  const client = islandFiles.length ? await buildClient(root, dir, islandFiles) : null
   for (const file of client?.files ?? []) {
-    written.add(file)
+    from.set(file, '')
     immutable.add(file)
   }
 
@@ -154,9 +194,9 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
     // The theme, weft.css, the page's component CSS, then view transitions.
     const css = [baseCSS, page.css, VIEW_TRANSITION].filter(Boolean).join('\n') + '\n'
     let stylesheet: string | null = null
-    if (Buffer.byteLength(css) > (opts.cssInlineLimit ?? 14 * 1024)) {
+    if (Buffer.byteLength(css) > (cssInlineLimit ?? 14 * 1024)) {
       const file = `assets/weft-${sha256(css).slice(0, 8)}.css`
-      if (!written.has(file)) await write(file, css)
+      if (!from.has(file)) await write(file, css)
       immutable.add(file)
       stylesheet = '/' + file
     }
@@ -174,12 +214,23 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
     else routesJson.pages.push({ path: page.path, html: file, islands: page.islands })
   }
   await write('routes.json', JSON.stringify(routesJson, null, 2) + '\n')
-  if (app) for (const file of await filesUnder(outDir, 'app')) written.add(file)
-  await copyPublic(root, outDir, written)
+  // The app's own .br/.gz would be stale beside the ones made here; public/ is copied as it is.
+  if (appDir) await copyTree(appDir, appDir, dir, 'app', from, { variants: false })
+  await copyTree(join(root, 'public'), 'public', dir, '', from, { variants: true })
+
+  // The .br and .gz the build makes may not be names already taken.
+  const listed = [...from.keys()].filter((f) => f !== 'manifest.json' && f !== MARKER).sort()
+  for (const file of listed) {
+    if (!TEXT.has(extname(file).toLowerCase())) continue
+    for (const variant of [file + '.br', file + '.gz']) {
+      const source = from.get(variant)
+      if (source !== undefined) throw new Error(`buildSite: ${source || variant} would overwrite the generated ${variant}; rename or move it.`)
+    }
+  }
 
   const files: Manifest['files'] = {}
-  for (const file of [...written].sort()) {
-    const bytes = await readFile(join(outDir, file))
+  for (const file of listed) {
+    const bytes = await readFile(join(dir, file))
     const text = TEXT.has(extname(file).toLowerCase())
     if (text) {
       const br = brotliCompressSync(bytes, {
@@ -189,8 +240,8 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
           [zlib.BROTLI_PARAM_SIZE_HINT]: bytes.length,
         },
       })
-      await writeFile(join(outDir, file + '.br'), br)
-      await writeFile(join(outDir, file + '.gz'), gzipSync(bytes, { level: 9 }))
+      await writeFile(join(dir, file + '.br'), br, { flag: 'wx' })
+      await writeFile(join(dir, file + '.gz'), gzipSync(bytes, { level: 9 }), { flag: 'wx' })
     }
     files['/' + file] = {
       etag: `"${sha256(bytes).slice(0, 16)}"`,
@@ -201,30 +252,175 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
     }
   }
   const manifest: Manifest = { files, hints }
-  await writeFile(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
+  await writeFile(join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' })
+  // The marker lists what is really there, whoever wrote it (the client build included).
+  const written = (await walk(dir)).filter((e) => e.kind === 'file' && e.path !== MARKER).map((e) => e.path)
+  await writeFile(join(dir, MARKER), JSON.stringify({ weft: 1, files: written.sort() }, null, 2) + '\n', { flag: 'wx' })
   return manifest
+}
+
+/**
+ * Copy the files under `src` into `<dir>/<prefix>`, recording each in `from`
+ * under `label`. A symlink is copied as the file it leads to only when that is
+ * a file inside `src`; anything else that is not a file or folder is refused.
+ * Unless `variants`, a `.br`/`.gz` beside a text file is left out: the build
+ * makes its own.
+ */
+async function copyTree(src: string, label: string, dir: string, prefix: string, from: Map<string, string>, { variants = true }) {
+  if (!existsSync(src)) return
+  const base = canonical(src)
+  const entries = await walk(src)
+  const paths = new Set(entries.map((e) => e.path))
+  for (const entry of entries) {
+    if (entry.kind === 'dir') continue
+    const shown = `${label}/${entry.path}`
+    const path = join(src, entry.path)
+    let source = path
+    if (entry.kind === 'link') {
+      const target = await realpath(path).catch(() => null)
+      if (!target || !contains(base, canonical(target)) || !(await stat(target)).isFile()) {
+        throw new Error(`buildSite: ${shown} is a symlink that does not lead to a file inside ${label}; put the file itself there.`)
+      }
+      source = target
+    } else if (entry.kind === 'other') {
+      throw new Error(`buildSite: ${shown} is not a file or a folder; move it out of ${label}.`)
+    }
+    const variantOf = /\.(br|gz)$/.test(entry.path) ? entry.path.slice(0, -3) : null
+    if (!variants && variantOf && paths.has(variantOf) && TEXT.has(extname(variantOf).toLowerCase())) continue
+    const to = prefix ? `${prefix}/${entry.path}` : entry.path
+    if (from.has(to)) {
+      const owner = from.get(to)
+      throw new Error(`buildSite: ${shown} would overwrite ${owner ? `${to} from ${owner}` : `the generated ${to}`}; rename or move it.`)
+    }
+    await mkdir(dirname(join(dir, to)), { recursive: true })
+    await copyFile(source, join(dir, to), fs.COPYFILE_EXCL)
+    from.set(to, shown)
+  }
+}
+
+interface Entry {
+  /** Posix path relative to the walked folder. */
+  path: string
+  kind: 'file' | 'dir' | 'link' | 'other'
+}
+
+const kindOf = (e: Dirent): Entry['kind'] =>
+  e.isSymbolicLink() ? 'link' : e.isDirectory() ? 'dir' : e.isFile() ? 'file' : 'other'
+
+/** Everything under `dir`, sorted, without following a symlink. */
+async function walk(dir: string, prefix = ''): Promise<Entry[]> {
+  const out: Entry[] = []
+  const entries = (await readdir(join(dir, prefix), { withFileTypes: true })).sort((a, b) => (a.name < b.name ? -1 : 1))
+  for (const e of entries) {
+    const path = prefix ? `${prefix}/${e.name}` : e.name
+    const kind = kindOf(e)
+    out.push({ path, kind })
+    if (kind === 'dir') out.push(...(await walk(dir, path)))
+  }
+  return out
+}
+
+/** A relative path in a marker: segments, none empty, `.` or `..`, no backslash or NUL. */
+const safePath = (p: unknown) =>
+  typeof p === 'string' && !/[\\\0]/.test(p) && p.split('/').every((s) => s !== '' && s !== '.' && s !== '..')
+
+/**
+ * Whether the build may take `dir`'s place: `missing`, `empty`, or `built`
+ * (its marker lists exactly the files in it, with no symlink and no other
+ * folder). Anything else is refused in one sentence naming `shown`.
+ */
+async function replaceable(dir: string, shown = dir): Promise<'missing' | 'empty' | 'built'> {
+  const refuse = (why: string): never => {
+    throw new Error(
+      `buildSite: outDir ${shown} ${why}; Weft replaces only an empty folder or one it built, so move that out or build into a new folder.`,
+    )
+  }
+  const self = await lstat(dir).catch((e: NodeJS.ErrnoException) => {
+    if (e.code === 'ENOENT') return null
+    throw e
+  })
+  if (!self) return 'missing'
+  if (self.isSymbolicLink()) refuse('is a symlink')
+  if (!self.isDirectory()) refuse('is not a folder')
+  const top = (await readdir(dir)).sort()
+  if (top.length === 0) return 'empty'
+  // Without a marker, the first entry is the foreign one; the rest is not walked.
+  const marker = await lstat(join(dir, MARKER)).catch(() => null)
+  if (!marker?.isFile()) refuse(`holds ${top.find((n) => n !== MARKER)}, which Weft did not build`)
+  let listed: string[] = []
+  try {
+    const m = JSON.parse(await readFile(join(dir, MARKER), 'utf8')) as { weft?: unknown; files?: unknown } | null
+    if (m?.weft !== 1 || !Array.isArray(m.files) || !m.files.every(safePath)) throw new Error()
+    listed = m.files as string[]
+  } catch {
+    refuse(`has a ${MARKER} that Weft cannot read`)
+  }
+  // Names are compared in one Unicode form, as file systems that ignore the form see them.
+  const nfc = (p: string) => p.normalize('NFC')
+  const want = new Set(listed.map(nfc))
+  const dirs = new Set(listed.flatMap((f) => f.split('/').slice(0, -1).map((_, n, s) => nfc(s.slice(0, n + 1).join('/')))))
+  const found = new Set<string>()
+  for (const e of await walk(dir)) {
+    const path = nfc(e.path)
+    if (e.kind === 'link') refuse(`holds the symlink ${e.path}`)
+    if (path === MARKER) continue
+    if (e.kind === 'dir' ? !dirs.has(path) : e.kind !== 'file' || !want.has(path)) refuse(`holds ${e.path}, which Weft did not build`)
+    if (e.kind === 'file') found.add(path)
+  }
+  const missing = listed.find((f) => !found.has(nfc(f)))
+  if (missing !== undefined) refuse(`no longer holds ${missing}, which Weft built`)
+  return 'built'
+}
+
+/**
+ * Put the finished build in `staging` in place of `outDir`, if outDir is still
+ * missing, empty or the earlier build. That earlier build is moved aside,
+ * checked once more, and only then removed.
+ */
+async function swap(staging: string, outDir: string) {
+  const state = await replaceable(outDir)
+  if (state === 'empty') await rmdir(outDir)
+  if (state !== 'built') return rename(staging, outDir)
+  const old = await mkdtemp(join(dirname(outDir), `.${basename(outDir)}.weft-old-`))
+  await rmdir(old)
+  await rename(outDir, old)
+  try {
+    await replaceable(old, outDir)
+    await rename(staging, outDir)
+  } catch (e) {
+    await rename(old, outDir)
+    throw e
+  }
+  // Exactly what the marker lists, and no symlink: all of it is Weft's.
+  await rm(old, { recursive: true })
 }
 
 const foldCase = process.platform === 'darwin' || process.platform === 'win32'
 
-/** The real path of `p` (symlinks resolved), through its nearest existing ancestor if it does not exist. */
-function realish(p: string): string {
+/**
+ * `p` as the file system sees it, for comparing: symlinks resolved (through
+ * its nearest existing ancestor if it does not exist), in one Unicode form, and
+ * in one case where the file system ignores case.
+ */
+function canonical(p: string): string {
   const rest: string[] = []
-  for (let dir = resolve(p); ; dir = dirname(dir)) {
+  let real = resolve(p)
+  for (let dir = real; ; dir = dirname(dir)) {
     try {
-      return join(realpathSync(dir), ...rest)
+      real = join(realpathSync.native(dir), ...rest)
+      break
     } catch {
-      if (dirname(dir) === dir) return resolve(p)
+      if (dirname(dir) === dir) break
       rest.unshift(basename(dir))
     }
   }
+  const nfc = real.normalize('NFC')
+  return foldCase ? nfc.toLowerCase() : nfc
 }
 
-const segments = (p: string) => (foldCase ? p.toLowerCase() : p).split(sep).filter(Boolean)
-
-/** Whether `inner` is `outer` or inside it, by whole segments; case-insensitive where the file system is. */
+/** Whether `inner` is `outer` or inside it, by whole segments of canonical paths. */
 function contains(outer: string, inner: string): boolean {
-  const [o, i] = [segments(outer), segments(inner)]
+  const [o, i] = [outer.split(sep).filter(Boolean), inner.split(sep).filter(Boolean)]
   return o.length <= i.length && o.every((s, n) => s === i[n])
 }
 
@@ -232,116 +428,35 @@ function contains(outer: string, inner: string): boolean {
 const SOURCE_DIRS = ['pages', 'public', 'components', 'src', 'node_modules']
 
 /**
- * Refuse an outDir that is the site root or contains it, or is inside one of
- * its source folders (or `sourceDirs`, given as absolute paths). Real paths are
- * compared, so a symlink does not hide either. A folder of its own inside the
- * root, such as `dist`, is fine: the build deletes only what it wrote.
+ * Refuse an outDir that is the site root or contains it, is inside one of its
+ * source folders (a symlinked one by where it leads), holds a `.vue` file the
+ * build used or is inside its folder, or overlaps the app build. A folder of
+ * its own inside the root, such as `dist`, is fine.
  */
-function checkOutDir(outDir: string, root: string, sourceDirs: string[] = []) {
-  const out = realish(outDir)
-  const site = realish(root)
-  const sources = [...SOURCE_DIRS.map((d) => join(site, d)), ...sourceDirs.map(realish)]
-  if (contains(out, site) || sources.some((d) => contains(d, out))) {
+function checkOutDir(outDir: string, root: string, appDir: string | null, vueFiles: string[] = []) {
+  const out = canonical(outDir)
+  const site = canonical(root)
+  const sources = SOURCE_DIRS.map((d) => canonical(join(root, d)))
+  const vue = vueFiles.map(canonical)
+  if (
+    contains(out, site) ||
+    sources.some((d) => contains(d, out)) ||
+    vue.some((f) => contains(out, f) || contains(dirname(f), out))
+  ) {
     throw new Error(
       `buildSite: outDir ${outDir} is the site root, contains it, or is one of its source folders; build into a folder of its own, like dist.`,
     )
   }
-}
-
-/** A manifest path that stays inside outDir: `/` then segments, none empty, `.` or `..`. */
-const safePath = (p: string) =>
-  p.startsWith('/') && !/[\\\0]/.test(p) && p.slice(1).split('/').every((s) => s !== '' && s !== '.' && s !== '..')
-
-/**
- * The files the previous build in `outDir` wrote, from its `manifest.json`:
- * each listed file with its `.br` and `.gz`, then `routes.json` and the
- * manifest. Files under `app/` are the app's when `keepApp`. None when there is
- * no manifest; a manifest that is not Weft's stops the build.
- */
-async function previousBuild(outDir: string, keepApp: boolean): Promise<string[]> {
-  const file = join(outDir, 'manifest.json')
-  if (!existsSync(file)) return []
-  let listed: string[]
-  try {
-    const m = JSON.parse(await readFile(file, 'utf8')) as Partial<Manifest> | null
-    const entries = Object.entries(m?.files ?? 0)
-    const ok =
-      typeof m?.hints === 'object' &&
-      m.hints !== null &&
-      entries.length > 0 &&
-      entries.every(([k, v]) => safePath(k) && typeof (v as ManifestFile | null)?.etag === 'string')
-    if (!ok) throw new Error()
-    listed = entries.map(([k]) => k.slice(1))
-  } catch {
-    throw new Error(`buildSite: ${file} is not a Weft build manifest; move it or choose another outDir.`)
-  }
-  const out = listed
-    .filter((f) => !(keepApp && f.startsWith('app/')))
-    .flatMap((f) => [f, f + '.br', f + '.gz'])
-  return [...new Set([...out, 'routes.json', 'manifest.json'])]
-}
-
-/**
- * Remove `files` (relative to `dir`), then the directories that left empty,
- * deepest first, never `dir` itself. A file reached through a symlink that
- * leads out of `dir`, or a directory where a file was, is left alone.
- */
-async function removeFiles(dir: string, files: string[]) {
-  const real = realish(dir)
-  const dirs = new Set<string>()
-  for (const file of files) {
-    const path = join(dir, file)
-    const stat = lstatSync(path, { throwIfNoEntry: false })
-    if (!stat || stat.isDirectory() || !contains(real, realish(dirname(path)))) continue
-    await rm(path, { force: true })
-    for (let d = dirname(file); d !== '.'; d = dirname(d)) dirs.add(d)
-  }
-  const deepest = [...dirs].sort((a, b) => b.split('/').length - a.split('/').length)
-  for (const d of deepest) {
-    try {
-      await rmdir(join(dir, d))
-    } catch (e) {
-      const code = (e as NodeJS.ErrnoException).code
-      if (code !== 'ENOTEMPTY' && code !== 'EEXIST' && code !== 'ENOENT') throw e
-    }
+  if (appDir && (contains(out, canonical(appDir)) || contains(canonical(appDir), out))) {
+    throw new Error(`buildSite: outDir ${outDir} and the app build ${appDir} overlap; keep the app build in a folder of its own.`)
   }
 }
 
-/** Copy `<root>/public` to the root of the build; a file the build made itself is not overwritten. */
-async function copyPublic(root: string, outDir: string, written: Set<string>) {
-  const generated = new Set(['manifest.json'])
-  for (const f of written) generated.add(f).add(f + '.br').add(f + '.gz')
-  for (const file of await filesUnder(root, 'public', { all: true })) {
-    const to = file.slice('public/'.length)
-    if (generated.has(to)) throw new Error(`buildSite: ${file} would overwrite the generated ${to}; rename or move it.`)
-    await mkdir(dirname(join(outDir, to)), { recursive: true })
-    await copyFile(join(root, file), join(outDir, to))
-    written.add(to)
-  }
-}
-
-function appRoute(prefix: string, outDir: string): RoutesJson['app'] {
+function appRoute(prefix: string): NonNullable<RoutesJson['app']> {
   if (!/^\/[^/]/.test(prefix) || prefix.endsWith('/')) {
     throw new Error(`buildSite: appPrefix "${prefix}" must start with "/" and not end with one, like "/app".`)
   }
-  if (!existsSync(join(outDir, 'app/index.html'))) {
-    throw new Error(`buildSite: appPrefix is ${prefix} but ${join(outDir, 'app/index.html')} is missing; build the app first.`)
-  }
   return { prefix, index: 'app/index.html' }
-}
-
-/**
- * The files under `<base>/<dir>` as posix paths relative to `base`; none when
- * it does not exist. Unless `all`, `.br` and `.gz` files are left out: in a
- * build directory they are the compressed variants an earlier build wrote.
- */
-async function filesUnder(base: string, dir: string, { all = false } = {}): Promise<string[]> {
-  if (!existsSync(join(base, dir))) return []
-  const entries = await readdir(join(base, dir), { recursive: true, withFileTypes: true })
-  return entries
-    .filter((e) => e.isFile() && (all || !/\.(br|gz)$/.test(e.name)))
-    .map((e) => posix(relative(base, join(e.parentPath, e.name))))
-    .sort()
 }
 
 /** The theme stylesheet, then `weft.css`: the CSS every page starts with, and their files. */
@@ -379,20 +494,36 @@ interface ClientBuild {
   files: string[]
 }
 
+/** A CSS module request: `*.module.css` and the like, or a `<style module>` block. */
+const CSS_MODULE = /\.module\.(css|less|sass|scss|styl|stylus|pcss|postcss|sss)(?:$|\?)/
+
 /**
  * Island CSS is inlined into the pages that use the island, so the client build
- * carries none: every stylesheet loads empty, and Vite emits and preloads nothing.
+ * ships none: plain stylesheets load empty, and the stylesheet the CSS modules
+ * leave is dropped from the output. A CSS module keeps its class mapping, the
+ * same one the server rendered with.
  */
 const noCSS: Plugin = {
   name: 'weft:no-client-css',
   enforce: 'pre',
   load(id) {
-    if (isCSSRequest(id)) return { code: '' }
+    if (isCSSRequest(id) && !CSS_MODULE.test(id)) return { code: '' }
+  },
+  generateBundle: {
+    order: 'post',
+    handler(_, bundle) {
+      for (const [name, file] of Object.entries(bundle)) if (file.type === 'asset' && name.endsWith('.css')) delete bundle[name]
+    },
   },
 }
 
-/** Build the island runtime and one chunk per island into `<outDir>/assets`. */
-async function buildClient(root: string, outDir: string, islands: string[]): Promise<ClientBuild> {
+type OutputOptions = Rolldown.OutputOptions
+
+/** The site's output options without those that say where files go or what they are called. */
+const placeless = ({ dir, file, entryFileNames, chunkFileNames, assetFileNames, ...rest }: OutputOptions): OutputOptions => rest
+
+/** Build the island runtime and one chunk per island into `<dir>/assets`. */
+async function buildClient(root: string, dir: string, islands: string[]): Promise<ClientBuild> {
   const config = await siteConfig(root, { command: 'build', mode: 'production' }, {
     base: '/',
     logLevel: 'warn',
@@ -401,7 +532,7 @@ async function buildClient(root: string, outDir: string, islands: string[]): Pro
     // The runtime lives in this package; its `vue` must be the site's.
     resolve: { dedupe: ['vue'] },
     build: {
-      outDir,
+      outDir: dir,
       assetsDir: 'assets',
       emptyOutDir: false,
       copyPublicDir: false,
@@ -410,24 +541,28 @@ async function buildClient(root: string, outDir: string, islands: string[]): Pro
       ssrManifest: false,
       sourcemap: false,
       modulePreload: { polyfill: false },
-      // With noCSS every island's CSS is empty; unsplit, no chunk imports or preloads a stylesheet.
+      // Unsplit, no chunk imports or preloads a stylesheet.
       cssCodeSplit: false,
     },
   })
   // Only the runtime entry: an input of the site's config (an SPA's index.html)
-  // would merge with it. The site's other options (external, output) stay.
+  // would merge with it. The site's other options (external, output format)
+  // stay, but not where it puts files: they go into `dir` and nowhere else.
   // Vite takes either name and prefers rolldownOptions; merge both into one.
   const b = (config.build ??= {})
-  const options = mergeConfig(b.rollupOptions ?? {}, b.rolldownOptions ?? {}, false)
-  b.rolldownOptions = b.rollupOptions = { ...options, input: { client: CLIENT_ENTRY } }
+  const options = mergeConfig(b.rollupOptions ?? {}, b.rolldownOptions ?? {}, false) as Rolldown.InputOptions & {
+    output?: OutputOptions | OutputOptions[]
+  }
+  const output = Array.isArray(options.output) ? options.output.map(placeless) : placeless(options.output ?? {})
+  b.rolldownOptions = b.rollupOptions = { ...options, input: { client: CLIENT_ENTRY }, output }
   const result = (await build(config)) as Rolldown.RolldownOutput | Rolldown.RolldownOutput[]
-  const output = (Array.isArray(result) ? result : [result]).flatMap((r) => r.output)
-  const entry = output.find((o): o is Rolldown.OutputChunk => o.type === 'chunk' && o.isEntry)
+  const chunks = (Array.isArray(result) ? result : [result]).flatMap((r) => r.output)
+  const entry = chunks.find((o): o is Rolldown.OutputChunk => o.type === 'chunk' && o.isEntry)
   if (!entry) throw new Error('buildSite: the client build produced no entry chunk.')
   return {
     entry: '/' + entry.fileName,
     imports: entry.imports.map((f) => '/' + f),
-    files: output.map((o) => o.fileName),
+    files: chunks.map((o) => o.fileName),
   }
 }
 
