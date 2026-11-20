@@ -25,6 +25,7 @@
   - Dark ground `#0F1530`, dark warp line `#1C2448`.
   - Type: Bricolage Grotesque for headlines and text, JetBrains Mono only for code.
 - **Motion:** exactly one automatic motion on the page, the hero thread pulling across, and it respects reduced motion.
+- The site's information architecture: `/`, `/components` (gallery), `/components/<name>`, `/docs/...`, `/skills/<name>`, `/catalog.json`, `/llms.txt`. Header navigation shows Docs, Components, For agents, GitHub.
 - **Size budgets (brotli, all bytes):**
   - Landing page without islands ≤ 12 KB (fonts excluded, since they are cached and preloaded).
   - Each docs page ≤ 10 KB.
@@ -67,10 +68,45 @@ Also in this task, carried from the fast-pages final review:
 
 Write it all from the code as it is today. Do not document features that do not exist; list them under "Coming next" with the spec phase. Then add the docs layout: a sidebar from `order`, a page table of contents, and previous and next links.
 
-### Task 4: Catalogue and component pages
-- **Catalogue:** `catalog/components.json` covers `Stack`, `Grid`, `Page`, `Section`, `Card`, `Divider`, `WeftProvider` and `Island`, with each component's props, slots, events, adaptive behaviour, an example, and when to use it and when not.
-- **Freshness:** a test fails when a component's props in its source differ from the catalogue.
-- **Pages:** `pages/components/[name].vue` renders each entry with a live example. The example is an island only when it is interactive.
+### Task 4: The /components gallery (owner request: "a dedicated /components like Nuxt or Tailwind")
+
+The gallery must grow by itself: every component later added to `packages/ui` appears here when its catalogue entry and examples exist, with no new page code.
+
+**Catalogue and examples**
+- `catalog/components.json` is generated from component sources by `scripts/catalog.ts`. It covers `Stack`, `Grid`, `Page`, `Section`, `Card`, `Divider`, `WeftProvider` and `Island` today. Each entry has a name, group (Layout, Forms, Overlays, Navigation, Feedback, Data, Charts, Landing), one-line purpose, when to use and when not, props with types, defaults and descriptions, slots, events, and adaptive behaviour per axis (pointer, touch, landing, app, narrow, regular, wide).
+- Hand-written prose lives in `packages/ui/src/<group>/<Name>.docs.md` frontmatter beside each component. Props, slots and events are extracted from the SFC with `@vue/compiler-sfc`, never typed by hand.
+- A test fails when the catalogue is stale, or when a component lacks a docs file or at least one example.
+- Examples are real `.vue` files: `packages/ui/examples/<Name>/<example>.vue`. Each one is rendered on the page and shown as source. Source shown on the site is the file itself, so it can never drift.
+
+**Pages**
+- `/components` is the index. Components are grouped by group, each with a live, server-rendered thumbnail of its first example (no script), name, and purpose. There is a client-side filter box (a small island) that narrows the list as you type. Without JavaScript the full list shows.
+- `/components/<name>` is the component page. In order:
+  1. Title, purpose, when to use and when not.
+  2. **Preview stage**, an island. The first example renders inside a `WeftProvider` with a toolbar:
+     - input: pointer or touch
+     - surface: app or landing
+     - theme: neutral or lisa
+     - scheme: light or dark
+     - width: phone 390, tablet 820, desktop 1280. The stage is a resizable container, so `useWidth` reacts. Use a container, not an iframe, so the server render stays meaningful.
+
+     The stage keeps its controls in the URL query, so a link reproduces the exact view.
+  3. **Code**: the example source, highlighted at build time, with a copy button (the shared copy island).
+  4. **Adapts**: a table of what changes per axis, from the catalogue.
+  5. **API**: props, slots and events tables from the catalogue.
+  6. **More examples**: every other example, each with its own preview and code.
+  7. **For agents**: the raw catalogue JSON for this component, and a link to `/components/<name>.json`.
+- `/components/<name>.json` and `/catalog.json` are served raw for agents.
+- **Navigation**: a sidebar with groups and component names, collapsing to a sheet on narrow touch screens. Previous and next links within the group.
+- **Budgets**:
+  - index: at most 14 KB brotli without the filter island;
+  - component page: at most 16 KB brotli without islands;
+  - the preview stage island shares the Vue runtime chunk with every other island on the page.
+- **Tests**:
+  - the gallery lists every catalogue entry;
+  - each component page contains its first example's server-rendered HTML;
+  - toolbar query parameters round-trip;
+  - the page works with JavaScript disabled (examples visible, controls hidden or inert);
+  - the stale-catalogue test.
 
 ### Task 5: Skills, `llms.txt`, `AGENTS.md`
 - **Skills:** `skills/` holds `weft-site` (build a site with pages and islands), `weft-go` (serve and publish), and `weft-theme`, each with `SKILL.md` frontmatter (`name`, `description`). Each is rendered at `/skills/<name>` and served raw at `/skills/<name>.md`.
