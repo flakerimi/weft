@@ -1,0 +1,23 @@
+{
+  "name": "@weft/themes",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./neutral.css": "./dist/neutral.css",
+    "./lisa.css": "./dist/lisa.css",
+    "./tailwind.css": "./tailwind.css"
+  },
+  "scripts": {
+    "build": "node --experimental-strip-types scripts/build.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "sync:lisa": "sh scripts/sync-lisa.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1"
+  }
+}

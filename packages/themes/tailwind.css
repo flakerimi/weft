@@ -1,0 +1,22 @@
+/* Optional: map Tailwind's theme names to Weft tokens. Import after a Weft theme. */
+@theme inline {
+  --color-bg: var(--weft-color-bg);
+  --color-surface: var(--weft-color-surface);
+  --color-surface-raised: var(--weft-color-surface-raised);
+  --color-border: var(--weft-color-border);
+  --color-text: var(--weft-color-text);
+  --color-text-muted: var(--weft-color-text-muted);
+  --color-primary: var(--weft-color-primary);
+  --color-primary-fg: var(--weft-color-primary-fg);
+  --color-primary-soft: var(--weft-color-primary-soft);
+  --color-danger: var(--weft-color-danger);
+  --color-warning: var(--weft-color-warning);
+  --color-success: var(--weft-color-success);
+  --color-info: var(--weft-color-info);
+  --color-focus: var(--weft-color-focus);
+  --radius-control: var(--weft-radius-control);
+  --radius-card: var(--weft-radius-card);
+  --radius-panel: var(--weft-radius-panel);
+  --font-sans: var(--weft-font-sans);
+  --font-mono: var(--weft-font-mono);
+}
