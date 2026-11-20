@@ -3,7 +3,7 @@
 export { overlayStack, type OverlayEntry } from './overlayStack.ts'
 export { useControllable } from './useControllable.ts'
 export { useDismiss, type DismissOptions, type DismissReason } from './useDismiss.ts'
-export { useFloating, type Floating, type FloatingOptions, type Placement } from './useFloating.ts'
+export { arrow, hide, useFloating, type Floating, type FloatingOptions, type Middleware, type MiddlewareData, type Placement } from './useFloating.ts'
 export { useFocusTrap, type FocusTrapOptions } from './useFocusTrap.ts'
 export { ID_SCOPE, useId, type IdScope } from './useId.ts'
 export { useRovingFocus, type RovingFocus, type RovingFocusOptions } from './useRovingFocus.ts'

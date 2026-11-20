@@ -14,3 +14,8 @@ only strings, finite numbers, booleans, null, arrays and plain objects; the
 build refuses anything else with a sentence naming the prop. `when="media"`
 needs a `media` query. Ids from `useId` inside an island are counted per
 island, so they match between the server and the browser.
+
+Ids are counted by the island's position among the page's islands, the
+same on the server (render order) and in the browser (document order). So an
+island inside a `<Teleport>`, whose markup lands elsewhere in the document,
+is not supported: its position, and so its ids, would differ.

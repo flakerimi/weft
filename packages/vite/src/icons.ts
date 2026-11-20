@@ -19,7 +19,10 @@
  *   aside): a property `icon: '…'` or `…Icon: '…'` whose string literal looks
  *   like an icon name (lowercase words joined by `-`), as in item lists
  *   (`{ label: 'Home', icon: 'house' }`) and `withDefaults`.
- * - Names built at run time cannot be seen; list them in `icons`.
+ * - Only the literal tag `Icon` is recognised for `name`: an import under
+ *   another name (`import { Icon as Glyph }`), `<icon>` or
+ *   `<component :is="Icon">` is not seen.
+ * - Names built at run time cannot be seen either; list them in `icons`.
  *
  * A static name that Lucide does not have fails the build with one sentence
  * naming the file. A literal inside a bound expression that is not an icon

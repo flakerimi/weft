@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { effectScope, nextTick, ref } from 'vue'
-import { useFloating, type FloatingOptions } from '../../src/headless/useFloating.ts'
+import { arrow, useFloating, type FloatingOptions } from '../../src/headless/useFloating.ts'
 import { $, html, reset } from './dom.ts'
 
 afterEach(reset)
@@ -108,6 +108,30 @@ describe('useFloating', () => {
     window.dispatchEvent(new Event('resize'))
     await settle()
     expect(api.styles.value.left).toBe('100px')
+  })
+
+  it('says when it has positioned, and is not positioned again until both elements are back', async () => {
+    const { api, scope, floating, floatEl } = setup()
+    expect(api.isPositioned.value).toBe(false)
+    await settle()
+    expect(api.isPositioned.value).toBe(true)
+    floating.value = null
+    await settle()
+    expect(api.isPositioned.value).toBe(false)
+    floating.value = floatEl
+    await settle()
+    expect(api.isPositioned.value).toBe(true)
+    scope.stop()
+  })
+
+  it('runs extra middleware after its own and returns their data, such as an arrow', async () => {
+    const arrowEl = document.createElement('i')
+    const { api, scope, floatEl } = setup({ middleware: [arrow({ element: arrowEl })] })
+    floatEl.appendChild(arrowEl)
+    place(arrowEl, { x: 0, y: 0, width: 10, height: 10 })
+    await api.update()
+    expect(api.middlewareData.value.arrow).toMatchObject({ x: expect.any(Number) })
+    scope.stop()
   })
 
   it('updates on demand', async () => {

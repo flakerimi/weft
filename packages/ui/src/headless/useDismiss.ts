@@ -9,13 +9,16 @@
  *
  * - `onDismiss(reason, event)`: the overlay should close; `reason` is
  *   `'escape'` or `'outside'`. The composable never changes state itself.
- * - `escape` (default true) and `outside` (default true) turn either off. A
- *   top overlay with Escape off swallows it rather than passing it down.
+ * - `escape` (default true) and `outside` (default true) turn either off.
+ *   Each may be a ref or getter (`escape: () => props.dismissible`), read at
+ *   each press, so it can change while the overlay is open. A top overlay with
+ *   Escape off does not pass it down to the overlay below.
  * - `ignore`: elements whose presses are not outside. Give the trigger, so a
  *   press on it toggles the overlay instead of closing and reopening it.
- * - `returnTo`: where focus goes when the overlay closes; by default the
- *   element that had focus when it opened (see `overlayStack` for when focus
- *   is left where the user put it).
+ * - `returnTo`: where focus goes when the overlay closes, an element, ref or
+ *   getter read at close (a template ref works); by default the element that
+ *   had focus when it opened. The overlay stack returns focus, and none after
+ *   a press outside; see `overlayStack`.
  *
  * The overlay joins the stack when `el` gets an element and leaves a
  * microtask after `el` empties, so swapping the element in one render (a
@@ -24,17 +27,17 @@
  *
  * Returns `{ id, isTop }`: the overlay's stack id and whether it is on top.
  */
-import { computed, onScopeDispose, watch, type ComputedRef, type Ref } from 'vue'
+import { computed, onScopeDispose, toValue, watch, type ComputedRef, type MaybeRefOrGetter, type Ref } from 'vue'
 import { overlayStack } from './overlayStack.ts'
 
 export type DismissReason = 'escape' | 'outside'
 
 export interface DismissOptions {
   onDismiss: (reason: DismissReason, event: Event) => void
-  escape?: boolean
-  outside?: boolean
+  escape?: MaybeRefOrGetter<boolean | undefined>
+  outside?: MaybeRefOrGetter<boolean | undefined>
   ignore?: () => (Element | null | undefined)[]
-  returnTo?: HTMLElement | null
+  returnTo?: MaybeRefOrGetter<HTMLElement | null | undefined>
 }
 
 let count = 0
@@ -51,11 +54,11 @@ export function useDismiss(
     pushed = true
     overlayStack.push(id, {
       el: () => el.value,
-      onEscape: opts.escape === false ? undefined : (e) => opts.onDismiss('escape', e),
-      // Without outside presses, the overlay still swallows them while on top.
-      onOutside: opts.outside === false ? undefined : (e) => opts.onDismiss('outside', e),
+      // Read at each press: false means this overlay does not take it now.
+      onEscape: (e) => toValue(opts.escape) !== false && (opts.onDismiss('escape', e), true),
+      onOutside: (e) => toValue(opts.outside) !== false && (opts.onDismiss('outside', e), true),
       ignore: opts.ignore,
-      returnTo: opts.returnTo,
+      returnTo: () => toValue(opts.returnTo),
     })
   }
   const leave = () => {

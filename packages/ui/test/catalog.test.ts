@@ -137,7 +137,7 @@ describe('the catalogue build refuses', () => {
     const root = repoWith({ examples: { 'basic.vue': 'b', 'with-icon.vue': 'w', 'Helper.vue': 'h' } })
     const [thing] = buildCatalog(root).components
     expect(thing!.examples.map((e) => [e.name, e.title])).toEqual([['basic', 'Basic'], ['with-icon', 'With icon']])
-    expect(thing!.slots).toEqual([{ name: 'default', props: [] }])
+    expect(thing!.slots).toEqual([{ name: 'default', props: [], dynamic: false }])
     expect(thing!.props).toEqual([{ name: 'on', type: 'boolean', required: false, default: null, description: null }])
   })
 })
@@ -176,17 +176,72 @@ defineSlots<{ item(props: { option: string; index: number }): unknown; empty(): 
       { name: 'update:open', payload: '[value: boolean]', description: null },
     ])
     expect(thing!.slots).toEqual([
-      { name: 'item', props: ['option', 'index'] },
-      { name: 'empty', props: [] },
+      { name: 'item', props: ['option', 'index'], dynamic: false },
+      { name: 'empty', props: [], dynamic: false },
     ])
+  })
+
+  it('defaults given by destructuring runtime props (mergeDefaults)', () => {
+    const sfc = `<script setup vapor lang="ts">
+const { size = 'md', n = 2 } = defineProps({ size: String, n: { type: Number, required: true }, tags: [String, Array] })
+</script>
+<template><i /></template>
+`
+    const [thing] = buildCatalog(repoWith({ sfc })).components
+    expect(thing!.props).toEqual([
+      { name: 'size', type: 'string', required: false, default: "'md'", description: null },
+      { name: 'n', type: 'number', required: true, default: '2', description: null },
+      { name: 'tags', type: 'string | unknown[]', required: false, default: null, description: null },
+    ])
+  })
+
+  it('prop types through interface extends and intersections', () => {
+    const sfc = `<script setup vapor lang="ts">
+interface Base {
+  /** From the base. */
+  tone?: 'a' | 'b'
+}
+interface Props extends Base { size?: string }
+type Extra = { open?: boolean }
+defineProps<Props & Extra & { last: number }>()
+</script>
+<template><i /></template>
+`
+    const [thing] = buildCatalog(repoWith({ sfc })).components
+    expect(thing!.props.map((p) => [p.name, p.type, p.required, p.description])).toEqual([
+      ['size', 'string', false, null],
+      ['tone', "'a' | 'b'", false, 'From the base.'],
+      ['open', 'boolean', false, null],
+      ['last', 'number', true, null],
+    ])
+  })
+
+  it('a slot with a bound name as a dynamic slot, not as a prop', () => {
+    const sfc = '<script setup vapor lang="ts">\n</script>\n<template><div><slot v-for="c in 2" :name="`cell-${c}`" :value="c" /></div></template>\n'
+    const [thing] = buildCatalog(repoWith({ sfc })).components
+    expect(thing!.slots).toEqual([{ name: '`cell-${c}`', props: ['value'], dynamic: true }])
+  })
+
+  it('refuses, in one sentence, options it cannot read', () => {
+    const sfc = `<script lang="ts">
+const shared = { a: String }
+export default { props: shared }
+</script>
+<script setup vapor lang="ts">
+</script>
+<template><i /></template>
+`
+    expect(() => buildCatalog(repoWith({ sfc }))).toThrow(
+      'packages/ui/src/widgets/Thing.vue sets component options in a plain <script> the catalogue cannot read; declare props, emits and slots in <script setup>.',
+    )
   })
 
   it('slot props from the template when slots are not declared', () => {
     const sfc = '<script setup vapor lang="ts">\n</script>\n<template><ul><slot name="row" :item="1" index="2" /><slot /></ul></template>\n'
     const [thing] = buildCatalog(repoWith({ sfc })).components
     expect(thing!.slots).toEqual([
-      { name: 'row', props: ['item', 'index'] },
-      { name: 'default', props: [] },
+      { name: 'row', props: ['item', 'index'], dynamic: false },
+      { name: 'default', props: [], dynamic: false },
     ])
   })
 })

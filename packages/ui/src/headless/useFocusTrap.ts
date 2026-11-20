@@ -5,19 +5,27 @@
  * or sheet must (WAI-ARIA APG, Dialog (Modal) pattern).
  *
  * - On activation (once `active` is true and `el` has an element, after the
- *   render that showed it) focus moves to `initial()` if given, else the
- *   first tabbable element inside, else `el` itself (made focusable with
- *   `tabindex="-1"`).
+ *   render that showed it) focus moves to `initial` if given (an element,
+ *   ref or getter, read then), else the first tabbable element inside, else
+ *   `el` itself (made focusable with `tabindex="-1"`). Tabbable means
+ *   focusable, not `tabindex="-1"`, and visible: not hidden by CSS, `hidden`
+ *   or `inert`.
  * - Tab from the last tabbable element goes to the first, Shift+Tab from the
  *   first goes to the last. With nothing tabbable inside, Tab stays put.
  * - Focus that lands outside `el` (a click, a script) is brought back to the
- *   element inside that had it last, unless it landed in an overlay on the
- *   `overlayStack` (a menu or tooltip opened from inside the trap).
+ *   element inside that had it last, unless it landed in an overlay stacked
+ *   above this one on the `overlayStack` (a menu or tooltip opened from
+ *   inside the trap). An overlay below, such as the popover the dialog was
+ *   opened from, does not count.
  * - Traps nest: only the most recently activated active trap acts; the one
  *   below resumes when it ends.
- * - On deactivation, or when the scope ends, focus returns to `returnTo`, by
- *   default the element focused before activation, unless the user has moved
- *   focus out on purpose (see `restoreFocus` in `dom.ts`).
+ * - Returning focus: when `el` is a stacked overlay (the same element has
+ *   `useDismiss`, as every Weft overlay does), the overlay stack is the one
+ *   owner of returning focus and this trap leaves it alone; give `returnTo`
+ *   to `useDismiss` there. Otherwise, on deactivation or when the scope ends,
+ *   focus returns to `returnTo` (an element, ref or getter, read then), by
+ *   default the element focused before activation, unless the user has
+ *   moved focus out on purpose (see `restoreFocus` in `dom.ts`).
  * - When `el` changes to another element while active (the overlay
  *   re-rendered in another form, a popover becoming a sheet), the trap moves
  *   to it directly: focus goes into the new element without passing through
@@ -25,14 +33,14 @@
  *
  * Nothing happens on the server.
  */
-import { onScopeDispose, watch, type Ref } from 'vue'
+import { onScopeDispose, toValue, watch, type MaybeRefOrGetter, type Ref } from 'vue'
 import { focus, focused, restoreFocus, tabbables } from './dom.ts'
 import { overlayStack } from './overlayStack.ts'
 
 export interface FocusTrapOptions {
   active: Readonly<Ref<boolean>>
-  initial?: () => HTMLElement | null | undefined
-  returnTo?: HTMLElement | null
+  initial?: MaybeRefOrGetter<HTMLElement | null | undefined>
+  returnTo?: MaybeRefOrGetter<HTMLElement | null | undefined>
 }
 
 interface Trap {
@@ -79,7 +87,7 @@ export function useFocusTrap(el: Readonly<Ref<HTMLElement | null | undefined>>, 
       lastInside = target
       return
     }
-    if (overlayStack.contains(target)) return
+    if (overlayStack.isAbove(target, container)) return
     focus(lastInside?.isConnected && container.contains(lastInside) ? lastInside : (tabbables(container)[0] ?? container))
   }
 
@@ -102,7 +110,7 @@ export function useFocusTrap(el: Readonly<Ref<HTMLElement | null | undefined>>, 
   /** Focus the place to start in `container`, unless focus is in it already. */
   function enter(container: HTMLElement) {
     const now = focused(container.ownerDocument)
-    const start = opts.initial?.() ?? tabbables(container)[0] ?? container
+    const start = toValue(opts.initial) ?? tabbables(container)[0] ?? container
     lastInside = start
     if (!(now && container.contains(now))) focus(start)
   }
@@ -131,7 +139,8 @@ export function useFocusTrap(el: Readonly<Ref<HTMLElement | null | undefined>>, 
     trap = null
     detach(container)
     lastInside = null
-    restoreFocus(opts.returnTo ?? before, [container])
+    // A stacked overlay's focus is returned by the overlay stack when it pops.
+    if (!overlayStack.contains(container)) restoreFocus(toValue(opts.returnTo) ?? before, [container])
     before = null
   }
 

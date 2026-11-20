@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { effectScope, nextTick, ref } from 'vue'
-import { useFocusTrap } from '../../src/headless/useFocusTrap.ts'
+import { overlayStack } from '../../src/headless/overlayStack.ts'
+import { useFocusTrap, type FocusTrapOptions } from '../../src/headless/useFocusTrap.ts'
 import { $, active, html, key, reset } from './dom.ts'
 
 afterEach(reset)
@@ -16,7 +17,7 @@ const markup = `
   </div>
   <button class="outside">outside</button>`
 
-function setup(opts: { initial?: () => HTMLElement | null; returnTo?: HTMLElement | null } = {}) {
+function setup(opts: Partial<Omit<FocusTrapOptions, 'active'>> = {}) {
   const root = html(markup)
   $('.opener', root).focus()
   const el = ref<HTMLElement | null>($('.trap', root))
@@ -161,6 +162,66 @@ describe('useFocusTrap', () => {
     on.value = false
     await nextTick()
     expect(active()).toBe(q('.opener'))
+    scope.stop()
+  })
+
+  it('skips elements hidden by CSS: focus never lands on one it cannot show', async () => {
+    const root = html(markup)
+    $('.first', root).style.display = 'none'
+    $('.opener', root).focus()
+    const on = ref(true)
+    const scope = effectScope()
+    scope.run(() => useFocusTrap(ref($('.trap', root)), { active: on }))
+    await nextTick()
+    expect(active()).toBe($('.middle', root))
+    $('.last', root).focus()
+    key('Tab')
+    expect(active()).toBe($('.middle', root))
+    scope.stop()
+  })
+
+  it('takes initial and returnTo as refs, read when they are used', async () => {
+    const target = ref<HTMLElement | null>(null)
+    const first = ref<HTMLElement | null>(null)
+    const { on, q, scope } = setup({ initial: first, returnTo: target })
+    first.value = q('.middle')
+    target.value = q('.outside')
+    on.value = true
+    await nextTick()
+    expect(active()).toBe(q('.middle'))
+    on.value = false
+    await nextTick()
+    expect(active()).toBe(q('.outside'))
+    scope.stop()
+  })
+
+  it('lets focus into an overlay stacked above it, not into one below it', async () => {
+    const root = html('<div class="below"><button class="b">b</button></div>' + markup + '<div class="above"><button class="a">a</button></div>')
+    overlayStack.push('below', { el: () => $('.below', root) })
+    overlayStack.push('trap', { el: () => $('.trap', root) })
+    overlayStack.push('above', { el: () => $('.above', root) })
+    const on = ref(true)
+    const scope = effectScope()
+    scope.run(() => useFocusTrap(ref($('.trap', root)), { active: on }))
+    await nextTick()
+    $('.a', root).focus()
+    expect(active()).toBe($('.a', root))
+    $('.b', root).focus()
+    expect(active()).toBe($('.first', root))
+    scope.stop()
+    for (const id of ['above', 'trap', 'below']) overlayStack.pop(id)
+  })
+
+  it('leaves returning focus to the overlay stack when its element is a stacked overlay', async () => {
+    const { on, q, scope } = setup()
+    overlayStack.push('dialog', { el: () => q('.trap') }) // pushed while the opener had focus
+    on.value = true
+    await nextTick()
+    on.value = false
+    await nextTick()
+    expect(active()).toBe(q('.first')) // the trap did not move it
+    overlayStack.pop('dialog')
+    expect(active()).toBe(q('.opener')) // the stack did
     scope.stop()
   })
 

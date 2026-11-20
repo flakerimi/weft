@@ -85,6 +85,34 @@ describe('useDismiss', () => {
     two.scope.stop()
   })
 
+  it('reads escape and outside when they are used, so a reactive dismissible can flip while open', () => {
+    const dismissible = ref(true)
+    const { el, panel, onDismiss, scope, root } = setup({ escape: dismissible, outside: () => dismissible.value })
+    el.value = panel
+    dismissible.value = false
+    const ignored = key('Escape', {}, document.body)
+    press($('.out', root))
+    expect(onDismiss).not.toHaveBeenCalled()
+    expect(ignored.defaultPrevented).toBe(false) // not taken: nothing closed
+    dismissible.value = true
+    key('Escape', {}, document.body)
+    press($('.out', root))
+    expect(onDismiss.mock.calls.map((c) => c[0])).toEqual(['escape', 'outside'])
+    scope.stop()
+  })
+
+  it('returns focus to a template ref given as returnTo, read when the overlay closes', async () => {
+    const trigger = ref<HTMLElement | null>(null) // filled by the render, after setup
+    const { el, panel, scope, root } = setup({ returnTo: trigger })
+    trigger.value = $('.trigger', root)
+    el.value = panel
+    $('.in', root).focus()
+    el.value = null
+    await tick()
+    expect(active()).toBe($('.trigger', root))
+    scope.stop()
+  })
+
   it('leaves the stack and returns focus when its scope is disposed', () => {
     const { el, panel, scope, root } = setup()
     $('.trigger', root).focus()

@@ -9,36 +9,42 @@
  * - Escape goes to the top overlay only, once per press: one keydown listener
  *   on the document hands it to the top entry's `onEscape`. A widget inside
  *   that handles Escape itself calls `preventDefault()` and the stack leaves
- *   that press alone. If the top overlay has no `onEscape`, nothing closes.
+ *   that press alone. If the top overlay has no `onEscape`, or it returns
+ *   false (it does not close on Escape now), nothing closes and the press is
+ *   left unhandled.
  * - A press outside goes to the top overlay only, the same way, through its
  *   `onOutside`. Outside means not inside its `el` and not inside any of its
  *   `ignore` elements (its trigger, so a press on the trigger toggles instead
  *   of closing and reopening). A touch press counts on the click that follows
  *   it, so a scroll that starts outside does not close anything.
- * - Restoring focus: `pop` returns focus to the entry's `returnTo`, by default
- *   the element that had focus when it was pushed (its opener), but only when
- *   focus is now inside the closing overlay or an overlay above it, or on
- *   nothing (it was in an element that went away). A user who clicked into
- *   another field keeps their focus.
+ * - Restoring focus: the stack is the one owner of returning focus when an
+ *   overlay closes. `pop` returns focus to the entry's `returnTo` (an element,
+ *   ref or getter, read at pop), by default the element that had focus when
+ *   it was pushed (its opener), but only when focus is now inside the closing
+ *   overlay or an overlay above it, or on nothing (it was in an element that
+ *   went away). A user who clicked into another field keeps their focus, and
+ *   an overlay closed by a press outside it returns no focus at all: the
+ *   press put the user's attention elsewhere. (`useFocusTrap` returns focus
+ *   itself only when its element is not a stacked overlay.)
  *
  * Components normally do not call this directly: `useDismiss` pushes and pops
  * while the overlay's element exists. Document listeners exist only while the
  * stack is not empty, and nothing is pushed on the server.
  */
-import { shallowRef } from 'vue'
+import { shallowRef, toValue, type MaybeRefOrGetter } from 'vue'
 import { focused, restoreFocus } from './dom.ts'
 
 export interface OverlayEntry {
   /** The overlay's element: presses inside it are not outside, and focus inside it is restored on pop. */
   el?: () => HTMLElement | null | undefined
-  /** Called with the keydown when Escape is pressed while this overlay is on top. */
-  onEscape?: (event: KeyboardEvent) => void
-  /** Called with the event when a press lands outside this overlay while it is on top. */
-  onOutside?: (event: PointerEvent | MouseEvent) => void
+  /** Called with the keydown when Escape is pressed while this overlay is on top; false means not taken. */
+  onEscape?: (event: KeyboardEvent) => void | boolean
+  /** Called with the event when a press lands outside this overlay while it is on top; false means not taken. */
+  onOutside?: (event: PointerEvent | MouseEvent) => void | boolean
   /** Elements whose presses do not count as outside, such as the overlay's trigger. */
   ignore?: () => (Element | null | undefined)[]
-  /** Where focus returns on pop; defaults to the element focused at push, when it was outside the overlay. */
-  returnTo?: HTMLElement | null
+  /** Where focus returns on pop, read then; defaults to the element focused at push, when it was outside the overlay. */
+  returnTo?: MaybeRefOrGetter<HTMLElement | null | undefined>
 }
 
 interface Entry extends OverlayEntry {
@@ -46,6 +52,8 @@ interface Entry extends OverlayEntry {
   /** The element of the overlay as it was last seen, kept for pop after it is gone. */
   last: HTMLElement | null
   opener: HTMLElement | null
+  /** A press outside was taken by this overlay, so its closing returns no focus. */
+  closedOutside: boolean
 }
 
 const entries: Entry[] = []
@@ -71,22 +79,34 @@ function onKeydown(event: KeyboardEvent) {
   if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return
   const top = topEntry()
   if (!top?.onEscape) return
+  if (top.onEscape(event) === false) return
+  top.closedOutside = false
   event.preventDefault()
-  top.onEscape(event)
+}
+
+/** The top overlay takes a press outside it. */
+function outside(e: Entry, event: PointerEvent | MouseEvent) {
+  // Set first: the handler may close the overlay, and pop it, at once.
+  e.closedOutside = true
+  if (e.onOutside?.(event) === false) e.closedOutside = false
 }
 
 function onPointerdown(event: PointerEvent) {
   pendingTouch = null
   const top = topEntry()
-  if (!top?.onOutside || !isOutside(top, event.target)) return
+  if (!top?.onOutside) return
+  if (!isOutside(top, event.target)) {
+    top.closedOutside = false
+    return
+  }
   if (event.pointerType === 'touch') pendingTouch = top
-  else top.onOutside(event)
+  else outside(top, event)
 }
 
 function onClick(event: MouseEvent) {
   const waiting = pendingTouch
   pendingTouch = null
-  if (waiting && waiting === topEntry() && isOutside(waiting, event.target)) waiting.onOutside?.(event)
+  if (waiting && waiting === topEntry() && isOutside(waiting, event.target)) outside(waiting, event)
 }
 
 function listen(on: boolean) {
@@ -112,7 +132,7 @@ export const overlayStack = {
   push(id: string, entry: OverlayEntry = {}): void {
     const at = entries.findIndex((e) => e.id === id)
     if (at >= 0) entries.splice(at, 1)
-    const e: Entry = { ...entry, id, last: null, opener: null }
+    const e: Entry = { ...entry, id, last: null, opener: null, closedOutside: false }
     const el = elOf(e)
     const now = typeof document === 'undefined' ? null : focused()
     e.opener = now && !el?.contains(now) ? now : null
@@ -131,7 +151,7 @@ export const overlayStack = {
     if (pendingTouch === e) pendingTouch = null
     publish()
     if (!entries.length && typeof document !== 'undefined') listen(false)
-    restoreFocus(e.returnTo ?? e.opener, within)
+    if (!e.closedOutside) restoreFocus(toValue(e.returnTo) ?? e.opener, within)
   },
 
   /** The id of the top overlay, or undefined when none is open. Reactive. */
@@ -153,5 +173,19 @@ export const overlayStack = {
   /** Whether `node` is inside any open overlay's element. */
   contains(node: Node | null | undefined): boolean {
     return !!node && entries.some((e) => elOf(e)?.contains(node))
+  },
+
+  /**
+   * Whether `node` is inside an overlay stacked above the one holding `el`
+   * (a menu opened from a dialog, seen from the dialog). When no overlay holds
+   * `el`, any open overlay counts.
+   */
+  isAbove(node: Node | null | undefined, el: Element): boolean {
+    if (!node) return false
+    let at = -1
+    entries.forEach((e, i) => {
+      if (elOf(e)?.contains(el)) at = i
+    })
+    return entries.slice(at + 1).some((e) => elOf(e)?.contains(node))
   },
 }

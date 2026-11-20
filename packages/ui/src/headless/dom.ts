@@ -32,13 +32,17 @@ const FOCUSABLE = [
   '[tabindex]',
 ].join(',')
 
+/** Whether `el` is rendered: not `display: none` or `visibility: hidden` itself or through an ancestor. */
+const visible = (el: HTMLElement) =>
+  el.checkVisibility?.({ visibilityProperty: true }) ?? el.getClientRects().length > 0
+
 /**
  * The elements inside `root` that Tab reaches, in document order: focusable,
- * not `tabindex="-1"`, and not inside a `hidden` or `inert` subtree.
+ * not `tabindex="-1"`, not inside a `hidden` or `inert` subtree, and visible.
  */
 export function tabbables(root: Element): HTMLElement[] {
   return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
-    (el) => el.tabIndex >= 0 && !el.closest('[hidden],[inert]'),
+    (el) => el.tabIndex >= 0 && !el.closest('[hidden],[inert]') && visible(el),
   )
 }
 

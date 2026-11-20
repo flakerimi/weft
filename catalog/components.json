@@ -33,19 +33,23 @@
       "slots": [
         {
           "name": "header",
-          "props": []
+          "props": [],
+          "dynamic": false
         },
         {
           "name": "actions",
-          "props": []
+          "props": [],
+          "dynamic": false
         },
         {
           "name": "default",
-          "props": []
+          "props": [],
+          "dynamic": false
         },
         {
           "name": "footer",
-          "props": []
+          "props": [],
+          "dynamic": false
         }
       ],
       "notes": "`padding` takes 0, 2, 3, 4 or 6 from the spacing scale; use 0 for edge-to-edge\ncontent such as an image or a table. `as` renders another element, such as\n`article` or `li`.",
@@ -123,7 +127,8 @@
       "slots": [
         {
           "name": "default",
-          "props": []
+          "props": [],
+          "dynamic": false
         }
       ],
       "notes": "`cols` is a fixed number or one per width class, `{ narrow, regular, wide }`.\nA width left out falls back to the nearest smaller one given, else to the\ndefault for it.",
@@ -239,7 +244,7 @@
       ],
       "emits": [],
       "slots": [],
-      "notes": "The component must be a `<script setup>` single-file component: its file name\nis the island's id. `props` travel to the browser as JSON, so they may hold\nonly strings, finite numbers, booleans, null, arrays and plain objects; the\nbuild refuses anything else with a sentence naming the prop. `when=\"media\"`\nneeds a `media` query. Ids from `useId` inside an island are counted per\nisland, so they match between the server and the browser.",
+      "notes": "The component must be a `<script setup>` single-file component: its file name\nis the island's id. `props` travel to the browser as JSON, so they may hold\nonly strings, finite numbers, booleans, null, arrays and plain objects; the\nbuild refuses anything else with a sentence naming the prop. `when=\"media\"`\nneeds a `media` query. Ids from `useId` inside an island are counted per\nisland, so they match between the server and the browser.\n\nIds are counted by the island's position among the page's islands, the\nsame on the server (render order) and in the browser (document order). So an\nisland inside a `<Teleport>`, whose markup lands elsewhere in the document,\nis not supported: its position, and so its ids, would differ.",
       "examples": [
         {
           "name": "basic",
@@ -281,15 +286,18 @@
       "slots": [
         {
           "name": "header",
-          "props": []
+          "props": [],
+          "dynamic": false
         },
         {
           "name": "actions",
-          "props": []
+          "props": [],
+          "dynamic": false
         },
         {
           "name": "default",
-          "props": []
+          "props": [],
+          "dynamic": false
         }
       ],
       "notes": "The `title` renders as the page's `h1`. Give the `header` slot to replace the\ntitle and description with your own markup, and the `actions` slot for\nbuttons beside them.",
@@ -334,11 +342,13 @@
       "slots": [
         {
           "name": "actions",
-          "props": []
+          "props": [],
+          "dynamic": false
         },
         {
           "name": "default",
-          "props": []
+          "props": [],
+          "dynamic": false
         }
       ],
       "notes": "The `title` renders as an `h2`.",
@@ -411,7 +421,8 @@
       "slots": [
         {
           "name": "default",
-          "props": []
+          "props": [],
+          "dynamic": false
         }
       ],
       "notes": "`gap` takes the spacing scale (0, 1, 2, 3, 4, 6 or 8, from `--weft-space-*`).\n`align` and `justify` work along the cross and main axes as in flexbox, and\n`as` renders another element, such as `ul` or `nav`, for the right semantics.",
@@ -469,7 +480,8 @@
       "slots": [
         {
           "name": "default",
-          "props": []
+          "props": [],
+          "dynamic": false
         }
       ],
       "notes": "Its element carries `data-weft-input` and `data-weft-surface`, which the\ntheme's CSS reads to switch control heights, hit sizes and density. It renders\nwith `display: contents`, so it does not affect layout. Nested providers\noverride one axis and inherit the other.",

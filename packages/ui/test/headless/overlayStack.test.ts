@@ -112,6 +112,38 @@ describe('overlayStack', () => {
     expect(active()).toBe($('.elsewhere', root))
   })
 
+  it('does not return focus to the opener after a press outside closed the overlay', () => {
+    const root = html('<button class="opener">o</button><div class="panel"><button class="in">i</button></div><p class="out">o</p>')
+    $('.opener', root).focus()
+    overlayStack.push('a', { el: () => $('.panel', root), onOutside: () => overlayStack.pop('a') })
+    $('.in', root).focus()
+    press($('.out', root))
+    expect(overlayStack.ids()).toEqual([])
+    expect(active()).not.toBe($('.opener', root))
+  })
+
+  it('takes returnTo as a ref or getter, read at pop', () => {
+    const root = html('<button class="later">l</button><div class="panel" tabindex="-1"></div>')
+    let target: HTMLElement | null = null
+    overlayStack.push('a', { el: () => $('.panel', root), returnTo: () => target })
+    target = $('.later', root)
+    $('.panel', root).focus()
+    overlayStack.pop('a')
+    expect(active()).toBe($('.later', root))
+  })
+
+  it('knows whether a node is in an overlay stacked above a given element', () => {
+    const root = html('<div class="low"><i class="trap"></i></div><div class="mid"><i class="m"></i></div><div class="high"><i class="h"></i></div><i class="loose"></i>')
+    overlayStack.push('low', { el: () => $('.low', root) })
+    overlayStack.push('mid', { el: () => $('.mid', root) })
+    overlayStack.push('high', { el: () => $('.high', root) })
+    expect(overlayStack.isAbove($('.h', root), $('.mid', root))).toBe(true)
+    expect(overlayStack.isAbove($('.m', root), $('.mid', root))).toBe(false) // its own
+    expect(overlayStack.isAbove($('.m', root), $('.high', root))).toBe(false) // below
+    expect(overlayStack.isAbove($('.trap', root), $('.mid', root))).toBe(false)
+    expect(overlayStack.isAbove($('.loose', root), $('.low', root))).toBe(false)
+  })
+
   it('returns focus to an explicit returnTo element', () => {
     const root = html('<button class="opener">o</button><button class="other">x</button><div class="panel" tabindex="-1"></div>')
     $('.panel', root).focus()

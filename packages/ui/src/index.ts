@@ -13,6 +13,8 @@ export { default as Island, type IslandWhen } from './islands/Island.vue'
 export { useHead, type Head } from './head/useHead.ts'
 export { default as Icon } from './basics/Icon.vue'
 export {
+  arrow,
+  hide,
   ID_SCOPE,
   overlayStack,
   useControllable,
@@ -29,6 +31,8 @@ export {
   type FloatingOptions,
   type FocusTrapOptions,
   type IdScope,
+  type Middleware,
+  type MiddlewareData,
   type OverlayEntry,
   type Placement,
   type RovingFocus,

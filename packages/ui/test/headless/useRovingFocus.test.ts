@@ -147,6 +147,64 @@ describe('useRovingFocus', () => {
     scope.stop()
   })
 
+  it('counts indices over every item, disabled ones included, and only skips them when moving', () => {
+    const { q, api, scope } = setup({ orientation: 'horizontal' }, items(4, { 1: 'disabled' }))
+    api.focus(2)
+    expect(active()).toBe(q(2))
+    expect(api.active.value).toBe(2)
+    key('ArrowLeft')
+    expect(active()).toBe(q(0))
+    expect(api.active.value).toBe(0)
+    api.focus(1) // disabled: nothing happens
+    expect(active()).toBe(q(0))
+    scope.stop()
+  })
+
+  it('moves the tab stop without moving focus, for a selection the parent sets', () => {
+    const { q, api, root, scope } = setup({ orientation: 'horizontal' }, items(4, { 1: 'disabled' }))
+    const outside = html('<button class="elsewhere">x</button>')
+    $('.elsewhere', outside).focus()
+    api.setActive(3)
+    expect(api.active.value).toBe(3)
+    expect(tabindexes(root)).toEqual(['-1', '-1', '-1', '0'])
+    expect(active()).toBe($('.elsewhere', outside))
+    api.setActive(1) // disabled: the tab stop stays
+    expect(api.active.value).toBe(3)
+    expect(q(3).getAttribute('tabindex')).toBe('0')
+    scope.stop()
+  })
+
+  it('leaves the items of a group nested inside it to that group', () => {
+    const markup =
+      '<button data-weft-item class="i0">0</button>' +
+      '<div class="inner"><button data-weft-item class="n0">a</button><button data-weft-item class="n1">b</button></div>' +
+      '<button data-weft-item class="i1">1</button>'
+    const outer = setup({ orientation: 'horizontal' }, markup)
+    const inner = ref<HTMLElement | null>($('.inner', outer.root))
+    const innerScope = effectScope()
+    const innerApi = innerScope.run(() => useRovingFocus(inner, { orientation: 'vertical' }))!
+    expect(tabindexes(outer.root)).toEqual(['0', '0', '-1', '-1'])
+    outer.q(0).focus()
+    key('ArrowRight')
+    expect(active()).toBe(outer.q(1)) // over the nested group, not into it
+    $('.n0', outer.root).focus()
+    key('ArrowDown')
+    expect(active()).toBe($('.n1', outer.root))
+    key('ArrowRight') // the inner group's item: not the outer group's to move
+    expect(active()).toBe($('.n1', outer.root))
+    expect(outer.api.active.value).toBe(1)
+    expect(innerApi.active.value).toBe(1)
+    innerScope.stop()
+    outer.scope.stop()
+  })
+
+  it('marks its container while it runs', () => {
+    const { container, scope } = setup({ orientation: 'horizontal' })
+    expect(container.value!.hasAttribute('data-weft-roving')).toBe(true)
+    scope.stop()
+    expect(container.value!.hasAttribute('data-weft-roving')).toBe(false)
+  })
+
   it('focuses an item by index', () => {
     const { q, api, scope } = setup({ orientation: 'horizontal' })
     api.focus(2)
