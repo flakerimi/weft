@@ -52,7 +52,8 @@ fi
 name="weft_${os}_${arch}.tar.gz"
 url="$base/releases/$version"
 tmp=$(mktemp -d 2>/dev/null) || fail "could not create a temporary directory"
-trap 'rm -rf "$tmp"' EXIT INT TERM
+trap 'rm -rf "$tmp"' EXIT
+trap 'rm -rf "$tmp"; rm -f "$bin_dir/.weft.new"; exit 130' INT TERM
 
 curl -fsSL "$url/$name" -o "$tmp/$name" 2>/dev/null || fail "could not download $url/$name"
 curl -fsSL "$url/SHA256SUMS" -o "$tmp/SHA256SUMS" 2>/dev/null || fail "could not download $url/SHA256SUMS"
@@ -65,7 +66,7 @@ tar -xzf "$tmp/$name" -C "$tmp" weft 2>/dev/null || fail "could not unpack $name
 mkdir -p "$bin_dir" || fail "could not create $bin_dir"
 chmod 755 "$tmp/weft"
 # Copy beside the target, then rename: the old binary stays until the new one is complete.
-cp "$tmp/weft" "$bin_dir/.weft.new" || fail "could not write to $bin_dir"
+cp "$tmp/weft" "$bin_dir/.weft.new" || { rm -f "$bin_dir/.weft.new"; fail "could not write to $bin_dir"; }
 mv -f "$bin_dir/.weft.new" "$bin_dir/weft" || fail "could not write to $bin_dir"
 
 printf 'Installed weft %s to %s/weft\n' "$version" "$bin_dir"

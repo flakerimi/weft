@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { effectScope } from 'vue'
 import { detectInput, widthOf } from '../src/adaptive/detect.ts'
 import { fakeMedia } from './fake-media.ts'
 
@@ -16,6 +17,17 @@ describe('detectInput', () => {
     expect(input.value).toBe('touch')
     media.set('(pointer: coarse)', false)
     expect(input.value).toBe('pointer')
+  })
+})
+
+describe('detectInput cleanup', () => {
+  it('stops listening when its scope ends', () => {
+    const media = fakeMedia({ '(pointer: coarse)': false })
+    const scope = effectScope()
+    scope.run(() => detectInput(media.mq))
+    expect(media.listenerCount('(pointer: coarse)')).toBe(1)
+    scope.stop()
+    expect(media.listenerCount('(pointer: coarse)')).toBe(0)
   })
 })
 

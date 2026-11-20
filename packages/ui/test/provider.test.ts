@@ -40,6 +40,14 @@ describe('WeftProvider', () => {
     expect((el.querySelector('.inner') as HTMLElement).dataset.weftInput).toBe('touch')
   })
 
+  it('keeps live detection after the first component that used it unmounts', async () => {
+    mount(Bare).unmount()
+    const { el } = mount(Bare)
+    media.set('(pointer: coarse)', true)
+    await nextTick()
+    expect(probe(el).dataset.input).toBe('touch')
+  })
+
   it('defaults to the detected input and the app surface without a provider', () => {
     const { el } = mount(Bare)
     expect(probe(el).dataset.input).toBe('pointer')

@@ -1,22 +1,22 @@
 /* Optional: map Tailwind's theme names to Weft tokens. Import after a Weft theme. */
 @theme inline {
-  --color-bg: var(--weft-color-bg);
-  --color-surface: var(--weft-color-surface);
-  --color-surface-raised: var(--weft-color-surface-raised);
-  --color-border: var(--weft-color-border);
-  --color-text: var(--weft-color-text);
-  --color-text-muted: var(--weft-color-text-muted);
-  --color-primary: var(--weft-color-primary);
-  --color-primary-fg: var(--weft-color-primary-fg);
-  --color-primary-soft: var(--weft-color-primary-soft);
-  --color-danger: var(--weft-color-danger);
-  --color-warning: var(--weft-color-warning);
-  --color-success: var(--weft-color-success);
-  --color-info: var(--weft-color-info);
-  --color-focus: var(--weft-color-focus);
-  --radius-control: var(--weft-radius-control);
-  --radius-card: var(--weft-radius-card);
-  --radius-panel: var(--weft-radius-panel);
-  --font-sans: var(--weft-font-sans);
-  --font-mono: var(--weft-font-mono);
+  --color-bg: var(--weft-color-bg, Canvas);
+  --color-surface: var(--weft-color-surface, Canvas);
+  --color-surface-raised: var(--weft-color-surface-raised, Canvas);
+  --color-border: var(--weft-color-border, GrayText);
+  --color-text: var(--weft-color-text, CanvasText);
+  --color-text-muted: var(--weft-color-text-muted, GrayText);
+  --color-primary: var(--weft-color-primary, LinkText);
+  --color-primary-fg: var(--weft-color-primary-fg, Canvas);
+  --color-primary-soft: var(--weft-color-primary-soft, Canvas);
+  --color-danger: var(--weft-color-danger, LinkText);
+  --color-warning: var(--weft-color-warning, LinkText);
+  --color-success: var(--weft-color-success, LinkText);
+  --color-info: var(--weft-color-info, LinkText);
+  --color-focus: var(--weft-color-focus, Highlight);
+  --radius-control: var(--weft-radius-control, 8px);
+  --radius-card: var(--weft-radius-card, 12px);
+  --radius-panel: var(--weft-radius-panel, 16px);
+  --font-sans: var(--weft-font-sans, system-ui, sans-serif);
+  --font-mono: var(--weft-font-mono, ui-monospace, monospace);
 }

@@ -23,8 +23,29 @@ describe('themeToCss', () => {
   it('emits density for input and surface', () => {
     expect(css).toMatch(/\[data-weft-input="touch"\]\s*\{[^}]*--weft-control-height: 44px;/)
     expect(css).toMatch(/\[data-weft-input="pointer"\]\s*\{[^}]*--weft-control-height: 36px;/)
-    expect(css).toMatch(/\[data-weft-surface="landing"\]\s*\{[^}]*--weft-text-base: 18px;/)
-    expect(css).toMatch(/\[data-weft-surface="app"\]\s*\{[^}]*--weft-text-base: 14px;/)
+          })
+
+  it('sizes for touch from the media query when no provider says otherwise', () => {
+    expect(css).toMatch(
+      /@media \(pointer: coarse\) \{\s*:root:not\(\[data-weft-input\]\) \{[^}]*--weft-control-height: 44px;[^}]*--weft-hit-min: 44px;/,
+    )
+  })
+
+  it('sizes text in rem so the reader\'s browser text size still counts', () => {
+    expect(css).toMatch(/\[data-weft-surface="app"\]\s*\{[^}]*--weft-text-base: 0\.875rem;/)
+    expect(css).toMatch(/\[data-weft-surface="landing"\]\s*\{[^}]*--weft-text-base: 1\.125rem;/)
+  })
+
+  it.each([
+    ['font.weightBody', (t: Theme) => { delete (t.font as Partial<Theme['font']>).weightBody }],
+    ['space.8', (t: Theme) => { delete (t.space as Partial<Theme['space']>)[8] }],
+    ['radius.card', (t: Theme) => { delete (t.radius as Partial<Theme['radius']>).card }],
+    ['ease.standard', (t: Theme) => { delete (t.ease as Partial<Theme['ease']>).standard }],
+    ['motion', (t: Theme) => { delete (t as Partial<Theme>).motion }],
+  ])('rejects a theme missing %s', (path, remove) => {
+    const broken = structuredClone(neutral) as Theme
+    remove(broken)
+    expect(() => themeToCss(broken)).toThrow(`theme "neutral" is missing ${path}`)
   })
 
   it('rejects a theme with a missing colour', () => {

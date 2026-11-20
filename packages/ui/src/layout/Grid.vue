@@ -12,11 +12,17 @@ const props = withDefaults(defineProps<{ cols?: Cols; gap?: Gap }>(), {
 
 const root = useTemplateRef<HTMLElement>('root')
 const width = useWidth(root)
+const order = ['narrow', 'regular', 'wide'] as const
+const defaults = { narrow: 1, regular: 2, wide: 3 }
+// A partial object falls back to the nearest smaller width given, else the defaults.
 const count = computed(() => {
   if (typeof props.cols === 'number') return props.cols
   const c = props.cols
-  const fallback = { narrow: 1, regular: c.narrow ?? 2, wide: c.regular ?? 3 }
-  return c[width.value] ?? fallback[width.value]
+  for (let i = order.indexOf(width.value); i >= 0; i--) {
+    const n = c[order[i]!]
+    if (n !== undefined) return n
+  }
+  return defaults[width.value]
 })
 </script>
 

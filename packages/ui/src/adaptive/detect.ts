@@ -1,4 +1,4 @@
-import { readonly, ref, type Ref } from 'vue'
+import { effectScope, getCurrentScope, onScopeDispose, readonly, ref, type Ref } from 'vue'
 
 export type Input = 'pointer' | 'touch'
 export type Surface = 'landing' | 'app'
@@ -31,15 +31,19 @@ export function detectInput(mq: MatchMedia | undefined = currentMatchMedia()): R
   if (!mq) return readonly(input)
   const list = mq(COARSE)
   input.value = list.matches ? 'touch' : 'pointer'
-  list.addEventListener('change', (e) => {
+  const onChange = (e: { matches: boolean }) => {
     input.value = e.matches ? 'touch' : 'pointer'
-  })
+  }
+  list.addEventListener('change', onChange)
+  // Inside a component or effect scope, stop listening when it ends.
+  if (getCurrentScope()) onScopeDispose(() => list.removeEventListener('change', onChange))
   return readonly(input)
 }
 
 /** One detection shared by every consumer outside an explicit override. */
 export function sharedInput(): Readonly<Ref<Input>> {
-  shared ??= detectInput()
+  // Created outside any scope so it lives for the page, not for the first component that asked.
+  shared ??= effectScope(true).run(() => detectInput())!
   return shared
 }
 

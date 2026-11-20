@@ -4,7 +4,7 @@
 
 html {
   font-family: var(--weft-font-sans, system-ui, sans-serif);
-  font-size: var(--weft-text-base, 14px);
+  font-size: var(--weft-text-base, 0.875rem);
   font-weight: var(--weft-weight-body, 400);
   line-height: 1.5;
   color: var(--weft-color-text, CanvasText);
@@ -26,4 +26,4 @@ p { margin: 0; }
   *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; }
 }
 
-.weft-provider { display: contents; font-size: var(--weft-text-base, 14px); }
+.weft-provider { display: contents; font-size: var(--weft-text-base, 0.875rem); }

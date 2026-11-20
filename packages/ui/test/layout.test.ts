@@ -35,6 +35,14 @@ describe('Grid', () => {
     expect(g.dataset.width).toBe('wide')
     expect(g.style.getPropertyValue('--weft-grid-cols')).toBe('3')
   })
+  it('falls back to the nearest smaller width given', async () => {
+    const g = first('grid-partial', '.weft-grid')
+    for (const w of [500, 800, 1100]) {
+      ro.report(g, w)
+      await nextTick()
+      expect(g.style.getPropertyValue('--weft-grid-cols'), `${w}px`).toBe('2')
+    }
+  })
   it('keeps a fixed column count at every width', async () => {
     const g = first('grid-fixed', '.weft-grid')
     for (const w of [500, 800, 1100]) {

@@ -11,7 +11,8 @@ printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?$' || {
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
-go test ./...
+# The CLI and the serving package; the playground needs a web build and is not shipped.
+go test . ./cmd/weft
 
 out="site/releases/$version"
 mkdir -p "$out"

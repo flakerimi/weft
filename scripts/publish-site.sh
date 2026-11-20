@@ -8,12 +8,9 @@ cd "$root"
 
 scripts/release.sh "$version"
 
-# Stage only what the site serves: the page, the installer and this release.
+# Stage the page, the installer and every real release (a push replaces the whole site).
 stage=$(mktemp -d)
-cp site/index.html site/install "$stage/"
-mkdir -p "$stage/releases"
-cp -R "site/releases/$version" "$stage/releases/"
-printf '%s\n' "$version" >"$stage/releases/latest"
+scripts/stage-site.sh site "$stage" "$version"
 echo "publishing:"
 (cd "$stage" && find . -type f | sort)
 

@@ -8,6 +8,7 @@ defineProps<{ case: string }>()
   <Stack v-else-if="$props.case === 'stack-row'" direction="row" :gap="2" wrap align="center" justify="between"><i>a</i></Stack>
   <Grid v-else-if="$props.case === 'grid-default'"><i>a</i></Grid>
   <Grid v-else-if="$props.case === 'grid-fixed'" :cols="4"><i>a</i></Grid>
+  <Grid v-else-if="$props.case === 'grid-partial'" :cols="{ narrow: 2 }"><i>a</i></Grid>
   <Page v-else-if="$props.case === 'page'" title="Customers" description="Everyone who pays">
     <template #actions><button class="act">New</button></template>
     <p class="body">rows</p>
