@@ -1194,5 +1194,1091 @@
         ]
       }
     }
-  ]
+  ],
+  "side_experiments": {
+    "lcp_script_placement": {
+      "date": "2026-11-20",
+      "question": "Does where the Weft page loads its island script change its Lighthouse LCP?",
+      "method": "bench/tools/lcp-experiment.mjs: hand-edited copies of the built Weft page and the two Astro pages, all served by bench/static (GOMAXPROCS=1, gzip on the fly) on 127.0.0.1:4303; Lighthouse 5 mobile runs each, interleaved, with simulated (Lantern) and with DevTools throttling. lcp_breakdown_ms is Lighthouse's LCP breakdown insight, read from the trace Lighthouse recorded: unthrottled under simulate (only lcp_ms is simulated), throttled under devtools.",
+      "variants": {
+        "weft-as-built": {
+          "simulate": {
+            "runs": [
+              {
+                "score": 100,
+                "lcp_ms": 1201,
+                "fcp_ms": 600,
+                "tbt_ms": 7,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 4,
+                  "resourceLoadDelay": 33,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 22
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1201,
+                "fcp_ms": 600,
+                "tbt_ms": 4,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 2,
+                  "resourceLoadDelay": 32,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 33
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1202,
+                "fcp_ms": 601,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 3,
+                  "resourceLoadDelay": 25,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 31
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1202,
+                "fcp_ms": 601,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 4,
+                  "resourceLoadDelay": 27,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 32
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1201,
+                "fcp_ms": 601,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 1,
+                  "resourceLoadDelay": 20,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 30
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              }
+            ],
+            "lcp_ms": {
+              "median": 1201,
+              "min": 1201,
+              "max": 1202
+            }
+          },
+          "devtools": {
+            "runs": [
+              {
+                "score": 100,
+                "lcp_ms": 1637,
+                "fcp_ms": 666,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 95,
+                  "resourceLoadDuration": 970,
+                  "elementRenderDelay": 9
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1616,
+                "fcp_ms": 630,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 61,
+                  "resourceLoadDuration": 985,
+                  "elementRenderDelay": 7
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1636,
+                "fcp_ms": 667,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 564,
+                  "resourceLoadDelay": 95,
+                  "resourceLoadDuration": 963,
+                  "elementRenderDelay": 15
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1633,
+                "fcp_ms": 656,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 564,
+                  "resourceLoadDelay": 85,
+                  "resourceLoadDuration": 975,
+                  "elementRenderDelay": 9
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1625,
+                "fcp_ms": 662,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 91,
+                  "resourceLoadDuration": 955,
+                  "elementRenderDelay": 16
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              }
+            ],
+            "lcp_ms": {
+              "median": 1633,
+              "min": 1616,
+              "max": 1637
+            }
+          }
+        },
+        "weft-body-end": {
+          "simulate": {
+            "runs": [
+              {
+                "score": 100,
+                "lcp_ms": 1201,
+                "fcp_ms": 600,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 1,
+                  "resourceLoadDelay": 17,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 28
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1126,
+                "fcp_ms": 618,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 2,
+                  "resourceLoadDelay": 38,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 38
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1201,
+                "fcp_ms": 621,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 4,
+                  "resourceLoadDelay": 35,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 27
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1126,
+                "fcp_ms": 601,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 4,
+                  "resourceLoadDelay": 17,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 33
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1201,
+                "fcp_ms": 621,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 1,
+                  "resourceLoadDelay": 20,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 32
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              }
+            ],
+            "lcp_ms": {
+              "median": 1201,
+              "min": 1126,
+              "max": 1201
+            }
+          },
+          "devtools": {
+            "runs": [
+              {
+                "score": 100,
+                "lcp_ms": 1634,
+                "fcp_ms": 659,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 83,
+                  "resourceLoadDuration": 979,
+                  "elementRenderDelay": 8
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1630,
+                "fcp_ms": 650,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 564,
+                  "resourceLoadDelay": 68,
+                  "resourceLoadDuration": 983,
+                  "elementRenderDelay": 15
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1633,
+                "fcp_ms": 669,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 564,
+                  "resourceLoadDelay": 80,
+                  "resourceLoadDuration": 974,
+                  "elementRenderDelay": 15
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1612,
+                "fcp_ms": 656,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 68,
+                  "resourceLoadDuration": 972,
+                  "elementRenderDelay": 9
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1630,
+                "fcp_ms": 649,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 78,
+                  "resourceLoadDuration": 976,
+                  "elementRenderDelay": 13
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              }
+            ],
+            "lcp_ms": {
+              "median": 1630,
+              "min": 1612,
+              "max": 1634
+            }
+          }
+        },
+        "weft-idle-import": {
+          "simulate": {
+            "runs": [
+              {
+                "score": 100,
+                "lcp_ms": 1206,
+                "fcp_ms": 602,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 1,
+                  "resourceLoadDelay": 28,
+                  "resourceLoadDuration": 3,
+                  "elementRenderDelay": 28
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1204,
+                "fcp_ms": 601,
+                "tbt_ms": 6,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 1,
+                  "resourceLoadDelay": 32,
+                  "resourceLoadDuration": 3,
+                  "elementRenderDelay": 21
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1206,
+                "fcp_ms": 602,
+                "tbt_ms": 8,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 4,
+                  "resourceLoadDelay": 34,
+                  "resourceLoadDuration": 3,
+                  "elementRenderDelay": 29
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1206,
+                "fcp_ms": 623,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 4,
+                  "resourceLoadDelay": 39,
+                  "resourceLoadDuration": 3,
+                  "elementRenderDelay": 23
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1205,
+                "fcp_ms": 602,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 1,
+                  "resourceLoadDelay": 16,
+                  "resourceLoadDuration": 3,
+                  "elementRenderDelay": 29
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              }
+            ],
+            "lcp_ms": {
+              "median": 1206,
+              "min": 1204,
+              "max": 1206
+            }
+          },
+          "devtools": {
+            "runs": [
+              {
+                "score": 100,
+                "lcp_ms": 1696,
+                "fcp_ms": 674,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 95,
+                  "resourceLoadDuration": 1029,
+                  "elementRenderDelay": 9
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1666,
+                "fcp_ms": 642,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 71,
+                  "resourceLoadDuration": 1022,
+                  "elementRenderDelay": 9
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1673,
+                "fcp_ms": 651,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 564,
+                  "resourceLoadDelay": 78,
+                  "resourceLoadDuration": 1024,
+                  "elementRenderDelay": 8
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1696,
+                "fcp_ms": 674,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 97,
+                  "resourceLoadDuration": 1027,
+                  "elementRenderDelay": 8
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1679,
+                "fcp_ms": 653,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 81,
+                  "resourceLoadDuration": 1027,
+                  "elementRenderDelay": 7
+                },
+                "scripts": [
+                  "/assets/client-BoLWIoud.js",
+                  "/assets/Counter-Dm9Hrc4V.js"
+                ]
+              }
+            ],
+            "lcp_ms": {
+              "median": 1679,
+              "min": 1666,
+              "max": 1696
+            }
+          }
+        },
+        "weft-no-js": {
+          "simulate": {
+            "runs": [
+              {
+                "score": 100,
+                "lcp_ms": 750,
+                "fcp_ms": 600,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 2,
+                  "resourceLoadDelay": 19,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 26
+                },
+                "scripts": []
+              },
+              {
+                "score": 100,
+                "lcp_ms": 751,
+                "fcp_ms": 600,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 2,
+                  "resourceLoadDelay": 16,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 31
+                },
+                "scripts": []
+              },
+              {
+                "score": 100,
+                "lcp_ms": 751,
+                "fcp_ms": 600,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 4,
+                  "resourceLoadDelay": 17,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 30
+                },
+                "scripts": []
+              },
+              {
+                "score": 100,
+                "lcp_ms": 751,
+                "fcp_ms": 600,
+                "tbt_ms": 16,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 1,
+                  "resourceLoadDelay": 36,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 28
+                },
+                "scripts": []
+              },
+              {
+                "score": 100,
+                "lcp_ms": 751,
+                "fcp_ms": 600,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 1,
+                  "resourceLoadDelay": 29,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 24
+                },
+                "scripts": []
+              }
+            ],
+            "lcp_ms": {
+              "median": 751,
+              "min": 750,
+              "max": 751
+            }
+          },
+          "devtools": {
+            "runs": [
+              {
+                "score": 100,
+                "lcp_ms": 1532,
+                "fcp_ms": 644,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 61,
+                  "resourceLoadDuration": 899,
+                  "elementRenderDelay": 8
+                },
+                "scripts": []
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1548,
+                "fcp_ms": 660,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 564,
+                  "resourceLoadDelay": 80,
+                  "resourceLoadDuration": 896,
+                  "elementRenderDelay": 9
+                },
+                "scripts": []
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1561,
+                "fcp_ms": 663,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 82,
+                  "resourceLoadDuration": 896,
+                  "elementRenderDelay": 19
+                },
+                "scripts": []
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1546,
+                "fcp_ms": 657,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 564,
+                  "resourceLoadDelay": 73,
+                  "resourceLoadDuration": 900,
+                  "elementRenderDelay": 9
+                },
+                "scripts": []
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1545,
+                "fcp_ms": 657,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 77,
+                  "resourceLoadDuration": 896,
+                  "elementRenderDelay": 9
+                },
+                "scripts": []
+              }
+            ],
+            "lcp_ms": {
+              "median": 1546,
+              "min": 1532,
+              "max": 1561
+            }
+          }
+        },
+        "astro-vue": {
+          "simulate": {
+            "runs": [
+              {
+                "score": 100,
+                "lcp_ms": 1354,
+                "fcp_ms": 601,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 1,
+                  "resourceLoadDelay": 21,
+                  "resourceLoadDuration": 3,
+                  "elementRenderDelay": 21
+                },
+                "scripts": [
+                  "/_astro/Counter.Bq14vyBh.js",
+                  "/_astro/client.CqNZHXs6.js",
+                  "/_astro/runtime-core.esm-bundler.DSCEjuOH.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1354,
+                "fcp_ms": 601,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 4,
+                  "resourceLoadDelay": 21,
+                  "resourceLoadDuration": 3,
+                  "elementRenderDelay": 24
+                },
+                "scripts": [
+                  "/_astro/Counter.Bq14vyBh.js",
+                  "/_astro/client.CqNZHXs6.js",
+                  "/_astro/runtime-core.esm-bundler.DSCEjuOH.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1356,
+                "fcp_ms": 602,
+                "tbt_ms": 26,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 4,
+                  "resourceLoadDelay": 39,
+                  "resourceLoadDuration": 3,
+                  "elementRenderDelay": 31
+                },
+                "scripts": [
+                  "/_astro/Counter.Bq14vyBh.js",
+                  "/_astro/client.CqNZHXs6.js",
+                  "/_astro/runtime-core.esm-bundler.DSCEjuOH.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1353,
+                "fcp_ms": 601,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 2,
+                  "resourceLoadDelay": 20,
+                  "resourceLoadDuration": 3,
+                  "elementRenderDelay": 36
+                },
+                "scripts": [
+                  "/_astro/Counter.Bq14vyBh.js",
+                  "/_astro/client.CqNZHXs6.js",
+                  "/_astro/runtime-core.esm-bundler.DSCEjuOH.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1353,
+                "fcp_ms": 601,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 2,
+                  "resourceLoadDelay": 28,
+                  "resourceLoadDuration": 3,
+                  "elementRenderDelay": 27
+                },
+                "scripts": [
+                  "/_astro/Counter.Bq14vyBh.js",
+                  "/_astro/client.CqNZHXs6.js",
+                  "/_astro/runtime-core.esm-bundler.DSCEjuOH.js"
+                ]
+              }
+            ],
+            "lcp_ms": {
+              "median": 1354,
+              "min": 1353,
+              "max": 1356
+            }
+          },
+          "devtools": {
+            "runs": [
+              {
+                "score": 100,
+                "lcp_ms": 1592,
+                "fcp_ms": 661,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 89,
+                  "resourceLoadDuration": 931,
+                  "elementRenderDelay": 8
+                },
+                "scripts": [
+                  "/_astro/Counter.Bq14vyBh.js",
+                  "/_astro/client.CqNZHXs6.js",
+                  "/_astro/runtime-core.esm-bundler.DSCEjuOH.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1582,
+                "fcp_ms": 672,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 83,
+                  "resourceLoadDuration": 927,
+                  "elementRenderDelay": 8
+                },
+                "scripts": [
+                  "/_astro/Counter.Bq14vyBh.js",
+                  "/_astro/client.CqNZHXs6.js",
+                  "/_astro/runtime-core.esm-bundler.DSCEjuOH.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1580,
+                "fcp_ms": 668,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 80,
+                  "resourceLoadDuration": 929,
+                  "elementRenderDelay": 8
+                },
+                "scripts": [
+                  "/_astro/Counter.Bq14vyBh.js",
+                  "/_astro/client.CqNZHXs6.js",
+                  "/_astro/runtime-core.esm-bundler.DSCEjuOH.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1598,
+                "fcp_ms": 680,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 564,
+                  "resourceLoadDelay": 95,
+                  "resourceLoadDuration": 931,
+                  "elementRenderDelay": 8
+                },
+                "scripts": [
+                  "/_astro/Counter.Bq14vyBh.js",
+                  "/_astro/client.CqNZHXs6.js",
+                  "/_astro/runtime-core.esm-bundler.DSCEjuOH.js"
+                ]
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1565,
+                "fcp_ms": 634,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 51,
+                  "resourceLoadDuration": 931,
+                  "elementRenderDelay": 20
+                },
+                "scripts": [
+                  "/_astro/Counter.Bq14vyBh.js",
+                  "/_astro/client.CqNZHXs6.js",
+                  "/_astro/runtime-core.esm-bundler.DSCEjuOH.js"
+                ]
+              }
+            ],
+            "lcp_ms": {
+              "median": 1582,
+              "min": 1565,
+              "max": 1598
+            }
+          }
+        },
+        "astro-plain": {
+          "simulate": {
+            "runs": [
+              {
+                "score": 100,
+                "lcp_ms": 751,
+                "fcp_ms": 600,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 1,
+                  "resourceLoadDelay": 18,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 25
+                },
+                "scripts": []
+              },
+              {
+                "score": 100,
+                "lcp_ms": 751,
+                "fcp_ms": 600,
+                "tbt_ms": 27,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 4,
+                  "resourceLoadDelay": 38,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 31
+                },
+                "scripts": []
+              },
+              {
+                "score": 100,
+                "lcp_ms": 751,
+                "fcp_ms": 600,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 4,
+                  "resourceLoadDelay": 23,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 23
+                },
+                "scripts": []
+              },
+              {
+                "score": 100,
+                "lcp_ms": 751,
+                "fcp_ms": 600,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 1,
+                  "resourceLoadDelay": 24,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 25
+                },
+                "scripts": []
+              },
+              {
+                "score": 100,
+                "lcp_ms": 751,
+                "fcp_ms": 600,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 2,
+                  "resourceLoadDelay": 21,
+                  "resourceLoadDuration": 1,
+                  "elementRenderDelay": 34
+                },
+                "scripts": []
+              }
+            ],
+            "lcp_ms": {
+              "median": 751,
+              "min": 751,
+              "max": 751
+            }
+          },
+          "devtools": {
+            "runs": [
+              {
+                "score": 100,
+                "lcp_ms": 1543,
+                "fcp_ms": 655,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 72,
+                  "resourceLoadDuration": 899,
+                  "elementRenderDelay": 9
+                },
+                "scripts": []
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1561,
+                "fcp_ms": 661,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 564,
+                  "resourceLoadDelay": 88,
+                  "resourceLoadDuration": 901,
+                  "elementRenderDelay": 9
+                },
+                "scripts": []
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1521,
+                "fcp_ms": 635,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 56,
+                  "resourceLoadDuration": 894,
+                  "elementRenderDelay": 8
+                },
+                "scripts": []
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1554,
+                "fcp_ms": 656,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 85,
+                  "resourceLoadDuration": 898,
+                  "elementRenderDelay": 8
+                },
+                "scripts": []
+              },
+              {
+                "score": 100,
+                "lcp_ms": 1541,
+                "fcp_ms": 643,
+                "tbt_ms": 0,
+                "lcp_breakdown_ms": {
+                  "timeToFirstByte": 563,
+                  "resourceLoadDelay": 70,
+                  "resourceLoadDuration": 899,
+                  "elementRenderDelay": 9
+                },
+                "scripts": []
+              }
+            ],
+            "lcp_ms": {
+              "median": 1543,
+              "min": 1521,
+              "max": 1561
+            }
+          }
+        }
+      }
+    }
+  },
+  "weft_html_breakdown": {
+    "file": "bench/weft/dist/pages/index/index.html",
+    "html": {
+      "raw": 13277,
+      "br": 2953
+    },
+    "inline_css": {
+      "raw": 7989,
+      "br_alone": 1829,
+      "br_share": 1798,
+      "method": "raw: UTF-8 bytes of the <style> element's content. br_alone: that CSS compressed on its own. br_share: the page's brotli size minus the brotli size of the page with the CSS removed."
+    },
+    "hydration_markers": {
+      "kinds": {
+        "<!--[-->": {
+          "count": 23,
+          "bytes": 184
+        },
+        "<!--{-->": {
+          "count": 8,
+          "bytes": 64
+        },
+        "<!--]-->": {
+          "count": 23,
+          "bytes": 184
+        },
+        "<!--}-->": {
+          "count": 8,
+          "bytes": 64
+        },
+        "<!---->": {
+          "count": 18,
+          "bytes": 126
+        }
+      },
+      "all": {
+        "count": 80,
+        "bytes": 622
+      },
+      "outside_islands": {
+        "count": 80,
+        "bytes": 622,
+        "br_share": 53
+      },
+      "method": "Every match of /<!--(\\[|\\]|\\{|\\}|)-->/ in the page: <!--[--> <!--]--> <!--{--> <!--}--> <!---->. outside_islands leaves out those inside <weft-island>...</weft-island>; br_share is the page's brotli size minus that of the page with those removed."
+    }
+  }
 }
