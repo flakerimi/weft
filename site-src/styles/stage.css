@@ -5,6 +5,8 @@
    ground the page's <html> would. It is as tall as the example, and at
    least 240 px: no large empty box. */
 .gallery-stage {
+  /* The site's raised surface, read here, outside the canvas's own theme. */
+  --site-stage: var(--weft-color-surface-raised);
   border: 1px solid var(--weft-color-border);
   border-radius: 16px;
   background: var(--weft-color-surface-raised);
@@ -46,6 +48,9 @@
   color: var(--weft-color-text);
   background: var(--weft-color-bg);
 }
+/* Following the page's scheme, it is the site's surface; with a scheme of
+   its own, its theme's ground. */
+.gallery-canvas:not([data-weft-scheme]) { background: var(--site-stage); }
 /* At a device's width it is a framed box on the stage. */
 .gallery-canvas[data-width] { margin-block: 20px; border: 1px solid var(--weft-color-border); border-radius: 12px; }
 .gallery-example { display: grid; justify-items: center; }

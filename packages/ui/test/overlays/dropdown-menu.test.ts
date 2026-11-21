@@ -419,6 +419,17 @@ describe('DropdownMenu with :portal="false"', () => {
     expect(locked()).toBe(false)
   })
 
+  it('in place and not yet positioned, sizes to its items, not to the narrow cell it hangs from', () => {
+    const unstyle = loadStyles()
+    try {
+      const rule = ruleFor('[data-in-place][data-form="floating"]')!
+      expect(rule.style.position).toBe('absolute')
+      expect(rule.style.inlineSize).toBe('max-content')
+    } finally {
+      unstyle()
+    }
+  })
+
   it('starts open in place when it starts open', async () => {
     const m = mount(InPlaceMenu, { defaultOpen: true })
     unmount = m.unmount

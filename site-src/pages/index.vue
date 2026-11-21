@@ -72,9 +72,9 @@ const known = new Set(components.map((c) => c.name))
 const scenes: { id: string; title: string; scene: Component; uses: string[] }[] = [
   { id: 'settings', title: 'Settings', scene: Settings, uses: ['Form', 'FormField', 'Input', 'Select', 'RadioGroup', 'Switch', 'Button'] },
   { id: 'search', title: 'Search anything', scene: Search, uses: ['CommandPalette', 'Kbd'] },
-  { id: 'window', title: 'Maintenance window', scene: Window, uses: ['DateRangePicker', 'Calendar'] },
+  { id: 'window', title: 'Maintenance window', scene: Window, uses: ['DateRangePicker', 'Calendar', 'Popover'] },
   { id: 'activity', title: 'Activity', scene: Activity, uses: ['Timeline', 'Avatar'] },
-  { id: 'restore', title: 'Restore', scene: Restore, uses: ['FileUpload', 'Progress', 'Toast'] },
+  { id: 'restore', title: 'Restore', scene: Restore, uses: ['FileUpload', 'Stack', 'Icon', 'Progress', 'Toast', 'Button'] },
 ]
 for (const s of scenes) {
   for (const name of s.uses) if (!known.has(name)) throw new Error(`landing: the ${s.title} scene names ${name}, which catalog/components.json does not have; name a component it has.`)

@@ -104,6 +104,7 @@ const more = computed(() => {
       <div
         class="gallery-canvas"
         data-weft-no-prefetch
+        data-site-picture
         :data-theme="view.theme"
         :data-weft-scheme="view.scheme"
         :data-width="view.width"

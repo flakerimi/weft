@@ -22,8 +22,8 @@ export const devices: Device[] = [
   { id: 'morina', name: 'Morina D.', port: '1/4/3', signal: '−20.7 dBm', status: 'online' },
 ]
 
-/** The device whose menu the pictures draw open. */
-export const opened = 'berisha'
+/** The device whose menu the pictures draw open: the one that is offline. */
+export const opened = 'gashi'
 
 export const statusOf: Record<Device['status'], { label: string; tone: Tone }> = {
   online: { label: 'Online', tone: 'success' },

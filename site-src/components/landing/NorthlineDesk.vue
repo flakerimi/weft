@@ -23,7 +23,7 @@ import DeviceTable from './DeviceTable.vue'
       <div class="northline__stats">
         <StatCard label="Online" :value="1284" :delta="12" description="today" />
         <StatCard label="Offline" :value="17" :delta="3" invert description="today" />
-        <StatCard label="Downstream" value="412 Mb/s" :delta="0.8" delta-unit="%" description="this hour" />
+        <StatCard label="Mb/s down" :value="412" :delta="0.8" delta-unit="%" description="this hour" />
       </div>
       <DeviceTable />
     </div>

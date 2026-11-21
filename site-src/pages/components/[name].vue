@@ -136,7 +136,7 @@ const codeId = (example: string) => `code-${example}`
           <h2 id="examples">More examples</h2>
           <article v-for="e in more" :key="e.name" class="gallery-more" :aria-labelledby="`example-${e.name}`">
             <h3 :id="`example-${e.name}`">{{ e.title }}</h3>
-            <div class="gallery-preview" data-weft-no-prefetch :data-example="e.file">
+            <div class="gallery-preview" data-weft-no-prefetch data-site-picture :data-example="e.file">
               <Island v-if="e.interactive" when="visible" :component="e.island" />
               <WeftProvider v-else inset><component :is="e.component" /></WeftProvider>
             </div>

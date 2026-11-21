@@ -541,9 +541,9 @@ func TestLandingScreens(t *testing.T) {
 	}{
 		{"Settings", []string{"Form", "FormField", "Input", "Select", "RadioGroup", "Switch", "Button"}, `class="weft-switch`},
 		{"Search anything", []string{"CommandPalette", "Kbd"}, "<mark>"},
-		{"Maintenance window", []string{"DateRangePicker", "Calendar"}, `class="weft-calendar`},
-		{"Activity", []string{"Timeline", "Avatar"}, `class="weft-avatar`},
-		{"Restore", []string{"FileUpload", "Progress", "Toast"}, `class="weft-toast`},
+		{"Maintenance window", []string{"DateRangePicker", "Calendar", "Popover"}, `data-in-place="bottom-start"`},
+		{"Activity", []string{"Timeline", "Avatar"}, `<span class="weft-avatar__initials" aria-hidden="true">!</span>`},
+		{"Restore", []string{"FileUpload", "Stack", "Icon", "Progress", "Toast", "Button"}, `class="weft-toast`},
 	} {
 		at := strings.Index(screens, `<strong>`+s.scene+`</strong>`)
 		if at == -1 {
@@ -558,6 +558,10 @@ func TestLandingScreens(t *testing.T) {
 		}
 		if !strings.Contains(picture, s.must) {
 			t.Errorf("%s: the picture has no %s", s.scene, s.must)
+		}
+		// Drawn by the components alone: no part of it is the site's own markup.
+		if own := regexp.MustCompile(`class="scene-[a-z]+__[a-z-]+"`).FindString(picture); own != "" {
+			t.Errorf("%s: part of the picture is drawn by the site (%s), not by a component", s.scene, own)
 		}
 		caption := element(tile, `<figcaption`)
 		for _, name := range s.components {

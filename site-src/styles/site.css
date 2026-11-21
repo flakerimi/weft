@@ -9,9 +9,9 @@
   font-optical-sizing: auto;
   background: var(--weft-color-bg);
 }
-/* Headings are a little narrower and tighter than text (Bricolage's width
-   axis), except in a picture of a component, which keeps its own look. */
-.site :is(h1, h2):not([data-weft-no-prefetch] *) { font-stretch: 90%; letter-spacing: -0.03em; }
+/* Headings are set tighter than text, except in a picture of a component
+   (data-site-picture), which keeps its own look. */
+.site :is(h1, h2, h3):not([data-site-picture] *) { letter-spacing: -0.03em; }
 /* Skip to the content: off screen until the keyboard reaches it. */
 .site-skip { position: absolute; inset-inline-start: 16px; inset-block-start: -64px; z-index: 50; padding: 8px 16px; border-radius: var(--weft-radius-control); background: var(--weft-color-surface); }
 .site-skip:focus { inset-block-start: 8px; }
