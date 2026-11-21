@@ -370,3 +370,17 @@ describe('docs frontmatter', () => {
     expect(() => parseDocs(text, f)).toThrow(sentence)
   })
 })
+
+// The skills and the docs say how many components there are; the number is
+// the catalogue's, so a component added or taken away must change them too.
+describe('the component count in the skills and docs', () => {
+  it('is the number of components in the catalogue', () => {
+    const catalog = JSON.parse(readFileSync(join(repo, CATALOG_FILE), 'utf8')) as Catalog
+    const files = ['skills/weft-components/SKILL.md', 'site-src/content/docs/index.md']
+    for (const file of files) {
+      const counts = [...readFileSync(join(repo, file), 'utf8').matchAll(/\b(\d+) (?:Vapor |Vue )?components\b/g)].map((m) => Number(m[1]))
+      expect(counts.length, `${file} gives no count`).toBeGreaterThan(0)
+      for (const n of counts) expect(n, file).toBe(catalog.components.length)
+    }
+  })
+})

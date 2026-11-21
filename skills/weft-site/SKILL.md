@@ -49,7 +49,7 @@ To add a site:
 | `pages/about.vue` | `/about` |
 | `pages/blog/index.vue` | `/blog` |
 | `pages/notes/[slug].vue` | `/notes/<slug>`, one page per value |
-| `pages/docs/[...slug].vue` | `/docs` and every path under it |
+| `pages/docs/[...slug].vue` | `/docs` and the paths under it that its `getPaths()` returns, slashes included; any other is the 404 page |
 | `pages/404.vue` | every path with no page, with status 404 |
 
 Names starting with `_` or `.` are skipped. A page is a Vapor component:
@@ -118,6 +118,7 @@ export default { docs: { schema: { section: 'string?' } } } satisfies ContentCon
 - A collection takes `base`, the route it is served at (default `/<name>`).
 - It also takes `dir`, a folder outside `content/` such as `../skills`.
 - `index` names the file that is its folder's page, such as `SKILL.md`.
+- A collection's folder holds only pages and their images; any other file fails the build. So a skill kept as a collection (`skills/<name>/SKILL.md`) cannot carry supporting files, such as scripts or templates, beside it yet.
 - `titleField` reads the title from another field, such as `name`.
 
 Pages read the content on the server only, from `virtual:weft/content`:

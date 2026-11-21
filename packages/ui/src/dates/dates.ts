@@ -118,14 +118,18 @@ export function formatter(locale: string, options: Intl.DateTimeFormatOptions): 
 export const utc = (date: CalendarDate) => date.toDate('UTC')
 export const format = (date: CalendarDate, locale: string, options: Intl.DateTimeFormatOptions) =>
   formatter(locale, options).format(utc(date))
+/** A thin, narrow or no-break space next to a range's dash. */
+const RANGE_SPACE = /[\u00a0\u2009\u202f](?=[\u2013\u2014-])|(?<=[\u2013\u2014-])[\u00a0\u2009\u202f]/g
 /**
  * Two dates as one range, "December 2026 – January 2027". ICU versions differ
  * in the spaces round the dash (Node's newer one writes thin spaces, a
- * browser's may write plain ones), and the server's text must be the
- * browser's for hydration to match, so they are plain spaces here.
+ * browser's may write plain or no-break ones), and the server's text must be
+ * the browser's for hydration to match, so a space next to the dash (en,
+ * em or hyphen), thin, narrow or no-break, is a plain one here. The
+ * no-break spaces inside each date, which keep "1 déc." whole, stay.
  */
 export const formatRange = (locale: string, options: Intl.DateTimeFormatOptions, start: CalendarDate, end: CalendarDate) =>
-  formatter(locale, options).formatRange(utc(start), utc(end)).replace(/[\u2009\u202f]/g, ' ')
+  formatter(locale, options).formatRange(utc(start), utc(end)).replace(RANGE_SPACE, ' ')
 
 export function weekdays(locale: string, first?: DayOfWeek): { short: string; narrow: string; long: string }[] {
   const start = startOfWeek(new CalendarDate(2026, 1, 7), locale, first)

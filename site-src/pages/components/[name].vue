@@ -93,7 +93,7 @@ const codeId = (example: string) => `code-${example}`
                 <tr v-for="p in c.props" :key="p.name">
                   <th scope="row"><code>{{ p.name }}</code><span v-if="p.required" class="gallery-required"> required</span></th>
                   <td><code>{{ p.type }}</code></td>
-                  <td><code v-if="p.default !== null">{{ p.default }}</code><span v-else aria-label="none">—</span></td>
+                  <td><code v-if="p.default !== null">{{ p.default }}</code><template v-else><span aria-hidden="true">—</span><span class="weft-visually-hidden">none</span></template></td>
                   <td v-html="inlineHTML(p.description)" />
                 </tr>
               </tbody>
@@ -109,7 +109,7 @@ const codeId = (example: string) => `code-${example}`
                   <th scope="row"><code>{{ s.name }}</code><span v-if="s.dynamic"> (dynamic)</span></th>
                   <td>
                     <template v-if="s.props.length"><code v-for="sp in s.props" :key="sp.name">{{ sp.name }}: {{ sp.type }}</code></template>
-                    <span v-else aria-label="none">—</span>
+                    <template v-else><span aria-hidden="true">—</span><span class="weft-visually-hidden">none</span></template>
                   </td>
                 </tr>
               </tbody>

@@ -181,7 +181,7 @@ const fail = (file: string, line: number, why: string): never => {
  * way. External links are left as they are and never fetched.
  */
 export async function loadContent(root: string, config: unknown): Promise<Content> {
-  const collections = readConfig(config)
+  const collections = readConfig(config, root)
   const dir = join(root, 'content')
   const found = existsSync(dir) ? await readdir(dir, { withFileTypes: true }) : []
   const visible = found.filter((e) => !e.name.startsWith('.') && !e.name.startsWith('_'))
@@ -293,7 +293,7 @@ function linkTo(page: Page): ContentLink {
 }
 
 /** The collections `config` declares, with their bases and whole schemas; a config it cannot read is refused. */
-function readConfig(config: unknown): Map<string, Collection> {
+function readConfig(config: unknown, root: string): Map<string, Collection> {
   const out = new Map<string, Collection>()
   if (config === undefined) return out
   const plain = (v: unknown): v is Record<string, unknown> =>
@@ -317,7 +317,7 @@ function readConfig(config: unknown): Map<string, Collection> {
     const other = bases.get(base)
     if (other) throw new Error(`content.config.ts: the ${other} and ${name} collections both have the base ${base}; give each its own.`)
     bases.set(base, name)
-    const dir = readDir(value.dir, name, why)
+    const dir = readDir(value.dir, name, why, root)
     for (const c of out.values()) {
       if (dir === c.dir || dir.startsWith(c.dir + '/') || c.dir.startsWith(dir + '/')) {
         throw new Error(`content.config.ts: the ${c.name} and ${name} collections' folders, ${c.dir} and ${dir}, overlap; give each a folder of its own.`)
@@ -340,7 +340,7 @@ function readConfig(config: unknown): Map<string, Collection> {
       if (!plain(value.schema)) throw new Error(`${why}'s schema is not an object of fields, like { section: 'string' }.`)
       for (const [field, type] of Object.entries(value.schema)) {
         if (field === 'title' && titleField !== 'title') throw new Error(`${why}'s schema names title, which is the page's title; leave it out.`)
-        if (field in fields) throw new Error(`${why}'s schema names ${field}, which every collection has; leave it out.`)
+        if (Object.hasOwn(fields, field)) throw new Error(`${why}'s schema names ${field}, which every collection has; leave it out.`)
         if (typeof type !== 'string' || !FIELD_TYPES.includes(type.replace(/\?$/, ''))) {
           throw new Error(
             `${why}'s schema gives ${field} the type ${JSON.stringify(type)}; use string, number, boolean or string[], with ? when optional.`,
@@ -357,14 +357,19 @@ function readConfig(config: unknown): Map<string, Collection> {
   return out
 }
 
-/** A collection's folder as its config gives it, made plain (`./x/../y` is `y`), or refused in a sentence. */
-function readDir(value: unknown, name: string, why: string): string {
+/**
+ * A collection's folder as its config gives it, from the site root `root`,
+ * or refused in a sentence. It is judged by where it is, not how it is
+ * written: `../site-src` from a site in site-src/ is the site itself, and
+ * `x/../y` is `y`.
+ */
+function readDir(value: unknown, name: string, why: string, root: string): string {
   if (value === undefined) return `content/${name}`
   if (typeof value !== 'string' || value === '' || value.startsWith('/') || /^[a-z]:/i.test(value) || /[\\\0]/.test(value)) {
     throw new Error(`${why}'s dir is ${JSON.stringify(value)}; give a folder from the site root, like ../skills, with / between names.`)
   }
-  const dir = posix.normalize(value).replace(/\/$/, '')
-  if (dir.split('/').every((s) => s === '..' || s === '.')) {
+  const dir = relative(root, resolve(root, value)).split(sep).join('/')
+  if (dir === '' || dir.split('/').every((s) => s === '..')) {
     throw new Error(`${why}'s dir ${JSON.stringify(value)} holds the site itself; give a folder beside it or under it.`)
   }
   if (dir === 'content' || dir.startsWith('content/')) {
@@ -508,7 +513,7 @@ function readFrontmatter(text: string, file: string, collection: Collection): { 
     }
   }
   for (const [field, { optional }] of collection.schema) {
-    if (!optional && !(field in out)) fail(file, 1, `the frontmatter has no ${field}, which every page of the ${name} collection needs.`)
+    if (!optional && !Object.hasOwn(out, field)) fail(file, 1, `the frontmatter has no ${field}, which every page of the ${name} collection needs.`)
   }
   if (collection.titleField !== 'title') out.title = out[collection.titleField]
   return { frontmatter: out as Frontmatter, body }
@@ -607,6 +612,11 @@ function checkLinks(
       if (!collection) continue
       const slug = collection.base === '/' ? path.slice(1) : path.slice(collection.base.length + 1)
       const target = collection.pages.find((p) => p.slug === slug)
+      if (!target && slug === '') {
+        // The collection's own path, with no index page: a page of the site may be it, as pages/skills/index.vue is /skills.
+        if (sitePageAt(root, collection.base)) continue
+        fail(file, line, `the link to ${href} leads to no page; the ${collection.name} collection has no index page, and the site no page at ${collection.base}.`)
+      }
       if (!target) fail(file, line, `the link to ${href} leads to no page; the ${collection.name} collection has no page ${slug}.`)
       checkHash(line, href, target!, hash)
     } else {
@@ -621,6 +631,12 @@ function checkLinks(
       token.attrSet('href', target!.path + query + (hashAt === -1 ? '' : raw.slice(hashAt)))
     }
   }
+}
+
+/** Whether the site has a page of its own at `path`: `pages/<path>.vue` or `pages/<path>/index.vue`. */
+function sitePageAt(root: string, path: string): boolean {
+  const at = join(root, 'pages', ...path.split('/').filter(Boolean))
+  return path === '/' ? existsSync(join(at, 'index.vue')) : existsSync(at + '.vue') || existsSync(join(at, 'index.vue'))
 }
 
 /** The page's HTML in parts, cut at each top-level code block marked copy. */

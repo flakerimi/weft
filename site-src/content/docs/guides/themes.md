@@ -33,7 +33,8 @@ Every value a component draws with is a `--weft-*` custom property:
 | `--weft-color-bg`, `-surface`, `-surface-raised`, `-border` | The page, cards and raised panels, and lines |
 | `--weft-color-text`, `-text-muted` | Text |
 | `--weft-color-primary`, `-danger`, `-warning`, `-success`, `-info` | The four tones, info, and `-focus` for focus rings |
-| `--weft-space-1` to `-8`, `--weft-radius-control`, `-card`, `-panel` | Spacing and corners |
+| `--weft-color-primary-soft` | A pale ground of the primary, under selected table rows and tree items |
+| `--weft-space-1`, `-2`, `-3`, `-4`, `-6`, `-8` (no 5 or 7), `--weft-radius-control`, `-card`, `-panel` | Spacing and corners |
 | `--weft-control-sm`, `-md`, `-lg` | The drawn height of controls |
 | `--weft-font-sans`, `-mono`, `--weft-weight-body`, `-heading`, `-title` | Type |
 | `--weft-duration-*`, `--weft-ease-*` | Motion |

@@ -424,6 +424,16 @@ describe('collections', () => {
     )
   })
 
+  it('takes a schema field named as an Object.prototype property, such as constructor', async () => {
+    const root = siteWith({ 'content/docs/intro.md': page('Intro', '', 'constructor: Ada\n') })
+    const content = await loadContent(root, { docs: { schema: { constructor: 'string', toString: 'string?' } } })
+    expect(content.page('docs', 'intro').frontmatter.constructor).toBe('Ada')
+    // Required, and missing: the page has no constructor of its own.
+    expect(await failure({ 'content/docs/intro.md': page('Intro') }, { docs: { schema: { constructor: 'string' } } })).toBe(
+      'content/docs/intro.md:1: the frontmatter has no constructor, which every page of the docs collection needs.',
+    )
+  })
+
   it('refuse a config that is not a set of collections, or a schema it cannot read', async () => {
     await expect(loadContent(siteWith({ 'content/docs/intro.md': page('A') }), undefined)).rejects.toThrow(
       new Error(
@@ -472,6 +482,19 @@ describe('a collection in a folder of its own', () => {
     expect(site.frontmatter).toEqual({ name: 'weft-site', description: 'Use when weft-site is the job.', title: 'weft-site' })
     expect(site.html).toContain('<a href="/skills/weft-go#serve">Go</a>')
     expect(content.page('docs', '').html).toContain('<a href="/skills/weft-site">the site skill</a>')
+  })
+
+  it('takes a link to the collection\'s own path when a page of the site serves it, and refuses it when none does', async () => {
+    const files = {
+      'site/content/docs/index.md': page('Docs', 'Install them as [the skills page](/skills) shows.\n'),
+      'skills/weft-go/SKILL.md': skill('weft-go'),
+    }
+    // The skills collection has no page of its own at /skills; the site's pages/skills/index.vue is it.
+    const content = await loadContent(withSkills({ ...files, 'site/pages/skills/index.vue': '<template><p /></template>\n' }), skills)
+    expect(content.page('docs', '').html).toContain('<a href="/skills">the skills page</a>')
+    await expect(loadContent(withSkills(files), skills)).rejects.toThrow(
+      new Error('content/docs/index.md:5: the link to /skills leads to no page; the skills collection has no index page, and the site no page at /skills.'),
+    )
   })
 
   it('gives each page its file\'s text as it is on disk', async () => {
@@ -526,6 +549,24 @@ describe('a collection in a folder of its own', () => {
     )
     expect(await why({ dir: 'content/docs/skills' })).toBe(
       'content.config.ts: the skills collection\'s dir is under content/, where each folder is the collection of its name; leave dir out, or give a folder outside content/.',
+    )
+    // Judged by where the folder is, not how it is written: the site's own folder by name, a collection's folder by another path.
+    const inSite = async (config: unknown) => {
+      try {
+        await loadContent(join(siteWith({ 'site-src/content/docs/intro.md': page('A') }), 'site-src'), config)
+      } catch (e) {
+        return (e as Error).message
+      }
+      throw new Error('loadContent did not fail')
+    }
+    expect(await inSite({ docs: {}, skills: { dir: '../site-src' } })).toBe(
+      'content.config.ts: the skills collection\'s dir "../site-src" holds the site itself; give a folder beside it or under it.',
+    )
+    expect(await inSite({ docs: {}, skills: { dir: '../site-src/content/docs/skills' } })).toBe(
+      'content.config.ts: the skills collection\'s dir is under content/, where each folder is the collection of its name; leave dir out, or give a folder outside content/.',
+    )
+    expect(await inSite({ docs: { dir: '../notes' }, skills: { dir: '../site-src/../notes/skills' } })).toBe(
+      'content.config.ts: the docs and skills collections\' folders, ../notes and ../notes/skills, overlap; give each a folder of its own.',
     )
     expect(await failure(one, { docs: { dir: '../notes' }, skills: { dir: '../notes/skills' } })).toBe(
       'content.config.ts: the docs and skills collections\' folders, ../notes and ../notes/skills, overlap; give each a folder of its own.',

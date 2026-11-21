@@ -63,7 +63,7 @@ const canvasStyle = computed(() => (view.value.width ? { inlineSize: `${view.val
 
 <template>
   <section class="gallery-stage" :aria-label="`${component} preview`">
-    <div class="gallery-toolbar" :inert="!mounted" :data-ready="mounted ? 'true' : undefined">
+    <div class="gallery-toolbar" role="group" aria-label="Preview settings" :inert="!mounted" :data-ready="mounted ? 'true' : undefined">
       <div class="gallery-toolbar__axis">
         <span class="gallery-toolbar__name" aria-hidden="true">Input</span>
         <ToggleGroup :items="inputs" :model-value="input" size="sm" attached aria-label="Input" @update:model-value="set('input', $event)" />

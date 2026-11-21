@@ -274,7 +274,7 @@ func TestGalleryWithoutJavaScript(t *testing.T) {
 	for _, c := range entries {
 		html := readPage(t, d, "/components/"+slugOf(c.Name))
 		stage := element(html, `data-id="Stage_`+c.Name+`"`)
-		if !strings.Contains(stage, `<div class="gallery-toolbar" inert>`) {
+		if !strings.Contains(stage, `<div class="gallery-toolbar" role="group" aria-label="Preview settings" inert>`) {
 			t.Errorf("%s: the stage's toolbar is not inert before the island starts", c.Name)
 		}
 		// Nothing hides an example: the page draws them all, shown.
@@ -512,5 +512,28 @@ func TestGalleryAppShellsAreNotRemembered(t *testing.T) {
 	}
 	if shells == 0 {
 		t.Fatal("no gallery page draws an AppShell")
+	}
+}
+
+// A component page reads well to a screen reader: an empty cell of the API
+// tables says "none" (the dash is hidden from it, aria-label on a span being
+// read by none), and the stage's toolbar is one named group of settings.
+func TestGalleryPagesNameWhatTheyShow(t *testing.T) {
+	d := dist(t)
+	_, entries, _ := readCatalog(t)
+	none := regexp.MustCompile(`<span aria-hidden="true">—</span><span class="weft-visually-hidden">none</span>`)
+	dashes := 0
+	for _, c := range entries {
+		html := readPage(t, d, "/components/"+slugOf(c.Name))
+		if strings.Contains(html, `aria-label="none"`) {
+			t.Errorf("%s: an empty cell is a span named by aria-label, which a screen reader may not read", c.Name)
+		}
+		dashes += len(none.FindAllString(html, -1))
+		if toolbar := element(html, `class="gallery-toolbar"`); !regexp.MustCompile(`^<div class="gallery-toolbar" role="group" aria-label="Preview settings"`).MatchString(toolbar) {
+			t.Errorf("%s: the stage's toolbar is not a group named Preview settings: %.120s", c.Name, toolbar)
+		}
+	}
+	if dashes == 0 {
+		t.Error("no API table has an empty cell")
 	}
 }

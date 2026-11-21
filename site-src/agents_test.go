@@ -283,7 +283,7 @@ func TestLLMsFull(t *testing.T) {
 			t.Fatal(err)
 		}
 		shown := path.Clean("site-src/" + file)
-		marker := fmt.Sprintf("Source: %s%s\nFile: %s\n%s\n\n", site, route, shown, strings.Repeat("=", 80))
+		marker := fmt.Sprintf("Source: %s%s\nFile: %s\n\n%s\n\n", site, route, shown, strings.Repeat("=", 80))
 		at := strings.Index(text, marker)
 		if at == -1 || !strings.HasPrefix(text[at+len(marker):], string(want)) {
 			t.Errorf("llms-full.txt does not hold %s as it is, after its source", shown)

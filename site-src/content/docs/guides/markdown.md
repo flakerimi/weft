@@ -87,6 +87,7 @@ useHead({ title: page.frontmatter.title, description: page.frontmatter.descripti
 - **`useCollection(collection)`** returns every page, ordered by `order` and then by slug, for a sidebar.
 - **`contentPaths(collection)`** returns the slugs for `getPaths()`.
 - **`highlightCode(code, lang)`** highlights source the page reads itself, such as an example file, as code blocks are highlighted.
+- **`useFile(path, text)`**, from `virtual:weft/files`, writes a file of the page's own into the build, such as a page's Markdown `source`, which this site serves at `/skills/weft-site.md` for agents to read. See [Pages and islands](pages-and-islands.md#files-a-page-writes).
 
 For TypeScript to know the module, add its types to the site's `tsconfig.json`:
 
@@ -102,7 +103,7 @@ The build stops with one sentence that names the file and line when:
 
 - the frontmatter is not valid YAML, misses a required field, has a field of the wrong type, or has a field the schema does not list;
 - a link to another `.md` file, or to a heading with `#id`, leads nowhere;
-- a link from the site root into a collection, such as `/docs/nope`, names no page;
+- a link from the site root into a collection, such as `/docs/nope`, names no page. A link to a collection's own path when it has no index page, such as `/skills`, is taken if a page of the site is there (`pages/skills/index.vue`);
 - an image is missing, or is not a `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.avif` or `.svg` file;
 - a code block's language is one the highlighter does not know.
 
