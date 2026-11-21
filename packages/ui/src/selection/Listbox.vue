@@ -221,7 +221,7 @@ function measure() {
   }
   list.measure(tallest)
 }
-watch(() => [virtual.value && shown.value, list.rowHeight.value], measure, { flush: 'post' })
+watch(() => [virtual.value && shown.value, list.rowHeight.value, list.measureRequests.value], measure, { flush: 'post' })
 onMounted(measure)
 // Rows can get smaller as well as taller (a smaller font, a wider list
 // wrapping less): when the list's width or the page's fonts change, they go

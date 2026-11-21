@@ -178,6 +178,8 @@ export interface Listbox {
   measure: (height: number) => void
   /** Forget the measured height (the list's width or fonts changed): rows go back to the estimate and are measured again. */
   remeasure: () => void
+  /** Counts `remeasure` calls: the Listbox measures its rows after each. */
+  measureRequests: Readonly<Ref<number>>
   /** Forget the typed search of the typeahead. */
   resetTypeahead: () => void
 }
@@ -295,6 +297,8 @@ export function useListbox(props: ListboxProps, model: Ref<unknown>, opts: Listb
   const scroller = shallowRef<HTMLElement | null>(null)
   /** The tallest a drawn row measured, px: rows never get shorter than it. */
   const measured = ref(0)
+  /** Counts the requests to measure the drawn rows again (`remeasure`), which the Listbox watches. */
+  const measureRequests = ref(0)
   const estimate = computed(() => {
     const given = virtualOpts().estimateSize
     if (given) return given
@@ -543,7 +547,12 @@ export function useListbox(props: ListboxProps, model: Ref<unknown>, opts: Listb
     measure: (height: number) => {
       if (height > measured.value) measured.value = Math.ceil(height)
     },
-    remeasure: () => (measured.value = 0),
+    remeasure: () => {
+      measured.value = 0
+      // Measure again even when nothing was measured before (no change above to react to).
+      measureRequests.value++
+    },
+    measureRequests,
   }
 }
 

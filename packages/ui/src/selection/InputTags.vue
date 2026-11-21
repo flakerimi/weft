@@ -240,7 +240,7 @@ function onTagBlur(event: FocusEvent) {
 
 <template>
   <Input
-    v-bind="$attrs"
+    v-bind="required ? { ...$attrs, 'aria-required': 'true' } : $attrs"
     class="weft-input-tags"
     :model-value="draft"
     :id="f.id.value"
@@ -249,7 +249,6 @@ function onTagBlur(event: FocusEvent) {
     :placeholder="placeholder"
     :loading="loading"
     :maxlength="maxLength"
-    :aria-required="required ? 'true' : ($attrs['aria-required'] as 'true' | 'false' | undefined)"
     @update:model-value="onDraft"
     @keydown="onKeydown"
     @paste="onPaste"

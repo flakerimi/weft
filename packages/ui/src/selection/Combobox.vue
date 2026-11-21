@@ -535,13 +535,12 @@ function onPanelDown(event: MouseEvent) {
     </button>
     <Input
       v-else
-      v-bind="$attrs"
+      v-bind="required ? { ...$attrs, 'aria-required': 'true' } : $attrs"
       :model-value="text"
       :id="f.id.value"
       :size="f.size.value"
       :disabled="f.disabled.value"
       :readonly="sheet || undefined"
-      :aria-required="required ? 'true' : ($attrs['aria-required'] as 'true' | 'false' | undefined)"
       :placeholder="multiple && hasValue ? undefined : placeholder"
       :icon="icon"
       :loading="busy"

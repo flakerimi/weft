@@ -406,6 +406,40 @@ describe('Listbox', () => {
       }
     })
 
+    it('measures rows that grow after a width change or a font load, even when none was taller than the estimate before', async () => {
+      const ro = installResizeObserver()
+      const fonts = new EventTarget()
+      Object.defineProperty(document, 'fonts', { value: fonts, configurable: true })
+      let height = 0
+      const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+        const h = this.classList.contains('weft-listbox__option') ? height : 0
+        return { height: h, width: 200, top: 0, bottom: h, left: 0, right: 200, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
+      })
+      try {
+        await cases({ items: many.slice(0, 300) })
+        await settle()
+        const row = () => list().style.getPropertyValue('--weft-listbox-row')
+        const spacer = () => $('.weft-listbox__spacer').style.blockSize
+        expect(row()).toBe('32px') // the estimate: nothing measured taller
+        height = 50 // the list got narrower and its rows wrap
+        ro.report(list(), 150)
+        await settle()
+        await settle()
+        expect(row()).toBe('50px')
+        expect(spacer()).toBe('15000px')
+        height = 64 // a web font arrived
+        fonts.dispatchEvent(new Event('loadingdone'))
+        await settle()
+        await settle()
+        expect(row()).toBe('64px')
+        expect(spacer()).toBe('19200px')
+      } finally {
+        rect.mockRestore()
+        ro.restore()
+        delete (document as { fonts?: unknown }).fonts
+      }
+    })
+
     it('renders every option up to 200', async () => {
       await cases({ items: many.slice(0, 200) })
       expect(list().hasAttribute('data-virtual')).toBe(false)
