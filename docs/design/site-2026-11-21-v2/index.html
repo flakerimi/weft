@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weft — second pass</title>
+<style>
+@font-face { font-family: Brico; src: url(brico.woff2) format("woff2"); font-weight: 200 800; font-stretch: 75% 100%; }
+@font-face { font-family: Mono; src: url(mono.woff2) format("woff2"); font-weight: 100 800; }
+:root {
+  --ground: #E8ECF4; --ink: #141C3A; --indigo: #2B3D8F; --saffron: #E2A11B; --warp: #C9D0E0;
+  --night: #0F1530; --night-warp: #1C2448; --white: #fff; --muted: #55607F; --line: #D7DCE8;
+  --ok: #1F7A4D; --bad: #B4322A;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: Brico, system-ui; color: var(--ink); background: var(--ground); font-size: 17px; line-height: 1.5; }
+a { color: var(--indigo); }
+code, pre, .mono { font-family: Mono, ui-monospace; font-variant-ligatures: none; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 32px; }
+
+/* ---------- header ---------- */
+.top { position: absolute; inset: 0 0 auto; z-index: 5; }
+.top .wrap { display: flex; align-items: center; height: 72px; }
+.mark { display: block; height: 28px; aspect-ratio: 266/122; position: relative; }
+.mark::before, .mark::after { content: ""; position: absolute; inset: 0; mask-size: 100% 100%; mask-repeat: no-repeat; }
+.mark::before { background: #fff; mask-image: url(weft.svg), linear-gradient(#000 86%, transparent 86%); mask-composite: intersect; }
+.mark::after { background: var(--saffron); mask-image: url(weft.svg), linear-gradient(transparent 86%, #000 86%); mask-composite: intersect; }
+.nav { margin-left: auto; display: flex; gap: 28px; }
+.nav a { color: #DCE2F2; text-decoration: none; font-size: 15px; }
+.nav a:hover { color: #fff; }
+
+/* ---------- hero: the night loom ---------- */
+.hero { position: relative; background: var(--night); color: #E9EDF8; overflow: hidden;
+  background-image: repeating-linear-gradient(90deg, var(--night-warp) 0 1px, transparent 1px 28px); }
+.hero .wrap { position: relative; padding-top: 136px; padding-bottom: 56px; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: end; gap: 48px; align-items: start; }
+.hero h1 { font-size: clamp(42px, 4.7vw, 68px); line-height: 0.98; letter-spacing: -0.03em; font-weight: 700; font-stretch: 92%; margin: 0 0 24px; color: #fff; }
+.hero p.lede { font-size: 20px; color: #B9C2DC; max-width: 30ch; margin: 0 0 32px; }
+.install { position: relative; z-index: 3; display: flex; align-items: stretch; max-width: 440px; border-radius: 12px; overflow: hidden; border: 1px solid #2B3561; }
+.install code { flex: 1; padding: 14px 16px; background: #0A0F24; color: #E9EDF8; font-size: 14px; white-space: nowrap; overflow: auto; }
+.install code b { color: var(--saffron); font-weight: 500; }
+.install button { border: 0; padding: 0 18px; background: var(--saffron); color: var(--ink); font: 600 14px Brico; cursor: pointer; }
+.hero small { display: block; margin-top: 12px; color: #8792B4; font-size: 14px; }
+.hero small code { color: #DCE2F2; }
+
+/* the thread: leaves the hero copy and passes through both frames */
+.thread { position: absolute; left: 0; right: 0; top: 600px; height: 6px; background: var(--saffron); z-index: 2; }
+.frames { position: relative; height: 660px; }
+.frame { position: absolute; background: #fff; color: var(--ink); border-radius: 14px; box-shadow: 0 30px 80px -20px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.06); overflow: hidden; }
+.desk { left: 0; right: 40px; top: 0; height: 500px; z-index: 1; }
+.phone { right: -30px; top: 150px; width: 250px; height: 500px; border-radius: 34px; border: 8px solid #05081A; z-index: 3; }
+.frame-label { position: absolute; z-index: 4; font-size: 13px; color: #8792B4; }
+
+/* ---- the app inside (Weft components drawn at real size) ---- */
+.app { display: grid; grid-template-columns: 196px 1fr; height: 100%; font-size: 13.5px; }
+.side { background: #F4F6FA; border-right: 1px solid var(--line); padding: 16px 10px; }
+.side .brand { font-weight: 700; padding: 4px 10px 16px; display: flex; gap: 8px; align-items: center; }
+.side .brand i { width: 22px; height: 22px; border-radius: 6px; background: var(--indigo); display: inline-block; }
+.side a { display: block; padding: 7px 10px; border-radius: 8px; color: var(--ink); text-decoration: none; }
+.side a.on { background: #E3E8F6; color: var(--indigo); font-weight: 600; }
+.main { padding: 18px 22px; overflow: hidden; }
+.bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.bar h3 { margin: 0; font-size: 19px; letter-spacing: -0.01em; }
+.crumb { color: var(--muted); font-size: 12.5px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 9px; font: 600 13px Brico; border: 1px solid var(--line); background: #fff; color: var(--ink); }
+.btn.primary { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+.ml { margin-left: auto; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.stat { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.stat span { color: var(--muted); font-size: 12px; }
+.stat b { display: block; font-size: 22px; letter-spacing: -0.02em; }
+.stat em { font-style: normal; font-size: 12px; color: var(--ok); }
+.stat em.down { color: var(--bad); }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 9px 8px; border-bottom: 1px solid #EEF1F7; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; font-weight: 600; }
+.b-ok { background: #E1F2E8; color: var(--ok); }
+.b-bad { background: #F8E2E0; color: var(--bad); }
+.b-warn { background: #FBEFD2; color: #7A5200; }
+.menu { position: absolute; left: 300px; top: 250px; width: 190px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 16px 40px -12px rgba(20,28,58,.35); padding: 6px; font-size: 13.5px; }
+.menu div { padding: 7px 10px; border-radius: 7px; }
+.menu div.hl { background: #EEF1FA; }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 5px 0; }
+.menu .kbd { float: right; color: var(--muted); font-size: 12px; }
+.menu .danger { color: var(--bad); }
+
+/* the phone: same screen, adapted */
+.pscreen { height: 100%; display: flex; flex-direction: column; font-size: 13px; background: #F4F6FA; }
+.pbar { padding: 14px 14px 10px; background: #fff; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); }
+.pbar b { font-size: 16px; }
+.burger { width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--line); display: grid; place-items: center; }
+.pcards { padding: 10px; display: grid; gap: 8px; }
+.pcard { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; }
+.pcard small { color: var(--muted); grid-column: 1; }
+.sheet { margin-top: auto; background: #fff; border-radius: 18px 18px 0 0; box-shadow: 0 -12px 30px -10px rgba(20,28,58,.35); padding: 8px 10px 14px; }
+.sheet .grab { width: 36px; height: 4px; border-radius: 4px; background: var(--line); margin: 2px auto 8px; }
+.sheet div { padding: 0 10px; height: 44px; display: flex; align-items: center; border-radius: 9px; }
+.sheet div.hl { background: #EEF1FA; }
+.scrim { position: absolute; inset: 0; background: rgba(15,21,48,.28); }
+
+.hero-foot { position: relative; z-index: 3; background: var(--ground); height: 90px; margin-top: -90px; }
+
+/* ---------- "real screens" ---------- */
+section { padding: 112px 0 0; }
+h2 { font-size: clamp(34px, 3.6vw, 50px); line-height: 1.02; letter-spacing: -0.03em; font-weight: 700; font-stretch: 85%; margin: 0 0 14px; }
+.intro { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: end; margin-bottom: 36px; }
+.intro p { margin: 0; color: var(--muted); font-size: 18px; max-width: 46ch; }
+.bento { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+.tile { background: #fff; border-radius: 16px; border: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
+.tile .stage { flex: 1; padding: 24px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.tile .cap { border-top: 1px solid #EEF1F7; padding: 12px 18px; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13.5px; color: var(--muted); }
+.tile .cap strong { color: var(--ink); font-weight: 600; margin-right: 4px; }
+.tile .cap a { font-family: Mono; font-size: 12.5px; text-decoration: none; }
+.t-form { grid-column: span 5; } .t-cmd { grid-column: span 7; } .t-cal { grid-column: span 4; } .t-time { grid-column: span 4; } .t-up { grid-column: span 4; }
+.field { display: grid; gap: 5px; margin-bottom: 14px; } .field label { font-weight: 600; font-size: 13.5px; }
+.input { height: 38px; border: 1px solid #C7CEDF; border-radius: 10px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; background: #fff; }
+.input.focus { border-color: var(--indigo); box-shadow: 0 0 0 3px #D5DCF4; }
+.switch { width: 38px; height: 22px; border-radius: 22px; background: var(--indigo); position: relative; flex: none; }
+.switch::after { content: ""; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: #fff; top: 3px; right: 3px; }
+.row { display: flex; align-items: center; gap: 10px; }
+.radio { display: flex; gap: 8px; } .radio span { flex: 1; border: 1px solid #C7CEDF; border-radius: 10px; padding: 8px 10px; } .radio span.on { border-color: var(--indigo); box-shadow: inset 0 0 0 1px var(--indigo); color: var(--indigo); font-weight: 600; }
+.cmd { width: 100%; max-width: 520px; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 20px 50px -20px rgba(20,28,58,.35); overflow: hidden; }
+.cmd .q { padding: 14px 16px; border-bottom: 1px solid var(--line); font-size: 16px; display: flex; gap: 10px; align-items: center; }
+.cmd .q span { color: var(--muted); }
+.cmd .grp { padding: 8px 8px 4px; font-size: 12px; color: var(--muted); padding-left: 12px; }
+.cmd .it { padding: 8px 12px; margin: 0 6px; border-radius: 8px; display: flex; justify-content: space-between; }
+.cmd .it.hl { background: #EEF1FA; }
+.cmd mark { background: none; color: var(--indigo); font-weight: 700; }
+.kb { font-family: Mono; font-size: 11.5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; color: var(--muted); }
+.cal { width: 252px; } .cal .h { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 8px; }
+.cal .g { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; font-size: 13px; }
+.cal .g span { height: 32px; display: grid; place-items: center; border-radius: 8px; }
+.cal .g .d { color: var(--muted); font-size: 11.5px; height: 22px; } .cal .g .x { color: #A6AEC4; }
+.cal .g .in { background: #E8ECFA; border-radius: 0; } .cal .g .s, .cal .g .e { background: var(--indigo); color: #fff; }
+.tl { width: 100%; } .tl .e { display: grid; grid-template-columns: 30px 1fr; gap: 10px; padding-bottom: 14px; position: relative; }
+.tl .e::before { content: ""; position: absolute; left: 14px; top: 30px; bottom: 0; width: 2px; background: var(--line); }
+.tl .e:last-child::before { display: none; }
+.av { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 11.5px; font-weight: 700; color: #fff; }
+.tl small { color: var(--muted); display: block; }
+.drop { width: 100%; border: 1.5px dashed #B4BCD3; border-radius: 12px; padding: 16px; text-align: center; color: var(--muted); margin-bottom: 12px; }
+.file { display: grid; grid-template-columns: 1fr auto; gap: 6px; font-size: 13.5px; margin-bottom: 10px; }
+.prog { grid-column: 1 / -1; height: 6px; background: #E5E9F2; border-radius: 6px; overflow: hidden; } .prog i { display: block; height: 100%; background: var(--indigo); }
+.toast { display: flex; gap: 10px; align-items: center; background: var(--ink); color: #fff; border-radius: 10px; padding: 10px 12px; font-size: 13.5px; width: 100%; }
+.toast b { color: var(--saffron); }
+
+/* ---------- gallery tile sample ---------- */
+.gal { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.gt { background: #fff; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; text-decoration: none; color: inherit; }
+.gt .pv { height: 200px; display: grid; place-items: center; background: #fff; border-bottom: 1px solid #EEF1F7; font-size: 14px; padding: 20px; }
+.gt .tx { padding: 14px 18px 16px; } .gt .tx b { font-size: 17px; } .gt .tx p { margin: 2px 0 0; color: var(--muted); font-size: 14.5px; }
+.gt:hover { border-color: var(--indigo); }
+.foot { margin-top: 110px; padding: 40px 0 60px; border-top: 6px solid var(--saffron); }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap"><span class="mark" role="img" aria-label="Weft"></span>
+<nav class="nav"><a href="#">Docs</a><a href="#">Components</a><a href="#">For agents</a></nav></div></header>
+
+<div class="hero">
+  <div class="thread"></div>
+  <div class="wrap">
+    <div>
+      <h1>One component tree, every screen.</h1>
+      <p class="lede">Vue components that know when they’re under a finger or a mouse, served with your Go API from one binary.</p>
+      <div class="install"><code><b>$</b> curl -fsSL https://weft.base.al/install | sh</code><button>Copy</button></div>
+      <small>Already installed? <code>weft update</code> moves you to the newest release.</small>
+    </div>
+    <div class="frames">
+      <div class="frame desk">
+        <div class="app">
+          <aside class="side"><div class="brand"><i></i>Northline</div>
+            <a>Overview</a><a class="on">Devices</a><a>Customers</a><a>Traffic</a><a>Tickets</a><a>Settings</a></aside>
+          <div class="main">
+            <div class="crumb">Network › Prishtina</div>
+            <div class="bar"><h3>Devices</h3><span class="btn ml">Export</span><span class="btn primary">＋ Add device</span></div>
+            <div class="stats">
+              <div class="stat"><span>Online</span><b>1,284</b><em>+12 today</em></div>
+              <div class="stat"><span>Offline</span><b>17</b><em class="down">+3 today</em></div>
+              <div class="stat"><span>Downstream</span><b>412<small style="font-size:13px"> Mb/s</small></b><em>steady</em></div>
+            </div>
+            <table>
+              <tr><th>Device</th><th>Port</th><th>Signal</th><th>Status</th><th></th></tr>
+              <tr><td>ONT · Krasniqi A.</td><td class="mono">1/2/4</td><td>−19.4 dBm</td><td><span class="badge b-ok">Online</span></td><td>⋯</td></tr>
+              <tr><td>ONT · Berisha L.</td><td class="mono">1/3/1</td><td>−24.9 dBm</td><td><span class="badge b-warn">Weak</span></td><td>⋯</td></tr>
+              <tr><td>ONT · Gashi M.</td><td class="mono">1/3/6</td><td>—</td><td><span class="badge b-bad">Offline</span></td><td>⋯</td></tr>
+              <tr><td>ONT · Hoxha E.</td><td class="mono">1/1/7</td><td>−18.1 dBm</td><td><span class="badge b-ok">Online</span></td><td>⋯</td></tr>
+              <tr><td>ONT · Morina D.</td><td class="mono">1/4/3</td><td>−20.7 dBm</td><td><span class="badge b-ok">Online</span></td><td>⋯</td></tr>
+            </table>
+          </div>
+        </div>
+        <div class="menu"><div>Open device</div><div class="hl">Reboot<span class="kbd">⌘R</span></div><div>Move port…</div><hr><div class="danger">Remove</div></div>
+      </div>
+      <div class="frame phone">
+        <div class="pscreen">
+          <div class="pbar"><span class="burger">≡</span><b>Devices</b><span class="btn primary ml" style="height:36px">＋</span></div>
+          <div class="pcards">
+            <div class="pcard"><b>Krasniqi A.</b><span class="badge b-ok">Online</span><small>1/2/4 · −19.4 dBm</small></div>
+            <div class="pcard"><b>Berisha L.</b><span class="badge b-warn">Weak</span><small>1/3/1 · −24.9 dBm</small></div>
+            <div class="pcard"><b>Gashi M.</b><span class="badge b-bad">Offline</span><small>1/3/6</small></div>
+          </div>
+          <div class="scrim"></div>
+          <div class="sheet" style="position:relative"><div class="grab"></div><div><b>Berisha L.</b></div><div>Open device</div><div class="hl">Reboot</div><div>Move port…</div><div style="color:var(--bad)">Remove</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<section><div class="wrap">
+  <div class="intro"><h2>Screens you’d ship, made from the parts on this site.</h2>
+  <p>Every tile is drawn by the components themselves, not a picture of them. Each name opens its page with the props, the code and how it adapts.</p></div>
+  <div class="bento">
+    <div class="tile t-form"><div class="stage"><div style="width:100%;max-width:340px">
+      <div class="field"><label>Workspace name</label><div class="input focus">Northline Prishtina</div></div>
+      <div class="field"><label>Region</label><div class="input">Europe (Frankfurt) <span>⌄</span></div></div>
+      <div class="field"><label>Plan</label><div class="radio"><span>Starter</span><span class="on">Team</span><span>Scale</span></div></div>
+      <div class="row" style="margin-bottom:16px"><span class="switch"></span>Email me when a device goes offline</div>
+      <div class="row"><span class="btn primary">Save changes</span><span class="btn">Cancel</span></div>
+    </div></div><div class="cap"><strong>Settings</strong><a href="#">Form</a><a href="#">FormField</a><a href="#">Input</a><a href="#">Select</a><a href="#">RadioGroup</a><a href="#">Switch</a></div></div>
+
+    <div class="tile t-cmd"><div class="stage" style="background:#F4F6FA"><div class="cmd">
+      <div class="q">⌕ <span>reb</span><span class="kb ml">esc</span></div>
+      <div class="grp">Devices</div>
+      <div class="it hl"><span><mark>Reb</mark>oot Berisha L.</span><span class="kb">↵</span></div>
+      <div class="it"><span><mark>Reb</mark>oot all on 1/3/1</span></div>
+      <div class="grp">Tickets</div>
+      <div class="it"><span>#418 Slow after <mark>reb</mark>oot</span><span style="color:var(--muted)">2 h ago</span></div>
+      <div style="height:8px"></div>
+    </div></div><div class="cap"><strong>Search anything</strong><a href="#">CommandPalette</a><a href="#">Kbd</a></div></div>
+
+    <div class="tile t-cal"><div class="stage"><div class="cal"><div class="h"><span>‹</span>December 2026<span>›</span></div>
+      <div class="g"><span class="d">Mo</span><span class="d">Tu</span><span class="d">We</span><span class="d">Th</span><span class="d">Fr</span><span class="d">Sa</span><span class="d">Su</span>
+      <span class="x">30</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span>
+      <span>7</span><span class="s">8</span><span class="in">9</span><span class="in">10</span><span class="in">11</span><span class="e">12</span><span>13</span>
+      <span>14</span><span>15</span><span>16</span><span>17</span><span>18</span><span>19</span><span>20</span>
+      <span>21</span><span>22</span><span>23</span><span>24</span><span>25</span><span>26</span><span>27</span></div></div></div>
+      <div class="cap"><strong>Maintenance window</strong><a href="#">DateRangePicker</a><a href="#">Calendar</a></div></div>
+
+    <div class="tile t-time"><div class="stage"><div class="tl">
+      <div class="e"><span class="av" style="background:#2B3D8F">FI</span><div><b>Port 1/3/1 moved to the new OLT</b><small>PPPoE kept for 31 customers · 09:12</small></div></div>
+      <div class="e"><span class="av" style="background:#1F7A4D">AB</span><div><b>Ticket #418 closed</b><small>Signal back to −20.1 dBm · 08:40</small></div></div>
+      <div class="e"><span class="av" style="background:#B4322A">!</span><div><b>Gashi M. went offline</b><small>Last seen 07:55</small></div></div>
+    </div></div><div class="cap"><strong>Activity</strong><a href="#">Timeline</a><a href="#">Avatar</a></div></div>
+
+    <div class="tile t-up"><div class="stage" style="flex-direction:column;align-items:stretch">
+      <div class="drop">Drop a config backup, or <a href="#">choose a file</a></div>
+      <div class="file"><span>olt-north.cfg</span><span style="color:var(--muted)">72 %</span><span class="prog"><i style="width:72%"></i></span></div>
+      <div class="toast"><b>✓</b> Backup from 08:00 restored<span class="ml" style="color:#B9C2DC">Undo</span></div>
+    </div><div class="cap"><strong>Restore</strong><a href="#">FileUpload</a><a href="#">Progress</a><a href="#">Toast</a></div></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="intro"><h2>The gallery, at the size you’ll use it.</h2><p>Previews are drawn 1:1 on a white stage, never shrunk. One example per tile, the rest on the component’s page.</p></div>
+  <div class="gal">
+    <a class="gt" href="#"><div class="pv"><div style="width:100%;max-width:260px"><div class="field" style="margin:0"><label>Due date</label><div class="input">30/11/2026 <span>▦</span></div></div></div></div><div class="tx"><b>DatePicker</b><p>A date typed as the locale writes it, or picked from a calendar.</p></div></a>
+    <a class="gt" href="#"><div class="pv"><div class="row"><span class="btn primary">Save changes</span><span class="btn">Cancel</span><span class="btn" style="border-color:transparent;color:var(--bad)">Delete</span></div></div><div class="tx"><b>Button</b><p>An action, in four tones and three sizes; 44 px tall under a finger.</p></div></a>
+    <a class="gt" href="#"><div class="pv"><table style="max-width:300px;font-size:13.5px"><tr><th>Name</th><th>Status</th></tr><tr><td>Hoxha E.</td><td><span class="badge b-ok">Online</span></td></tr><tr><td>Gashi M.</td><td><span class="badge b-bad">Offline</span></td></tr></table></div><div class="tx"><b>Table</b><p>Sortable, selectable rows that turn into cards when narrow.</p></div></a>
+  </div>
+</div></section>
+
+<footer class="foot"><div class="wrap" style="color:var(--muted);font-size:14px">MIT licensed. This site is built with Weft and served by its binary.</div></footer>
+</body>
+</html>
