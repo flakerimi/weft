@@ -1,0 +1,27 @@
+/* InputTime: a form-control box (input.css) holding the time's parts. A
+   part is a spinbutton drawn as text, the focused one filled with the
+   focus colour's tint and ringed; an empty one shows dashes, muted. On
+   touch the box holds the platform's time field instead. */
+.weft-input-time { cursor: default; }
+.weft-input-time__segments {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  min-inline-size: 0;
+  font-variant-numeric: tabular-nums;
+}
+.weft-input-time__segment {
+  padding: 0 2px;
+  border-radius: 4px;
+  outline: none;
+  caret-color: transparent;
+  cursor: text;
+}
+.weft-input-time__segment[data-placeholder] { color: var(--weft-color-text-muted, GrayText); }
+.weft-input-time__segment:focus { background: color-mix(in srgb, var(--weft-color-focus, Highlight) 18%, transparent); }
+.weft-input-time__segment:focus-visible {
+  outline: 2px solid var(--weft-color-focus, Highlight);
+  outline-offset: 0;
+}
+.weft-input-time__literal { color: var(--weft-color-text-muted, GrayText); white-space: pre; }
+.weft-input-time[data-disabled] .weft-input-time__segment { cursor: not-allowed; }

@@ -6,7 +6,8 @@
  *
  * - On activation (once `active` is true and `el` has an element, after the
  *   render that showed it) focus moves to `initial` if given (an element,
- *   ref or getter, read then), else the first tabbable element inside, else
+ *   ref or getter, read then), else the tabbable element inside marked
+ *   `data-weft-autofocus`, else the first tabbable element inside, else
  *   `el` itself (made focusable with `tabindex="-1"`). Tabbable means
  *   focusable, not `tabindex="-1"`, and visible: not hidden by CSS, `hidden`
  *   or `inert`.
@@ -41,7 +42,7 @@
  * Nothing happens on the server.
  */
 import { onScopeDispose, toValue, watch, type MaybeRefOrGetter, type Ref } from 'vue'
-import { focus, focused, restoreFocus, tabbables } from './dom.ts'
+import { firstFocus, focus, focused, restoreFocus, tabbables } from './dom.ts'
 import { overlayStack } from './overlayStack.ts'
 
 export interface FocusTrapOptions {
@@ -96,7 +97,7 @@ export function useFocusTrap(el: Readonly<Ref<HTMLElement | null | undefined>>, 
       return
     }
     if (overlayStack.isAbove(target, container) || target?.closest?.('[data-weft-trap-exempt]')) return
-    focus(lastInside?.isConnected && container.contains(lastInside) ? lastInside : (tabbables(container)[0] ?? container))
+    focus(lastInside?.isConnected && container.contains(lastInside) ? lastInside : (firstFocus(container) ?? container))
   }
 
   function attach(container: HTMLElement) {
@@ -118,7 +119,7 @@ export function useFocusTrap(el: Readonly<Ref<HTMLElement | null | undefined>>, 
   /** Focus the place to start in `container`, unless focus is in it already. */
   function enter(container: HTMLElement) {
     const now = focused(container.ownerDocument)
-    const start = toValue(opts.initial) ?? tabbables(container)[0] ?? container
+    const start = toValue(opts.initial) ?? firstFocus(container) ?? container
     lastInside = start
     if (!(now && container.contains(now))) focus(start)
   }

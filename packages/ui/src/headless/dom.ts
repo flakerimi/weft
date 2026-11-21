@@ -46,6 +46,16 @@ export function tabbables(root: Element): HTMLElement[] {
   )
 }
 
+/**
+ * Where focus goes first inside `root`: the tabbable element marked
+ * `data-weft-autofocus` (a calendar's focused date, which comes after its
+ * month buttons), else the first tabbable one.
+ */
+export function firstFocus(root: Element): HTMLElement | undefined {
+  const all = tabbables(root)
+  return all.find((el) => el.hasAttribute('data-weft-autofocus')) ?? all[0]
+}
+
 /** Focus `el` without scrolling the page to it. */
 export function focus(el: HTMLElement | null | undefined): void {
   el?.focus({ preventScroll: true })

@@ -12,7 +12,7 @@
 // out when it closes, unless motion is reduced.
 import { computed, onScopeDispose, useTemplateRef, watch } from 'vue'
 import { useWeft } from '../adaptive/context.ts'
-import { focus, tabbables } from '../headless/dom.ts'
+import { firstFocus, focus } from '../headless/dom.ts'
 import { overlayStack } from '../headless/overlayStack.ts'
 import { useControllable } from '../headless/useControllable.ts'
 import { useDismiss } from '../headless/useDismiss.ts'
@@ -45,7 +45,7 @@ const props = withDefaults(
     dismissible?: boolean
     /** Modal on pointer too: focus is trapped and the page does not scroll. On touch it is always modal. */
     modal?: boolean
-    /** Move focus into the content when it opens (on pointer); false keeps focus where it is, as a combobox's input needs. */
+    /** Move focus into the content when it opens (on pointer): to the element marked `data-weft-autofocus`, else the first one; false keeps focus where it is, as a combobox's input needs. */
     autoFocus?: boolean
     /** Float against this element or point instead of the trigger. */
     anchor?: Anchor
@@ -160,7 +160,7 @@ watch(
     if (!el) return
     const skip = quiet || hovered
     quiet = false
-    if (!skip && !trapping.value && props.autoFocus) focus(tabbables(el)[0] ?? el)
+    if (!skip && !trapping.value && props.autoFocus) focus(firstFocus(el) ?? el)
   },
   { flush: 'post' },
 )

@@ -1,0 +1,54 @@
+<script setup vapor lang="ts">
+import { ref } from 'vue'
+import type { TimeInput } from '../../../src/dates/time.ts'
+import FormField from '../../../src/forms/FormField.vue'
+import InputTime from '../../../src/dates/InputTime.vue'
+import WeftProvider from '../../../src/adaptive/WeftProvider.vue'
+import type { Input } from '../../../src/adaptive/detect.ts'
+
+const props = withDefaults(defineProps<{
+  input?: Input
+  dir?: 'ltr' | 'rtl'
+  locale?: string
+  initial?: unknown
+  hourCycle?: 12 | 24
+  granularity?: 'hour' | 'minute' | 'second'
+  min?: string
+  max?: string
+  step?: { hour?: number; minute?: number; second?: number }
+  valueFormat?: 'iso' | 'object'
+  disabled?: boolean
+  readonly?: boolean
+}>(), { initial: undefined })
+const input = ref<Input | undefined>(props.input)
+const value = ref(((props.initial ?? null) as TimeInput | null))
+const submitted = ref<string | null>(null)
+function onSubmit(event: Event) {
+  event.preventDefault()
+  submitted.value = new FormData(event.target as HTMLFormElement).get('at') as string | null
+}
+defineExpose({ input, value, submitted })
+</script>
+
+<template>
+  <WeftProvider :input="input" :locale="locale">
+    <div :dir="dir">
+      <form @submit="onSubmit">
+        <FormField label="Start time" name="at" description="Local time">
+          <InputTime
+            v-model="value"
+            :hour-cycle="hourCycle"
+            :granularity="granularity"
+            :min="min"
+            :max="max"
+            :step="step"
+            :value-format="valueFormat"
+            :disabled="disabled"
+            :readonly="readonly"
+          />
+        </FormField>
+        <button class="submit" type="submit">Save</button>
+      </form>
+    </div>
+  </WeftProvider>
+</template>

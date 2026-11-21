@@ -47,6 +47,15 @@ describe('useFocusTrap', () => {
     scope.stop()
   })
 
+  it('moves focus to the tabbable element marked data-weft-autofocus (a calendar’s date) before the first', async () => {
+    const { on, q, scope } = setup()
+    q('.middle').setAttribute('data-weft-autofocus', '')
+    on.value = true
+    await nextTick()
+    expect(active()).toBe(q('.middle'))
+    scope.stop()
+  })
+
   it('wraps Tab from the last element to the first, and Shift+Tab back', async () => {
     const { on, q, scope } = setup()
     on.value = true

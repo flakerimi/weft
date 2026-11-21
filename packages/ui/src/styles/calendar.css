@@ -1,0 +1,144 @@
+/* Calendar: a header (page buttons around the heading), then the months.
+   A date is --weft-calendar-day square (sm 28, md 36, lg 44 px), at least
+   --weft-hit-min, so 44 px on touch; on touch the dates also share the
+   width the grid has. Chosen dates take the tone's solid fill, a range its
+   tint between its ends; today is underlined; dates of the next and
+   previous month are muted; disabled ones faded, unavailable ones struck
+   through. The page arrows point the other way right to left. */
+.weft-calendar {
+  --weft-calendar-day: var(--weft-control-md, 36px);
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--weft-space-2, 8px);
+  max-inline-size: 100%;
+  color: var(--weft-color-text, CanvasText);
+  font-variant-numeric: tabular-nums;
+}
+.weft-calendar[data-size="sm"] { --weft-calendar-day: var(--weft-control-sm, 28px); font-size: 0.875em; }
+.weft-calendar[data-size="lg"] { --weft-calendar-day: var(--weft-control-lg, 44px); font-size: 1.0625em; }
+
+.weft-calendar__header {
+  display: flex;
+  align-items: center;
+  gap: var(--weft-space-1, 4px);
+}
+.weft-calendar__heading {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  margin: 0;
+  font-size: 1em;
+  font-weight: var(--weft-weight-heading, 600);
+  text-align: center;
+}
+.weft-calendar__nav,
+.weft-calendar__view,
+.weft-calendar__day,
+.weft-calendar__cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--weft-radius-control, 8px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease);
+}
+.weft-calendar__nav {
+  flex: none;
+  min-inline-size: max(var(--weft-calendar-day), var(--weft-hit-min, 24px));
+  min-block-size: max(var(--weft-calendar-day), var(--weft-hit-min, 24px));
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-calendar__nav svg { inline-size: 1.15em; block-size: 1.15em; }
+[dir="rtl"] .weft-calendar__nav svg { scale: -1 1; }
+.weft-calendar__view {
+  min-block-size: max(var(--weft-calendar-day), var(--weft-hit-min, 24px));
+  padding-inline: var(--weft-space-3, 12px);
+  font-weight: inherit;
+}
+.weft-calendar__nav:hover:not(:disabled),
+.weft-calendar__view:hover:not(:disabled),
+.weft-calendar__day:hover:not(:disabled, [data-disabled], [data-selected]),
+.weft-calendar__cell:hover:not(:disabled, [data-disabled], [data-selected]) {
+  background: color-mix(in srgb, var(--weft-color-text, CanvasText) 8%, transparent);
+}
+.weft-calendar__nav:disabled,
+.weft-calendar__view:disabled { opacity: 0.4; cursor: not-allowed; }
+.weft-calendar__nav:focus-visible,
+.weft-calendar__view:focus-visible,
+.weft-calendar__day:focus-visible,
+.weft-calendar__cell:focus-visible {
+  outline: 2px solid var(--weft-color-focus, Highlight);
+  outline-offset: 1px;
+}
+
+.weft-calendar__body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--weft-space-6, 24px);
+  /* A finger moving across the dates is a swipe; up and down still scrolls. */
+  touch-action: pan-y;
+}
+.weft-calendar__month { display: flex; flex-direction: column; gap: var(--weft-space-2, 8px); }
+.weft-calendar__month-label { text-align: center; font-weight: var(--weft-weight-heading, 600); }
+.weft-calendar__grid { border-collapse: collapse; border-spacing: 0; }
+.weft-calendar__weekday,
+.weft-calendar__week {
+  padding: 0 0 var(--weft-space-1, 4px);
+  color: var(--weft-color-text-muted, GrayText);
+  font-size: 0.85em;
+  font-weight: 500;
+  text-align: center;
+}
+tbody .weft-calendar__week { padding: 0 var(--weft-space-1, 4px); font-size: 0.75em; }
+.weft-calendar__grid td { padding: 1px 0; text-align: center; }
+
+.weft-calendar__day {
+  position: relative;
+  min-inline-size: max(var(--weft-calendar-day), var(--weft-hit-min, 24px));
+  min-block-size: max(var(--weft-calendar-day), var(--weft-hit-min, 24px));
+  inline-size: 100%;
+}
+.weft-calendar__day[data-outside] { color: var(--weft-color-text-muted, GrayText); }
+.weft-calendar__day[data-today]::after {
+  content: '';
+  position: absolute;
+  inset-block-end: 18%;
+  inline-size: 1.1em;
+  block-size: 2px;
+  border-radius: 1px;
+  background: currentColor;
+}
+.weft-calendar__day[data-disabled],
+.weft-calendar__cell[data-disabled] { opacity: 0.4; cursor: not-allowed; }
+.weft-calendar__day[data-unavailable] { text-decoration: line-through; }
+.weft-calendar__day[data-range] { border-radius: 0; background: color-mix(in srgb, var(--weft-tone, LinkText) 14%, transparent); }
+.weft-calendar__day[data-range~="start"] { border-start-start-radius: var(--weft-radius-control, 8px); border-end-start-radius: var(--weft-radius-control, 8px); }
+.weft-calendar__day[data-range~="end"] { border-start-end-radius: var(--weft-radius-control, 8px); border-end-end-radius: var(--weft-radius-control, 8px); }
+.weft-calendar__day[data-preview] { background: color-mix(in srgb, var(--weft-tone, LinkText) 10%, transparent); }
+.weft-calendar__day[data-selected]:not([data-range="middle"]),
+.weft-calendar__cell[data-selected] {
+  background: var(--weft-tone, LinkText);
+  color: var(--weft-tone-fg, Canvas);
+}
+.weft-calendar__day[data-range="middle"] { color: var(--weft-tone-text, LinkText); }
+
+.weft-calendar__grid[data-view] td { padding: var(--weft-space-1, 4px); }
+.weft-calendar__cell {
+  min-inline-size: max(4.5em, var(--weft-hit-min, 24px));
+  min-block-size: max(var(--weft-calendar-day), var(--weft-hit-min, 24px));
+  inline-size: 100%;
+}
+
+.weft-calendar[data-disabled] { opacity: 0.6; }
+.weft-calendar[data-disabled] button { cursor: not-allowed; }
+
+/* On touch the dates share the width the grid has, never less than the hit size. */
+[data-weft-input="touch"] .weft-calendar { display: flex; }
+[data-weft-input="touch"] .weft-calendar__month { flex: 1; }
+[data-weft-input="touch"] .weft-calendar__grid { inline-size: 100%; table-layout: fixed; }

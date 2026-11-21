@@ -1,0 +1,59 @@
+/* DatePicker and DateRangePicker: a form-control box (input.css). On
+   pointer it holds the text field (two for a range) and, at its end, a
+   calendar button whose hit area is at least --weft-hit-min. On touch the
+   whole box is one button showing the date. The calendar floats in a
+   Popover on pointer; on touch it fills the width of the bottom sheet. */
+.weft-date-picker__button,
+.weft-date-picker__trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--weft-color-text-muted, GrayText);
+  font: inherit;
+  cursor: pointer;
+}
+.weft-date-picker__button {
+  flex: none;
+  justify-content: center;
+  inline-size: 1.75em;
+  block-size: 1.75em;
+  margin-inline-end: calc(var(--weft-space-1, 4px) * -1);
+  border-radius: calc(var(--weft-radius-control, 8px) - 2px);
+}
+.weft-date-picker__button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  inline-size: max(100%, var(--weft-hit-min, 24px));
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  transform: translate(-50%, -50%);
+}
+.weft-date-picker__button:hover:not(:disabled) { color: var(--weft-color-text, CanvasText); }
+.weft-date-picker__button:focus-visible {
+  outline: 2px solid var(--weft-color-focus, Highlight);
+  outline-offset: 1px;
+}
+.weft-date-picker__button:disabled,
+.weft-date-picker__trigger:disabled { cursor: not-allowed; }
+.weft-date-picker__glyph { flex: none; inline-size: 1.15em; block-size: 1.15em; }
+/* Touch: the box is the button. */
+.weft-date-picker[data-form="button"] { cursor: pointer; }
+.weft-date-picker__trigger {
+  flex: 1;
+  gap: var(--weft-space-2, 8px);
+  min-inline-size: 0;
+  block-size: 100%;
+  outline: none;
+  color: inherit;
+  text-align: start;
+}
+.weft-date-picker__value { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weft-date-picker__value[data-placeholder] { color: var(--weft-color-text-muted, GrayText); }
+.weft-date-picker__trigger .weft-date-picker__glyph { color: var(--weft-color-text-muted, GrayText); }
+.weft-date-picker__range-separator { flex: none; color: var(--weft-color-text-muted, GrayText); }
+.weft-popover.weft-date-picker__popup[data-form="floating"] { max-inline-size: none; }

@@ -10,6 +10,8 @@ const props = withDefaults(defineProps<{
   input?: Input
   /** `landing` or `app` density for everything inside; unset passes on the outer surface. */
   surface?: Surface
+  /** The BCP 47 locale (`de-DE`, `ar-EG`) for dates and sizes inside: names, digits, the first day of the week; unset passes on the outer one. */
+  locale?: string
   /** The element to render; it has `display: contents`, so it does not affect layout. */
   as?: string
 }>(), {
@@ -19,7 +21,8 @@ const props = withDefaults(defineProps<{
 const parent = useWeft()
 const input = computed(() => props.input ?? parent.input.value)
 const surface = computed(() => props.surface ?? parent.surface.value)
-provide(weftKey, { input, surface })
+const locale = computed(() => props.locale ?? parent.locale.value)
+provide(weftKey, { input, surface, locale })
 </script>
 
 <template>

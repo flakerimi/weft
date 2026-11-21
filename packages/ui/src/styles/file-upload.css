@@ -1,0 +1,90 @@
+/* FileUpload: on pointer a dashed drop zone, its text and Browse button
+   centred, tinted with the focus colour while files are dragged over it;
+   on touch only the button. Below, the files: a row each, a 40 px preview
+   (an image, or a file glyph), the name (cut with an ellipsis) over its
+   size, a thin progress bar while uploading, a retry after a failure, and
+   the remove button, whose hit area is at least --weft-hit-min. */
+.weft-file-upload {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-3, 12px);
+  inline-size: 100%;
+}
+.weft-file-upload__zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--weft-space-2, 8px);
+  padding: var(--weft-space-6, 24px) var(--weft-space-4, 16px);
+  border: 1px dashed var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-card, 12px);
+  background: var(--weft-color-surface, Field);
+  color: var(--weft-color-text, CanvasText);
+  text-align: center;
+  transition-property: border-color, background-color;
+  transition-duration: var(--weft-duration-control, 150ms);
+  transition-timing-function: var(--weft-ease-standard, ease);
+}
+.weft-file-upload__zone[data-interactive] { cursor: pointer; }
+.weft-file-upload__zone[data-dragging] {
+  border-style: solid;
+  border-color: var(--weft-color-focus, Highlight);
+  background: color-mix(in srgb, var(--weft-color-focus, Highlight) 8%, var(--weft-color-surface, Field));
+}
+.weft-file-upload__zone[data-invalid] { border-color: var(--weft-color-danger, #DC2626); }
+.weft-file-upload[data-disabled] .weft-file-upload__zone { opacity: 0.5; cursor: not-allowed; }
+.weft-file-upload__icon {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 40px;
+  block-size: 40px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--weft-color-text, CanvasText) 6%, transparent);
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-file-upload__icon svg { inline-size: 20px; block-size: 20px; }
+.weft-file-upload__label { font-weight: var(--weft-weight-heading, 600); }
+.weft-file-upload__description { color: var(--weft-color-text-muted, GrayText); font-size: 0.875em; }
+.weft-file-upload__glyph { inline-size: 1.15em; block-size: 1.15em; }
+.weft-file-upload[data-form="button"] > .weft-file-upload__browse { align-self: flex-start; }
+
+.weft-file-upload__files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-2, 8px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.weft-file-upload__file {
+  display: flex;
+  align-items: center;
+  gap: var(--weft-space-3, 12px);
+  padding: var(--weft-space-2, 8px);
+  border: 1px solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-control, 8px);
+}
+.weft-file-upload__file[data-status="error"] { border-color: var(--weft-color-danger, #DC2626); }
+.weft-file-upload__thumb {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  inline-size: 40px;
+  block-size: 40px;
+  border-radius: calc(var(--weft-radius-control, 8px) - 2px);
+  background: color-mix(in srgb, var(--weft-color-text, CanvasText) 6%, transparent);
+  color: var(--weft-color-text-muted, GrayText);
+  object-fit: cover;
+}
+.weft-file-upload__thumb svg { inline-size: 20px; block-size: 20px; }
+.weft-file-upload__meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.weft-file-upload__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weft-file-upload__size { color: var(--weft-color-text-muted, GrayText); font-size: 0.85em; font-variant-numeric: tabular-nums; }
+.weft-file-upload__error { color: var(--weft-color-danger-text, #AB2323); font-size: 0.85em; }
+.weft-file-upload__progress { margin-block-start: var(--weft-space-1, 4px); }
