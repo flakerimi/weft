@@ -12,7 +12,7 @@ if (!process.features.typescript) {
 const { buildSite } = await import('../src/build.ts')
 
 const usage =
-  'usage: weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa]'
+  'usage: weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa|weft]'
 
 function fail(message) {
   process.stderr.write(`weft-build-pages: ${message}\n${usage}\n`)

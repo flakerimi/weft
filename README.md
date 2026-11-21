@@ -95,8 +95,8 @@ container, so a grid in a side panel lays out narrow on a big screen.
 ## Themes
 
 A theme is one token file: colours for light and dark, radius, spacing, type,
-motion. Weft ships `neutral` and `lisa` (generated from LisaOS's token
-contract). Components read only `--weft-*` custom properties, so a brand is a
+motion. Weft ships `neutral`, `lisa` (generated from LisaOS's token
+contract) and `weft` (weft.base.al's). Components read only `--weft-*` custom properties, so a brand is a
 stylesheet, not a fork. Want Tailwind for your own components? Import
 `@weft/themes/tailwind.css` and its colours are Weft's.
 

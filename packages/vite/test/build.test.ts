@@ -348,6 +348,64 @@ describe('buildSite on a site without islands', () => {
   })
 })
 
+describe('buildSite with files its CSS names', () => {
+  let out: string
+  let manifest: Manifest
+  const html = (page: string) => readFileSync(join(out, 'pages', page, 'index.html'), 'utf8')
+  const sha = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex').slice(0, 8)
+  const source = (p: string) => readFileSync(join(fixture('css-assets'), p))
+  const lucide = () => readFileSync(fileURLToPath(new URL('../node_modules/lucide-static/font/lucide.woff2', import.meta.url)))
+
+  beforeAll(async () => {
+    out = tempDir()
+    manifest = await buildSite({ root: fixture('css-assets'), outDir: out, theme: 'weft' })
+  })
+
+  it('copies each file to /assets/ named by a hash of its bytes, and points the CSS there', () => {
+    const font = `/assets/Test-${sha(source('styles/fonts/Test.woff2'))}.woff2`
+    const ext = `/assets/Test-ext-${sha(source('styles/fonts/Test-ext.woff2'))}.woff2`
+    const dot = `/assets/dot-${sha(source('styles/dot.svg'))}.svg`
+    const packaged = `/assets/lucide-${sha(lucide())}.woff2`
+    const css = styleOf(html('index'))!
+    for (const url of [font, dot, packaged]) expect(css).toContain(`url(${url})`)
+    // A query and a fragment stay on the URL.
+    expect(css).toContain(`url(${ext}?v=1#ext)`)
+    expect(css).not.toContain('/@fs/')
+    expect(readFileSync(join(out, font.slice(1)))).toEqual(source('styles/fonts/Test.woff2'))
+    expect(readFileSync(join(out, packaged.slice(1)))).toEqual(lucide())
+    expect(manifest.files[font]).toMatchObject({ type: 'font/woff2', immutable: true, br: false })
+    expect(manifest.files[dot]).toMatchObject({ type: 'image/svg+xml', immutable: true, br: true })
+  })
+
+  it('leaves public files, data URLs and other sites as they are', () => {
+    const css = styleOf(html('index'))!
+    expect(css).toContain('url(/robots.txt)')
+    expect(css).toContain('url(data:image/gif;base64,R0lGODlhAQABAAAAACw=)')
+    expect(css).toContain('url(https://example.com/x.png)')
+    expect(files(out).filter((f) => f.startsWith('assets/')).map((f) => f.replace(/-[0-9a-f]{8}\./, '-#.')).sort()).toEqual(
+      ['assets/Test-#.woff2', 'assets/Test-ext-#.woff2', 'assets/dot-#.svg', 'assets/dot-#.svg.br', 'assets/dot-#.svg.gz', 'assets/lucide-#.woff2'],
+    )
+  })
+
+  it('preloads the page\'s woff2 fonts, in its head and in its Early Hints', () => {
+    const fonts = Object.keys(manifest.files).filter((f) => f.endsWith('.woff2')).sort()
+    expect(fonts).toHaveLength(3)
+    const head = html('index').split('</head>')[0]!
+    for (const font of fonts) {
+      expect(head).toContain(`<link rel="preload" href="${font}" as="font" type="font/woff2" crossorigin>`)
+      expect(manifest.hints['/']).toContain(`<${font}>; rel=preload; as=font; type="font/woff2"; crossorigin`)
+    }
+    // Before the stylesheet that names them, so the fetch starts first.
+    expect(head.indexOf('rel="preload"')).toBeLessThan(head.indexOf('<style>'))
+    expect(html('plain')).not.toContain('rel="preload"')
+    expect(manifest.hints['/plain']).toBeUndefined()
+  })
+
+  it('inlines the weft theme', () => {
+    expect(styleOf(html('plain'))).toContain('--weft-color-bg:#e8ecf4')
+  })
+})
+
 describe('buildSite with CSS over the inline limit', () => {
   let out: string
   let manifest: Manifest
@@ -1334,7 +1392,7 @@ describe('bin/weft-build-pages.mjs', () => {
       code: 1,
       stderr:
         'weft-build-pages: --out is required.\n' +
-        'usage: weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa]\n',
+        'usage: weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa|weft]\n',
     })
   })
 })

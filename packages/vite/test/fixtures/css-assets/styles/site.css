@@ -1,0 +1,16 @@
+/* Files beside the stylesheet, a font from a package, a public file, a data URL and another site's file. */
+@font-face {
+  font-family: 'Test';
+  src: url('./fonts/Test.woff2') format('woff2');
+  unicode-range: U+0000-00FF;
+}
+@font-face {
+  font-family: 'Test';
+  src: url("./fonts/Test-ext.woff2?v=1#ext") format('woff2');
+  unicode-range: U+0100-024F;
+}
+.dot { background: url(./dot.svg) no-repeat; }
+@font-face { font-family: 'Lucide'; src: url('lucide-static/font/lucide.woff2') format('woff2'); }
+.robots { background: url(/robots.txt); }
+.data { background: url('data:image/gif;base64,R0lGODlhAQABAAAAACw='); }
+.far { background: url(https://example.com/x.png); }

@@ -9,6 +9,7 @@ import { contrast, mix } from '../src/contrast.ts'
 import { lisa, type LisaTokens } from '../src/lisa.ts'
 import { neutral } from '../src/neutral.ts'
 import { themeToCss } from '../src/to-css.ts'
+import { weft } from '../src/weft.ts'
 import { tints, tones } from '../src/tokens.ts'
 import type { Theme } from '../src/tokens.ts'
 
@@ -21,7 +22,7 @@ function block(css: string, selector: string): Record<string, string> {
 }
 
 const accents = Object.keys(tokens.color.accent).filter((k) => /^accent-.+-500$/.test(k)).map((k) => k.slice(7, -4))
-const themes: Theme[] = [neutral, ...accents.map((accent) => lisa(tokens as LisaTokens, { accent }))]
+const themes: Theme[] = [neutral, weft, ...accents.map((accent) => lisa(tokens as LisaTokens, { accent }))]
 
 describe.each(themes.map((t) => [t.name, t] as const))('%s', (_, theme) => {
   const css = themeToCss(theme)

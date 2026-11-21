@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -325,5 +327,218 @@ func TestSiteDoesNotFollowASymlinkOut(t *testing.T) {
 	res, body := get(t, srv, "/releases/latest")
 	if res.StatusCode == 200 || strings.Contains(body, "SECRET") {
 		t.Fatalf("GET /releases/latest through a symlink out: %d %q", res.StatusCode, body)
+	}
+}
+
+// docsPages are the routes.json entries of the docs, by path.
+func docsPages(t *testing.T, r builtRoutes) map[string]string {
+	t.Helper()
+	pages := map[string]string{}
+	for _, p := range r.Pages {
+		if p.Path == "/docs" || strings.HasPrefix(p.Path, "/docs/") {
+			pages[p.Path] = p.HTML
+		}
+	}
+	return pages
+}
+
+// A doc as content/docs/ has it: its route, title and order.
+type doc struct {
+	path, title string
+	order       int
+}
+
+var (
+	frontTitle = regexp.MustCompile(`(?m)^title: (.+)$`)
+	frontOrder = regexp.MustCompile(`(?m)^order: (\d+)$`)
+)
+
+// contentDocs reads content/docs/**/*.md, in the sidebar's order.
+func contentDocs(t *testing.T) []doc {
+	t.Helper()
+	var docs []doc
+	err := filepath.WalkDir("content/docs", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
+			return err
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		slug := strings.TrimSuffix(strings.TrimPrefix(filepath.ToSlash(p), "content/docs/"), ".md")
+		slug = strings.TrimSuffix(strings.TrimSuffix(slug, "index"), "/")
+		route := "/docs"
+		if slug != "" {
+			route += "/" + slug
+		}
+		title, order := frontTitle.FindSubmatch(b), frontOrder.FindSubmatch(b)
+		if title == nil || order == nil {
+			t.Fatalf("%s has no title or no order; every doc has both, so the sidebar can place it", p)
+		}
+		n := 0
+		fmt.Sscan(string(order[1]), &n)
+		docs = append(docs, doc{route, string(title[1]), n})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Slice(docs, func(i, j int) bool { return docs[i].order < docs[j].order })
+	return docs
+}
+
+// Each docs page is at most 10 KB brotli: its HTML, with its CSS inlined, and
+// any stylesheet it links. Fonts are not counted: they are cached and
+// preloaded. A docs page loads no JavaScript, except one with a code block
+// marked copy, whose only island is the copy button.
+func TestDocsPageBudgets(t *testing.T) {
+	d := dist(t)
+	var m builtFiles
+	var r builtRoutes
+	readJSON(t, d, "manifest.json", &m)
+	readJSON(t, d, "routes.json", &r)
+	islands := map[string][]string{}
+	for _, p := range r.Pages {
+		islands[p.Path] = p.Islands
+	}
+	pages := docsPages(t, r)
+	if len(pages) == 0 {
+		t.Fatal("routes.json has no docs pages")
+	}
+	for path, file := range pages {
+		b, err := fs.ReadFile(d, file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		html := string(b)
+		size := brotliSize(t, d, m, "/"+file)
+		for _, link := range stylesheetLink.FindAllStringSubmatch(html, -1) {
+			size += brotliSize(t, d, m, link[1])
+		}
+		t.Logf("%s: %d B brotli", path, size)
+		if size > 10*1024 {
+			t.Errorf("%s is %d B brotli, over 10 KB", path, size)
+		}
+		switch got := strings.Join(islands[path], ","); got {
+		case "":
+			for _, tag := range anyScript.FindAllString(html, -1) {
+				if !strings.Contains(tag, `type="speculationrules"`) && !strings.Contains(tag, `type="application/json"`) {
+					t.Errorf("%s has no island but has %s", path, tag)
+				}
+			}
+		case "CopyCommand":
+		default:
+			t.Errorf("%s has the islands %s; a docs page has none, or only CopyCommand", path, got)
+		}
+	}
+}
+
+// Every doc in content/docs/ is a page, and each page has the whole sidebar
+// in the docs' order with itself current, its title as the h1, its table of
+// contents, and links to the docs before and after it.
+func TestDocsLayout(t *testing.T) {
+	d := dist(t)
+	var r builtRoutes
+	readJSON(t, d, "routes.json", &r)
+	pages := docsPages(t, r)
+	docs := contentDocs(t)
+	if len(pages) != len(docs) {
+		t.Errorf("%d docs pages built for %d files in content/docs", len(pages), len(docs))
+	}
+	sidebar := regexp.MustCompile(`(?s)<aside id="docs-nav".*?</aside>`)
+	navLink := regexp.MustCompile(`<a class="weft-link weft-nav__item" href="([^"]+)"( aria-current="page")?`)
+	for i, doc := range docs {
+		file, ok := pages[doc.path]
+		if !ok {
+			t.Errorf("content/docs has %s, but no page was built at %s", doc.title, doc.path)
+			continue
+		}
+		b, err := fs.ReadFile(d, file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		html := string(b)
+		var order, current []string
+		for _, l := range navLink.FindAllStringSubmatch(sidebar.FindString(html), -1) {
+			order = append(order, l[1])
+			if l[2] != "" {
+				current = append(current, l[1])
+			}
+		}
+		var want []string
+		for _, o := range docs {
+			want = append(want, o.path)
+		}
+		if strings.Join(order, " ") != strings.Join(want, " ") {
+			t.Errorf("%s: the sidebar is %v, want %v", doc.path, order, want)
+		}
+		if len(current) != 1 || current[0] != doc.path {
+			t.Errorf("%s: the sidebar marks %v current", doc.path, current)
+		}
+		if !strings.Contains(html, `<h1 class="docs-title">`+doc.title+`</h1>`) {
+			t.Errorf("%s: no h1 %q", doc.path, doc.title)
+		}
+		if strings.Count(html, `<h2 id="`) > 0 && !strings.Contains(html, `<p id="docs-toc-title">On this page</p>`) {
+			t.Errorf("%s has headings but no On this page", doc.path)
+		}
+		if i > 0 && !strings.Contains(html, `href="`+docs[i-1].path+`" rel="prev"`) {
+			t.Errorf("%s: no link back to %s", doc.path, docs[i-1].path)
+		}
+		if i+1 < len(docs) && !strings.Contains(html, `href="`+docs[i+1].path+`" rel="next"`) {
+			t.Errorf("%s: no link on to %s", doc.path, docs[i+1].path)
+		}
+		// The narrow screen's drawer needs no script: the Menu button opens the sidebar as a popover.
+		if !strings.Contains(html, `popovertarget="docs-nav"`) || !strings.Contains(html, `<aside id="docs-nav" class="docs-nav" popover>`) {
+			t.Errorf("%s: the sidebar is not a popover the Menu button opens", doc.path)
+		}
+	}
+}
+
+// Every page preloads the site's two fonts, served from the build under
+// hashed names and cached for good; nothing comes from another site.
+func TestDocsFontsAreSelfHosted(t *testing.T) {
+	d := dist(t)
+	var m struct {
+		Files map[string]struct {
+			Immutable bool `json:"immutable"`
+		} `json:"files"`
+	}
+	readJSON(t, d, "manifest.json", &m)
+	b, err := fs.ReadFile(d, "pages/docs/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(b)
+	preload := regexp.MustCompile(`<link rel="preload" href="(/assets/[^"]+\.woff2)" as="font" type="font/woff2" crossorigin>`)
+	fonts := preload.FindAllStringSubmatch(html, -1)
+	var names []string
+	for _, f := range fonts {
+		names = append(names, f[1])
+		if !m.Files[f[1]].Immutable {
+			t.Errorf("%s is not in the build, cached for good", f[1])
+		}
+	}
+	if len(fonts) != 2 || !strings.Contains(names[0], "bricolage-grotesque-latin") || !strings.Contains(names[1], "jetbrains-mono-latin") {
+		t.Errorf("the docs preload %v, want Bricolage Grotesque and JetBrains Mono", names)
+	}
+	if regexp.MustCompile(`(?i)(src|href)="https?:|url\(https?:`).MatchString(strings.ReplaceAll(html, `href="https://github.com/flakerimi/weft"`, "")) {
+		t.Error("the docs page loads something from another site")
+	}
+}
+
+// The wordmark is the owner's file, byte for byte.
+func TestWordmarkIsTheOwners(t *testing.T) {
+	want, err := os.ReadFile("../docs/design/weft-wordmark.svg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"public/weft.svg", "dist/weft.svg"} {
+		got, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != string(want) {
+			t.Errorf("%s is not docs/design/weft-wordmark.svg", name)
+		}
 	}
 }

@@ -1,0 +1,68 @@
+/* weft.base.al's look, from the approved design (docs/design/site-2026-11-21):
+   the weft theme's colours on a ground of thin vertical threads (the warp),
+   saffron for the thread that crosses them. Every page imports this. */
+.site {
+  --site-warp: #C9D0E0;
+  --site-saffron: #E2A11B;
+  --site-code-bg: #141C3A;
+  --site-mark-height: 26px;
+  min-height: 100vh;
+  font-optical-sizing: auto;
+  background-color: var(--weft-color-bg);
+  background-image: repeating-linear-gradient(90deg, var(--site-warp) 0 1px, transparent 1px 28px);
+  background-attachment: fixed;
+}
+@media (prefers-color-scheme: dark) {
+  .site { --site-warp: #1C2448; --site-code-bg: #0A0F24; }
+}
+html { overflow-x: clip; }
+.site a { color: var(--weft-color-primary-text); text-underline-offset: 3px; }
+.site code, .site kbd, .site pre { font-family: var(--weft-font-mono); font-variant-ligatures: none; }
+
+/* The header: the wordmark, then the site's sections. */
+.site .weft-header { background: var(--weft-color-bg); border-block-end-color: var(--site-warp); }
+.site .weft-header__inner { max-inline-size: 1280px; padding-inline: 24px; }
+/* The wordmark: public/weft.svg as a mask, twice. Its letters end above 86 %
+   of its height and its thread starts below, so the top part is drawn in the
+   text colour and the bottom part, the thread, in saffron. */
+.site-mark {
+  position: relative;
+  display: block;
+  flex: none;
+  block-size: var(--site-mark-height);
+  aspect-ratio: 266 / 122;
+  color: var(--weft-color-text);
+  forced-color-adjust: none;
+}
+.site-mark::before, .site-mark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  mask-image: url(/weft.svg), linear-gradient(#000 86%, transparent 86%);
+  mask-size: 100% 100%;
+  mask-composite: intersect;
+  background: currentColor;
+}
+.site-mark::after {
+  mask-image: url(/weft.svg), linear-gradient(transparent 86%, #000 86%);
+  background: var(--site-saffron);
+}
+@media (forced-colors: active) {
+  .site-mark::before, .site-mark::after { background: LinkText; }
+}
+.site-nav { display: flex; align-items: center; gap: 4px 24px; margin-inline-start: auto; font-size: 1rem; }
+.site-nav .weft-link { color: var(--weft-color-text); text-decoration: none; }
+.site-nav .weft-link:hover, .site-nav .weft-link[aria-current] { color: var(--weft-color-primary-text); text-decoration: underline; }
+.site-menu { display: none; }
+@media (max-width: 767.98px) {
+  .site-menu { display: inline-flex; }
+}
+@media (max-width: 639.98px) {
+  .site .weft-header__inner { padding-inline: 16px; }
+  .site-nav { gap: 16px; }
+  .site-nav .site-wide { display: none; }
+}
+
+/* The footer: the wordmark again, the licence. */
+.site .weft-footer { max-inline-size: 1280px; margin-inline: auto; padding: 64px 24px 48px; color: var(--weft-color-text-muted); font-size: 0.9375rem; }
+.site .weft-footer .site-mark { --site-mark-height: 22px; }

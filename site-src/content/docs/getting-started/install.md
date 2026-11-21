@@ -1,0 +1,76 @@
+---
+title: Install
+description: Install the weft command, and get the packages you build with.
+order: 10
+---
+
+On this page you install the `weft` command and set up the repository you build sites in. You need macOS or Linux, on arm64 or amd64.
+
+## The weft command
+
+Run the installer:
+
+```sh copy
+curl -fsSL https://weft.base.al/install | sh
+```
+
+It downloads the release for your system from `weft.base.al`, checks it against the release's `SHA256SUMS`, and puts `weft` in `~/.local/bin`. If that folder is not on your `PATH`, it tells you.
+
+Check that it works:
+
+```sh
+weft version
+```
+
+It prints the version and your platform, such as `weft 0.0.3 (darwin/arm64)`.
+
+### Installer settings
+
+Set these before `sh` to change what the installer does:
+
+| Variable | What it does | Default |
+| --- | --- | --- |
+| `WEFT_BIN_DIR` | Where to put `weft` | `$HOME/.local/bin` |
+| `WEFT_VERSION` | Which release to install | the latest |
+| `WEFT_BASE` | Where the releases are | `https://weft.base.al` |
+
+For example, to install release 0.0.2 into `~/bin`:
+
+```sh
+curl -fsSL https://weft.base.al/install | WEFT_VERSION=0.0.2 WEFT_BIN_DIR="$HOME/bin" sh
+```
+
+### Update
+
+`weft update` replaces the binary with the latest release. `weft update --check` only tells you whether there is a newer one. See the [CLI reference](../reference/cli.md) for the flags.
+
+## The packages
+
+The `weft` command does not carry the UI packages yet. Today you build inside a clone of the Weft repository, which is a pnpm workspace. The repository is private for now, so you need access to it.
+
+You need:
+
+- Node 22.18 or later, which runs the page build's TypeScript directly;
+- pnpm 10;
+- Go 1.26.
+
+Clone the repository, install its packages, and build the themes, which the page build reads:
+
+```sh
+git clone git@github.com:flakerimi/weft.git
+cd weft
+pnpm install
+pnpm --filter @weft/themes build
+```
+
+To check your setup, build and run this site, which lives in `site-src/`:
+
+```sh
+scripts/site.sh
+```
+
+It serves the site on `http://localhost:8080`.
+
+## Next
+
+[Build your first site](first-site.md).

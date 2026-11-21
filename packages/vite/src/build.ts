@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { constants as fs, existsSync, realpathSync, type Dirent } from 'node:fs'
+import { constants as fs, existsSync, realpathSync, statSync, type Dirent } from 'node:fs'
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, rmdir, stat, unlink, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
@@ -13,7 +13,7 @@ import type { ContentAsset } from './content.ts'
 import { createRenderServer, renderPage, type PageHead, type RenderResult } from './render.ts'
 import { discoverRoutes, expandRoutes, type ExpandedRoute, type PageModule, type RoutesJson } from './routes.ts'
 
-export type Theme = 'neutral' | 'lisa'
+export type Theme = 'neutral' | 'lisa' | 'weft'
 
 export interface BuildOptions {
   /** The site's root directory; its pages are `<root>/pages/**.vue`. */
@@ -79,7 +79,7 @@ function speculationRules(app: RoutesJson['app']): string {
   return `<script type="speculationrules">${JSON.stringify(rules)}</script>`
 }
 const VIEW_TRANSITION = '@view-transition { navigation: auto; }'
-const THEMES: Theme[] = ['neutral', 'lisa']
+const THEMES: Theme[] = ['neutral', 'lisa', 'weft']
 const CLIENT_ENTRY = fileURLToPath(new URL('./client.ts', import.meta.url))
 
 const TYPES: Record<string, string> = {
@@ -122,7 +122,7 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
   const root = resolve(opts.root)
   const outDir = resolve(opts.outDir)
   const theme = opts.theme ?? 'neutral'
-  if (!THEMES.includes(theme)) throw new Error(`buildSite: unknown theme "${theme}"; use ${THEMES.join(' or ')}.`)
+  if (!THEMES.includes(theme)) throw new Error(`buildSite: unknown theme "${theme}"; use ${THEMES.slice(0, -1).join(', ')} or ${THEMES.at(-1)}.`)
   const app = opts.appPrefix === undefined ? null : appRoute(opts.appPrefix)
   const appDir = app ? resolve(opts.appDir ?? join(root, 'app-dist')) : null
   checkOutDir(outDir, root, appDir)
@@ -270,6 +270,74 @@ function minifier(targets: Targets | undefined): (css: string, page: string) => 
   }
 }
 
+/** A file a page's CSS names, and the URL it is served at in the build. */
+interface CSSFile {
+  /** Its absolute path. */
+  file: string
+  /** `/assets/<name>-<hash><ext>`: the first 8 hex digits of the SHA-256 of its bytes. */
+  path: string
+}
+
+const CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)\s'"]*))\s*\)/g
+
+/**
+ * The files a page's CSS names with `url()`, as the render server wrote them:
+ * a file of the site (`/styles/x.woff2`) or one outside it, such as a
+ * package's (`/@fs/…/x.woff2`). Each is copied into the build at
+ * `/assets/<name>-<hash><ext>`, named by its bytes so it is cached forever,
+ * and the CSS points there, keeping a query or fragment. A path from the site
+ * root that is a file of public/, or that is no file at all, a `data:` URL and
+ * another site's are left as they are. Within one build each file is read once.
+ */
+function cssFiles(root: string): (css: string) => Promise<{ css: string; files: CSSFile[] }> {
+  const paths = new Map<string, Promise<string>>()
+  const pathOf = (file: string) => {
+    let path = paths.get(file)
+    if (!path) {
+      path = readFile(file).then((bytes) => {
+        const ext = extname(file)
+        const name = basename(file, ext).replace(/[^\w.-]/g, '-')
+        return `/assets/${name}-${sha256(bytes).slice(0, 8)}${ext}`
+      })
+      paths.set(file, path)
+    }
+    return path
+  }
+  const isFile = (p: string) => existsSync(p) && statSync(p).isFile()
+  /** The file a URL of the render server names, or null to leave the URL as it is. */
+  const fileOf = (url: string): string | null => {
+    if (url.startsWith('/@fs/')) {
+      const p = decodeURI(url.slice('/@fs'.length))
+      // /@fs/C:/… on Windows.
+      const file = /^\/[A-Za-z]:\//.test(p) ? p.slice(1) : p
+      return isFile(file) ? file : null
+    }
+    if (!url.startsWith('/') || url.startsWith('//')) return null
+    const p = decodeURI(url)
+    if (isFile(join(root, 'public', p))) return null
+    return isFile(join(root, p)) ? join(root, p) : null
+  }
+  return async (css) => {
+    const found: { at: number; length: number; file: string; rest: string }[] = []
+    for (const m of css.matchAll(CSS_URL)) {
+      const url = m[1] ?? m[2] ?? m[3] ?? ''
+      const cut = url.search(/[?#]/)
+      const file = fileOf(cut < 0 ? url : url.slice(0, cut))
+      if (file) found.push({ at: m.index, length: m[0].length, file, rest: cut < 0 ? '' : url.slice(cut) })
+    }
+    const files: CSSFile[] = []
+    let out = ''
+    let from = 0
+    for (const f of found) {
+      const path = await pathOf(f.file)
+      files.push({ file: f.file, path })
+      out += css.slice(from, f.at) + `url(${path}${f.rest})`
+      from = f.at + f.length
+    }
+    return { css: out + css.slice(from), files }
+  }
+}
+
 /** Write the whole build into `dir`, a fresh folder of its own, and mark it. */
 async function writeBuild(
   dir: string,
@@ -298,9 +366,19 @@ async function writeBuild(
   const rules = speculationRules(app)
   const sentSize = sentSizes()
   const minify = minifier(cssTarget)
+  const named = cssFiles(root)
   for (const page of pages) {
+    // The files the page's CSS names (fonts, images), copied in under hashed names.
+    const { css: pageCSS, files: assets } = await named(page.css)
+    for (const asset of assets) {
+      const file = asset.path.slice(1)
+      if (taken.get(fsKey(file))?.path === file) continue
+      await write(file, await readFile(asset.file))
+      immutable.add(file)
+    }
+    const fonts = [...new Set(assets.filter((a) => a.path.endsWith('.woff2')).map((a) => a.path))]
     // The theme, base.css, the CSS of what the page renders, then view transitions.
-    const css = minify([baseCSS, page.css, VIEW_TRANSITION].filter(Boolean).join('\n'), `pages/${page.file}`) + '\n'
+    const css = minify([baseCSS, pageCSS, VIEW_TRANSITION].filter(Boolean).join('\n'), `pages/${page.file}`) + '\n'
     let stylesheet: string | null = null
     if (sentSize(css) > (cssInlineLimit ?? 14 * 1024)) {
       const file = `assets/weft-${sha256(css).slice(0, 8)}.css`
@@ -310,9 +388,10 @@ async function writeBuild(
     }
     const scripts = page.islands.length > 0 ? client : null
     const file = htmlFile(page.path)
-    await write(file, pageHTML({ body: page.html, head: page.head, prePaint: page.prePaint, css, stylesheet, scripts, rules }))
+    await write(file, pageHTML({ body: page.html, head: page.head, prePaint: page.prePaint, fonts, css, stylesheet, scripts, rules }))
 
     const links = [
+      ...fonts.map((f) => `<${f}>; rel=preload; as=font; type="font/woff2"; crossorigin`),
       ...(stylesheet ? [`<${stylesheet}>; rel=preload; as=style`] : []),
       ...(scripts ? [scripts.entry, ...scripts.imports].map((m) => `<${m}>; rel=modulepreload`) : []),
     ]
@@ -1008,6 +1087,8 @@ function pageHTML(p: {
   head: PageHead
   /** Pre-paint snippets (usePrePaint), run before the CSS and the first paint. */
   prePaint: string[]
+  /** The woff2 fonts the page's CSS names, preloaded. */
+  fonts: string[]
   css: string
   stylesheet: string | null
   scripts: ClientBuild | null
@@ -1022,6 +1103,7 @@ function pageHTML(p: {
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     ...prePaintTag(p.prePaint),
     ...headTags(p.head),
+    ...p.fonts.map((f) => `<link rel="preload" href="${f}" as="font" type="font/woff2" crossorigin>`),
     p.stylesheet === null ? `<style>${p.css}</style>` : `<link rel="stylesheet" href="${p.stylesheet}">`,
     p.rules,
     ...(p.scripts

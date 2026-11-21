@@ -1,5 +1,5 @@
 // code.css colours highlighted code from the theme: every colour it gives a
-// token reaches WCAG AA (4.5:1) on the code's ground, in both themes, light and dark.
+// token reaches WCAG AA (4.5:1) on the code's ground, in every theme, light and dark.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { CODE_THEME } from '../src/content.ts'
@@ -36,7 +36,7 @@ it('sets every variable the code theme can draw with', () => {
   for (const v of drawn) expect(Object.keys(vars), v).toContain(v)
 })
 
-describe.each(['neutral', 'lisa'])('code.css on the %s theme', (theme) => {
+describe.each(['neutral', 'lisa', 'weft'])('code.css on the %s theme', (theme) => {
   const css = read(`../../themes/dist/${theme}.css`)
   const light = block(css, ':root, [data-weft-scheme="light"]')
   const schemes = { light, dark: { ...light, ...block(css, '[data-weft-scheme="dark"]') } }
