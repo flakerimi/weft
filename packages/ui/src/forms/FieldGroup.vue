@@ -5,6 +5,8 @@
 // unless they set their own; give Buttons in it the same `size`.
 import { provideFieldGroup } from './field.ts'
 import type { Size } from '../types.ts'
+import '../styles/base.css'
+import '../styles/field-group.css'
 
 const props = withDefaults(
   defineProps<{

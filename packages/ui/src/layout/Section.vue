@@ -1,4 +1,7 @@
 <script setup vapor lang="ts">
+import '../styles/base.css'
+import '../styles/section.css'
+
 defineProps<{
   /** The section's heading, rendered as an h2. */
   title?: string

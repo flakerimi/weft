@@ -1,0 +1,46 @@
+/* Progress: a track with a bar whose inline size is the percentage. */
+.weft-progress { display: flex; align-items: center; gap: var(--weft-space-2, 8px); inline-size: 100%; }
+.weft-progress__track {
+  position: relative;
+  flex: 1;
+  block-size: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--weft-tone, LinkText) 14%, transparent);
+}
+.weft-progress[data-size="sm"] .weft-progress__track { block-size: 4px; }
+.weft-progress[data-size="lg"] .weft-progress__track { block-size: 10px; }
+.weft-progress__bar {
+  block-size: 100%;
+  border-radius: inherit;
+  background: var(--weft-tone, LinkText);
+  transition: inline-size var(--weft-duration-layout, 220ms) var(--weft-ease-standard, ease);
+}
+.weft-progress[data-state="indeterminate"] .weft-progress__bar {
+  position: absolute;
+  inset-block: 0;
+  inline-size: 40%;
+  animation: weft-sweep 1.4s var(--weft-ease-standard, ease) infinite;
+}
+.weft-progress__status {
+  min-inline-size: 4ch;
+  color: var(--weft-color-text-muted, GrayText);
+  font-size: 0.857em;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+@keyframes weft-sweep {
+  from { inset-inline-start: -40%; }
+  to { inset-inline-start: 100%; }
+}
+
+/* Reduced motion: the indeterminate bar stands still at full length, dimmed,
+   so it still reads as under way. */
+@media (prefers-reduced-motion: reduce) {
+  .weft-progress[data-state="indeterminate"] .weft-progress__bar {
+    animation: none;
+    inset-inline-start: 0;
+    inline-size: 100%;
+    opacity: 0.5;
+  }
+}

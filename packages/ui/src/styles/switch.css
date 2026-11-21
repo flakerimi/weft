@@ -1,0 +1,32 @@
+/* Switch: a track with a thumb that slides to the inline end when on (the
+   start in right-to-left). md is 36 × 20 px, sm 28 × 16, lg 44 × 24. */
+.weft-switch__track {
+  --weft-switch-w: 36px;
+  --weft-switch-h: 20px;
+  display: inline-flex;
+  align-items: center;
+  inline-size: var(--weft-switch-w, 36px);
+  block-size: var(--weft-switch-h, 20px);
+  padding: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--weft-color-text, CanvasText) 22%, transparent);
+  transition: background-color var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease);
+}
+.weft-switch[data-size="sm"] .weft-switch__track { --weft-switch-w: 28px; --weft-switch-h: 16px; }
+.weft-switch[data-size="lg"] .weft-switch__track { --weft-switch-w: 44px; --weft-switch-h: 24px; }
+.weft-switch__thumb {
+  display: inline-grid;
+  place-items: center;
+  inline-size: calc(var(--weft-switch-h, 20px) - 4px);
+  block-size: calc(var(--weft-switch-h, 20px) - 4px);
+  border-radius: 50%;
+  background: var(--weft-color-bg, Canvas);
+  color: var(--weft-tone, LinkText);
+  box-shadow: 0 1px 2px color-mix(in srgb, CanvasText 25%, transparent);
+  transition: margin-inline-start var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease);
+}
+.weft-switch__thumb .weft-spinner { inline-size: 80%; block-size: 80%; }
+.weft-switch[data-state="checked"] .weft-switch__track { background: var(--weft-tone, LinkText); }
+.weft-switch[data-state="checked"] .weft-switch__thumb { margin-inline-start: calc(var(--weft-switch-w, 36px) - var(--weft-switch-h, 20px)); }
+.weft-switch[data-loading] .weft-switch__input { cursor: progress; }
+.weft-switch[data-invalid] .weft-switch__track { border-color: var(--weft-color-danger, #DC2626); }

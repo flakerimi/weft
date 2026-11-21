@@ -1,4 +1,7 @@
 <script setup vapor lang="ts">
+import '../styles/base.css'
+import '../styles/page.css'
+
 defineProps<{
   /** The page's heading, rendered as its h1. */
   title?: string

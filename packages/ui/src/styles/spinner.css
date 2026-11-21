@@ -1,0 +1,28 @@
+/* Spinner: a ring with one bright quarter, turning. Under reduced motion it
+   turns slowly rather than freezing, since a still ring reads as stuck. */
+.weft-spinner {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  inline-size: 1.25em;
+  block-size: 1.25em;
+  vertical-align: middle;
+}
+.weft-spinner[data-size="sm"] { inline-size: 16px; block-size: 16px; }
+.weft-spinner[data-size="md"] { inline-size: 20px; block-size: 20px; }
+.weft-spinner[data-size="lg"] { inline-size: 24px; block-size: 24px; }
+.weft-spinner__ring {
+  inline-size: 80%;
+  block-size: 80%;
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-block-start-color: currentColor;
+  border-radius: 50%;
+  animation-name: weft-spin;
+  animation-duration: 0.8s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@keyframes weft-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) {
+  .weft-spinner__ring { animation-duration: 2.4s !important; }
+}

@@ -2,6 +2,9 @@
 // A short label for a status or a count, drawn in a tone. Not interactive.
 import Icon from './Icon.vue'
 import type { Size, Tone, Variant } from '../types.ts'
+import '../styles/base.css'
+import '../styles/tone.css'
+import '../styles/badge.css'
 
 withDefaults(
   defineProps<{

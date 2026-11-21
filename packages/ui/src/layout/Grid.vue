@@ -2,6 +2,9 @@
 import { computed, useTemplateRef } from 'vue'
 import { useWidth } from '../adaptive/useWidth.ts'
 import type { Gap } from './types.ts'
+import '../styles/base.css'
+import '../styles/gap.css'
+import '../styles/grid.css'
 
 type Cols = number | { narrow?: number; regular?: number; wide?: number }
 

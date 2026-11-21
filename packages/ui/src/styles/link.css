@@ -1,0 +1,37 @@
+/* Link: text in the primary colour, underlined. In running text it is plain
+   inline text: a larger hit area would cover the lines above and below
+   (WCAG 2.5.8 exempts targets in a sentence). Standalone (data-standalone),
+   it is an inline box whose ::before hit area is at least --weft-hit-min,
+   centred, as a button's is. */
+.weft-link {
+  color: var(--weft-color-primary-text, LinkText);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  border-radius: var(--weft-space-1, 4px);
+  -webkit-tap-highlight-color: transparent;
+}
+.weft-link[data-standalone] {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--weft-space-1, 4px);
+}
+.weft-link[data-standalone]::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  inline-size: max(100%, var(--weft-hit-min, 24px));
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  transform: translate(-50%, -50%);
+}
+@media (hover: hover) {
+  .weft-link[href]:hover { text-decoration-thickness: 2px; }
+}
+.weft-link[aria-current="page"] {
+  color: var(--weft-color-text, CanvasText);
+  font-weight: var(--weft-weight-heading, 600);
+  text-decoration: none;
+}
+.weft-link[aria-disabled="true"] { color: var(--weft-color-text-muted, GrayText); text-decoration: none; cursor: not-allowed; }

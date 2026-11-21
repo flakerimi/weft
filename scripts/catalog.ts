@@ -38,6 +38,15 @@
  *    A PascalCase `.vue` file in the folder is a helper component the examples
  *    import, not an example.
  *
+ * 3. Its own stylesheet, `packages/ui/src/styles/<name>.css` in kebab-case
+ *    (`FormField.vue` → `form-field.css`), imported at the end of the SFC's
+ *    imports after `'../styles/base.css'` and any shared sheet it draws with
+ *    (`tone.css`, `choice.css`), and added to its group's sheet (`forms.css`;
+ *    a new group's sheet goes in `weft.css`). A page then ships only the CSS
+ *    of the components it renders. The comment at the top of `base.css` says
+ *    how in full; `packages/ui/test/stylesheets.test.ts` checks it. (Not read
+ *    by this script.)
+ *
  * Props, defaults, emits and slots come from the SFC itself, through
  * `compileScript` from `vue/compiler-sfc` (the pinned `vue` package's own);
  * `scripts/catalog-sfc.ts` reads them and its header says how. A

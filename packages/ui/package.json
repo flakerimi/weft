@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./icons": "./src/basics/icons.ts",
-    "./weft.css": "./dist/weft.css"
+    "./weft.css": "./dist/weft.css",
+    "./styles/*": "./src/styles/*"
   },
   "scripts": {
     "build": "vite build",

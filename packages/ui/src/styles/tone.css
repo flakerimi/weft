@@ -1,0 +1,31 @@
+/* Tone: a component with data-tone draws from these. --weft-tone is the
+   colour, --weft-tone-fg the text on it as a solid fill, --weft-tone-text the
+   tone as text on the page and on its tints. The theme chooses fg and text at
+   build so each reaches 4.5:1; the tints below (14% soft, 22% soft on hover,
+   10% for outline and ghost on hover) are the ones it checks against
+   (`tints` in @weft/themes). */
+[data-tone="neutral"] {
+  --weft-tone: var(--weft-color-text, CanvasText);
+  --weft-tone-fg: var(--weft-color-bg, Canvas);
+  --weft-tone-text: var(--weft-color-text, CanvasText);
+}
+[data-tone="primary"] {
+  --weft-tone: var(--weft-color-primary, LinkText);
+  --weft-tone-fg: var(--weft-color-primary-fg, Canvas);
+  --weft-tone-text: var(--weft-color-primary-text, LinkText);
+}
+[data-tone="danger"] {
+  --weft-tone: var(--weft-color-danger, #DC2626);
+  --weft-tone-fg: var(--weft-color-danger-fg, #FAFAFA);
+  --weft-tone-text: var(--weft-color-danger-text, #AB2323);
+}
+[data-tone="warning"] {
+  --weft-tone: var(--weft-color-warning, #D97706);
+  --weft-tone-fg: var(--weft-color-warning-fg, #18181B);
+  --weft-tone-text: var(--weft-color-warning-text, #8C510E);
+}
+[data-tone="success"] {
+  --weft-tone: var(--weft-color-success, #16A34A);
+  --weft-tone-fg: var(--weft-color-success-fg, #18181B);
+  --weft-tone-text: var(--weft-color-success-text, #17723A);
+}

@@ -4,6 +4,8 @@
 // the build there, with a sentence naming the file.
 import { computed } from 'vue'
 import { drawIcon } from './icons.ts'
+import '../styles/base.css'
+import '../styles/icon.css'
 
 const props = defineProps<{
   /** The Lucide icon's name, as on lucide.dev: `trash`, `chevron-down`. */

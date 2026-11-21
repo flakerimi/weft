@@ -1,0 +1,16 @@
+/* Skeleton: a muted block that pulses. */
+.weft-skeleton {
+  display: block;
+  inline-size: 100%;
+  block-size: 1em;
+  border-radius: var(--weft-radius-control, 8px);
+  background: color-mix(in srgb, var(--weft-color-text, CanvasText) 10%, transparent);
+  animation: weft-pulse 1.6s var(--weft-ease-standard, ease) infinite;
+}
+.weft-skeleton[data-circle] { border-radius: 50%; }
+@keyframes weft-pulse { 50% { opacity: 0.45; } }
+
+/* Reduced motion: the skeleton stops pulsing. */
+@media (prefers-reduced-motion: reduce) {
+  .weft-skeleton { animation: none; }
+}

@@ -10,6 +10,8 @@ import { choice, provideCheckboxGroup, type ChoiceItem } from './choice.ts'
 import { leavesGroup } from './dom.ts'
 import { hideField, useField } from './field.ts'
 import type { Size, Tone } from '../types.ts'
+import '../styles/base.css'
+import '../styles/checkbox-group.css'
 
 const props = withDefaults(
   defineProps<{

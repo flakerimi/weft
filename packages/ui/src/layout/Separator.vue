@@ -3,6 +3,8 @@
 // middle ("or", a date). A `separator` named by its label, or, when
 // decorative, hidden from assistive technology. For a plain rule, Divider.
 import Icon from '../basics/Icon.vue'
+import '../styles/base.css'
+import '../styles/separator.css'
 
 withDefaults(
   defineProps<{

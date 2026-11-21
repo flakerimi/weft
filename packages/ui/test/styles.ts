@@ -10,8 +10,13 @@ import { neutral, themeToCss } from '@weft/themes'
 const styles = join(dirname(fileURLToPath(import.meta.url)), '../src/styles')
 const read = (name: string) => readFileSync(join(styles, `${name}.css`), 'utf8')
 
-/** The stylesheets weft.css imports, in its order. */
-const sheets = [...read('weft').matchAll(/@import '\.\/([a-z-]+)\.css';/g)].map((m) => m[1]!)
+/** The stylesheets weft.css imports, in its order, in place of the group sheets that import them. */
+const imports = (name: string): string[] =>
+  [...read(name).matchAll(/@import '\.\/([a-z-]+)\.css';/g)].flatMap((m) => {
+    const inner = imports(m[1]!)
+    return inner.length ? inner : [m[1]!]
+  })
+const sheets = imports('weft')
 
 /** Add a theme (neutral by default) and weft.css to the document; returns a function that removes them. */
 export function loadStyles(theme = neutral): () => void {

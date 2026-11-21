@@ -6,6 +6,8 @@
 import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
 import { useControlAttrs, useField } from './field.ts'
 import type { Size } from '../types.ts'
+import '../styles/base.css'
+import '../styles/textarea.css'
 
 defineOptions({ inheritAttrs: false })
 

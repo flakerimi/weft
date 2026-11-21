@@ -21,6 +21,8 @@ import { computed, isProxy, nextTick, ref, toRaw, useTemplateRef } from 'vue'
 import { tabbables } from '../headless/dom.ts'
 import { provideForm } from './field.ts'
 import { validateField, validateFields, type FieldSchema } from './schema.ts'
+import '../styles/base.css'
+import '../styles/form.css'
 
 const props = withDefaults(
   defineProps<{

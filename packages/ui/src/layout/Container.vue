@@ -3,6 +3,9 @@
 // space around it. On a landing surface the width is capped
 // (--weft-page-max, 1200 px in the shipped themes); in an app it runs full
 // width, as the surface's density says.
+import '../styles/base.css'
+import '../styles/container.css'
+
 withDefaults(
   defineProps<{
     /** The element to render, for semantics: `section`, `header`, `footer`. */

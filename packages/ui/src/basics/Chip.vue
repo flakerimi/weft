@@ -3,6 +3,9 @@
 // a status on an avatar. Positions are logical, so `top-end` is the top
 // right in a left-to-right document and the top left in a right-to-left one.
 import type { Size, Tone } from '../types.ts'
+import '../styles/base.css'
+import '../styles/tone.css'
+import '../styles/chip.css'
 
 withDefaults(
   defineProps<{

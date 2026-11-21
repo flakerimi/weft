@@ -11,6 +11,8 @@ import Spinner from '../basics/Spinner.vue'
 import { useControlAttrs, useField } from './field.ts'
 import { pressFocuses } from './dom.ts'
 import type { Size } from '../types.ts'
+import '../styles/base.css'
+import '../styles/input.css'
 
 defineOptions({ inheritAttrs: false })
 

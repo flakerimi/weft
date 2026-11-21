@@ -1,0 +1,59 @@
+/* Checkbox, radio and switch: a row of the drawn control and its text, at
+   least --weft-hit-min tall so neighbouring rows' hit areas do not overlap.
+   The native input lies over the drawing, invisible, at least --weft-hit-min
+   square: it is the hit area, and it takes focus, which rings the drawing. */
+.weft-checkbox,
+.weft-switch,
+.weft-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--weft-space-2, 8px);
+  min-block-size: var(--weft-hit-min, 24px);
+  padding-block: max(0px, calc((var(--weft-hit-min, 24px) - 1.5em) / 2));
+}
+.weft-checkbox__control,
+.weft-switch__control,
+.weft-radio__control {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  block-size: 1.5em;
+}
+.weft-checkbox__input,
+.weft-switch__input,
+.weft-radio__input {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  inline-size: max(100%, var(--weft-hit-min, 24px));
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  margin: 0;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  cursor: pointer;
+}
+.weft-checkbox__input:disabled,
+.weft-switch__input:disabled,
+.weft-radio__input:disabled { cursor: not-allowed; }
+.weft-checkbox__input:focus-visible + .weft-checkbox__box,
+.weft-switch__input:focus-visible + .weft-switch__track,
+.weft-radio__input:focus-visible + .weft-radio__circle {
+  outline: 2px solid var(--weft-color-focus, Highlight);
+  outline-offset: 2px;
+}
+.weft-checkbox__text,
+.weft-switch__text,
+.weft-radio__text { display: flex; flex-direction: column; min-inline-size: 0; }
+.weft-checkbox__label,
+.weft-switch__label,
+.weft-radio__label { cursor: pointer; }
+.weft-checkbox__description,
+.weft-switch__description,
+.weft-radio__description { color: var(--weft-color-text-muted, GrayText); font-size: 0.875em; }
+:is(.weft-checkbox, .weft-switch, .weft-radio)[data-disabled] { opacity: 0.5; }
+:is(.weft-checkbox, .weft-switch, .weft-radio)[data-disabled] label { cursor: not-allowed; }
+:is(.weft-checkbox, .weft-switch, .weft-radio)[data-size="sm"] { font-size: 0.875em; }
+:is(.weft-checkbox, .weft-switch, .weft-radio)[data-size="lg"] { font-size: 1.0625em; }

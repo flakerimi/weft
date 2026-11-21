@@ -10,6 +10,8 @@ import { useId } from '../headless/useId.ts'
 import { joinIds } from './dom.ts'
 import { provideField, useForm } from './field.ts'
 import type { Size } from '../types.ts'
+import '../styles/base.css'
+import '../styles/form-field.css'
 
 const props = withDefaults(
   defineProps<{

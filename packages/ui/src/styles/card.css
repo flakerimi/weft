@@ -1,0 +1,24 @@
+.weft-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--weft-space-4, 16px);
+  flex-wrap: wrap;
+}
+.weft-card__actions { display: flex; gap: var(--weft-space-2, 8px); align-items: center; }
+.weft-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-3, 12px);
+  background: var(--weft-color-surface, Canvas);
+  color: var(--weft-color-text, CanvasText);
+  border: 1px solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-card, 12px);
+}
+.weft-card[data-padding="0"] { padding: 0; }
+.weft-card[data-padding="2"] { padding: var(--weft-space-2, 8px); }
+.weft-card[data-padding="3"] { padding: var(--weft-space-3, 12px); }
+.weft-card[data-padding="4"] { padding: var(--weft-space-4, 16px); }
+.weft-card[data-padding="6"] { padding: var(--weft-space-6, 24px); }
+.weft-card__title { font-weight: var(--weft-weight-heading, 600); }
+.weft-card__footer { color: var(--weft-color-text-muted, GrayText); font-size: 0.9em; }

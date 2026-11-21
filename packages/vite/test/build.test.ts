@@ -167,12 +167,12 @@ describe('buildSite on a site with islands', () => {
     const counter = styleOf(read('pages/counter/index.html'))!
     const about = styleOf(read('pages/about/index.html'))!
     const index = styleOf(read('pages/index/index.html'))!
-    expect(counter).toMatch(/button \{\s*font-variant-numeric: tabular-nums;\s*\}/)
-    expect(about).toMatch(/\.badge \{\s*letter-spacing: 0\.02em;\s*\}/)
-    // The rules themselves, not their words: weft.css on every page may use those too.
-    expect(index).not.toMatch(/button \{\s*font-variant-numeric: tabular-nums;/)
-    expect(index).not.toMatch(/\.badge \{\s*letter-spacing/)
-    // Component CSS comes before view transitions, after the theme and weft.css.
+    expect(counter).toMatch(/button\s*\{\s*font-variant-numeric:\s*tabular-nums;?\s*\}/)
+    expect(about).toMatch(/\.badge\s*\{\s*letter-spacing:\s*\.?0?\.?02em;?\s*\}/)
+    // The rules themselves, not their words: base.css on every page may use those too.
+    expect(index).not.toMatch(/button\s*\{\s*font-variant-numeric/)
+    expect(index).not.toMatch(/\.badge\s*\{\s*letter-spacing/)
+    // Component CSS comes before view transitions, after the theme and base.css.
     expect(about.indexOf('.badge')).toBeGreaterThan(about.indexOf('box-sizing:border-box'))
   })
 
@@ -203,13 +203,14 @@ describe('buildSite on a site with islands', () => {
     expect(manifest.files['/archive.tar.gz']).toMatchObject({ type: 'application/octet-stream', br: false, gz: false })
   })
 
-  it('inlines the theme and weft.css with view transitions, and adds speculation rules', () => {
+  it('inlines the theme and base.css, minified, with view transitions, and adds speculation rules', () => {
     for (const p of ['index', 'counter']) {
       const html = read(`pages/${p}/index.html`)
       const css = styleOf(html)!
-      expect(css).toContain('--weft-color-bg: #FAFAFA') // neutral, the default theme
-      expect(css).toContain('box-sizing:border-box') // weft.css
-      expect(css).toContain('@view-transition { navigation: auto; }')
+      expect(css).toContain('--weft-color-bg:#fafafa') // neutral, the default theme
+      expect(css).toContain('box-sizing:border-box') // base.css
+      expect(css).toContain('@view-transition{navigation:auto}')
+      expect(css).not.toContain('/*') // no comments: minified
       expect(html).not.toContain('rel="stylesheet"')
       expect(speculationRules(html)).toEqual({
         prefetch: [{ where: { and: [{ href_matches: '/*' }, { not: { href_matches: ['/api', '/api/*'] } }] }, eagerness: 'moderate' }],
@@ -330,7 +331,7 @@ describe('buildSite on a site without islands', () => {
 
   it('inlines the chosen theme', () => {
     const css = styleOf(readFileSync(join(out, 'pages/index/index.html'), 'utf8'))!
-    expect(css).toContain('--weft-color-bg: #F1F5F9') // lisa
+    expect(css).toContain('--weft-color-bg:#f1f5f9') // lisa
   })
 
   it('records the app and a missing 404 page in routes.json', () => {
@@ -363,13 +364,13 @@ describe('buildSite with CSS over the inline limit', () => {
     const href = hrefOf('index')
     expect(href).toMatch(/^\/assets\/weft-[0-9a-f]{8}\.css$/)
     const css = readFileSync(join(out, href!), 'utf8')
-    expect(css).toContain('--weft-color-bg: #FAFAFA')
-    expect(css).toContain('@view-transition { navigation: auto; }')
+    expect(css).toContain('--weft-color-bg:#fafafa')
+    expect(css).toContain('@view-transition{navigation:auto}')
     expect(manifest.files[href!]).toMatchObject({ type: 'text/css; charset=utf-8', immutable: true })
     // Pages with the same CSS share a file; a page with component CSS gets its own.
     expect(hrefOf('404')).toBe(href)
     expect(hrefOf('about')).not.toBe(href)
-    expect(readFileSync(join(out, hrefOf('about')!), 'utf8')).toMatch(/\.badge \{\s*letter-spacing: 0\.02em;\s*\}/)
+    expect(readFileSync(join(out, hrefOf('about')!), 'utf8')).toMatch(/\.badge\s*\{\s*letter-spacing:\s*\.?0?\.?02em;?\s*\}/)
   })
 
   it('measures the limit in brotli bytes, as the page is sent, not in raw bytes', async () => {

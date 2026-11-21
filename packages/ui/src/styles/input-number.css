@@ -1,0 +1,45 @@
+/* InputNumber: an input's box with a stepper at each end. A stepper is
+   --weft-control-sm wide on pointer and --weft-hit-min (44 px) on touch, the
+   box's full height; its ::before makes it at least --weft-hit-min tall. */
+.weft-input-number { padding-inline: 0; gap: 0; }
+.weft-input-number__field { text-align: center; font-variant-numeric: tabular-nums; }
+.weft-input-number__step {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  inline-size: max(var(--weft-control-sm, 28px), var(--weft-hit-min, 24px));
+  block-size: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--weft-color-text-muted, GrayText);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.weft-input-number__step::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  inline-size: 100%;
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  transform: translateY(-50%);
+}
+/* The minus and plus, drawn as bars in the text colour. */
+.weft-input-number__glyph { position: relative; inline-size: 0.85em; block-size: 0.85em; }
+.weft-input-number__glyph::before,
+.weft-input-number__glyph::after {
+  content: '';
+  position: absolute;
+  inset: calc(50% - 1px) 0;
+  border-radius: 1px;
+  background: currentColor;
+}
+.weft-input-number__step[data-step="down"] .weft-input-number__glyph::after { content: none; }
+.weft-input-number__glyph::after { inset: 0 calc(50% - 1px); }
+.weft-input-number__step:disabled { opacity: 0.4; cursor: not-allowed; }
+@media (hover: hover) {
+  .weft-input-number__step:not(:disabled):hover { color: var(--weft-color-text, CanvasText); background: color-mix(in srgb, var(--weft-color-text, CanvasText) 6%, transparent); }
+}

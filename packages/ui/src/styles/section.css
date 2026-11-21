@@ -1,0 +1,11 @@
+.weft-section__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--weft-space-4, 16px);
+  flex-wrap: wrap;
+}
+.weft-section__description { color: var(--weft-color-text-muted, GrayText); margin-top: var(--weft-space-1, 4px); }
+.weft-section__actions { display: flex; gap: var(--weft-space-2, 8px); align-items: center; }
+.weft-section { display: flex; flex-direction: column; gap: var(--weft-space-4, 16px); }
+.weft-section__title { font-size: 1.25em; }

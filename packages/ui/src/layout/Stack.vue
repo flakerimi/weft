@@ -1,5 +1,8 @@
 <script setup vapor lang="ts">
 import type { Gap } from './types.ts'
+import '../styles/base.css'
+import '../styles/gap.css'
+import '../styles/stack.css'
 
 withDefaults(
   defineProps<{

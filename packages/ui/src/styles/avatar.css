@@ -1,0 +1,22 @@
+/* Avatar: a circle holding an image, initials or an icon. */
+.weft-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  inline-size: 32px;
+  block-size: 32px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--weft-color-text, CanvasText) 10%, var(--weft-color-surface, Canvas));
+  color: var(--weft-color-text-muted, GrayText);
+  font-size: 13px;
+  font-weight: var(--weft-weight-heading, 600);
+  line-height: 1;
+  user-select: none;
+  vertical-align: middle;
+}
+.weft-avatar[data-size="sm"] { inline-size: 24px; block-size: 24px; font-size: 10px; }
+.weft-avatar[data-size="lg"] { inline-size: 40px; block-size: 40px; font-size: 16px; }
+.weft-avatar__image { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.weft-avatar .weft-icon { inline-size: 60%; block-size: 60%; }

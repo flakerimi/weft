@@ -13,6 +13,9 @@ import { useControlAttrs, useField } from './field.ts'
 import { pressFocuses } from './dom.ts'
 import { clamp, tidy } from './numbers.ts'
 import type { Size } from '../types.ts'
+import '../styles/base.css'
+import '../styles/input.css'
+import '../styles/input-number.css'
 
 defineOptions({ inheritAttrs: false })
 

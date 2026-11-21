@@ -1,0 +1,79 @@
+/* Form controls. Heights follow the theme's control sizes: an md control is
+   max(--weft-control-md, --weft-hit-min), so on touch it is 44 px tall as an
+   md Button is; sm and lg keep their sizes. Where a control is drawn smaller
+   than --weft-hit-min (sm boxes, ticks, switches, slider thumbs) its hit area
+   grows to it instead. Invalid controls take the danger colour; focus shows
+   the theme's focus ring on the drawn box. */
+
+/* Input: the box holds the field and anything before and after it. Its
+   ::before is the hit area, behind the field so a press on the text still
+   places the caret; the box isolates, so the hit area stays above whatever
+   background is behind the box. */
+.weft-input {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--weft-space-2, 8px);
+  inline-size: 100%;
+  block-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
+  padding-inline: var(--weft-space-3, 12px);
+  border: 1px solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-control, 8px);
+  background: var(--weft-color-surface, Field);
+  color: var(--weft-color-text, FieldText);
+  cursor: text;
+  transition-property: border-color, box-shadow;
+  transition-duration: var(--weft-duration-control, 150ms);
+  transition-timing-function: var(--weft-ease-standard, ease);
+}
+.weft-input::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  left: 50%;
+  inline-size: max(100%, var(--weft-hit-min, 24px));
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  transform: translate(-50%, -50%);
+}
+.weft-input[data-size="sm"] {
+  block-size: var(--weft-control-sm, 28px);
+  padding-inline: var(--weft-space-2, 8px);
+  gap: var(--weft-space-1, 4px);
+  font-size: 0.875em;
+}
+.weft-input[data-size="lg"] {
+  block-size: var(--weft-control-lg, 44px);
+  padding-inline: var(--weft-space-4, 16px);
+  font-size: 1.0625em;
+}
+.weft-input__field {
+  flex: 1;
+  min-inline-size: 0;
+  block-size: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.weft-input__field::placeholder { color: var(--weft-color-text-muted, GrayText); opacity: 1; }
+.weft-input__leading,
+.weft-input__trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--weft-space-1, 4px);
+  flex-shrink: 0;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-input:focus-within {
+  outline: 2px solid var(--weft-color-focus, Highlight);
+  outline-offset: -1px;
+  border-color: var(--weft-color-focus, Highlight);
+}
+.weft-input[data-invalid] { border-color: var(--weft-color-danger, #DC2626); }
+.weft-input[data-invalid]:focus-within { outline-color: var(--weft-color-danger, #DC2626); }
+.weft-input[data-disabled] { opacity: 0.5; cursor: not-allowed; }
+.weft-input[data-disabled] .weft-input__field { cursor: not-allowed; }

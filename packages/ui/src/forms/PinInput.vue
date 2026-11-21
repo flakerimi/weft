@@ -13,6 +13,8 @@ import { useId } from '../headless/useId.ts'
 import { leavesGroup } from './dom.ts'
 import { useField } from './field.ts'
 import type { Size } from '../types.ts'
+import '../styles/base.css'
+import '../styles/pin-input.css'
 
 const props = withDefaults(
   defineProps<{

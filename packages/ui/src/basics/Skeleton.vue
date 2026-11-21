@@ -2,6 +2,9 @@
 // A placeholder in the shape of content still loading. Hidden from assistive
 // technology: mark the region that is loading with aria-busy instead. It
 // pulses, and stands still under reduced motion.
+import '../styles/base.css'
+import '../styles/skeleton.css'
+
 defineProps<{
   /** Any CSS length; without it, the full width. */
   width?: string

@@ -6,6 +6,9 @@
 // document. Under reduced motion the indeterminate bar stands still.
 import { computed } from 'vue'
 import type { Size, Tone } from '../types.ts'
+import '../styles/base.css'
+import '../styles/tone.css'
+import '../styles/progress.css'
 
 const props = withDefaults(
   defineProps<{

@@ -42,7 +42,7 @@ describe('an island with CSS modules, built and hydrated', () => {
     const after = island.after.split(' ')
     expect(after.slice(0, 2)).toEqual(classes)
     expect(after).toHaveLength(3)
-    expect(css).toMatch(new RegExp(`\\.${after[2]}\\s*\\{\\s*font-weight: 700;`))
+    expect(css).toMatch(new RegExp(`\\.${after[2]}\\s*\\{\\s*font-weight:\\s*700`))
   })
 
   it('ships no stylesheet for them: their CSS is inlined in the page', () => {

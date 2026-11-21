@@ -8,6 +8,8 @@
 // lines above and below.
 import { computed, onMounted, ref } from 'vue'
 import { isExternal as looksExternal, relFor } from './address.ts'
+import '../styles/base.css'
+import '../styles/link.css'
 
 const props = withDefaults(
   defineProps<{

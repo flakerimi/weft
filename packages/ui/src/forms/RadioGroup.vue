@@ -14,6 +14,10 @@ import { choice, type ChoiceItem } from './choice.ts'
 import { leavesGroup } from './dom.ts'
 import { hideField, useField } from './field.ts'
 import type { Size, Tone } from '../types.ts'
+import '../styles/base.css'
+import '../styles/tone.css'
+import '../styles/choice.css'
+import '../styles/radio-group.css'
 
 const props = withDefaults(
   defineProps<{

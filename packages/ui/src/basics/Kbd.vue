@@ -5,6 +5,8 @@
 // draws what it is given, never guessing the reader's operating system.
 import { computed } from 'vue'
 import type { Size } from '../types.ts'
+import '../styles/base.css'
+import '../styles/kbd.css'
 
 const props = withDefaults(
   defineProps<{

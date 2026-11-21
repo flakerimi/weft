@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { brotliCompressSync, constants as zlib, gzipSync } from 'node:zlib'
+import { transform as transformCSS } from 'lightningcss'
 import { build, isCSSRequest, mergeConfig, type Plugin, type ResolvedConfig, type Rolldown } from 'vite'
 import { siteConfig } from './config.ts'
 import { weft } from './plugin.ts'
@@ -222,6 +223,28 @@ function sentSizes(): (css: string) => number {
   }
 }
 
+/**
+ * A page's CSS minified with Lightning CSS, the minifier Vite uses: comments
+ * and spaces go; with no browser targets given, nothing is rewritten for older
+ * browsers. Pages share CSS, so within one build each set is minified once.
+ */
+function minifier(): (css: string, page: string) => string {
+  const done = new Map<string, string>()
+  return (css, page) => {
+    let out = done.get(css)
+    if (out === undefined) {
+      try {
+        out = transformCSS({ filename: 'page.css', code: Buffer.from(css), minify: true }).code.toString()
+      } catch (e) {
+        const why = e instanceof Error ? e.message : String(e)
+        throw new Error(`buildSite: the CSS of ${page} does not parse (${why}).`)
+      }
+      done.set(css, out)
+    }
+    return out
+  }
+}
+
 /** Write the whole build into `dir`, a fresh folder of its own, and mark it. */
 async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssInlineLimit }: BuildInput): Promise<Manifest> {
   // Every file in the build; none is ever written twice, nor under two names the file system takes for one.
@@ -246,9 +269,10 @@ async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssI
   const routesJson: RoutesJson = { pages: [], notFound: null, app }
   const rules = speculationRules(app)
   const sentSize = sentSizes()
+  const minify = minifier()
   for (const page of pages) {
-    // The theme, weft.css, the page's component CSS, then view transitions.
-    const css = [baseCSS, page.css, VIEW_TRANSITION].filter(Boolean).join('\n') + '\n'
+    // The theme, base.css, the CSS of what the page renders, then view transitions.
+    const css = minify([baseCSS, page.css, VIEW_TRANSITION].filter(Boolean).join('\n'), `pages/${page.file}`) + '\n'
     let stylesheet: string | null = null
     if (sentSize(css) > (cssInlineLimit ?? 14 * 1024)) {
       const file = `assets/weft-${sha256(css).slice(0, 8)}.css`
@@ -630,21 +654,32 @@ function appRoute(prefix: string): NonNullable<RoutesJson['app']> {
   return { prefix, index: `${segments.join('/')}/index.html` }
 }
 
-/** The theme stylesheet, then `weft.css`: the CSS every page starts with, and their files. */
+/**
+ * The CSS every page starts with: the theme stylesheet, then @weft/ui's
+ * base.css. Each component brings its own stylesheet, collected per page.
+ * `files` are those two and @weft/ui's weft.css, all-in-one, which a page may
+ * import but whose rules come per component instead: the render leaves them out.
+ */
 async function readStyles(root: string, theme: Theme): Promise<{ css: string; files: string[] }> {
-  const read = async (from: string, spec: string, pkg: string) => {
+  const read = async (from: string, spec: string, fix: string) => {
     try {
       const file = createRequire(from).resolve(spec)
       return [file, await readFile(file, 'utf8')] as const
     } catch (e) {
       const why = e instanceof Error ? e.message.split('\n')[0] : String(e)
-      throw new Error(`buildSite: cannot read ${spec} (${why}); run pnpm --filter ${pkg} build.`)
+      throw new Error(`buildSite: cannot read ${spec} (${why}); ${fix}.`)
     }
   }
-  const [uiFile, ui] = await read(join(root, 'package.json'), '@weft/ui/weft.css', '@weft/ui')
+  const [baseFile, base] = await read(join(root, 'package.json'), '@weft/ui/styles/base.css', 'add @weft/ui to the site\'s dependencies')
   // The theme comes from @weft/ui's own @weft/themes, the version its components expect.
-  const [themeFile, themeCss] = await read(uiFile, `@weft/themes/${theme}.css`, '@weft/themes')
-  return { css: `${themeCss}\n${ui}`, files: [themeFile, uiFile] }
+  const [themeFile, themeCss] = await read(baseFile, `@weft/themes/${theme}.css`, 'run pnpm --filter @weft/themes build')
+  const files = [themeFile, baseFile]
+  try {
+    files.push(createRequire(baseFile).resolve('@weft/ui/weft.css'))
+  } catch {
+    // Not built: then no page imports it either.
+  }
+  return { css: `${themeCss}\n${base}`, files }
 }
 
 /** `/` → `pages/index/index.html`, `/blog/a` → `pages/blog/a/index.html`. */

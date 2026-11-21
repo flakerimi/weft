@@ -31,7 +31,13 @@ export interface RenderResult {
   islands: string[]
   /** Each island's id → the absolute path of its `.vue` file. */
   islandFiles: Record<string, string>
-  /** The CSS of every module the page imports (component `<style>` blocks, CSS imports), in load order. */
+  /**
+   * The CSS of what the page renders, in load order: the stylesheets and
+   * `<style>` blocks of the page, of each component the server render used, of
+   * the components those import, and of the modules (not components) they
+   * import. A component the page only imports, through an index such as
+   * @weft/ui's, and never renders adds nothing.
+   */
   css: string
   head: PageHead
 }
@@ -72,15 +78,17 @@ export async function renderPage(opts: RenderOptions): Promise<RenderResult> {
     const file = '/' + relative(root, resolve(root, opts.page)).split('\\').join('/')
     const mod = (await vite.ssrLoadModule(file)) as { default?: unknown }
     if (!mod.default) throw new Error(`renderPage: ${opts.page} has no default export.`)
-    const ctx: { islands?: string[]; head?: PageHead } = {}
+    // `modules` is filled by @vitejs/plugin-vue: every SFC whose setup ran in this render, relative to root.
+    const ctx: { islands?: string[]; head?: PageHead; modules?: Set<string> } = {}
     const html = await renderToString(createSSRApp(mod.default as never, opts.props), ctx)
     const islands = [...new Set(ctx.islands ?? [])]
     const modules = await pageModules(vite, file)
+    const rendered = new Set([...(ctx.modules ?? [])].map((m) => resolve(root, m)))
     return {
       html,
       islands,
       islandFiles: findIslandFiles(modules, root, file, islands),
-      css: await collectCSS(vite, modules, new Set(opts.providedCSS)),
+      css: await collectCSS(vite, await pageModules(vite, file, rendered), new Set(opts.providedCSS)),
       head: ctx.head ?? {},
     }
   } finally {
@@ -88,18 +96,30 @@ export async function renderPage(opts: RenderOptions): Promise<RenderResult> {
   }
 }
 
-/** Every module the page imports, directly or not, in load order (a module after its imports). */
-async function pageModules(vite: ViteDevServer, page: string): Promise<EnvironmentModuleNode[]> {
+/** A component's own module: a `.vue` file, not one of its blocks (`?vue&type=style…`). */
+const isSFC = (mod: EnvironmentModuleNode) => !!mod.id && mod.id.endsWith('.vue')
+
+/**
+ * Every module the page imports, directly or not, in load order (a module
+ * after its imports). With `rendered`, the components (absolute `.vue` paths)
+ * the server render used: then only what those need. A component is followed
+ * when it was rendered, or when a followed component imports it directly (it
+ * may draw it later, as a Button draws its Spinner once loading); one reached
+ * only through other modules, such as an index re-exporting every component,
+ * is left out with what it imports.
+ */
+async function pageModules(vite: ViteDevServer, page: string, rendered?: Set<string>): Promise<EnvironmentModuleNode[]> {
   const order: EnvironmentModuleNode[] = []
   const seen = new Set<EnvironmentModuleNode>()
-  const visit = (mod: EnvironmentModuleNode) => {
+  const visit = (mod: EnvironmentModuleNode, fromSFC: boolean) => {
     if (seen.has(mod)) return
+    if (rendered && isSFC(mod) && !fromSFC && !rendered.has(mod.file ?? '')) return
     seen.add(mod)
-    for (const dep of mod.importedModules) visit(dep)
+    for (const dep of mod.importedModules) visit(dep, isSFC(mod))
     order.push(mod)
   }
   const start = await vite.environments.ssr.moduleGraph.getModuleByUrl(page)
-  if (start) visit(start)
+  if (start) visit(start, true)
   return order
 }
 

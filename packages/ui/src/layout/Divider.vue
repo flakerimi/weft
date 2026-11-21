@@ -1,4 +1,7 @@
 <script setup vapor lang="ts">
+import '../styles/base.css'
+import '../styles/divider.css'
+
 withDefaults(
   defineProps<{
     /** `horizontal` separates stacked content; `vertical` separates content in a row. */

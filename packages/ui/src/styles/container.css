@@ -1,0 +1,8 @@
+/* Container: the page width, centred, padded more as there is more room
+   (padding in % is of the width around it). */
+.weft-container {
+  inline-size: 100%;
+  max-inline-size: var(--weft-page-max, 1200px);
+  margin-inline: auto;
+  padding-inline: clamp(var(--weft-space-4, 16px), 4%, var(--weft-space-8, 32px));
+}

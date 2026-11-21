@@ -1,0 +1,25 @@
+/* FormField: the label over the control with a hint beside it, a
+   description under the label, the error under the control. */
+.weft-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-1, 4px);
+  min-inline-size: 0;
+}
+.weft-form-field__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--weft-space-2, 8px);
+}
+.weft-form-field__label {
+  color: var(--weft-color-text, CanvasText);
+  font-weight: var(--weft-weight-heading, 600);
+}
+.weft-form-field__required { margin-inline-start: 0.25em; color: var(--weft-color-danger-text, #AB2323); }
+.weft-form-field__hint,
+.weft-form-field__description { color: var(--weft-color-text-muted, GrayText); font-size: 0.875em; }
+.weft-form-field__hint { margin-inline-start: auto; }
+.weft-form-field__error { color: var(--weft-color-danger-text, #AB2323); font-size: 0.875em; }
+.weft-form-field[data-size="sm"] .weft-form-field__label { font-size: 0.875em; }
+.weft-form-field[data-size="lg"] .weft-form-field__label { font-size: 1.0625em; }

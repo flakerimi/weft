@@ -1,5 +1,37 @@
 /* Weft base: every value comes from a --weft-* token, with a system fallback so a
-   missing token never yields invisible text. */
+   missing token never yields invisible text.
+
+   How components get their CSS. Each component has its own stylesheet here,
+   named for it in kebab-case (Button.vue → button.css, FormField.vue →
+   form-field.css), and imports it in its <script setup vapor>, after its other
+   imports:
+
+       import Spinner from './Spinner.vue'
+       import '../styles/base.css'
+       import '../styles/tone.css'
+       import '../styles/button.css'
+
+   - base.css comes first in every component, so a page that renders any of
+     them has it, once. The page build inlines it on every page anyway, right
+     after the theme.
+   - Rules shared by a few components are a stylesheet of their own that each
+     of them imports (tone.css for data-tone, gap.css for Stack and Grid,
+     choice.css for checkbox, radio and switch rows). A component that draws
+     another component's classes without rendering that component imports
+     that stylesheet too (AvatarGroup imports avatar.css).
+   - A component that renders another imports it, and so gets its CSS through
+     the import; its own stylesheet comes after, so its rules about the inner
+     one (.weft-badge .weft-icon) win ties.
+   - Every stylesheet is also imported by its group's sheet (layout.css,
+     basics.css, forms.css: only @imports, in the order the components import
+     them), and weft.css, the all-in-one bundle, imports base.css and each
+     group. A new group adds its sheet to weft.css. test/stylesheets.test.ts
+     checks all of this.
+   The page build (@weft/vite) inlines, per page: the theme, this file, then
+   the stylesheets imported by the components the page renders, in import
+   order. A component an island imports from @weft/ui but draws only after
+   hydrating (never in the server render) is not on the page: the island
+   imports its stylesheet itself, `import '@weft/ui/styles/badge.css'`. */
 *, *::before, *::after { box-sizing: border-box; }
 
 html {

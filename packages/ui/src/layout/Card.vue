@@ -1,4 +1,7 @@
 <script setup vapor lang="ts">
+import '../styles/base.css'
+import '../styles/card.css'
+
 withDefaults(
   defineProps<{
     /** Inner space, from the spacing scale; 0 for edge-to-edge content. */

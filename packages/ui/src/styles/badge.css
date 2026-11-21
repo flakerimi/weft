@@ -1,0 +1,30 @@
+/* Badge: a short label in a tone. Heights follow the control sizes at about
+   two thirds, so a badge sits on a line of text beside a button. */
+.weft-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--weft-space-1, 4px);
+  block-size: 22px;
+  padding-inline: var(--weft-space-2, 8px);
+  border: 1px solid transparent;
+  border-radius: var(--weft-radius-control, 8px);
+  font-size: 0.857em;
+  font-weight: var(--weft-weight-heading, 600);
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.weft-badge[data-size="sm"] { block-size: 18px; padding-inline: var(--weft-space-1, 4px); font-size: 0.75em; }
+.weft-badge[data-size="lg"] { block-size: 26px; padding-inline: var(--weft-space-3, 12px); font-size: 1em; }
+.weft-badge[data-square] { aspect-ratio: 1; padding-inline: 0; justify-content: center; }
+.weft-badge .weft-icon { inline-size: 1.15em; block-size: 1.15em; }
+.weft-badge[data-variant="solid"] { background: var(--weft-tone, LinkText); color: var(--weft-tone-fg, Canvas); }
+.weft-badge[data-variant="soft"] {
+  background: color-mix(in srgb, var(--weft-tone, LinkText) 14%, transparent);
+  color: var(--weft-tone-text, LinkText);
+}
+.weft-badge[data-variant="outline"] {
+  border-color: color-mix(in srgb, var(--weft-tone, LinkText) 45%, transparent);
+  color: var(--weft-tone-text, LinkText);
+}
+.weft-badge[data-variant="ghost"] { color: var(--weft-tone-text, LinkText); }

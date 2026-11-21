@@ -2,6 +2,8 @@
 // A turning ring in the text colour, for work in progress of unknown length.
 // Decorative unless it has a label; with one it is a status that announces it.
 import type { Size } from '../types.ts'
+import '../styles/base.css'
+import '../styles/spinner.css'
 
 defineProps<{
   /** `sm` 16 px, `md` 20 px, `lg` 24 px; without it the spinner is 1.25em, sized with the text. */

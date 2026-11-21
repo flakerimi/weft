@@ -11,6 +11,9 @@ import { isExternal, relFor } from './address.ts'
 import Icon from './Icon.vue'
 import Spinner from './Spinner.vue'
 import type { Size, Tone, Variant } from '../types.ts'
+import '../styles/base.css'
+import '../styles/tone.css'
+import '../styles/button.css'
 
 const props = withDefaults(
   defineProps<{

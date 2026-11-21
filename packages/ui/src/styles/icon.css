@@ -1,0 +1,12 @@
+/* Icon: a 24 × 24 Lucide drawing, stroked in the text colour. Without a size
+   it is 1.25em, so it grows with the text around it. */
+.weft-icon {
+  display: inline-block;
+  flex-shrink: 0;
+  inline-size: 1.25em;
+  block-size: 1.25em;
+  vertical-align: middle;
+}
+.weft-icon[data-size="sm"] { inline-size: 16px; block-size: 16px; }
+.weft-icon[data-size="md"] { inline-size: 20px; block-size: 20px; }
+.weft-icon[data-size="lg"] { inline-size: 24px; block-size: 24px; }

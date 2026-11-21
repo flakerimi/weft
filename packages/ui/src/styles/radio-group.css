@@ -1,0 +1,49 @@
+/* RadioGroup: a radio's circle, 16 px at md, 14 at sm, 20 at lg, filled in
+   the tone with a dot when checked. */
+.weft-radio__circle {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 16px;
+  block-size: 16px;
+  border: 1px solid var(--weft-color-border, GrayText);
+  background: var(--weft-color-surface, Field);
+  border-radius: 50%;
+  color: var(--weft-tone-fg, Canvas);
+  transition-property: background-color, border-color;
+  transition-duration: var(--weft-duration-control, 150ms);
+  transition-timing-function: var(--weft-ease-standard, ease);
+}
+.weft-radio-group[data-size="sm"] .weft-radio__circle { inline-size: 14px; block-size: 14px; }
+.weft-radio-group[data-size="lg"] .weft-radio__circle { inline-size: 20px; block-size: 20px; }
+.weft-radio[data-state="checked"] .weft-radio__circle {
+  border-color: var(--weft-tone, LinkText);
+  background: var(--weft-tone, LinkText);
+}
+.weft-radio[data-state="checked"] .weft-radio__circle::after {
+  content: '';
+  inline-size: 40%;
+  block-size: 40%;
+  border-radius: 50%;
+  background: var(--weft-tone-fg, Canvas);
+}
+.weft-radio-group[aria-invalid="true"] .weft-radio__circle { border-color: var(--weft-color-danger, #DC2626); }
+
+/* The group: a fieldset with no frame of its own; the radios in a column, or
+   a wrapping row with room between their hit areas. */
+.weft-radio-group {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.weft-radio-group__legend {
+  margin-block-end: var(--weft-space-1, 4px);
+  padding: 0;
+  font-weight: var(--weft-weight-heading, 600);
+}
+.weft-radio-group__items { display: flex; flex-direction: column; }
+.weft-radio-group[data-orientation="horizontal"] > div {
+  flex-direction: row;
+  flex-wrap: wrap;
+  column-gap: var(--weft-space-4, 16px);
+}

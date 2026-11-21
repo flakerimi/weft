@@ -1,6 +1,7 @@
 <script setup vapor lang="ts">
 import { provide, useSSRContext, type Component } from 'vue'
 import { ID_SCOPE, type IdScope } from '../headless/useId.ts'
+import '../styles/base.css'
 
 export type IslandWhen = 'load' | 'idle' | 'visible' | 'media'
 

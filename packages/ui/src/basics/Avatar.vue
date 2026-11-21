@@ -9,6 +9,8 @@ import { computed, onMounted, ref, useTemplateRef, watch } from 'vue'
 import Icon from './Icon.vue'
 import { useAvatarGroup } from './avatarGroup.ts'
 import type { Size } from '../types.ts'
+import '../styles/base.css'
+import '../styles/avatar.css'
 
 const props = withDefaults(
   defineProps<{

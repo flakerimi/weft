@@ -11,6 +11,10 @@ import { useId } from '../headless/useId.ts'
 import { useControlAttrs, useField } from './field.ts'
 import Spinner from '../basics/Spinner.vue'
 import type { Size, Tone } from '../types.ts'
+import '../styles/base.css'
+import '../styles/tone.css'
+import '../styles/choice.css'
+import '../styles/switch.css'
 
 defineOptions({ inheritAttrs: false })
 

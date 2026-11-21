@@ -15,6 +15,9 @@ import { useId } from '../headless/useId.ts'
 import { useField } from './field.ts'
 import { clamp, snap } from './numbers.ts'
 import type { Size, Tone } from '../types.ts'
+import '../styles/base.css'
+import '../styles/tone.css'
+import '../styles/slider.css'
 
 defineOptions({ inheritAttrs: false })
 

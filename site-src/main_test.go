@@ -69,11 +69,10 @@ var (
 )
 
 // The home page has one island, the copy button. Brotli, its HTML and CSS are
-// at most 8 KB; with every script the client build made (the island runtime,
-// Vue's Vapor runtime and the island's chunk) at most 28 KB. The CSS is the
-// whole of weft.css, every component's rules whether the page uses them or
-// not (2026-11-21: the form controls took it from 6 KB and 26 KB to these),
-// until the page build sends only the CSS of the components a page renders.
+// at most 6 KB; with every script the client build made (the island runtime,
+// Vue's Vapor runtime and the island's chunk) at most 26 KB. The CSS is the
+// theme, base.css and the stylesheets of the components the page renders,
+// so adding components to @weft/ui does not grow it.
 func TestHomePageBudgets(t *testing.T) {
 	d := dist(t)
 	var m builtFiles
@@ -111,11 +110,11 @@ func TestHomePageBudgets(t *testing.T) {
 			}
 		}
 		t.Logf("home page, brotli: HTML+CSS %d B, scripts %d B, total %d B", static, scripts, static+scripts)
-		if static > 8*1024 {
-			t.Errorf("home page without its island is %d B brotli, over 8 KB", static)
+		if static > 6*1024 {
+			t.Errorf("home page without its island is %d B brotli, over 6 KB", static)
 		}
-		if static+scripts > 28*1024 {
-			t.Errorf("home page with its island is %d B brotli, over 28 KB", static+scripts)
+		if static+scripts > 26*1024 {
+			t.Errorf("home page with its island is %d B brotli, over 26 KB", static+scripts)
 		}
 	}
 	if html == "" {

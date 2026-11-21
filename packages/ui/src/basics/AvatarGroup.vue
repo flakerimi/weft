@@ -5,6 +5,9 @@
 // group with an aria-label ("Project members").
 import { provideAvatarGroup } from './avatarGroup.ts'
 import type { Size } from '../types.ts'
+import '../styles/base.css'
+import '../styles/avatar.css'
+import '../styles/avatar-group.css'
 
 const props = withDefaults(
   defineProps<{

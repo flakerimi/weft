@@ -1,0 +1,84 @@
+/* Slider: a track, its filled part, and thumbs placed along it by inline
+   start (so a right-to-left page fills from the right) or, vertical, from the
+   bottom. The thumb is drawn 16 px (12 sm, 20 lg), and at least
+   --weft-thumb-min (24 px on touch); its ::before, and the track's, are the
+   hit area, at least --weft-hit-min. */
+.weft-slider {
+  --weft-slider-thumb: 16px;
+  --weft-slider-track: 6px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  inline-size: 100%;
+  block-size: max(var(--weft-slider-thumb, 16px), var(--weft-hit-min, 24px));
+  touch-action: none;
+  user-select: none;
+  cursor: pointer;
+}
+.weft-slider[data-size="sm"] { --weft-slider-thumb: 12px; --weft-slider-track: 4px; }
+.weft-slider[data-size="lg"] { --weft-slider-thumb: 20px; --weft-slider-track: 8px; }
+.weft-slider[data-orientation="vertical"] {
+  flex-direction: column;
+  justify-content: center;
+  inline-size: max(var(--weft-slider-thumb, 16px), var(--weft-hit-min, 24px));
+  block-size: 160px;
+}
+.weft-slider__track {
+  position: relative;
+  flex: 1;
+  block-size: var(--weft-slider-track, 6px);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--weft-color-text, CanvasText) 14%, transparent);
+}
+.weft-slider[data-orientation="vertical"] .weft-slider__track { flex: 1; inline-size: var(--weft-slider-track, 6px); block-size: auto; }
+.weft-slider__track::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  transform: translateY(-50%);
+}
+.weft-slider[data-orientation="vertical"] .weft-slider__track::before {
+  inset-block: 0;
+  inset-inline: auto;
+  top: auto;
+  left: 50%;
+  inline-size: max(100%, var(--weft-hit-min, 24px));
+  block-size: auto;
+  transform: translateX(-50%);
+}
+.weft-slider__fill { position: absolute; inset-block: 0; border-radius: inherit; background: var(--weft-tone, LinkText); }
+.weft-slider[data-orientation="vertical"] .weft-slider__fill { inset-block: auto; inset-inline: 0; }
+.weft-slider__thumb {
+  position: absolute;
+  top: 50%;
+  --weft-slider-drawn: max(var(--weft-slider-thumb, 16px), var(--weft-thumb-min, 0px));
+  inline-size: var(--weft-slider-drawn, 16px);
+  block-size: var(--weft-slider-drawn, 16px);
+  margin-inline-start: calc(var(--weft-slider-drawn, 16px) / -2);
+  margin-block-start: calc(var(--weft-slider-drawn, 16px) / -2);
+  border: 2px solid var(--weft-tone, LinkText);
+  border-radius: 50%;
+  background: var(--weft-color-bg, Canvas);
+  box-shadow: 0 1px 2px color-mix(in srgb, CanvasText 25%, transparent);
+  cursor: grab;
+}
+.weft-slider[data-orientation="vertical"] .weft-slider__thumb {
+  top: auto;
+  left: 50%;
+  margin-inline-start: calc(var(--weft-slider-drawn, 16px) / -2);
+  margin-block: 0 calc(var(--weft-slider-drawn, 16px) / -2);
+}
+.weft-slider__thumb::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  inline-size: max(100%, var(--weft-hit-min, 24px));
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  transform: translate(-50%, -50%);
+}
+.weft-slider__thumb:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: 2px; }
+.weft-slider[data-disabled] { opacity: 0.5; cursor: not-allowed; }
+.weft-slider[data-disabled] .weft-slider__thumb { cursor: not-allowed; }

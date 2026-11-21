@@ -1,0 +1,35 @@
+/* Chip: the indicator sits across the chosen corner, or inside it when inset. */
+.weft-chip { position: relative; display: inline-flex; flex-shrink: 0; }
+.weft-chip__indicator {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 8px;
+  block-size: 8px;
+  padding-inline: 0;
+  border-radius: 999px;
+  background: var(--weft-tone, LinkText);
+  color: var(--weft-tone-fg, Canvas);
+  box-shadow: 0 0 0 2px var(--weft-color-bg, Canvas);
+  font-size: 10px;
+  font-weight: var(--weft-weight-heading, 600);
+  line-height: 1;
+  white-space: nowrap;
+  --weft-chip-x: 50%;
+  --weft-chip-y: -50%;
+  transform: translate(var(--weft-chip-x, 50%), var(--weft-chip-y, -50%));
+}
+.weft-chip__indicator[data-text] { min-inline-size: 16px; block-size: 16px; padding-inline: 4px; }
+.weft-chip__indicator[data-size="sm"] { min-inline-size: 6px; block-size: 6px; }
+.weft-chip__indicator[data-size="sm"][data-text] { min-inline-size: 14px; block-size: 14px; font-size: 9px; }
+.weft-chip__indicator[data-size="lg"] { min-inline-size: 10px; block-size: 10px; }
+.weft-chip__indicator[data-size="lg"][data-text] { min-inline-size: 20px; block-size: 20px; font-size: 12px; }
+.weft-chip__indicator[data-position^="top"] { inset-block-start: 0; }
+.weft-chip__indicator[data-position^="bottom"] { inset-block-end: 0; --weft-chip-y: 50%; }
+.weft-chip__indicator[data-position$="end"] { inset-inline-end: 0; }
+.weft-chip__indicator[data-position$="start"] { inset-inline-start: 0; --weft-chip-x: -50%; }
+.weft-chip__indicator[data-position$="end"]:dir(rtl) { --weft-chip-x: -50%; }
+.weft-chip__indicator[data-position$="start"]:dir(rtl) { --weft-chip-x: 50%; }
+.weft-chip__indicator[data-inset] { transform: none; }

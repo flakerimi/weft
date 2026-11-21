@@ -1,0 +1,7 @@
+/* AvatarGroup: each avatar after the first overlaps the one before, ringed in
+   the page colour so the edges read. Logical margins mirror in RTL. */
+.weft-avatar-group { display: inline-flex; align-items: center; }
+.weft-avatar-group > .weft-avatar { box-shadow: 0 0 0 2px var(--weft-color-bg, Canvas); }
+.weft-avatar-group > .weft-avatar + .weft-avatar { margin-inline-start: calc(var(--weft-space-2, 8px) * -1); }
+.weft-avatar-group[data-size="lg"] > .weft-avatar + .weft-avatar { margin-inline-start: calc(var(--weft-space-3, 12px) * -1); }
+.weft-avatar-group__more { color: var(--weft-color-text, CanvasText); }

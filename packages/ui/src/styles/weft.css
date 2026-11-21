@@ -1,3 +1,6 @@
+/* Every Weft stylesheet, for an app that loads them all at once. Components
+   import their own (see base.css), so an app built with Vite has the CSS of
+   the components it uses without this; the page build never inlines it. */
 @import './base.css';
 @import './layout.css';
 @import './basics.css';

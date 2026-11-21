@@ -1,7 +1,7 @@
 // Toned components draw their text in colours @weft/themes checks for AA at
 // build: --weft-color-<tone>-fg on a solid fill, --weft-color-<tone>-text on
 // the page and on tints. The tints here must be the ones the themes check.
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { neutral, themeToCss, tints } from '@weft/themes'
@@ -11,7 +11,13 @@ import Button from '../src/basics/Button.vue'
 import { mount } from './mount.ts'
 import { loadStyles } from './styles.ts'
 
-const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../src/styles/basics.css'), 'utf8')
+// Every stylesheet: tone.css sets the tones, the components' own sheets tint them.
+const styles = join(dirname(fileURLToPath(import.meta.url)), '../src/styles')
+const css = readdirSync(styles)
+  .filter((f) => f.endsWith('.css'))
+  .sort()
+  .map((f) => readFileSync(join(styles, f), 'utf8'))
+  .join('\n')
 
 describe('tone colours', () => {
   it('tint only by the percentages the themes check text against', () => {
