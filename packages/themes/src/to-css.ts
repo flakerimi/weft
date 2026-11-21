@@ -71,8 +71,11 @@ function toneColors(theme: Theme, scheme: 'light' | 'dark'): string[] {
   return lines
 }
 
-const pointerSizes = ['  --weft-control-height: 36px;', '  --weft-hit-min: 24px;']
-const touchSizes = ['  --weft-control-height: 44px;', '  --weft-hit-min: 44px;']
+// Input changes only the hit area: a control's drawn height is
+// --weft-control-sm/md/lg on pointer and touch alike, and an md control is
+// max(--weft-control-md, --weft-hit-min) tall where it is used.
+const pointerSizes = ['  --weft-hit-min: 24px;']
+const touchSizes = ['  --weft-hit-min: 44px;']
 const appDensity = ['  --weft-text-base: 0.875rem;', '  --weft-page-max: none;', '  --weft-section-gap: var(--weft-space-6);']
 const landingDensity = ['  --weft-text-base: 1.125rem;', '  --weft-page-max: 1200px;', '  --weft-section-gap: var(--weft-space-8);']
 

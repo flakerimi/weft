@@ -10,10 +10,13 @@ import { neutral, themeToCss } from '@weft/themes'
 const styles = join(dirname(fileURLToPath(import.meta.url)), '../src/styles')
 const read = (name: string) => readFileSync(join(styles, `${name}.css`), 'utf8')
 
-/** Add the neutral theme and weft.css to the document; returns a function that removes them. */
-export function loadStyles(): () => void {
+/** The stylesheets weft.css imports, in its order. */
+const sheets = [...read('weft').matchAll(/@import '\.\/([a-z-]+)\.css';/g)].map((m) => m[1]!)
+
+/** Add a theme (neutral by default) and weft.css to the document; returns a function that removes them. */
+export function loadStyles(theme = neutral): () => void {
   const style = document.createElement('style')
-  style.textContent = [themeToCss(neutral), read('base'), read('layout'), read('basics')].join('\n')
+  style.textContent = [themeToCss(theme), ...sheets.map(read)].join('\n')
   document.head.appendChild(style)
   return () => style.remove()
 }

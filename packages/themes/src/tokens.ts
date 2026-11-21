@@ -34,9 +34,10 @@ export interface Theme {
   radius: { control: number; card: number; panel: number }
   /**
    * px: the drawn height of a control at each size, for pointer and touch
-   * alike. On touch a control's hit area is at least `--weft-hit-min`: an md
-   * Button grows to it; a small or square control keeps its size and extends
-   * its hit area with a pseudo-element.
+   * alike, as `--weft-control-sm/md/lg`; these are the only control heights a
+   * theme sets. On touch a control's hit area is at least `--weft-hit-min`:
+   * an md Button or Input grows to it (`max(md, hit-min)`); a small or square
+   * control keeps its size and extends its hit area with a pseudo-element.
    */
   control: { sm: number; md: number; lg: number }
   /** px */

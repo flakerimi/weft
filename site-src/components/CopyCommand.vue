@@ -49,7 +49,7 @@ async function copy(e: MouseEvent) {
 }
 .copy-command__button {
   flex: none;
-  min-height: var(--weft-control-height);
+  min-height: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
   min-width: 5.5em;
   padding: 0 var(--weft-space-4);
   font: inherit;

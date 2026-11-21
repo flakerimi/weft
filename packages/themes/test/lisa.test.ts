@@ -30,6 +30,15 @@ describe('lisa theme', () => {
     expect(theme.control).toEqual({ sm: 28, md: 34, lg: 44 })
   })
 
+  it('emits its control sizes, the same for pointer and touch', () => {
+    const css = themeToCss(theme)
+    const root = /:root, \[data-weft-scheme="light"\] \{[^}]*\}/.exec(css)![0]
+    expect(root).toContain('--weft-control-sm: 28px;')
+    expect(root).toContain('--weft-control-md: 34px;')
+    expect(root).toContain('--weft-control-lg: 44px;')
+    expect(css).not.toContain('--weft-control-height')
+  })
+
   it('draws danger from the contract\'s red ramp, whose $solid stops reach 4.5:1 with its inks', () => {
     // semantic.error (#D6453C) reads at 4.2:1 with warm-white and 4.1:1 with ink-900: under AA either way.
     expect(theme.light.danger).toBe(tokens.color.accent['accent-red-700'].value)

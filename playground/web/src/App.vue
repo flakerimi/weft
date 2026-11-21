@@ -1,6 +1,6 @@
 <script setup vapor lang="ts">
 import { computed, ref, watchEffect } from 'vue'
-import { Card, Divider, Grid, Page, Section, Stack, WeftProvider, type Input, type Surface } from '@weft/ui'
+import { Card, Divider, Grid, Page, Section, Stack, WeftProvider, type InputMethod, type Surface } from '@weft/ui'
 import Controls from './Controls.vue'
 import Readout from './Readout.vue'
 import { applyScheme, applyTheme, type Scheme, type ThemeName } from './themes.ts'
@@ -13,7 +13,7 @@ const pick = <T extends string>(key: string, allowed: readonly T[], fallback: T)
 }
 const theme = ref<ThemeName>(pick('theme', ['neutral', 'lisa'] as const, 'neutral'))
 const scheme = ref<Scheme>(pick('scheme', ['system', 'light', 'dark'] as const, 'system'))
-const input = ref<'auto' | Input>(pick('input', ['auto', 'pointer', 'touch'] as const, 'auto'))
+const input = ref<'auto' | InputMethod>(pick('input', ['auto', 'pointer', 'touch'] as const, 'auto'))
 const surface = ref<Surface>(pick('surface', ['app', 'landing'] as const, 'app'))
 
 watchEffect(() => applyTheme(theme.value))
@@ -69,7 +69,7 @@ const cards = ['Customers', 'Revenue', 'Open tickets', 'ONTs online', 'Churn', '
 </template>
 
 <style>
-.controls select { margin-inline-start: var(--weft-space-2); min-height: var(--weft-control-height); font: inherit; }
+.controls select { margin-inline-start: var(--weft-space-2); min-height: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px)); font: inherit; }
 .pill { padding: 2px 8px; border-radius: 999px; background: var(--weft-color-primary-soft); color: var(--weft-color-text); }
 .readout { color: var(--weft-color-text-muted); }
 </style>

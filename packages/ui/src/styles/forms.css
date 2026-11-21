@@ -1,0 +1,445 @@
+/* Form controls. Heights follow the theme's control sizes: an md control is
+   max(--weft-control-md, --weft-hit-min), so on touch it is 44 px tall as an
+   md Button is; sm and lg keep their sizes. Where a control is drawn smaller
+   than --weft-hit-min (sm boxes, ticks, switches, slider thumbs) its hit area
+   grows to it instead. Invalid controls take the danger colour; focus shows
+   the theme's focus ring on the drawn box. */
+
+/* Input: the box holds the field and anything before and after it. Its
+   ::before is the hit area, behind the field so a press on the text still
+   places the caret. */
+.weft-input {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--weft-space-2, 8px);
+  inline-size: 100%;
+  block-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
+  padding-inline: var(--weft-space-3, 12px);
+  border: 1px solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-control, 8px);
+  background: var(--weft-color-surface, Field);
+  color: var(--weft-color-text, FieldText);
+  cursor: text;
+  transition-property: border-color, box-shadow;
+  transition-duration: var(--weft-duration-control, 150ms);
+  transition-timing-function: var(--weft-ease-standard, ease);
+}
+.weft-input::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  left: 50%;
+  inline-size: max(100%, var(--weft-hit-min, 24px));
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  transform: translate(-50%, -50%);
+}
+.weft-input[data-size="sm"] {
+  block-size: var(--weft-control-sm, 28px);
+  padding-inline: var(--weft-space-2, 8px);
+  gap: var(--weft-space-1, 4px);
+  font-size: 0.875em;
+}
+.weft-input[data-size="lg"] {
+  block-size: var(--weft-control-lg, 44px);
+  padding-inline: var(--weft-space-4, 16px);
+  font-size: 1.0625em;
+}
+.weft-input__field {
+  flex: 1;
+  min-inline-size: 0;
+  block-size: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.weft-input__field::placeholder { color: var(--weft-color-text-muted, GrayText); opacity: 1; }
+.weft-input__leading,
+.weft-input__trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--weft-space-1, 4px);
+  flex-shrink: 0;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-input:focus-within {
+  outline: 2px solid var(--weft-color-focus, Highlight);
+  outline-offset: -1px;
+  border-color: var(--weft-color-focus, Highlight);
+}
+.weft-input[data-invalid] { border-color: var(--weft-color-danger, #DC2626); }
+.weft-input[data-invalid]:focus-within { outline-color: var(--weft-color-danger, #DC2626); }
+.weft-input[data-disabled] { opacity: 0.5; cursor: not-allowed; }
+.weft-input[data-disabled] .weft-input__field { cursor: not-allowed; }
+
+/* FormField: the label over the control, a hint under the label, the error
+   under the control. */
+.weft-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-1, 4px);
+  min-inline-size: 0;
+}
+.weft-form-field__label {
+  align-self: flex-start;
+  color: var(--weft-color-text, CanvasText);
+  font-weight: var(--weft-weight-heading, 600);
+}
+.weft-form-field__required { margin-inline-start: 0.25em; color: var(--weft-color-danger-text, #AB2323); }
+.weft-form-field__hint { color: var(--weft-color-text-muted, GrayText); font-size: 0.875em; }
+.weft-form-field__error { color: var(--weft-color-danger-text, #AB2323); font-size: 0.875em; }
+.weft-form-field[data-size="sm"] > .weft-form-field__label { font-size: 0.875em; }
+.weft-form-field[data-size="lg"] > .weft-form-field__label { font-size: 1.0625em; }
+
+/* Checkbox, radio and switch: a row of the drawn control and its text, at
+   least --weft-hit-min tall so neighbouring rows' hit areas do not overlap.
+   The native input lies over the drawing, invisible, at least --weft-hit-min
+   square: it is the hit area, and it takes focus, which rings the drawing. */
+.weft-checkbox,
+.weft-switch,
+.weft-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--weft-space-2, 8px);
+  min-block-size: var(--weft-hit-min, 24px);
+  padding-block: max(0px, calc((var(--weft-hit-min, 24px) - 1.5em) / 2));
+}
+.weft-checkbox__control,
+.weft-switch__control,
+.weft-radio__control {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  block-size: 1.5em;
+}
+.weft-checkbox__input,
+.weft-switch__input,
+.weft-radio__input {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  inline-size: max(100%, var(--weft-hit-min, 24px));
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  margin: 0;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  cursor: pointer;
+}
+.weft-checkbox__input:disabled,
+.weft-switch__input:disabled,
+.weft-radio__input:disabled { cursor: not-allowed; }
+.weft-checkbox__input:focus-visible + .weft-checkbox__box,
+.weft-switch__input:focus-visible + .weft-switch__track,
+.weft-radio__input:focus-visible + .weft-radio__circle {
+  outline: 2px solid var(--weft-color-focus, Highlight);
+  outline-offset: 2px;
+}
+.weft-checkbox__text,
+.weft-switch__text,
+.weft-radio__text { display: flex; flex-direction: column; min-inline-size: 0; }
+.weft-checkbox__label,
+.weft-switch__label,
+.weft-radio__label { cursor: pointer; }
+.weft-checkbox__description,
+.weft-switch__description,
+.weft-radio__description { color: var(--weft-color-text-muted, GrayText); font-size: 0.875em; }
+:is(.weft-checkbox, .weft-switch, .weft-radio)[data-disabled] { opacity: 0.5; }
+:is(.weft-checkbox, .weft-switch, .weft-radio)[data-disabled] label { cursor: not-allowed; }
+:is(.weft-checkbox, .weft-switch, .weft-radio)[data-size="sm"] { font-size: 0.875em; }
+:is(.weft-checkbox, .weft-switch, .weft-radio)[data-size="lg"] { font-size: 1.0625em; }
+
+/* The box and the circle: 16 px at md, 14 at sm, 20 at lg. */
+.weft-checkbox__box,
+.weft-radio__circle {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 16px;
+  block-size: 16px;
+  border: 1px solid var(--weft-color-border, GrayText);
+  background: var(--weft-color-surface, Field);
+  color: var(--weft-tone-fg, Canvas);
+  transition-property: background-color, border-color;
+  transition-duration: var(--weft-duration-control, 150ms);
+  transition-timing-function: var(--weft-ease-standard, ease);
+}
+.weft-checkbox__box { border-radius: 4px; }
+.weft-radio__circle { border-radius: 50%; }
+:is(.weft-checkbox, .weft-radio-group)[data-size="sm"] :is(.weft-checkbox__box, .weft-radio__circle) { inline-size: 14px; block-size: 14px; }
+:is(.weft-checkbox, .weft-radio-group)[data-size="lg"] :is(.weft-checkbox__box, .weft-radio__circle) { inline-size: 20px; block-size: 20px; }
+.weft-checkbox__mark { inline-size: 75%; block-size: 75%; visibility: hidden; }
+.weft-checkbox:is([data-state="checked"], [data-state="indeterminate"]) .weft-checkbox__box,
+.weft-radio[data-state="checked"] .weft-radio__circle {
+  border-color: var(--weft-tone, LinkText);
+  background: var(--weft-tone, LinkText);
+}
+.weft-checkbox:is([data-state="checked"], [data-state="indeterminate"]) .weft-checkbox__mark { visibility: visible; }
+.weft-radio[data-state="checked"] .weft-radio__circle::after {
+  content: '';
+  inline-size: 40%;
+  block-size: 40%;
+  border-radius: 50%;
+  background: var(--weft-tone-fg, Canvas);
+}
+.weft-checkbox[data-invalid] .weft-checkbox__box,
+.weft-switch[data-invalid] .weft-switch__track,
+.weft-radio-group[aria-invalid="true"] .weft-radio__circle { border-color: var(--weft-color-danger, #DC2626); }
+
+/* Switch: a track with a thumb that slides to the inline end when on (the
+   start in right-to-left). md is 36 × 20 px, sm 28 × 16, lg 44 × 24. */
+.weft-switch__track {
+  --weft-switch-w: 36px;
+  --weft-switch-h: 20px;
+  display: inline-flex;
+  align-items: center;
+  inline-size: var(--weft-switch-w, 36px);
+  block-size: var(--weft-switch-h, 20px);
+  padding: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--weft-color-text, CanvasText) 22%, transparent);
+  transition: background-color var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease);
+}
+.weft-switch[data-size="sm"] .weft-switch__track { --weft-switch-w: 28px; --weft-switch-h: 16px; }
+.weft-switch[data-size="lg"] .weft-switch__track { --weft-switch-w: 44px; --weft-switch-h: 24px; }
+.weft-switch__thumb {
+  display: inline-grid;
+  place-items: center;
+  inline-size: calc(var(--weft-switch-h, 20px) - 4px);
+  block-size: calc(var(--weft-switch-h, 20px) - 4px);
+  border-radius: 50%;
+  background: var(--weft-color-bg, Canvas);
+  color: var(--weft-tone, LinkText);
+  box-shadow: 0 1px 2px color-mix(in srgb, CanvasText 25%, transparent);
+  transition: margin-inline-start var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease);
+}
+.weft-switch__thumb .weft-spinner { inline-size: 80%; block-size: 80%; }
+.weft-switch[data-state="checked"] .weft-switch__track { background: var(--weft-tone, LinkText); }
+.weft-switch[data-state="checked"] .weft-switch__thumb { margin-inline-start: calc(var(--weft-switch-w, 36px) - var(--weft-switch-h, 20px)); }
+.weft-switch[data-loading] .weft-switch__input { cursor: progress; }
+
+/* Groups: a fieldset with no frame of its own; the items in a column, or a
+   wrapping row with room between the items' hit areas. */
+.weft-checkbox-group,
+.weft-radio-group {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.weft-checkbox-group__legend,
+.weft-radio-group__legend {
+  margin-block-end: var(--weft-space-1, 4px);
+  padding: 0;
+  font-weight: var(--weft-weight-heading, 600);
+}
+.weft-checkbox-group__items,
+.weft-radio-group__items { display: flex; flex-direction: column; }
+:is(.weft-checkbox-group, .weft-radio-group)[data-orientation="horizontal"] > div {
+  flex-direction: row;
+  flex-wrap: wrap;
+  column-gap: var(--weft-space-4, 16px);
+}
+
+/* Textarea: an input's box over several lines. */
+.weft-textarea {
+  display: block;
+  inline-size: 100%;
+  min-block-size: var(--weft-control-md, 36px);
+  padding: var(--weft-space-2, 8px) var(--weft-space-3, 12px);
+  border: 1px solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-control, 8px);
+  background: var(--weft-color-surface, Field);
+  color: var(--weft-color-text, FieldText);
+  font: inherit;
+  line-height: 1.5;
+  resize: vertical;
+}
+.weft-textarea[data-autoresize] { resize: none; overflow-y: hidden; }
+.weft-textarea::placeholder { color: var(--weft-color-text-muted, GrayText); opacity: 1; }
+.weft-textarea:focus-visible {
+  outline: 2px solid var(--weft-color-focus, Highlight);
+  outline-offset: -1px;
+  border-color: var(--weft-color-focus, Highlight);
+}
+.weft-textarea[data-size="sm"] { padding: var(--weft-space-1, 4px) var(--weft-space-2, 8px); font-size: 0.875em; }
+.weft-textarea[data-size="lg"] { padding: var(--weft-space-3, 12px) var(--weft-space-4, 16px); font-size: 1.0625em; }
+.weft-textarea[data-invalid] { border-color: var(--weft-color-danger, #DC2626); }
+.weft-textarea:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* InputNumber: an input's box with a stepper at each end. A stepper is
+   --weft-control-sm wide on pointer and --weft-hit-min (44 px) on touch, the
+   box's full height; its ::before makes it at least --weft-hit-min tall. */
+.weft-input-number { padding-inline: 0; gap: 0; }
+.weft-input-number__field { text-align: center; font-variant-numeric: tabular-nums; }
+.weft-input-number__step {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  inline-size: max(var(--weft-control-sm, 28px), var(--weft-hit-min, 24px));
+  block-size: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--weft-color-text-muted, GrayText);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.weft-input-number__step::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  inline-size: 100%;
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  transform: translateY(-50%);
+}
+/* The minus and plus, drawn as bars in the text colour. */
+.weft-input-number__glyph { position: relative; inline-size: 0.85em; block-size: 0.85em; }
+.weft-input-number__glyph::before,
+.weft-input-number__glyph::after {
+  content: '';
+  position: absolute;
+  inset: calc(50% - 1px) 0;
+  border-radius: 1px;
+  background: currentColor;
+}
+.weft-input-number__step[data-step="down"] .weft-input-number__glyph::after { content: none; }
+.weft-input-number__glyph::after { inset: 0 calc(50% - 1px); }
+.weft-input-number__step:disabled { opacity: 0.4; cursor: not-allowed; }
+@media (hover: hover) {
+  .weft-input-number__step:not(:disabled):hover { color: var(--weft-color-text, CanvasText); background: color-mix(in srgb, var(--weft-color-text, CanvasText) 6%, transparent); }
+}
+
+/* Slider: a track, its filled part, and thumbs placed along it by inline
+   start (so a right-to-left page fills from the right) or, vertical, from the
+   bottom. The thumb is drawn 16 px (12 sm, 20 lg); its ::before, and the
+   track's, are the hit area, at least --weft-hit-min. */
+.weft-slider {
+  --weft-slider-thumb: 16px;
+  --weft-slider-track: 6px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  inline-size: 100%;
+  block-size: max(var(--weft-slider-thumb, 16px), var(--weft-hit-min, 24px));
+  touch-action: none;
+  user-select: none;
+  cursor: pointer;
+}
+.weft-slider[data-size="sm"] { --weft-slider-thumb: 12px; --weft-slider-track: 4px; }
+.weft-slider[data-size="lg"] { --weft-slider-thumb: 20px; --weft-slider-track: 8px; }
+.weft-slider[data-orientation="vertical"] {
+  flex-direction: column;
+  justify-content: center;
+  inline-size: max(var(--weft-slider-thumb, 16px), var(--weft-hit-min, 24px));
+  block-size: 160px;
+}
+.weft-slider__track {
+  position: relative;
+  flex: 1;
+  block-size: var(--weft-slider-track, 6px);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--weft-color-text, CanvasText) 14%, transparent);
+}
+.weft-slider[data-orientation="vertical"] .weft-slider__track { flex: 1; inline-size: var(--weft-slider-track, 6px); block-size: auto; }
+.weft-slider__track::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  transform: translateY(-50%);
+}
+.weft-slider[data-orientation="vertical"] .weft-slider__track::before {
+  inset-block: 0;
+  inset-inline: auto;
+  top: auto;
+  left: 50%;
+  inline-size: max(100%, var(--weft-hit-min, 24px));
+  block-size: auto;
+  transform: translateX(-50%);
+}
+.weft-slider__fill { position: absolute; inset-block: 0; border-radius: inherit; background: var(--weft-tone, LinkText); }
+.weft-slider[data-orientation="vertical"] .weft-slider__fill { inset-block: auto; inset-inline: 0; }
+.weft-slider__thumb {
+  position: absolute;
+  top: 50%;
+  inline-size: var(--weft-slider-thumb, 16px);
+  block-size: var(--weft-slider-thumb, 16px);
+  margin-inline-start: calc(var(--weft-slider-thumb, 16px) / -2);
+  margin-block-start: calc(var(--weft-slider-thumb, 16px) / -2);
+  border: 2px solid var(--weft-tone, LinkText);
+  border-radius: 50%;
+  background: var(--weft-color-bg, Canvas);
+  box-shadow: 0 1px 2px color-mix(in srgb, CanvasText 25%, transparent);
+  cursor: grab;
+}
+.weft-slider[data-orientation="vertical"] .weft-slider__thumb {
+  top: auto;
+  left: 50%;
+  margin-inline-start: calc(var(--weft-slider-thumb, 16px) / -2);
+  margin-block: 0 calc(var(--weft-slider-thumb, 16px) / -2);
+}
+.weft-slider__thumb::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  inline-size: max(100%, var(--weft-hit-min, 24px));
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  transform: translate(-50%, -50%);
+}
+.weft-slider__thumb:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: 2px; }
+.weft-slider[data-disabled] { opacity: 0.5; cursor: not-allowed; }
+.weft-slider[data-disabled] .weft-slider__thumb { cursor: not-allowed; }
+
+/* PinInput: square boxes in a row, each a control height. */
+.weft-pin-input { display: inline-flex; gap: var(--weft-space-2, 8px); }
+.weft-pin-input__box {
+  inline-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
+  block-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
+  padding: 0;
+  border: 1px solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-control, 8px);
+  background: var(--weft-color-surface, Field);
+  color: var(--weft-color-text, FieldText);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.weft-pin-input[data-size="sm"] .weft-pin-input__box { inline-size: var(--weft-control-sm, 28px); block-size: var(--weft-control-sm, 28px); font-size: 0.875em; }
+.weft-pin-input[data-size="lg"] .weft-pin-input__box { inline-size: var(--weft-control-lg, 44px); block-size: var(--weft-control-lg, 44px); font-size: 1.0625em; }
+.weft-pin-input__box:focus-visible {
+  outline: 2px solid var(--weft-color-focus, Highlight);
+  outline-offset: -1px;
+  border-color: var(--weft-color-focus, Highlight);
+}
+.weft-pin-input[data-invalid] .weft-pin-input__box { border-color: var(--weft-color-danger, #DC2626); }
+.weft-pin-input__box:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* FieldGroup: the controls' borders meet (each overlaps the one before by
+   its border) and only the group's outer corners are round. The focused
+   control is drawn on top so its ring shows whole. */
+.weft-field-group { display: inline-flex; align-items: stretch; }
+.weft-field-group[data-orientation="vertical"] { flex-direction: column; }
+.weft-field-group > * { position: relative; flex-shrink: 0; }
+.weft-field-group > .weft-input { flex: 1; inline-size: auto; }
+.weft-field-group > :focus-within,
+.weft-field-group > :focus-visible { z-index: 1; }
+.weft-field-group[data-orientation="horizontal"] > * + * { margin-inline-start: -1px; }
+.weft-field-group[data-orientation="horizontal"] > :not(:last-child) { border-start-end-radius: 0; border-end-end-radius: 0; }
+.weft-field-group[data-orientation="horizontal"] > :not(:first-child) { border-start-start-radius: 0; border-end-start-radius: 0; }
+.weft-field-group[data-orientation="vertical"] > * + * { margin-block-start: -1px; }
+.weft-field-group[data-orientation="vertical"] > :not(:last-child) { border-end-start-radius: 0; border-end-end-radius: 0; }
+.weft-field-group[data-orientation="vertical"] > :not(:first-child) { border-start-start-radius: 0; border-start-end-radius: 0; }
+
+/* Form: its fields in a column. */
+.weft-form { display: flex; flex-direction: column; gap: var(--weft-space-4, 16px); }

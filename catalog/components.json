@@ -446,6 +446,238 @@
       ]
     },
     {
+      "name": "Checkbox",
+      "group": "forms",
+      "file": "packages/ui/src/forms/Checkbox.vue",
+      "purpose": "A box to tick on its own or as one of a CheckboxGroup, which can also be indeterminate.",
+      "use": "For a yes or no that is sent with a form (accept the terms), or a choice among several that are all allowed.",
+      "avoid": "For a setting that takes effect at once, use Switch; for one choice among several, use RadioGroup.",
+      "adapts": {
+        "input": "The box keeps its drawn size; the native input lies over it at least --weft-hit-min square, and each row is at least --weft-hit-min tall, so on touch it takes a 44 px press without neighbours' hit areas overlapping.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "Nothing changes; a long label wraps beside the box."
+      },
+      "props": [
+        {
+          "name": "modelValue",
+          "type": "boolean | 'indeterminate'",
+          "required": false,
+          "default": "undefined",
+          "description": "Ticked (`true`), not (`false`), or `'indeterminate'`; bound with `v-model`."
+        },
+        {
+          "name": "defaultValue",
+          "type": "boolean | 'indeterminate'",
+          "required": false,
+          "default": "false",
+          "description": "The state to start in when `v-model` is not bound."
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The text beside the box. The default slot replaces it."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A sentence under the label, which also describes the box."
+        },
+        {
+          "name": "value",
+          "type": "string | number",
+          "required": false,
+          "default": null,
+          "description": "The value it stands for: what a CheckboxGroup lists, and what a form post sends (default `on`)."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The form field name; a group's or a FormField's applies when not set."
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The input's id; generated when not set."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": null,
+          "description": "`sm`, `md` or `lg`."
+        },
+        {
+          "name": "tone",
+          "type": "'neutral' | 'primary' | 'danger' | 'warning' | 'success'",
+          "required": false,
+          "default": null,
+          "description": "The colour of the ticked box."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Unavailable: natively disabled."
+        },
+        {
+          "name": "required",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "The native `required`."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:modelValue",
+          "payload": "[value: boolean | 'indeterminate']",
+          "description": "Ticked or unticked by a press, Space or its label."
+        },
+        {
+          "name": "change",
+          "payload": "[event: Event]",
+          "description": "The native change."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "Bind `v-model` to `true`, `false` or `'indeterminate'`. Indeterminate (some\nof what it stands for is chosen) draws a dash and is announced as mixed; a\npress ticks it. A parent that does not take a change leaves it as bound.\n\nIt is a native checkbox, so Space toggles it, its label toggles it, and it\nposts `value` (default `on`) under `name` with a plain form. `label` (or the\ndefault slot) is beside the box; `description` sits under the label and\ndescribes the box. Focus rings the drawn box.\n\nIn a CheckboxGroup a Checkbox with a `value` is ticked while that value is in\nthe group's list. In a FormField it takes the field's id, so the field's label\nalso names it.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Checkbox/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Checkbox } from '@weft/ui'\n\nconst accepted = ref(false)\n</script>\n\n<template>\n  <Checkbox v-model=\"accepted\" label=\"I accept the terms\" description=\"You can withdraw at any time.\" />\n</template>\n"
+        },
+        {
+          "name": "indeterminate",
+          "title": "Indeterminate",
+          "file": "packages/ui/examples/Checkbox/indeterminate.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { computed, ref } from 'vue'\nimport { Checkbox, Stack } from '@weft/ui'\n\nconst files = ref([\n  { name: 'report.pdf', on: true },\n  { name: 'notes.txt', on: false },\n])\nconst all = computed({\n  get: () => (files.value.every((f) => f.on) ? true : files.value.some((f) => f.on) ? 'indeterminate' : false),\n  set: (v: boolean | 'indeterminate') => files.value.forEach((f) => (f.on = v === true)),\n})\n</script>\n\n<template>\n  <Stack :gap=\"1\">\n    <Checkbox v-model=\"all\" label=\"All files\" />\n    <Checkbox v-for=\"f in files\" :key=\"f.name\" v-model=\"f.on\" :label=\"f.name\" />\n  </Stack>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "CheckboxGroup",
+      "group": "forms",
+      "file": "packages/ui/src/forms/CheckboxGroup.vue",
+      "purpose": "Several checkboxes for one list of chosen values.",
+      "use": "For choosing any number of a few options, all in view (toppings, notification channels).",
+      "avoid": "For exactly one choice, use RadioGroup; for many options, use a multiple select.",
+      "adapts": {
+        "input": "Each row is at least 44 px tall on touch, and each box's hit area 44 px square, so rows do not steal each other's presses.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "Horizontal groups wrap onto more rows when narrow."
+      },
+      "props": [
+        {
+          "name": "modelValue",
+          "type": "(string | number)[]",
+          "required": false,
+          "default": "undefined",
+          "description": "The chosen values, bound with `v-model`."
+        },
+        {
+          "name": "defaultValue",
+          "type": "(string | number)[]",
+          "required": false,
+          "default": "() => []",
+          "description": "The values chosen at first when `v-model` is not bound."
+        },
+        {
+          "name": "items",
+          "type": "ChoiceItem[]",
+          "required": false,
+          "default": null,
+          "description": "The options: values, or `{ value, label, description, disabled }`."
+        },
+        {
+          "name": "legend",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The group's name, shown above it; inside a FormField the field's label names it instead."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The form field name each box posts under; a FormField's applies when not set."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": null,
+          "description": "`sm`, `md` or `lg`, for every box."
+        },
+        {
+          "name": "tone",
+          "type": "'neutral' | 'primary' | 'danger' | 'warning' | 'success'",
+          "required": false,
+          "default": "'primary'",
+          "description": "The colour of the ticked boxes."
+        },
+        {
+          "name": "orientation",
+          "type": "'vertical' | 'horizontal'",
+          "required": false,
+          "default": "'vertical'",
+          "description": "`vertical` (a column) or `horizontal` (a wrapping row)."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Disables every box."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:modelValue",
+          "payload": "[value: (string | number)[]]",
+          "description": "A box was ticked or unticked: the new list."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "legend",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "Bind the list with `v-model`. Give the options as `items` - values, or\n`{ value, label, description, disabled }` - or put Checkboxes with a `value`\nin the default slot. A ticked value is added at the end of the list.\n\nIt is a `<fieldset>`: `legend` names it, or, inside a FormField, the field's\nlabel does through `aria-labelledby`; the field's hint and error describe the\ngroup, and an error marks it `aria-invalid`. The boxes keep ids of their own.\n`disabled` disables every box. Tab visits each box, as native checkboxes do.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/CheckboxGroup/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { CheckboxGroup } from '@weft/ui'\n\nconst channels = ref<(string | number)[]>(['email'])\nconst items = [\n  { value: 'email', label: 'Email' },\n  { value: 'sms', label: 'Text message', description: 'Charges may apply.' },\n  { value: 'push', label: 'Push notification' },\n]\n</script>\n\n<template>\n  <CheckboxGroup v-model=\"channels\" legend=\"Notify me by\" :items=\"items\" />\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "Chip",
       "group": "basics",
       "file": "packages/ui/src/basics/Chip.vue",
@@ -599,6 +831,227 @@
       ]
     },
     {
+      "name": "FieldGroup",
+      "group": "forms",
+      "file": "packages/ui/src/forms/FieldGroup.vue",
+      "purpose": "Controls joined into one, their borders meeting.",
+      "use": "For an input with a button at its end, a unit before an amount, a row of segmented buttons.",
+      "avoid": "For laying out separate fields, use Stack or Grid.",
+      "adapts": {
+        "input": "Nothing of its own; the controls in it keep their touch sizes, so on touch an md input and an md Button in a group are both 44 px tall.",
+        "surface": "Nothing changes.",
+        "width": "Nothing changes; a vertical group stacks its controls."
+      },
+      "props": [
+        {
+          "name": "orientation",
+          "type": "'horizontal' | 'vertical'",
+          "required": false,
+          "default": "'horizontal'",
+          "description": "`horizontal` (a row) or `vertical` (a column)."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": null,
+          "description": "`sm`, `md` or `lg`, for the form controls in it."
+        }
+      ],
+      "emits": [],
+      "slots": [
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "Put Inputs, InputNumbers and Buttons in the default slot. Neighbouring borders\noverlap, only the group's outer corners are round, and the focused control is\ndrawn on top so its ring shows whole. `orientation` is `horizontal` or\n`vertical`. Form controls in it take its `size` unless they set their own;\ngive Buttons in it the same `size`. It is a `role=\"group\"`; give it an\n`aria-label` when the controls need a shared name.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/FieldGroup/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Button, FieldGroup, Input } from '@weft/ui'\n\nconst email = ref('')\n</script>\n\n<template>\n  <FieldGroup aria-label=\"Subscribe\">\n    <Input v-model=\"email\" type=\"email\" placeholder=\"you@example.com\" aria-label=\"Email\" />\n    <Button label=\"Subscribe\" />\n  </FieldGroup>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "Form",
+      "group": "forms",
+      "file": "packages/ui/src/forms/Form.vue",
+      "purpose": "A form that checks its values against a Weft field schema before it submits.",
+      "use": "For any form whose values need checking before they are sent, with the same rules the server enforces.",
+      "avoid": "For a search box or a single setting that takes effect at once, a Form is not needed.",
+      "adapts": {
+        "input": "Nothing of its own; the fields inside it adapt.",
+        "surface": "Nothing changes in behaviour.",
+        "width": "Nothing changes; its fields stack in a column."
+      },
+      "props": [
+        {
+          "name": "state",
+          "type": "T",
+          "required": true,
+          "default": null,
+          "description": "The values, by field name: an object the fields bind into with `v-model`."
+        },
+        {
+          "name": "schema",
+          "type": "FieldSchema<Extract<keyof T, string>>",
+          "required": false,
+          "default": "() => ({})",
+          "description": "The rules each field must meet, by name: `{ email: { required: true, email: true } }`."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Disables every field, and a submit does nothing."
+        }
+      ],
+      "emits": [
+        {
+          "name": "submit",
+          "payload": "[values: T]",
+          "description": "Submitted with every field valid: a copy of the values."
+        },
+        {
+          "name": "error",
+          "payload": "[errors: Record<string, string>]",
+          "description": "Submitted with errors: each failing field's sentence, by name."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "`state` is the values, an object the fields bind into with `v-model`;\n`schema` is a Weft field schema - plain JSON a server can send, the same\nshape the Go contract will generate - keyed by field name:\n\n    { email: { required: true, email: true }, age: { min: 18, message: 'You must be 18 or over.' } }\n\nEach rule is optional: `required`, `min` and `max` (a length for text and\nlists, bounds for numbers), `pattern` (matched against the whole text, as the\nHTML attribute does), `email`, and `message` in place of the default\nsentences. Its TypeScript type is `FieldSchema`, and `validateFields` checks\nvalues against one anywhere.\n\n**When it checks.** On submit every field is checked. With errors, `error`\nfires with them, each FormField with a matching `name` shows its error, and\nfocus moves to the first invalid control; without, `submit` fires with a\ncopy of the values, typed as `state` is. After the first submit, a field is\nchecked again when it is left, and a field showing an error is checked as it\nchanges, so the error goes the moment it is fixed - but no new error appears\nwhile typing.\n\n**Server errors.** A template ref's `setErrors({ email: 'That address is\ntaken.' })` shows errors from elsewhere until each field is checked again;\n`validate()` checks without submitting, and `clear()` clears every error.\n\nWhile `disabled`, its fields are disabled and a submit does nothing. A\nButton with `type=\"submit\"` and `loading` blocks a second submit. The native\nform has `novalidate`: Weft shows the errors, not the browser.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Form/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { reactive, ref } from 'vue'\nimport { Button, Checkbox, Form, FormField, Input, InputNumber, type FieldSchema } from '@weft/ui'\n\nconst state = reactive({ email: '', age: null as number | null, terms: false })\n// The same rules the server checks; the Go contract can generate this object.\nconst schema: FieldSchema<keyof typeof state> = {\n  email: { required: true, email: true },\n  age: { min: 18, message: 'You must be 18 or over.' },\n  terms: { required: true, message: 'Accept the terms to go on.' },\n}\nconst sent = ref('')\n</script>\n\n<template>\n  <Form :state=\"state\" :schema=\"schema\" @submit=\"sent = $event.email\">\n    <FormField label=\"Email\" name=\"email\"><Input v-model=\"state.email\" type=\"email\" autocomplete=\"email\" /></FormField>\n    <FormField label=\"Age\" name=\"age\"><InputNumber v-model=\"state.age\" :min=\"0\" /></FormField>\n    <FormField name=\"terms\"><Checkbox v-model=\"state.terms\" label=\"I accept the terms\" /></FormField>\n    <Button type=\"submit\" label=\"Create account\" />\n    <p v-if=\"sent\">Welcome, {{ sent }}.</p>\n  </Form>\n</template>\n"
+        },
+        {
+          "name": "server-errors",
+          "title": "Server errors",
+          "file": "packages/ui/examples/Form/server-errors.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { reactive, ref, useTemplateRef } from 'vue'\nimport { Button, Form, FormField, Input } from '@weft/ui'\n\nconst state = reactive({ username: '' })\nconst form = useTemplateRef<{ setErrors(errors: Record<string, string>): void }>('form')\nconst busy = ref(false)\n\n// A stand-in for the server's answer: the name is taken.\nasync function save(values: { username: string }) {\n  busy.value = true\n  await new Promise((r) => setTimeout(r, 600))\n  busy.value = false\n  form.value?.setErrors({ username: `\"${values.username}\" is taken; try another.` })\n}\n</script>\n\n<template>\n  <Form ref=\"form\" :state=\"state\" :schema=\"{ username: { required: true, min: 3 } }\" @submit=\"save\">\n    <FormField label=\"Username\" name=\"username\"><Input v-model=\"state.username\" /></FormField>\n    <Button type=\"submit\" label=\"Claim it\" :loading=\"busy\" />\n  </Form>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "FormField",
+      "group": "forms",
+      "file": "packages/ui/src/forms/FormField.vue",
+      "purpose": "The label, hint, error and required marker around one form control.",
+      "use": "Around every form control that needs a visible label, inside a Form or not.",
+      "avoid": "For a Checkbox or Switch whose own label says everything, the control alone is enough.",
+      "adapts": {
+        "input": "Nothing of its own; the control inside it adapts.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "Nothing changes; it fills the width of its container."
+      },
+      "props": [
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "What the control is for. The label slot replaces it."
+        },
+        {
+          "name": "hint",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Help in a sentence, under the label (\"We never share it.\"). The hint slot replaces it."
+        },
+        {
+          "name": "error",
+          "type": "string | boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "What is wrong, under the control; `true` marks it invalid without a sentence. Wins over the Form's error."
+        },
+        {
+          "name": "required",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Marks the field required (an asterisk, and aria-required on the control); a Form's schema can say so too."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The field's name: the control's name, and the key of its value, rules and error in a Form."
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The control's id; generated when not set."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": null,
+          "description": "`sm`, `md` or `lg`, for the label and the control."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Disables the control."
+        }
+      ],
+      "emits": [],
+      "slots": [
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "label",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "hint",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "error",
+          "props": [
+            "error"
+          ],
+          "dynamic": false
+        }
+      ],
+      "notes": "The label sits over the control and is `for` it: the control takes the\nfield's id (set `id` to choose it). A group control (RadioGroup,\nCheckboxGroup, PinInput, a range Slider) is named through `aria-labelledby`\ninstead. `hint` sits under the label; `error` sits under the control. Both\ndescribe the control through `aria-describedby`, and an error marks it\n`aria-invalid`. `error: true` marks it invalid without a sentence (or with\nthe `error` slot). `required` draws an asterisk, hidden from assistive\ntechnology, and sets `aria-required` on the control.\n\n**In a Form,** `name` links the field to the Form: it shows the Form's error\nfor that name, it is required when the schema says so, and leaving or\nchanging the control lets the Form check it again. An `error` given to the\nfield wins over the Form's.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/FormField/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, Input, Stack } from '@weft/ui'\n\nconst email = ref('')\nconst username = ref('ada')\n</script>\n\n<template>\n  <Stack :gap=\"4\">\n    <FormField label=\"Email\" hint=\"We never share it.\" required>\n      <Input v-model=\"email\" type=\"email\" autocomplete=\"email\" />\n    </FormField>\n    <FormField label=\"Username\" error=\"That name is taken.\">\n      <Input v-model=\"username\" />\n    </FormField>\n  </Stack>\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "Grid",
       "group": "layout",
       "file": "packages/ui/src/layout/Grid.vue",
@@ -700,6 +1153,313 @@
           "title": "Sizes and label",
           "file": "packages/ui/examples/Icon/sizes-and-label.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { Icon, Stack } from '@weft/ui'\n</script>\n\n<template>\n  <Stack direction=\"row\" :gap=\"3\" align=\"center\">\n    <Icon name=\"star\" size=\"sm\" />\n    <Icon name=\"star\" size=\"md\" />\n    <Icon name=\"star\" size=\"lg\" />\n    <!-- Standing alone, the icon needs a label. -->\n    <Icon name=\"circle-alert\" label=\"Payment failed\" />\n  </Stack>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "Input",
+      "group": "forms",
+      "file": "packages/ui/src/forms/Input.vue",
+      "purpose": "A one-line text field in a box that can hold an icon, a unit or a button before and after the text.",
+      "use": "For a short answer typed in full - a name, an email address, a search - bound with v-model, usually inside a FormField.",
+      "avoid": "For text over several lines, use Textarea; for a number stepped up and down, use InputNumber; for a choice from a known list, use a select or RadioGroup.",
+      "adapts": {
+        "input": "An md input is max(--weft-control-md, --weft-hit-min) tall, so 44 px on touch, the same height as an md Button beside it; sm and lg keep their sizes, and a pseudo-element behind the field grows the hit area to 44 px.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "It fills the width of its container; put it in a Grid or a FieldGroup to share a row."
+      },
+      "props": [
+        {
+          "name": "modelValue",
+          "type": "string | number | null",
+          "required": false,
+          "default": "undefined",
+          "description": "The text, bound with `v-model`; a number with `v-model.number` or `type=\"number\"`."
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "default": "'text'",
+          "description": "The native input type: `text`, `email`, `password`, `search`, `tel`, `url`, `number`."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": null,
+          "description": "`sm`, `md` or `lg`; a FieldGroup's size applies when not set. md is 44 px tall on touch, as Button is."
+        },
+        {
+          "name": "placeholder",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Shown while it is empty; not a label."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The form field name; a FormField's name applies when not set."
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The input's id; inside a FormField the field's id is used, so its label points here."
+        },
+        {
+          "name": "icon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon before the text. The leading slot replaces it."
+        },
+        {
+          "name": "trailingIcon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon after the text. The trailing slot replaces it."
+        },
+        {
+          "name": "loading",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Work in progress (a lookup as it is typed): a spinner after the text, and `aria-busy`."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Unavailable: natively disabled."
+        },
+        {
+          "name": "readonly",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Shown but not editable."
+        },
+        {
+          "name": "required",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "The native `required`, for a form the browser checks."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:modelValue",
+          "payload": "[value: string | number | null]",
+          "description": "The text changed (on each key, or on change with `.lazy`)."
+        },
+        {
+          "name": "blur",
+          "payload": "[event: FocusEvent]",
+          "description": "The input lost focus."
+        },
+        {
+          "name": "focus",
+          "payload": "[event: FocusEvent]",
+          "description": "The input took focus."
+        },
+        {
+          "name": "change",
+          "payload": "[event: Event]",
+          "description": "The native change: the text was committed."
+        }
+      ],
+      "slots": [
+        {
+          "name": "leading",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "trailing",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "Bind the text with `v-model`; `v-model.trim`, `.number` and `.lazy` work as\non a native input (`type=\"number\"` also gives a number, or `null` when it is\nempty). Attributes such as `placeholder`, `autocomplete`, `inputmode` and\n`aria-label` go to the `<input>`; `class` and `style` go to the box.\n\n**Leading and trailing.** `icon` and `trailing-icon` draw Lucide icons, hidden\nfrom assistive technology; the `leading` and `trailing` slots replace them\nwith anything (a unit, a clear button). A press on the box outside the text\nfocuses the text; a button in the box keeps its own press.\n\n**Loading** puts a spinner after the text and sets `aria-busy`; the field\nstays editable (a lookup runs as it is typed).\n\n**In a FormField** the input takes the field's id (so the label points to\nit), its name, `aria-describedby` (the hint and the error; an\n`aria-describedby` of its own comes first), `aria-invalid` and\n`aria-required`. In a FieldGroup it takes the group's size.\n\n**For other components:** a template ref's `focus()` focuses the text, and\n`input` is the element; Select, Combobox and DatePicker build on this box.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Input/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, Input } from '@weft/ui'\n\nconst name = ref('')\n</script>\n\n<template>\n  <FormField label=\"Full name\">\n    <Input v-model=\"name\" placeholder=\"Ada Lovelace\" autocomplete=\"name\" />\n  </FormField>\n</template>\n"
+        },
+        {
+          "name": "icons-and-slots",
+          "title": "Icons and slots",
+          "file": "packages/ui/examples/Input/icons-and-slots.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Button, Input, Stack } from '@weft/ui'\n\nconst query = ref('')\nconst amount = ref<string | number | null>(null)\n</script>\n\n<template>\n  <Stack :gap=\"3\">\n    <Input v-model=\"query\" icon=\"search\" placeholder=\"Search invoices\" aria-label=\"Search invoices\" :loading=\"query.length > 2\">\n      <template #trailing>\n        <Button v-if=\"query\" icon=\"x\" size=\"sm\" variant=\"ghost\" tone=\"neutral\" aria-label=\"Clear\" @click=\"query = ''\" />\n      </template>\n    </Input>\n    <Input v-model.number=\"amount\" inputmode=\"decimal\" aria-label=\"Amount\">\n      <template #leading>€</template>\n      <template #trailing>EUR</template>\n    </Input>\n  </Stack>\n</template>\n"
+        },
+        {
+          "name": "sizes",
+          "title": "Sizes",
+          "file": "packages/ui/examples/Input/sizes.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Input, Stack } from '@weft/ui'\n</script>\n\n<template>\n  <!-- md lines up with an md Button: 36 px on pointer, 44 px on touch. -->\n  <Stack :gap=\"2\">\n    <Input size=\"sm\" placeholder=\"Small\" aria-label=\"Small\" />\n    <Input placeholder=\"Medium\" aria-label=\"Medium\" />\n    <Input size=\"lg\" placeholder=\"Large\" aria-label=\"Large\" />\n    <Input placeholder=\"Disabled\" aria-label=\"Disabled\" disabled />\n  </Stack>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "InputNumber",
+      "group": "forms",
+      "file": "packages/ui/src/forms/InputNumber.vue",
+      "purpose": "A number typed or stepped up and down, kept between a minimum and a maximum.",
+      "use": "For a quantity, a count or an amount where a step up or down is natural.",
+      "avoid": "For a value picked along a range, use Slider; for numbers that are really codes (a phone number, a card), use Input.",
+      "adapts": {
+        "input": "md is 44 px tall on touch, as an md Button is, and the steppers become large buttons, 44 px wide (28 px on pointer) and at least 44 px tall through their hit areas.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "It fills the width of its container."
+      },
+      "props": [
+        {
+          "name": "modelValue",
+          "type": "number | null",
+          "required": false,
+          "default": "undefined",
+          "description": "The number, bound with `v-model`; null when it is empty."
+        },
+        {
+          "name": "defaultValue",
+          "type": "number | null",
+          "required": false,
+          "default": "null",
+          "description": "The number to start with when `v-model` is not bound."
+        },
+        {
+          "name": "min",
+          "type": "number",
+          "required": false,
+          "default": null,
+          "description": "The smallest it may be."
+        },
+        {
+          "name": "max",
+          "type": "number",
+          "required": false,
+          "default": null,
+          "description": "The largest it may be."
+        },
+        {
+          "name": "step",
+          "type": "number",
+          "required": false,
+          "default": "1",
+          "description": "How much a step (an arrow key or a stepper) changes it."
+        },
+        {
+          "name": "wheel",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Change it with the mouse wheel while it has focus. Off by default, so scrolling the page never changes a value."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": null,
+          "description": "`sm`, `md` or `lg`; a FieldGroup's size applies when not set. md is 44 px tall on touch, as Button is."
+        },
+        {
+          "name": "placeholder",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Shown while it is empty; not a label."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The form field name; a FormField's name applies when not set."
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The input's id; inside a FormField the field's id is used."
+        },
+        {
+          "name": "decrementLabel",
+          "type": "string",
+          "required": false,
+          "default": "'Decrease'",
+          "description": "The decrease button's name for assistive technology."
+        },
+        {
+          "name": "incrementLabel",
+          "type": "string",
+          "required": false,
+          "default": "'Increase'",
+          "description": "The increase button's name for assistive technology."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Unavailable: natively disabled, steppers too."
+        },
+        {
+          "name": "readonly",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Shown but not changeable."
+        },
+        {
+          "name": "required",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "The native `required`."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:modelValue",
+          "payload": "[value: number | null]",
+          "description": "The number changed: stepped, or typed and committed."
+        },
+        {
+          "name": "blur",
+          "payload": "[event: FocusEvent]",
+          "description": "The input lost focus."
+        },
+        {
+          "name": "focus",
+          "payload": "[event: FocusEvent]",
+          "description": "The input took focus."
+        }
+      ],
+      "slots": [],
+      "notes": "Bind the number with `v-model`; it is `null` when the field is empty.\n\n**Keyboard** (the WAI-ARIA spinbutton pattern): Up and Down step by `step`,\nPage Up and Page Down by ten steps, Home and End go to `min` and `max`.\nTyped text is read when it is committed - Enter, or leaving the field - and\nkept within `min` and `max`; text that is not a number goes back to the\nvalue. Stepping by decimals leaves no floating-point dust (0.1 + 0.2 is 0.3).\n\n**Mouse wheel:** off by default, so scrolling the page never changes a value.\nWith `wheel`, the wheel steps it, but only while it has focus.\n\n**Steppers:** out of the tab order (the keys do their work), named by\n`decrement-label` and `increment-label` (\"Decrease\", \"Increase\"), disabled at\nthe bounds, and a press keeps focus where it was. The input is a text input\nwith `role=\"spinbutton\"` and `inputmode=\"decimal\"`, carrying\n`aria-valuenow`, `aria-valuemin` and `aria-valuemax`.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/InputNumber/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, InputNumber } from '@weft/ui'\n\nconst seats = ref<number | null>(3)\n</script>\n\n<template>\n  <FormField label=\"Seats\" hint=\"Between 1 and 50.\">\n    <InputNumber v-model=\"seats\" :min=\"1\" :max=\"50\" />\n  </FormField>\n</template>\n"
+        },
+        {
+          "name": "decimal-steps",
+          "title": "Decimal steps",
+          "file": "packages/ui/examples/InputNumber/decimal-steps.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, InputNumber } from '@weft/ui'\n\nconst rate = ref<number | null>(1.5)\n</script>\n\n<template>\n  <!-- wheel lets the mouse wheel step it, only while it has focus. -->\n  <FormField label=\"Rate\">\n    <InputNumber v-model=\"rate\" :step=\"0.25\" :min=\"0\" wheel />\n  </FormField>\n</template>\n"
         }
       ]
     },
@@ -960,6 +1720,127 @@
       ]
     },
     {
+      "name": "PinInput",
+      "group": "forms",
+      "file": "packages/ui/src/forms/PinInput.vue",
+      "purpose": "A short code typed one character per box.",
+      "use": "For a one-time code, a verification code or a PIN.",
+      "avoid": "For a password or anything longer than about eight characters, use Input.",
+      "adapts": {
+        "input": "md boxes are 44 px square on touch (36 px on pointer); with type number a number pad comes up.",
+        "surface": "Nothing changes.",
+        "width": "The boxes stay in one row."
+      },
+      "props": [
+        {
+          "name": "modelValue",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "The code, bound with `v-model`."
+        },
+        {
+          "name": "defaultValue",
+          "type": "string",
+          "required": false,
+          "default": "''",
+          "description": "The code to start with when `v-model` is not bound."
+        },
+        {
+          "name": "length",
+          "type": "number",
+          "required": false,
+          "default": "5",
+          "description": "How many boxes."
+        },
+        {
+          "name": "type",
+          "type": "'text' | 'number'",
+          "required": false,
+          "default": "'text'",
+          "description": "`number` takes digits only and brings up a number pad; `text` takes letters and digits."
+        },
+        {
+          "name": "mask",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Hide what is typed, as a password field does."
+        },
+        {
+          "name": "otp",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "A one-time code: lets the browser fill it from a message (autocomplete=\"one-time-code\")."
+        },
+        {
+          "name": "placeholder",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Shown in each empty box."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The form field name: the joined code posts under it."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": null,
+          "description": "`sm`, `md` or `lg`."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Unavailable: every box natively disabled."
+        },
+        {
+          "name": "required",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "The native `required`, on each box."
+        },
+        {
+          "name": "boxLabel",
+          "type": "string",
+          "required": false,
+          "default": "'Character {n} of {count}'",
+          "description": "A box's name for assistive technology; `{n}` is its number and `{count}` how many there are."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:modelValue",
+          "payload": "[value: string]",
+          "description": "A box changed: the joined code."
+        },
+        {
+          "name": "complete",
+          "payload": "[value: string]",
+          "description": "Every box is filled: the code."
+        }
+      ],
+      "slots": [],
+      "notes": "Bind the joined code with `v-model`; `complete` fires once every box is\nfilled. `length` sets how many boxes (5). `type=\"number\"` takes digits only;\n`mask` hides what is typed; `otp` lets the browser fill a one-time code from\na message (`autocomplete=\"one-time-code\"`).\n\n**Keyboard:** typing a character fills the box and moves to the next;\nBackspace clears the box, or steps back and clears the one before when it is\nempty; Delete clears the box; Left and Right move (swapped in a right-to-left\ndocument); Home and End go to the first and last box. A paste or an autofill\nfills the boxes from the one it lands in, dropping characters the type does\nnot take.\n\nThe boxes form a `role=\"group\"`, named by its FormField's label; each box is\nnamed by its place (`box-label`, \"Character 1 of 6\"). With `name` the code\nposts from a hidden input.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/PinInput/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, PinInput } from '@weft/ui'\n\nconst code = ref('')\nconst done = ref(false)\n</script>\n\n<template>\n  <FormField label=\"Verification code\" :hint=\"done ? 'Checking…' : 'We sent it to your phone.'\">\n    <PinInput v-model=\"code\" :length=\"6\" type=\"number\" otp @complete=\"done = true\" />\n  </FormField>\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "Progress",
       "group": "basics",
       "file": "packages/ui/src/basics/Progress.vue",
@@ -1024,6 +1905,120 @@
           "title": "Basic",
           "file": "packages/ui/examples/Progress/basic.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Progress, Stack } from '@weft/ui'\n\nconst uploaded = ref(64)\n</script>\n\n<template>\n  <Stack :gap=\"4\">\n    <Progress v-model=\"uploaded\" label=\"Uploading report.pdf\" status />\n    <!-- No value: indeterminate. -->\n    <Progress label=\"Preparing the export\" tone=\"neutral\" size=\"sm\" />\n  </Stack>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "RadioGroup",
+      "group": "forms",
+      "file": "packages/ui/src/forms/RadioGroup.vue",
+      "purpose": "One choice among a few options, all in view.",
+      "use": "For a choice of two to six options the reader should compare at a glance (a plan, a shipping speed).",
+      "avoid": "For many options, use a select; for on or off, use Switch or Checkbox.",
+      "adapts": {
+        "input": "Each row is at least 44 px tall on touch, and each radio's hit area 44 px square.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "Horizontal groups wrap onto more rows when narrow."
+      },
+      "props": [
+        {
+          "name": "modelValue",
+          "type": "string | number | null",
+          "required": false,
+          "default": "undefined",
+          "description": "The chosen value, bound with `v-model`; undefined or null when none is."
+        },
+        {
+          "name": "defaultValue",
+          "type": "string | number | null",
+          "required": false,
+          "default": "null",
+          "description": "The value chosen at first when `v-model` is not bound."
+        },
+        {
+          "name": "items",
+          "type": "ChoiceItem[]",
+          "required": true,
+          "default": null,
+          "description": "The options: values, or `{ value, label, description, disabled }`."
+        },
+        {
+          "name": "legend",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The group's name, shown above it; inside a FormField the field's label names it instead."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The form field name the radios share; a FormField's applies, else one is generated."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": null,
+          "description": "`sm`, `md` or `lg`."
+        },
+        {
+          "name": "tone",
+          "type": "'neutral' | 'primary' | 'danger' | 'warning' | 'success'",
+          "required": false,
+          "default": "'primary'",
+          "description": "The colour of the chosen radio."
+        },
+        {
+          "name": "orientation",
+          "type": "'vertical' | 'horizontal'",
+          "required": false,
+          "default": "'vertical'",
+          "description": "`vertical` (a column) or `horizontal` (a wrapping row). The arrow keys work the same either way."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Disables every radio."
+        },
+        {
+          "name": "required",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "A choice must be made: the native `required` on the radios."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:modelValue",
+          "payload": "[value: string | number | null]",
+          "description": "A radio was chosen, by press, Space or an arrow key."
+        }
+      ],
+      "slots": [
+        {
+          "name": "legend",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "Bind the chosen value with `v-model`; give the options as `items` - values,\nor `{ value, label, description, disabled }`.\n\n**Keyboard** (the WAI-ARIA radio group pattern): the group is one tab stop,\non the chosen radio or else the first. Down and Right move to the next radio\nand choose it, Up and Left to the previous, wrapping at the ends and\nskipping disabled radios; in a right-to-left document Left and Right swap.\nFocus arriving by Tab or a click chooses nothing by itself; Space chooses\nthe focused radio.\n\nThe radios are native, sharing `name` (one is generated when not given), so\nthey post with a plain form. The group is `role=\"radiogroup\"`, named by\n`legend` or by its FormField's label, described by the field's hint and\nerror, and `aria-required` when the field (or `required`) asks.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/RadioGroup/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { RadioGroup } from '@weft/ui'\n\nconst plan = ref<string | number | null>('team')\nconst plans = [\n  { value: 'solo', label: 'Solo', description: 'One person.' },\n  { value: 'team', label: 'Team', description: 'Up to 20 people.' },\n  { value: 'company', label: 'Company', description: 'Ask us.', disabled: true },\n]\n</script>\n\n<template>\n  <RadioGroup v-model=\"plan\" legend=\"Plan\" :items=\"plans\" />\n</template>\n"
+        },
+        {
+          "name": "horizontal",
+          "title": "Horizontal",
+          "file": "packages/ui/examples/RadioGroup/horizontal.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, RadioGroup } from '@weft/ui'\n\nconst size = ref<string | number | null>(null)\n</script>\n\n<template>\n  <FormField label=\"Size\" required>\n    <RadioGroup v-model=\"size\" orientation=\"horizontal\" :items=\"['S', 'M', 'L', 'XL']\" />\n  </FormField>\n</template>\n"
         }
       ]
     },
@@ -1192,6 +2187,133 @@
       ]
     },
     {
+      "name": "Slider",
+      "group": "forms",
+      "file": "packages/ui/src/forms/Slider.vue",
+      "purpose": "A value, or a range between two values, picked along a track.",
+      "use": "For a value where the position matters more than the exact number (volume, a price range).",
+      "avoid": "For an exact number, use InputNumber; for a few named steps, use RadioGroup.",
+      "adapts": {
+        "input": "The thumb is drawn 16 px (12 sm, 20 lg); on touch its hit area and the track's grow to 44 px through pseudo-elements, and the slider is 44 px tall.",
+        "surface": "Nothing changes.",
+        "width": "It fills the width of its container; vertical sliders are 160 px tall."
+      },
+      "props": [
+        {
+          "name": "modelValue",
+          "type": "number | number[]",
+          "required": false,
+          "default": "undefined",
+          "description": "The value, or an array of values for a range, bound with `v-model`."
+        },
+        {
+          "name": "defaultValue",
+          "type": "number | number[]",
+          "required": false,
+          "default": "undefined",
+          "description": "The value to start with when `v-model` is not bound; an array for a range."
+        },
+        {
+          "name": "min",
+          "type": "number",
+          "required": false,
+          "default": "0",
+          "description": "The start of the track."
+        },
+        {
+          "name": "max",
+          "type": "number",
+          "required": false,
+          "default": "100",
+          "description": "The end of the track."
+        },
+        {
+          "name": "step",
+          "type": "number",
+          "required": false,
+          "default": "1",
+          "description": "The values it moves between, counted from `min`."
+        },
+        {
+          "name": "minStepsBetweenThumbs",
+          "type": "number",
+          "required": false,
+          "default": "0",
+          "description": "For a range: the fewest steps kept between neighbouring thumbs."
+        },
+        {
+          "name": "orientation",
+          "type": "'horizontal' | 'vertical'",
+          "required": false,
+          "default": "'horizontal'",
+          "description": "`horizontal` (min at the inline start) or `vertical` (min at the bottom)."
+        },
+        {
+          "name": "thumbLabels",
+          "type": "string[]",
+          "required": false,
+          "default": null,
+          "description": "Each thumb's name for assistive technology; for a range the default is \"Minimum\" and \"Maximum\". A single thumb takes the Slider's own aria-label, or its FormField's label."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The form field name: each value posts under it from a hidden input."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": null,
+          "description": "`sm`, `md` or `lg`: the track's thickness and the thumb's size."
+        },
+        {
+          "name": "tone",
+          "type": "'neutral' | 'primary' | 'danger' | 'warning' | 'success'",
+          "required": false,
+          "default": "'primary'",
+          "description": "The colour of the filled part and the thumbs."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Unavailable: out of the tab order, and presses do nothing."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:modelValue",
+          "payload": "[value: number | number[]]",
+          "description": "A thumb moved, by key, press or drag."
+        },
+        {
+          "name": "change",
+          "payload": "[value: number | number[]]",
+          "description": "A move ended: a key press, or a drag let go; the final value."
+        }
+      ],
+      "slots": [],
+      "notes": "Bind a number with `v-model`, or an array for a range: a thumb is drawn per\nvalue, thumbs never pass each other (`min-steps-between-thumbs` keeps a gap),\nand the track between them fills.\n\n**Keyboard** (the WAI-ARIA slider pattern): each thumb is a `role=\"slider\"`\nin the tab order. Right and Up raise it by `step`, Left and Down lower it,\nPage Up and Page Down move ten steps, Home and End go to the ends. In a\nright-to-left document Left and Right swap, and the track fills from the\nright. Each thumb's `aria-valuemin` and `aria-valuemax` are its neighbours.\n\n**Pointer:** a press on the track moves the nearest thumb there, on a step,\nand drags it until let go. `update:modelValue` fires as it moves; `change`\nfires once a move ends (a key press, or a drag let go).\n\nThumbs are named by `thumb-labels`, or for a range \"Minimum\" and \"Maximum\";\ninside a FormField a single thumb is named by the field's label. With `name`\neach value posts from a hidden input.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Slider/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, Slider } from '@weft/ui'\n\nconst volume = ref<number | number[]>(60)\n</script>\n\n<template>\n  <FormField label=\"Volume\">\n    <Slider v-model=\"volume\" />\n  </FormField>\n</template>\n"
+        },
+        {
+          "name": "range",
+          "title": "Range",
+          "file": "packages/ui/examples/Slider/range.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, Slider } from '@weft/ui'\n\nconst price = ref<number | number[]>([20, 80])\n</script>\n\n<template>\n  <FormField label=\"Price\" :hint=\"Array.isArray(price) ? `€${price[0]} to €${price[1]}` : ''\">\n    <Slider v-model=\"price\" :min=\"0\" :max=\"200\" :step=\"5\" :min-steps-between-thumbs=\"2\" />\n  </FormField>\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "Spinner",
       "group": "basics",
       "file": "packages/ui/src/basics/Spinner.vue",
@@ -1308,6 +2430,257 @@
           "title": "Row",
           "file": "packages/ui/examples/Stack/row.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { Stack } from '@weft/ui'\n</script>\n\n<template>\n  <Stack direction=\"row\" :gap=\"2\" align=\"center\" justify=\"between\" wrap>\n    <strong>3 selected</strong>\n    <Stack direction=\"row\" :gap=\"2\">\n      <button type=\"button\">Archive</button>\n      <button type=\"button\">Delete</button>\n    </Stack>\n  </Stack>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "Switch",
+      "group": "forms",
+      "file": "packages/ui/src/forms/Switch.vue",
+      "purpose": "On or off, taking effect at once.",
+      "use": "For a setting that applies as soon as it changes (Wi-Fi, notifications).",
+      "avoid": "For a choice sent with a form (accept the terms), use Checkbox.",
+      "adapts": {
+        "input": "The track keeps its drawn size; its hit area is at least 44 px square on touch, and the row at least 44 px tall.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "Nothing changes; a long label wraps beside the track."
+      },
+      "props": [
+        {
+          "name": "modelValue",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "On or off, bound with `v-model`."
+        },
+        {
+          "name": "defaultValue",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "The state to start in when `v-model` is not bound."
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The text beside the switch. The default slot replaces it."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A sentence under the label, which also describes the switch."
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "What a form post sends while it is on (default `on`)."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The form field name; a FormField's applies when not set."
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The input's id; generated when not set."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": null,
+          "description": "`sm`, `md` or `lg`."
+        },
+        {
+          "name": "tone",
+          "type": "'neutral' | 'primary' | 'danger' | 'warning' | 'success'",
+          "required": false,
+          "default": "'primary'",
+          "description": "The colour while on."
+        },
+        {
+          "name": "loading",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Work in progress (the change is being saved): a spinner in the thumb, aria-busy, and no toggling."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Unavailable: natively disabled."
+        },
+        {
+          "name": "required",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "The native `required`: it must be on."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:modelValue",
+          "payload": "[value: boolean]",
+          "description": "Turned on or off."
+        },
+        {
+          "name": "change",
+          "payload": "[event: Event]",
+          "description": "The native change."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "Bind with `v-model`. It is a native checkbox with `role=\"switch\"`, so Space\nand its label toggle it, assistive technology reads it as on or off, and it\nposts `value` under `name` while on.\n\n**Loading** (the change is being saved) turns a spinner in the thumb, sets\n`aria-busy` and `aria-disabled`, and blocks a press, Space and the label\nalike, while it stays focusable. **Disabled** is native.\n\nThe thumb slides to the inline end when on, so to the left in a right-to-left\ndocument.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Switch/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Stack, Switch } from '@weft/ui'\n\nconst wifi = ref(true)\nconst sync = ref(false)\nconst saving = ref(false)\nfunction save(on: boolean) {\n  sync.value = on\n  saving.value = true\n  setTimeout(() => (saving.value = false), 1200)\n}\n</script>\n\n<template>\n  <Stack :gap=\"1\">\n    <Switch v-model=\"wifi\" label=\"Wi-Fi\" description=\"Join known networks automatically.\" />\n    <!-- Loading blocks toggling while the change is saved. -->\n    <Switch :model-value=\"sync\" label=\"Sync photos\" :loading=\"saving\" @update:model-value=\"save\" />\n  </Stack>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "Textarea",
+      "group": "forms",
+      "file": "packages/ui/src/forms/Textarea.vue",
+      "purpose": "Text over several lines, which can grow with what is typed.",
+      "use": "For a message, a description, a note; with autoresize where the length varies.",
+      "avoid": "For one line, use Input; for formatted text, use an editor.",
+      "adapts": {
+        "input": "Nothing changes; it is taller than the touch minimum at any size.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "It fills the width of its container."
+      },
+      "props": [
+        {
+          "name": "modelValue",
+          "type": "string | null",
+          "required": false,
+          "default": "undefined",
+          "description": "The text, bound with `v-model`."
+        },
+        {
+          "name": "rows",
+          "type": "number",
+          "required": false,
+          "default": "3",
+          "description": "Lines shown, and with autoresize the fewest it shrinks to."
+        },
+        {
+          "name": "autoresize",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Grow with the text, from `rows` up to `maxrows`."
+        },
+        {
+          "name": "maxrows",
+          "type": "number",
+          "required": false,
+          "default": "0",
+          "description": "With autoresize, the most lines it grows to before it scrolls; 0 for no limit."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": null,
+          "description": "`sm`, `md` or `lg`: the text size and padding."
+        },
+        {
+          "name": "placeholder",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Shown while it is empty; not a label."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The form field name; a FormField's name applies when not set."
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The textarea's id; inside a FormField the field's id is used."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Unavailable: natively disabled."
+        },
+        {
+          "name": "readonly",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Shown but not editable."
+        },
+        {
+          "name": "required",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "The native `required`."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:modelValue",
+          "payload": "[value: string]",
+          "description": "The text changed (on each key, or on change with `.lazy`)."
+        },
+        {
+          "name": "blur",
+          "payload": "[event: FocusEvent]",
+          "description": "The textarea lost focus."
+        },
+        {
+          "name": "focus",
+          "payload": "[event: FocusEvent]",
+          "description": "The textarea took focus."
+        },
+        {
+          "name": "change",
+          "payload": "[event: Event]",
+          "description": "The native change: the text was committed."
+        }
+      ],
+      "slots": [],
+      "notes": "Bind the text with `v-model` (`.trim` and `.lazy` work). `rows` sets how many\nlines show (3). With `autoresize` it grows as text is added, from `rows` up to\n`maxrows` (0, the default, for no limit) and then scrolls, and it shrinks\nback when text is removed; it cannot be resized by hand then. A template ref\nhas `focus()`, `resize()` (to fit after being shown) and `textarea`.\n\nIn a FormField it takes the field's id, name, description, error and required\nstate, as Input does. Attributes go to the `<textarea>`.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Textarea/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, Textarea } from '@weft/ui'\n\nconst message = ref('')\n</script>\n\n<template>\n  <FormField label=\"Message\" hint=\"It grows as you write, up to eight lines.\">\n    <Textarea v-model=\"message\" autoresize :rows=\"2\" :maxrows=\"8\" placeholder=\"How can we help?\" />\n  </FormField>\n</template>\n"
         }
       ]
     },

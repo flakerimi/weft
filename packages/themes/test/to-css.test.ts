@@ -20,9 +20,11 @@ describe('themeToCss', () => {
     expect(css).toContain(':root:not([data-weft-scheme="light"])')
   })
 
-  it('emits density for input and surface', () => {
-    expect(css).toMatch(/\[data-weft-input="touch"\]\s*\{[^}]*--weft-control-height: 44px;/)
-    expect(css).toMatch(/\[data-weft-input="pointer"\]\s*\{[^}]*--weft-control-height: 36px;/)
+  it('emits the hit area for input: 44 px on touch, 24 px on pointer', () => {
+    expect(css).toMatch(/\[data-weft-input="touch"\]\s*\{[^}]*--weft-hit-min: 44px;/)
+    expect(css).toMatch(/\[data-weft-input="pointer"\]\s*\{[^}]*--weft-hit-min: 24px;/)
+    // Heights come from --weft-control-sm/md/lg alone; there is no second height token to drift from them.
+    expect(css).not.toContain('--weft-control-height')
   })
 
   it('emits control sizes that stay the same for pointer and touch', () => {
@@ -66,7 +68,7 @@ describe('themeToCss', () => {
 
   it('sizes for touch from the media query when no provider says otherwise', () => {
     expect(css).toMatch(
-      /@media \(pointer: coarse\) \{\s*:root:not\(\[data-weft-input\]\) \{[^}]*--weft-control-height: 44px;[^}]*--weft-hit-min: 44px;/,
+      /@media \(pointer: coarse\) \{\s*:root:not\(\[data-weft-input\]\) \{[^}]*--weft-hit-min: 44px;/,
     )
   })
 

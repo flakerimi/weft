@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { effectScope, nextTick, reactive, watch } from 'vue'
 import { useControllable } from '../../src/headless/useControllable.ts'
 
-function setup<T>(initial: T | undefined, fallback: T | (() => T)) {
+function setup<T>(initial: T | undefined, fallback: Exclude<T, undefined> | (() => Exclude<T, undefined>)) {
   const props = reactive({ modelValue: initial }) as { modelValue: T | undefined }
   const emitted: [string, T][] = []
   const emit = (event: 'update:modelValue', value: T) => void emitted.push([event, value])
@@ -30,14 +30,33 @@ describe('useControllable', () => {
     scope.stop()
   })
 
-  it('with a bound value shows it and asks the parent to change it', () => {
+  it('with a bound value shows it and asks the parent to change it', async () => {
     const { props, model, emitted, scope } = setup<string>('p', 'a')
     expect(model.value).toBe('p')
     model.value = 'q'
     expect(emitted).toEqual([['update:modelValue', 'q']])
-    expect(model.value).toBe('p') // until the parent agrees
     props.modelValue = 'q'
+    await nextTick()
     expect(model.value).toBe('q')
+    scope.stop()
+  })
+
+  it('reads a bound write back at once, so writes in one task build on each other', () => {
+    const { model, emitted, scope } = setup<number>(1, 0)
+    model.value = model.value + 1
+    model.value = model.value + 1
+    expect(model.value).toBe(3)
+    expect(emitted).toEqual([['update:modelValue', 2], ['update:modelValue', 3]])
+    scope.stop()
+  })
+
+  it('shows the parent\'s value again at the next tick when the parent refuses the write', async () => {
+    const { model, emitted, scope } = setup<string>('p', 'a')
+    model.value = 'q'
+    expect(model.value).toBe('q')
+    await nextTick()
+    expect(model.value).toBe('p')
+    expect(emitted).toEqual([['update:modelValue', 'q']])
     scope.stop()
   })
 
