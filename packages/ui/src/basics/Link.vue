@@ -3,7 +3,9 @@
 // browser is on gets aria-current="page". The current page is known only in
 // the browser, so it is marked after mounting: the server's render and the
 // first client render agree, and an island hydrates without a mismatch. Pass
-// `active` where the server knows (a layout's own navigation).
+// `active` where the server knows (a layout's own navigation). Only a
+// standalone link gets a touch hit area: in running text it would cover the
+// lines above and below.
 import { computed, onMounted, ref } from 'vue'
 import { isExternal as looksExternal, relFor } from './address.ts'
 
@@ -23,6 +25,8 @@ const props = withDefaults(
     active?: boolean
     /** Unavailable: no address, so not focusable, and announced as a disabled link. */
     disabled?: boolean
+    /** Not in running text (a list of links, a footer, a toolbar): drawn as an inline box whose hit area is at least --weft-hit-min on touch. In a sentence, leave it unset, so the hit area does not cover the lines around it. */
+    standalone?: boolean
   }>(),
   { external: undefined, active: undefined },
 )
@@ -62,11 +66,12 @@ function onClick(event: MouseEvent) {
   <a
     class="weft-link"
     :href="disabled ? undefined : address"
-    :target="target"
+    :target="disabled ? undefined : target"
     :rel="disabled ? undefined : rel"
     :role="disabled ? 'link' : undefined"
     :aria-disabled="disabled ? 'true' : undefined"
     :aria-current="current ? 'page' : undefined"
+    :data-standalone="standalone ? 'true' : undefined"
     @click="onClick"
   ><slot /></a>
 </template>

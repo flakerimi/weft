@@ -12,14 +12,36 @@
 .weft-icon[data-size="lg"] { inline-size: 24px; block-size: 24px; }
 
 /* Tone: a component with data-tone draws from these. --weft-tone is the
-   colour, --weft-tone-fg the text on it, --weft-tone-text the colour as text
-   on the page (pulled toward the text colour, so it reads in both schemes). */
-[data-tone] { --weft-tone-text: color-mix(in srgb, var(--weft-tone, LinkText) 80%, var(--weft-color-text, CanvasText)); }
-[data-tone="neutral"] { --weft-tone: var(--weft-color-text, CanvasText); --weft-tone-fg: var(--weft-color-bg, Canvas); }
-[data-tone="primary"] { --weft-tone: var(--weft-color-primary, LinkText); --weft-tone-fg: var(--weft-color-primary-fg, Canvas); }
-[data-tone="danger"] { --weft-tone: var(--weft-color-danger, #DC2626); --weft-tone-fg: var(--weft-color-danger-fg, #FFFFFF); }
-[data-tone="warning"] { --weft-tone: var(--weft-color-warning, #D97706); --weft-tone-fg: var(--weft-color-warning-fg, #18181B); }
-[data-tone="success"] { --weft-tone: var(--weft-color-success, #16A34A); --weft-tone-fg: var(--weft-color-success-fg, #18181B); }
+   colour, --weft-tone-fg the text on it as a solid fill, --weft-tone-text the
+   tone as text on the page and on its tints. The theme chooses fg and text at
+   build so each reaches 4.5:1; the tints below (14% soft, 22% soft on hover,
+   10% for outline and ghost on hover) are the ones it checks against
+   (`tints` in @weft/themes). */
+[data-tone="neutral"] {
+  --weft-tone: var(--weft-color-text, CanvasText);
+  --weft-tone-fg: var(--weft-color-bg, Canvas);
+  --weft-tone-text: var(--weft-color-text, CanvasText);
+}
+[data-tone="primary"] {
+  --weft-tone: var(--weft-color-primary, LinkText);
+  --weft-tone-fg: var(--weft-color-primary-fg, Canvas);
+  --weft-tone-text: var(--weft-color-primary-text, LinkText);
+}
+[data-tone="danger"] {
+  --weft-tone: var(--weft-color-danger, #DC2626);
+  --weft-tone-fg: var(--weft-color-danger-fg, #FAFAFA);
+  --weft-tone-text: var(--weft-color-danger-text, #AB2323);
+}
+[data-tone="warning"] {
+  --weft-tone: var(--weft-color-warning, #D97706);
+  --weft-tone-fg: var(--weft-color-warning-fg, #18181B);
+  --weft-tone-text: var(--weft-color-warning-text, #8C510E);
+}
+[data-tone="success"] {
+  --weft-tone: var(--weft-color-success, #16A34A);
+  --weft-tone-fg: var(--weft-color-success-fg, #18181B);
+  --weft-tone-text: var(--weft-color-success-text, #17723A);
+}
 
 /* Spinner: a ring with one bright quarter, turning. Under reduced motion it
    turns slowly rather than freezing, since a still ring reads as stuck. */
@@ -40,23 +62,26 @@
   border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
   border-block-start-color: currentColor;
   border-radius: 50%;
-  animation: weft-spin 0.8s linear infinite;
+  animation-name: weft-spin;
+  animation-duration: 0.8s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
 }
 @keyframes weft-spin { to { transform: rotate(1turn); } }
 @media (prefers-reduced-motion: reduce) {
   .weft-spinner__ring { animation-duration: 2.4s !important; }
 }
 
-/* Button. Its drawn height is the theme's control size and does not change
-   with input; ::before is the hit area, at least --weft-hit-min (44 px on
-   touch), centred on the button. */
+/* Button. An md button is its control height, or --weft-hit-min where that
+   is more (44 px on touch). A small or square button keeps its control size;
+   for those ::before is the hit area, at least --weft-hit-min, centred. */
 .weft-button {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--weft-space-2, 8px);
-  block-size: var(--weft-control-md, 36px);
+  block-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
   padding-inline: var(--weft-space-3, 12px);
   border: 1px solid transparent;
   border-radius: var(--weft-radius-control, 8px);
@@ -94,6 +119,7 @@
   padding-inline: var(--weft-space-4, 16px);
   font-size: 1.0625em;
 }
+.weft-button[data-size="md"][data-square] { block-size: var(--weft-control-md, 36px); }
 .weft-button[data-square] { aspect-ratio: 1; padding-inline: 0; }
 .weft-button[data-block] { display: flex; inline-size: 100%; }
 
@@ -110,6 +136,14 @@
 .weft-button[data-variant="ghost"] { background: transparent; color: var(--weft-tone-text, LinkText); }
 
 /* Hover only where there is hover: on touch it would stick after a tap. */
+/* Active: drawn as a soft fill (or, solid, as pressed), the current one of a set. */
+.weft-button[data-active]:not([data-variant="solid"]) {
+  background: color-mix(in srgb, var(--weft-tone, LinkText) 14%, transparent);
+}
+.weft-button[data-active][data-variant="solid"] {
+  background: color-mix(in srgb, var(--weft-tone, LinkText) 75%, var(--weft-tone-fg, Canvas));
+}
+
 @media (hover: hover) {
   .weft-button:not(:disabled, [aria-disabled="true"]):hover[data-variant="solid"] {
     background: color-mix(in srgb, var(--weft-tone, LinkText) 85%, var(--weft-tone-fg, Canvas));
@@ -130,19 +164,31 @@
 .weft-button[data-loading] { cursor: progress; }
 .weft-button[data-loading] .weft-button__content { visibility: hidden; }
 .weft-button__spinner { position: absolute; inset: 0; display: grid; place-items: center; }
+.weft-button__loading-icon { animation: weft-spin 0.8s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .weft-button__loading-icon { animation-duration: 2.4s !important; }
+}
 
-/* Link: text in the primary colour, underlined. Its ::before hit area is at
-   least --weft-hit-min, centred on the text, as a button's is. */
+/* Link: text in the primary colour, underlined. In running text it is plain
+   inline text: a larger hit area would cover the lines above and below
+   (WCAG 2.5.8 exempts targets in a sentence). Standalone (data-standalone),
+   it is an inline box whose ::before hit area is at least --weft-hit-min,
+   centred, as a button's is. */
 .weft-link {
-  position: relative;
-  color: var(--weft-color-primary, LinkText);
+  color: var(--weft-color-primary-text, LinkText);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.2em;
   border-radius: var(--weft-space-1, 4px);
   -webkit-tap-highlight-color: transparent;
 }
-.weft-link::before {
+.weft-link[data-standalone] {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--weft-space-1, 4px);
+}
+.weft-link[data-standalone]::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -259,7 +305,7 @@
   block-size: 6px;
   overflow: hidden;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--weft-tone, LinkText) 16%, transparent);
+  background: color-mix(in srgb, var(--weft-tone, LinkText) 14%, transparent);
 }
 .weft-progress[data-size="sm"] .weft-progress__track { block-size: 4px; }
 .weft-progress[data-size="lg"] .weft-progress__track { block-size: 10px; }

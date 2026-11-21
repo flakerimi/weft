@@ -31,33 +31,30 @@ export function lisa(tokens: LisaTokens, opts: { accent?: string } = {}): Theme 
   if (!(`accent-${accent}-500` in color.accent)) throw new Error(`unknown Lisa accent "${accent}"`)
   const c = (group: keyof LisaTokens['color'], key: string) => pick<string>(color[group], key, `color.${group}`)
   const m = (key: string) => pick<number>(tokens.metric, key, 'metric')
-  const primary = c('accent', `accent-${accent}-500`)
-  const common = {
-    primary,
-    'primary-fg': c('ink', 'warm-white'),
-    'primary-soft': c('accent', `accent-${accent}-300`),
-    // Each tone's text is the contract's ink that reads best on it: warm-white
-    // on error (4.2:1, against ink-900's 4.1), ink-900 on warning and success.
-    danger: c('semantic', 'error'),
-    'danger-fg': c('ink', 'warm-white'),
+  const stop = (name: string, n: number) => c('accent', `accent-${name}-${n}`)
+  // The contract pairs each ramp's stops with their use ($solid, $selectionOutline):
+  // solid fills and text take 700 on light and 300 on dark, outlines 500 on light
+  // and 300 on dark. Danger takes the red ramp the same way: semantic.error reads
+  // at 4.2:1 with warm-white and 4.1:1 with ink-900, under AA either way. The text
+  // on each fill is chosen at build (themeToCss), from the contract's two inks.
+  const semantic = {
     warning: c('semantic', 'warning'),
-    'warning-fg': c('ink', 'ink-900'),
     success: c('semantic', 'success'),
-    'success-fg': c('ink', 'ink-900'),
     info: c('semantic', 'info'),
-    focus: primary,
   }
   return {
     name: accent === 'olive' ? 'lisa' : `lisa-${accent}`,
     light: {
       bg: c('ink', 'paper'), surface: c('ink', 'surface'), 'surface-raised': c('ink', 'surface'),
       border: c('ink', 'line-200'), text: c('ink', 'ink-900'), 'text-muted': c('ink', 'ink-500'),
-      ...common,
+      primary: stop(accent, 700), 'primary-soft': stop(accent, 300), focus: stop(accent, 500),
+      danger: stop('red', 700), ...semantic,
     },
     dark: {
       bg: c('dark', 'base'), surface: c('dark', 'elevated'), 'surface-raised': c('dark', 'card'),
       border: c('dark', 'line'), text: c('dark', 'text-primary'), 'text-muted': c('dark', 'text-secondary'),
-      ...common,
+      primary: stop(accent, 300), 'primary-soft': stop(accent, 700), focus: stop(accent, 300),
+      danger: stop('red', 300), ...semantic,
     },
     font: {
       sans: `${tokens.font.ui.value}, system-ui, sans-serif`,

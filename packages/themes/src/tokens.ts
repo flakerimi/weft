@@ -1,8 +1,25 @@
 export const colorKeys = [
   'bg', 'surface', 'surface-raised', 'border', 'text', 'text-muted',
-  'primary', 'primary-fg', 'primary-soft', 'danger', 'danger-fg', 'warning', 'warning-fg',
-  'success', 'success-fg', 'info', 'focus',
+  'primary', 'primary-soft', 'danger', 'warning', 'success', 'info', 'focus',
 ] as const
+
+/**
+ * The tones a component can be drawn in, besides neutral (the text colour).
+ * For each, `themeToCss` works out at build two colours a theme does not
+ * give: `--weft-color-<tone>-fg`, the text on a solid fill (the better of the
+ * theme's two inks, light.text and dark.text), and `--weft-color-<tone>-text`,
+ * the tone as text on the page and on its tints. Both reach WCAG AA (4.5:1),
+ * or the build refuses.
+ */
+export const tones = ['primary', 'danger', 'warning', 'success'] as const
+export type Tone = (typeof tones)[number]
+
+/**
+ * The tints, in percent of the tone over the ground behind, that tinted
+ * variants draw under their text: a soft fill, the soft fill on hover, and
+ * the hover of outline and ghost. @weft/ui's CSS uses exactly these.
+ */
+export const tints = { soft: 14, softHover: 22, quiet: 10 } as const
 
 export type ColorKey = (typeof colorKeys)[number]
 export type ColorSet = Record<ColorKey, string>
@@ -16,8 +33,10 @@ export interface Theme {
   /** px */
   radius: { control: number; card: number; panel: number }
   /**
-   * px: the drawn height of a control at each size. It is the same for pointer
-   * and touch; on touch a control's hit area grows to `--weft-hit-min` instead.
+   * px: the drawn height of a control at each size, for pointer and touch
+   * alike. On touch a control's hit area is at least `--weft-hit-min`: an md
+   * Button grows to it; a small or square control keeps its size and extends
+   * its hit area with a pseudo-element.
    */
   control: { sm: number; md: number; lg: number }
   /** px */

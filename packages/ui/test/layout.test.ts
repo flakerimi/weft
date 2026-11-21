@@ -106,6 +106,7 @@ describe('Separator', () => {
     const s = first('separator', '.weft-separator')
     expect(s.getAttribute('role')).toBe('separator')
     expect(s.getAttribute('aria-orientation')).toBe('horizontal')
+    expect(s.hasAttribute('aria-hidden')).toBe(false)
     expect(s.dataset.orientation).toBe('horizontal')
     expect(s.querySelectorAll('.weft-separator__line')).toHaveLength(1)
     expect(s.querySelector('.weft-separator__content')).toBeNull()
@@ -134,6 +135,7 @@ describe('Separator', () => {
   it('is hidden from assistive technology when decorative', () => {
     const s = first('separator-decorative', '.weft-separator')
     expect(s.getAttribute('role')).toBe('none')
+    expect(s.getAttribute('aria-hidden')).toBe('true')
     expect(s.hasAttribute('aria-orientation')).toBe(false)
     expect(s.hasAttribute('aria-label')).toBe(false)
   })

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import LinkCases from './fixtures/basics/LinkCases.vue'
+import { navigations, press } from './keyboard.ts'
 import { mount } from './mount.ts'
 import { loadStyles, ruleFor } from './styles.ts'
 
@@ -99,6 +100,10 @@ describe('Link', () => {
       expect(a.hasAttribute('rel')).toBe(false)
     })
 
+    it('drops its target, which would have nowhere to go', async () => {
+      expect((await link({ to: 'https://example.com', target: '_blank', disabled: true })).hasAttribute('target')).toBe(false)
+    })
+
     it('does nothing when pressed', async () => {
       const onPress = vi.fn()
       const a = await link({ to: '/docs', disabled: true, onPress: () => onPress })
@@ -114,20 +119,56 @@ describe('Link', () => {
     beforeEach(() => { unload = loadStyles() })
     afterEach(() => unload())
 
-    it('is a native link: in the tab order, followed with Enter, with a visible focus ring', async () => {
+    it('is a native link: in the tab order, with a visible focus ring', async () => {
       const a = await link({ to: '/docs' })
-      // An anchor with an href is focusable and the browser follows it on Enter.
       expect(a.tabIndex).toBe(0)
       a.focus()
       expect(document.activeElement).toBe(a)
       expect(getComputedStyle(a).outlineStyle).toBe('solid')
     })
 
-    it('has a hit area of at least --weft-hit-min, drawn by a pseudo-element', () => {
-      const hit = ruleFor('.weft-link::before')!
+    it('is followed with Enter, and not with Space', async () => {
+      const a = await link({ to: '/docs' })
+      const followed = navigations(a)
+      expect(press(a, ' ')).toBe(false)
+      expect(followed.urls).toEqual([])
+      expect(press(a, 'Enter')).toBe(true)
+      expect(followed.urls).toEqual([new URL('/docs', location.href).href])
+      followed.restore()
+    })
+
+    it('is neither focused nor followed by keyboard when disabled', async () => {
+      const a = await link({ to: '/docs', disabled: true })
+      const followed = navigations(a)
+      // No href: browsers do not let it take focus, so no key reaches it.
+      expect(a.hasAttribute('href')).toBe(false)
+      expect(a.hasAttribute('tabindex')).toBe(false)
+      expect(press(a, 'Enter')).toBe(false)
+      expect(followed.urls).toEqual([])
+      followed.restore()
+    })
+
+    it('in running text, has no hit area of its own, which would cover the lines around it', async () => {
+      const a = await link({ to: '/docs' })
+      expect(a.hasAttribute('data-standalone')).toBe(false)
+      expect(ruleFor('.weft-link::before')).toBeUndefined()
+      // It stays an inline element, flowing with the text around it.
+      expect(ruleFor('.weft-link')!.style.getPropertyValue('display')).toBe('')
+      expect(ruleFor('.weft-link')!.style.getPropertyValue('position')).toBe('')
+    })
+
+    it('draws in the primary text colour the theme checked for AA on the page', () => {
+      expect(ruleFor('.weft-link')!.style.getPropertyValue('color')).toBe('var(--weft-color-primary-text, LinkText)')
+    })
+
+    it('standalone, is an inline box with a hit area of at least --weft-hit-min', async () => {
+      const a = await link({ to: '/docs', standalone: true })
+      expect(a.dataset.standalone).toBe('true')
+      expect(getComputedStyle(a).display).toBe('inline-flex')
+      const hit = ruleFor('.weft-link[data-standalone]::before')!
       expect(hit.style.getPropertyValue('block-size')).toBe('max(100%, var(--weft-hit-min, 24px))')
       expect(hit.style.getPropertyValue('inline-size')).toBe('max(100%, var(--weft-hit-min, 24px))')
-      expect(ruleFor('.weft-link')!.style.getPropertyValue('position')).toBe('relative')
+      expect(ruleFor('.weft-link[data-standalone]')!.style.getPropertyValue('position')).toBe('relative')
     })
   })
 })

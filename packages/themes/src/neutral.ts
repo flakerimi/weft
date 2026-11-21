@@ -4,15 +4,13 @@ export const neutral: Theme = {
   name: 'neutral',
   light: {
     bg: '#FAFAFA', surface: '#FFFFFF', 'surface-raised': '#FFFFFF', border: '#E4E4E7',
-    text: '#18181B', 'text-muted': '#71717A', primary: '#2563EB', 'primary-fg': '#FFFFFF',
-    'primary-soft': '#DBEAFE', danger: '#DC2626', 'danger-fg': '#FFFFFF', warning: '#D97706',
-    'warning-fg': '#18181B', success: '#16A34A', 'success-fg': '#18181B', info: '#0284C7', focus: '#2563EB',
+    text: '#18181B', 'text-muted': '#71717A', primary: '#2563EB', 'primary-soft': '#DBEAFE',
+    danger: '#DC2626', warning: '#D97706', success: '#16A34A', info: '#0284C7', focus: '#2563EB',
   },
   dark: {
     bg: '#09090B', surface: '#18181B', 'surface-raised': '#27272A', border: '#27272A',
-    text: '#FAFAFA', 'text-muted': '#A1A1AA', primary: '#3B82F6', 'primary-fg': '#FFFFFF',
-    'primary-soft': '#172554', danger: '#EF4444', 'danger-fg': '#09090B', warning: '#F59E0B',
-    'warning-fg': '#09090B', success: '#22C55E', 'success-fg': '#09090B', info: '#38BDF8', focus: '#60A5FA',
+    text: '#FAFAFA', 'text-muted': '#A1A1AA', primary: '#3B82F6', 'primary-soft': '#172554',
+    danger: '#EF4444', warning: '#F59E0B', success: '#22C55E', info: '#38BDF8', focus: '#60A5FA',
   },
   font: {
     sans: 'Inter, system-ui, sans-serif', mono: 'ui-monospace, monospace',

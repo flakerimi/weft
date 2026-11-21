@@ -4,23 +4,32 @@ purpose: A button that runs an action, or a link drawn as a button when it has `
 use: For the actions on a page, a form's submit, a dialog's confirm; solid for the one main action, soft, outline or ghost for the others.
 avoid: For moving to another page within running text, use Link; for a choice that stays on or off, use a switch or checkbox.
 adapts:
-  input: On touch its hit area grows to at least 44 px (--weft-hit-min) through a pseudo-element, so its drawn size and the layout stay the same; hover colours apply only where the device can hover.
+  input: On touch an md button is at least 44 px tall (--weft-hit-min); a small or square button keeps its drawn size and grows its hit area to 44 px through a pseudo-element. Hover colours apply only where the device can hover.
   surface: Nothing changes in behaviour; text follows the surface's type scale.
   width: Nothing changes; set block to fill a narrow column.
 ---
 `variant` is `solid`, `soft`, `outline` or `ghost`; `tone` is `neutral`,
 `primary`, `danger`, `warning` or `success`; `size` is `sm`, `md` or `lg`.
-Give the text as `label` or as the default slot. With only an `icon` the
-button is square: give it an `aria-label`.
+Give the text as `label` or as the default slot; the `leading` and
+`trailing` slots replace `icon` and `trailing-icon`. With only an icon the
+button is square (`square` makes any button square): give it an
+`aria-label`, or it warns once in development. `active` draws it as the
+current one of a set; with `to` it also sets `aria-current="page"`.
 
-**Loading** shows a spinner over the content, which stays in place (hidden),
-so the button keeps its width. It sets `aria-busy="true"` and
+**Touch:** an md button grows to 44 px tall on touch, so the visible target
+is the hit target. A small or square button keeps its size (a toolbar would
+change shape otherwise) and its `::before` reaches 44 px instead.
+
+**Loading** shows a spinner (or `loading-icon`, turning) over the content,
+which stays in place (hidden), so the button keeps its width. It sets `aria-busy="true"` and
 `aria-disabled="true"`, and blocks activation by mouse, keyboard and form
 submit, but stays focusable, so a keyboard user does not lose their place.
 
 **Disabled** is the native `disabled` attribute on a button. With `to` the
-button is an `<a>`; disabled, it has no address and is announced as a
-disabled link.
+button is an `<a>`, taking `rel` and `target`, with `noopener` added for
+another site; disabled, it has no address and is announced as a disabled
+link; loading, it keeps its address (and focus) but neither a click, a
+middle click nor Enter follows it.
 
 **Keyboard:** a native button, so Enter and Space press it; as a link, Enter
 follows it. Focus shows the theme's focus ring.

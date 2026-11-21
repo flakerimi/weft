@@ -104,7 +104,7 @@
           "dynamic": false
         }
       ],
-      "notes": "Put Avatars in its default slot. With `max`, the first `max` show and a last\navatar counts the rest (`+3`); without it every avatar shows. `size` sizes\nevery avatar in the group.\n\nIt is a `group`: name it with an `aria-label` (\"Project members\"). Avatars\njoin the group in the order they render, on the server and in the browser\nalike, so the count hydrates as rendered.",
+      "notes": "Put Avatars in its default slot. With `max`, the first `max` show and a last\navatar counts the rest, drawn `+3` and read as \"3 more\"; without it every\navatar shows. `size` sizes\nevery avatar in the group.\n\nIt is a `group`: name it with an `aria-label` (\"Project members\"). Avatars\njoin the group in the order they render, on the server and in the browser\nalike, so the count hydrates as rendered.",
       "examples": [
         {
           "name": "basic",
@@ -202,7 +202,7 @@
       "use": "For the actions on a page, a form's submit, a dialog's confirm; solid for the one main action, soft, outline or ghost for the others.",
       "avoid": "For moving to another page within running text, use Link; for a choice that stays on or off, use a switch or checkbox.",
       "adapts": {
-        "input": "On touch its hit area grows to at least 44 px (--weft-hit-min) through a pseudo-element, so its drawn size and the layout stay the same; hover colours apply only where the device can hover.",
+        "input": "On touch an md button is at least 44 px tall (--weft-hit-min); a small or square button keeps its drawn size and grows its hit area to 44 px through a pseudo-element. Hover colours apply only where the device can hover.",
         "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
         "width": "Nothing changes; set block to fill a narrow column."
       },
@@ -233,21 +233,28 @@
           "type": "'sm' | 'md' | 'lg'",
           "required": false,
           "default": "'md'",
-          "description": "`sm`, `md` or `lg`: the drawn height, which touch does not change."
+          "description": "`sm`, `md` or `lg`. On touch an md button grows to 44 px; sm keeps its height and grows its hit area."
         },
         {
           "name": "icon",
           "type": "string",
           "required": false,
           "default": null,
-          "description": "A Lucide icon before the label; alone, the button is square and needs an `aria-label`."
+          "description": "A Lucide icon before the label; alone, the button is square and needs an `aria-label`. The leading slot replaces it."
         },
         {
           "name": "trailingIcon",
           "type": "string",
           "required": false,
           "default": null,
-          "description": "A Lucide icon after the label."
+          "description": "A Lucide icon after the label. The trailing slot replaces it."
+        },
+        {
+          "name": "square",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Square, its width equal to its height, whatever it holds."
         },
         {
           "name": "loading",
@@ -257,11 +264,25 @@
           "description": "Work in progress: shows a spinner, sets `aria-busy` and blocks activation, keeping width and focus."
         },
         {
+          "name": "loadingIcon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon to turn in place of the spinner while loading."
+        },
+        {
           "name": "disabled",
           "type": "boolean",
           "required": false,
           "default": null,
           "description": "Unavailable: a button is natively disabled; a link loses its address."
+        },
+        {
+          "name": "active",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Drawn as on: the current one of a set. With `to` it is the current page (aria-current=\"page\")."
         },
         {
           "name": "block",
@@ -276,6 +297,20 @@
           "required": false,
           "default": null,
           "description": "An address: the button renders as an `<a>` that goes there (rel=\"noopener\" when it is another site)."
+        },
+        {
+          "name": "rel",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "With `to`: the native rel; `noopener` is added for another site."
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "With `to`: where to open it, as the native attribute: `_blank` for a new tab."
         },
         {
           "name": "type",
@@ -297,9 +332,19 @@
           "name": "default",
           "props": [],
           "dynamic": false
+        },
+        {
+          "name": "leading",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "trailing",
+          "props": [],
+          "dynamic": false
         }
       ],
-      "notes": "`variant` is `solid`, `soft`, `outline` or `ghost`; `tone` is `neutral`,\n`primary`, `danger`, `warning` or `success`; `size` is `sm`, `md` or `lg`.\nGive the text as `label` or as the default slot. With only an `icon` the\nbutton is square: give it an `aria-label`.\n\n**Loading** shows a spinner over the content, which stays in place (hidden),\nso the button keeps its width. It sets `aria-busy=\"true\"` and\n`aria-disabled=\"true\"`, and blocks activation by mouse, keyboard and form\nsubmit, but stays focusable, so a keyboard user does not lose their place.\n\n**Disabled** is the native `disabled` attribute on a button. With `to` the\nbutton is an `<a>`; disabled, it has no address and is announced as a\ndisabled link.\n\n**Keyboard:** a native button, so Enter and Space press it; as a link, Enter\nfollows it. Focus shows the theme's focus ring.\n\n`click` is emitted only when the button is pressed while neither loading nor\ndisabled. `type` defaults to `button`, so a Button inside a form submits it\nonly with `type=\"submit\"`.",
+      "notes": "`variant` is `solid`, `soft`, `outline` or `ghost`; `tone` is `neutral`,\n`primary`, `danger`, `warning` or `success`; `size` is `sm`, `md` or `lg`.\nGive the text as `label` or as the default slot; the `leading` and\n`trailing` slots replace `icon` and `trailing-icon`. With only an icon the\nbutton is square (`square` makes any button square): give it an\n`aria-label`, or it warns once in development. `active` draws it as the\ncurrent one of a set; with `to` it also sets `aria-current=\"page\"`.\n\n**Touch:** an md button grows to 44 px tall on touch, so the visible target\nis the hit target. A small or square button keeps its size (a toolbar would\nchange shape otherwise) and its `::before` reaches 44 px instead.\n\n**Loading** shows a spinner (or `loading-icon`, turning) over the content,\nwhich stays in place (hidden), so the button keeps its width. It sets `aria-busy=\"true\"` and\n`aria-disabled=\"true\"`, and blocks activation by mouse, keyboard and form\nsubmit, but stays focusable, so a keyboard user does not lose their place.\n\n**Disabled** is the native `disabled` attribute on a button. With `to` the\nbutton is an `<a>`, taking `rel` and `target`, with `noopener` added for\nanother site; disabled, it has no address and is announced as a disabled\nlink; loading, it keeps its address (and focus) but neither a click, a\nmiddle click nor Enter follows it.\n\n**Keyboard:** a native button, so Enter and Space press it; as a link, Enter\nfollows it. Focus shows the theme's focus ring.\n\n`click` is emitted only when the button is pressed while neither loading nor\ndisabled. `type` defaults to `button`, so a Button inside a form submits it\nonly with `type=\"submit\"`.",
       "examples": [
         {
           "name": "basic",
@@ -318,6 +363,12 @@
           "title": "Icons",
           "file": "packages/ui/examples/Button/icons.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { Button, Stack } from '@weft/ui'\n</script>\n\n<template>\n  <Stack direction=\"row\" :gap=\"2\" align=\"center\">\n    <Button label=\"New invoice\" icon=\"plus\" />\n    <Button label=\"Continue\" variant=\"outline\" trailing-icon=\"arrow-right\" />\n    <!-- An icon alone makes a square button; it needs an aria-label. -->\n    <Button icon=\"settings\" variant=\"ghost\" tone=\"neutral\" aria-label=\"Settings\" />\n  </Stack>\n</template>\n"
+        },
+        {
+          "name": "leading-and-trailing",
+          "title": "Leading and trailing",
+          "file": "packages/ui/examples/Button/leading-and-trailing.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Badge, Button, Stack } from '@weft/ui'\n\nconst view = ref<'list' | 'grid'>('list')\n</script>\n\n<template>\n  <Stack direction=\"row\" :gap=\"2\" align=\"center\">\n    <Button label=\"Inbox\" variant=\"outline\" tone=\"neutral\" icon=\"inbox\">\n      <template #trailing><Badge :label=\"3\" size=\"sm\" /></template>\n    </Button>\n    <!-- active draws the current one of a set. -->\n    <Button label=\"List\" variant=\"ghost\" tone=\"neutral\" :active=\"view === 'list'\" @click=\"view = 'list'\" />\n    <Button label=\"Grid\" variant=\"ghost\" tone=\"neutral\" :active=\"view === 'grid'\" @click=\"view = 'grid'\" />\n  </Stack>\n</template>\n"
         },
         {
           "name": "loading",
@@ -760,7 +811,7 @@
       "use": "For navigation, in running text, in a list of pages or a footer.",
       "avoid": "For an action that changes something, use Button; for a link that should look like a button, use Button with to.",
       "adapts": {
-        "input": "On touch its hit area grows to at least 44 px (--weft-hit-min) through a pseudo-element, without changing the text; hover styles apply only where the device can hover.",
+        "input": "A standalone link (in a list, a footer, a toolbar) gets a hit area of at least 44 px on touch through a pseudo-element; a link in running text keeps its text size and no larger hit area, which would cover the lines around it. Hover styles apply only where the device can hover.",
         "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
         "width": "Nothing changes."
       },
@@ -813,6 +864,13 @@
           "required": false,
           "default": null,
           "description": "Unavailable: no address, so not focusable, and announced as a disabled link."
+        },
+        {
+          "name": "standalone",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Not in running text (a list of links, a footer, a toolbar): drawn as an inline box whose hit area is at least --weft-hit-min on touch. In a sentence, leave it unset, so the hit area does not cover the lines around it."
         }
       ],
       "emits": [
@@ -829,7 +887,7 @@
           "dynamic": false
         }
       ],
-      "notes": "An external link (an address with a scheme and host, `https://…` or `//…`,\nor any with `external`) gets `rel=\"noopener\"`, added to any `rel` you give.\n`target` passes through as the native attribute.\n\nThe link to the page the browser is on gets `aria-current=\"page\"`. It is\nworked out in the browser after mounting, so the server's markup and the\nfirst client render agree; on a page with no JavaScript the server cannot\nknow, so set `active` where the layout knows the current page. `active`\nalways wins over the comparison.\n\n**Disabled:** no address, so it leaves the tab order; announced as a disabled\nlink (`role=\"link\"`, `aria-disabled=\"true\"`); a click does nothing.\n\n**Keyboard:** a native anchor, so Tab reaches it and Enter follows it.",
+      "notes": "**Standalone or in text.** Set `standalone` on a link that stands on its\nown: in navigation, a list, a footer, a toolbar. It becomes an inline box\nwhose hit area reaches `--weft-hit-min` (44 px on touch). Leave it unset in\nrunning text: a larger hit area there would cover the line above and below\nand take taps meant for the links on them (WCAG 2.5.8 exempts targets in a\nsentence).\n\nThe text is the theme's `--weft-color-primary-text`, which it checks for\n4.5:1 on the page.\n\nAn external link (an address with a scheme and host, `https://…` or `//…`,\nor any with `external`) gets `rel=\"noopener\"`, added to any `rel` you give.\n`target` passes through as the native attribute.\n\nThe link to the page the browser is on gets `aria-current=\"page\"`. It is\nworked out in the browser after mounting, so the server's markup and the\nfirst client render agree; on a page with no JavaScript the server cannot\nknow, so set `active` where the layout knows the current page. `active`\nalways wins over the comparison.\n\n**Disabled:** no address and no target, so it leaves the tab order;\nannounced as a disabled link (`role=\"link\"`, `aria-disabled=\"true\"`); a click\ndoes nothing.\n\n**Keyboard:** a native anchor, so Tab reaches it and Enter follows it.",
       "examples": [
         {
           "name": "basic",
@@ -841,7 +899,7 @@
           "name": "current-page",
           "title": "Current page",
           "file": "packages/ui/examples/Link/current-page.vue",
-          "source": "<script setup vapor lang=\"ts\">\nimport { Link, Stack } from '@weft/ui'\n</script>\n\n<template>\n  <!-- In the browser a Link marks itself when it is the current page; active says so on the server too. -->\n  <nav aria-label=\"Account\">\n    <Stack direction=\"row\" :gap=\"4\">\n      <Link to=\"/account\" active>Profile</Link>\n      <Link to=\"/account/billing\">Billing</Link>\n      <Link to=\"/account/team\" disabled>Team</Link>\n    </Stack>\n  </nav>\n</template>\n"
+          "source": "<script setup vapor lang=\"ts\">\nimport { Link, Stack } from '@weft/ui'\n</script>\n\n<template>\n  <!-- In the browser a Link marks itself when it is the current page; active says so on the server too. -->\n  <nav aria-label=\"Account\">\n    <Stack direction=\"row\" :gap=\"4\">\n      <Link standalone to=\"/account\" active>Profile</Link>\n      <Link standalone to=\"/account/billing\">Billing</Link>\n      <Link standalone to=\"/account/team\" disabled>Team</Link>\n    </Stack>\n  </nav>\n</template>\n"
         }
       ]
     },
@@ -1070,7 +1128,7 @@
           "dynamic": false
         }
       ],
-      "notes": "`label` (or the default slot) and `icon` sit between two lines. It is a\n`separator` with `aria-orientation`, named by `label`; `decorative` hides it\nfrom assistive technology (`role=\"none\"`), for a rule that separates nothing\na reader needs told about. `orientation=\"vertical\"` stretches to the height\nof its row.",
+      "notes": "`label` (or the default slot) and `icon` sit between two lines. It is a\n`separator` with `aria-orientation`, named by `label`; `decorative` hides it\nfrom assistive technology (`role=\"none\"`, `aria-hidden=\"true\"`), for a rule\nthat separates nothing a reader needs told about. `orientation=\"vertical\"` stretches to the height\nof its row.",
       "examples": [
         {
           "name": "basic",
@@ -1082,7 +1140,7 @@
           "name": "vertical",
           "title": "Vertical",
           "file": "packages/ui/examples/Separator/vertical.vue",
-          "source": "<script setup vapor lang=\"ts\">\nimport { Link, Separator, Stack } from '@weft/ui'\n</script>\n\n<template>\n  <Stack direction=\"row\" :gap=\"3\" align=\"center\">\n    <Link to=\"/terms\">Terms</Link>\n    <Separator orientation=\"vertical\" decorative />\n    <Link to=\"/privacy\">Privacy</Link>\n  </Stack>\n</template>\n"
+          "source": "<script setup vapor lang=\"ts\">\nimport { Link, Separator, Stack } from '@weft/ui'\n</script>\n\n<template>\n  <Stack direction=\"row\" :gap=\"3\" align=\"center\">\n    <Link standalone to=\"/terms\">Terms</Link>\n    <Separator orientation=\"vertical\" decorative />\n    <Link standalone to=\"/privacy\">Privacy</Link>\n  </Stack>\n</template>\n"
         }
       ]
     },

@@ -118,7 +118,9 @@ describe('AvatarGroup', () => {
     const g = cases({ case: 'group', people, max: 3 })
     expect(shown(g)).toEqual(people.slice(0, 3))
     const more = g.querySelector('.weft-avatar-group__more') as HTMLElement
-    expect(more.textContent).toBe('+2')
+    // Drawn as +2, said as "2 more".
+    expect(more.querySelector('[aria-hidden="true"]')?.textContent).toBe('+2')
+    expect(more.querySelector('.weft-visually-hidden')?.textContent).toBe('2 more')
     expect(more.dataset.size).toBe('md')
   })
 
@@ -128,10 +130,11 @@ describe('AvatarGroup', () => {
     expect(g.querySelector('.weft-avatar-group__more')).toBeNull()
     list.value = people
     await nextTick()
-    expect(g.querySelector('.weft-avatar-group__more')?.textContent).toBe('+2')
+    expect(g.querySelector('.weft-avatar-group__more [aria-hidden="true"]')?.textContent).toBe('+2')
     list.value = people.slice(0, 4)
     await nextTick()
-    expect(g.querySelector('.weft-avatar-group__more')?.textContent).toBe('+1')
+    expect(g.querySelector('.weft-avatar-group__more [aria-hidden="true"]')?.textContent).toBe('+1')
+    expect(g.querySelector('.weft-avatar-group__more .weft-visually-hidden')?.textContent).toBe('1 more')
   })
 
   it('sizes every avatar in it', () => {

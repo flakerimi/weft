@@ -1,4 +1,5 @@
-export { colorKeys, type ColorKey, type ColorSet, type Curve, type Theme } from './tokens.ts'
+export { colorKeys, tints, tones, type ColorKey, type ColorSet, type Curve, type Theme, type Tone } from './tokens.ts'
+export { contrast, mix } from './contrast.ts'
 export { themeToCss } from './to-css.ts'
 export { neutral } from './neutral.ts'
 export { lisa, type LisaTokens } from './lisa.ts'

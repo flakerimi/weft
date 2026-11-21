@@ -1,6 +1,7 @@
 <script setup vapor lang="ts">
 // Avatars overlapping in a row, such as the people on a project. With `max`,
-// the first `max` show and a last avatar counts the rest ("+3"). Name the
+// the first `max` show and a last avatar counts the rest, drawn "+3" and
+// said "3 more". Name the
 // group with an aria-label ("Project members").
 import { provideAvatarGroup } from './avatarGroup.ts'
 import type { Size } from '../types.ts'
@@ -24,6 +25,9 @@ const more = provideAvatarGroup(
 <template>
   <div class="weft-avatar-group" role="group" :data-size="size">
     <slot />
-    <span v-if="more > 0" class="weft-avatar weft-avatar-group__more" :data-size="size">+{{ more }}</span>
+    <span v-if="more > 0" class="weft-avatar weft-avatar-group__more" :data-size="size">
+      <span aria-hidden="true">+{{ more }}</span>
+      <span class="weft-visually-hidden">{{ more }} more</span>
+    </span>
   </div>
 </template>

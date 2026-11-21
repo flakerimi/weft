@@ -34,11 +34,34 @@ describe('themeToCss', () => {
     for (const m of css.matchAll(/data-weft-input[^{]*\{[^}]*\}/g)) expect(m[0]).not.toMatch(/--weft-control-(sm|md|lg)/)
   })
 
-  it('emits a foreground for every tone, in both schemes', () => {
-    for (const tone of ['danger', 'warning', 'success']) {
-      expect(css).toMatch(new RegExp(`:root, \\[data-weft-scheme="light"\\] \\{[^}]*--weft-color-${tone}-fg: #`))
-      expect(css).toMatch(new RegExp(`\\[data-weft-scheme="dark"\\] \\{[^}]*--weft-color-${tone}-fg: #`))
+  it('chooses each tone\'s text at build: the better of the theme\'s two inks, and a tinted text', () => {
+    const light = /:root, \[data-weft-scheme="light"\] \{[^}]*\}/.exec(css)![0]
+    const dark = /\[data-weft-scheme="dark"\] \{[^}]*\}/.exec(css)![0]
+    // Light: white-ish ink on blue and red, dark ink on amber and green.
+    expect(light).toContain(`--weft-color-primary-fg: ${neutral.dark.text};`)
+    expect(light).toContain(`--weft-color-danger-fg: ${neutral.dark.text};`)
+    expect(light).toContain(`--weft-color-warning-fg: ${neutral.light.text};`)
+    expect(light).toContain(`--weft-color-success-fg: ${neutral.light.text};`)
+    // Dark: every tone is light enough for the dark ink.
+    for (const tone of ['primary', 'danger', 'warning', 'success']) {
+      expect(dark).toContain(`--weft-color-${tone}-fg: ${neutral.light.text};`)
+      expect(light).toMatch(new RegExp(`--weft-color-${tone}-text: #[0-9A-F]{6};`))
+      expect(dark).toMatch(new RegExp(`--weft-color-${tone}-text: #[0-9A-F]{6};`))
     }
+  })
+
+  it('refuses a tone neither ink reaches 4.5:1 on, in one sentence', () => {
+    const grey = structuredClone(neutral)
+    grey.light.warning = '#767676'
+    expect(() => themeToCss(grey)).toThrow(
+      'theme "neutral": neither its light text (#FAFAFA) nor its dark text (#18181B) reaches 4.5:1 on light.warning (#767676); pick a warning colour one of them can be read on.',
+    )
+  })
+
+  it('refuses a colour it cannot check, in one sentence', () => {
+    const named = structuredClone(neutral)
+    named.dark.danger = 'red'
+    expect(() => themeToCss(named)).toThrow('theme "neutral": dark.danger is "red"; give it as #RRGGBB so its contrast can be checked.')
   })
 
   it('sizes for touch from the media query when no provider says otherwise', () => {

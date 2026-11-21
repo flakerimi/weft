@@ -221,6 +221,15 @@ describe('motion', () => {
     expect(animation(root(Progress).querySelector('.weft-progress__bar')!)).toContain('weft-sweep')
   })
 
+  it('turns a Spinner slowly under prefers-reduced-motion, rather than freezing it', () => {
+    const ring = () => root(Spinner).querySelector('.weft-spinner__ring')!
+    expect(getComputedStyle(ring()).getPropertyValue('animation-duration')).toBe('0.8s')
+    settings().prefersReducedMotion = 'reduce'
+    const still = ring()
+    expect(getComputedStyle(still).getPropertyValue('animation-duration')).toBe('2.4s')
+    expect(animation(still)).toContain('weft-spin')
+  })
+
   it('stills both under prefers-reduced-motion', () => {
     settings().prefersReducedMotion = 'reduce'
     expect(matchMedia('(prefers-reduced-motion: reduce)').matches).toBe(true)

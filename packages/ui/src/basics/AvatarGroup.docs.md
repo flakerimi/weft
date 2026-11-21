@@ -9,7 +9,8 @@ adapts:
   width: Nothing changes; set max so the row fits the narrowest place it appears.
 ---
 Put Avatars in its default slot. With `max`, the first `max` show and a last
-avatar counts the rest (`+3`); without it every avatar shows. `size` sizes
+avatar counts the rest, drawn `+3` and read as "3 more"; without it every
+avatar shows. `size` sizes
 every avatar in the group.
 
 It is a `group`: name it with an `aria-label` ("Project members"). Avatars

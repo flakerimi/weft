@@ -4,8 +4,8 @@ import { Link, Separator, Stack } from '@weft/ui'
 
 <template>
   <Stack direction="row" :gap="3" align="center">
-    <Link to="/terms">Terms</Link>
+    <Link standalone to="/terms">Terms</Link>
     <Separator orientation="vertical" decorative />
-    <Link to="/privacy">Privacy</Link>
+    <Link standalone to="/privacy">Privacy</Link>
   </Stack>
 </template>

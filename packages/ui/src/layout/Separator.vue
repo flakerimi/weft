@@ -23,6 +23,7 @@ withDefaults(
   <div
     class="weft-separator"
     :role="decorative ? 'none' : 'separator'"
+    :aria-hidden="decorative ? 'true' : undefined"
     :aria-orientation="decorative ? undefined : orientation"
     :aria-label="!decorative && label ? label : undefined"
     :data-orientation="orientation"

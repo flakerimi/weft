@@ -3,11 +3,13 @@ import { nextTick, ref } from 'vue'
 import { registerIcon } from '../src/basics/icons.ts'
 import Button from '../src/basics/Button.vue'
 import ButtonCases from './fixtures/basics/ButtonCases.vue'
+import { navigations, press } from './keyboard.ts'
 import { mount } from './mount.ts'
 import { loadStyles, ruleFor } from './styles.ts'
 
 registerIcon('plus', '<path d="M5 12h14"></path>')
 registerIcon('arrow-right', '<path d="M12 5l7 7"></path>')
+registerIcon('loader', '<path d="M12 2v4"></path>')
 
 let mounted: { unmount(): void }[] = []
 afterEach(() => {
@@ -85,6 +87,42 @@ describe('Button', () => {
     expect(onClick.mock.calls[0]![0]).toBeInstanceOf(MouseEvent)
   })
 
+  it('takes leading and trailing slots in place of its icons', () => {
+    const b = cases({ case: 'ends' }).querySelector('button')!
+    const parts = Array.from(b.querySelector('.weft-button__content')!.children).map((p) => p.getAttribute('class'))
+    expect(parts).toEqual(['lead', 'weft-button__label', 'trail'])
+    expect(b.querySelector('svg')).toBeNull()
+  })
+
+  it('is square when told, whatever its content', () => {
+    expect(render({ label: 'A', square: true }).dataset.square).toBe('true')
+  })
+
+  it('marks itself active, and as the current page when it is a link', () => {
+    const b = render({ label: 'Grid', active: true })
+    expect(b.dataset.active).toBe('true')
+    expect(b.hasAttribute('aria-current')).toBe(false)
+    expect(render({ label: 'Docs', to: '/docs', active: true }).getAttribute('aria-current')).toBe('page')
+    expect(render({ label: 'Docs', to: '/docs' }).hasAttribute('aria-current')).toBe(false)
+  })
+
+  describe('naming', () => {
+    it('warns once, in development, when it has only an icon and no name', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      render({ icon: 'plus', 'aria-label': 'Add' })
+      render({ icon: 'plus', label: 'Add' })
+      render({ icon: 'plus', 'aria-labelledby': 'x' })
+      expect(warn).not.toHaveBeenCalled()
+      render({ icon: 'plus' })
+      render({ icon: 'plus' })
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(String(warn.mock.calls[0]![0])).toBe(
+        'Button: a button with only an icon needs a name; give it a label or an aria-label, which assistive technology reads in place of the icon.',
+      )
+      warn.mockRestore()
+    })
+  })
+
   describe('disabled', () => {
     it('is natively disabled, so mouse, keyboard and form submit cannot activate it', () => {
       const onClick = vi.fn()
@@ -132,6 +170,14 @@ describe('Button', () => {
       expect(onSubmit).toHaveBeenCalledTimes(1)
     })
 
+    it('shows loadingIcon, turning, in place of the spinner', () => {
+      const b = render({ label: 'Save', loading: true, loadingIcon: 'loader' })
+      const icon = b.querySelector('.weft-button__spinner svg.weft-icon')!
+      expect(icon.innerHTML).toContain('M12 2v4')
+      expect(icon.getAttribute('class')).toContain('weft-button__loading-icon')
+      expect(b.querySelector('.weft-spinner')).toBeNull()
+    })
+
     it('follows the loading prop live', async () => {
       const loading = ref(false)
       const onClick = vi.fn()
@@ -170,6 +216,25 @@ describe('Button', () => {
       expect(render({ label: 'In', to: '/docs' }).hasAttribute('rel')).toBe(false)
     })
 
+    it('takes rel and target, merging noopener into rel', () => {
+      const a = render({ label: 'Out', to: 'https://example.com', rel: 'nofollow', target: '_blank' })
+      expect(a.getAttribute('rel')).toBe('nofollow noopener')
+      expect(a.getAttribute('target')).toBe('_blank')
+      expect(render({ label: 'In', to: '/docs', rel: 'help' }).getAttribute('rel')).toBe('help')
+      // A button has no rel or target.
+      const b = render({ label: 'Go', rel: 'nofollow', target: '_blank' })
+      expect(b.hasAttribute('rel')).toBe(false)
+      expect(b.hasAttribute('target')).toBe(false)
+    })
+
+    it('is followed with Enter', () => {
+      const a = render({ label: 'Docs', to: '/docs' })
+      const followed = navigations(a)
+      expect(press(a, 'Enter')).toBe(true)
+      expect(followed.urls).toEqual([new URL('/docs', location.href).href])
+      followed.restore()
+    })
+
     it('when disabled, drops its address and leaves the tab order, announced as a disabled link', () => {
       const onClick = vi.fn()
       const a = render({ label: 'Docs', to: '/docs', disabled: true, onClick: () => onClick })
@@ -182,15 +247,31 @@ describe('Button', () => {
       expect(onClick).not.toHaveBeenCalled()
     })
 
-    it('when loading, keeps focus but does not navigate', () => {
+    it('when loading, keeps focus but does not navigate, by click, middle click or Enter', () => {
       const onClick = vi.fn()
       const a = render({ label: 'Docs', to: '/docs', loading: true, onClick: () => onClick })
+      const followed = navigations(a)
       expect(a.getAttribute('href')).toBe('/docs')
       expect(a.getAttribute('aria-busy')).toBe('true')
-      const press = new MouseEvent('click', { bubbles: true, cancelable: true })
-      a.dispatchEvent(press)
-      expect(press.defaultPrevented).toBe(true)
+      const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+      a.dispatchEvent(click)
+      expect(click.defaultPrevented).toBe(true)
+      // A middle click opens a link in a new tab as the default of auxclick.
+      const middle = new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 })
+      a.dispatchEvent(middle)
+      expect(middle.defaultPrevented).toBe(true)
+      press(a, 'Enter')
+      expect(document.activeElement).toBe(a)
+      expect(followed.urls).toEqual([])
       expect(onClick).not.toHaveBeenCalled()
+      followed.restore()
+    })
+
+    it('lets a middle click through when not loading', () => {
+      const a = render({ label: 'Docs', to: '/docs' })
+      const middle = new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 })
+      a.dispatchEvent(middle)
+      expect(middle.defaultPrevented).toBe(false)
     })
   })
 
@@ -206,6 +287,33 @@ describe('Button', () => {
       expect(document.activeElement).toBe(b)
       expect(getComputedStyle(b).outlineStyle).toBe('solid')
       expect(getComputedStyle(b).outlineWidth).toBe('2px')
+    })
+
+    it('is pressed with Enter and with Space', () => {
+      const onClick = vi.fn()
+      const b = render({ label: 'Go', onClick: () => onClick })
+      expect(press(b, 'Enter')).toBe(true)
+      expect(press(b, ' ')).toBe(true)
+      expect(onClick).toHaveBeenCalledTimes(2)
+    })
+
+    it('submits its form with Enter, unless it is loading', () => {
+      const onSubmit = vi.fn()
+      expect(press(cases({ case: 'form', onSubmit: () => onSubmit }).querySelector('button')!, 'Enter')).toBe(true)
+      expect(onSubmit).toHaveBeenCalledTimes(1)
+      const busy = cases({ case: 'form', loading: true, onSubmit: () => onSubmit }).querySelector('button')!
+      press(busy, 'Enter')
+      press(busy, ' ')
+      expect(onSubmit).toHaveBeenCalledTimes(1)
+      expect(document.activeElement).toBe(busy)
+    })
+
+    it('cannot be reached or pressed by keyboard when disabled', () => {
+      const onClick = vi.fn()
+      const b = render({ label: 'Go', disabled: true, onClick: () => onClick })
+      expect(press(b, 'Enter')).toBe(false)
+      expect(press(b, ' ')).toBe(false)
+      expect(onClick).not.toHaveBeenCalled()
     })
 
     it('stays in the tab order while loading, so keyboard focus is not lost', () => {
@@ -230,20 +338,28 @@ describe('Button', () => {
       expect(ruleFor('.weft-button')!.style.getPropertyValue('position')).toBe('relative')
     })
 
-    it('has a hit area of 44 px under touch and keeps its drawn size', () => {
-      const probe = (input: string) => {
-        const el = cases({ case: 'adaptive', input })
-        const button = el.querySelector('button')!
-        // The probe, inside the button, resolves --weft-hit-min where the pseudo-element does.
-        const hit = getComputedStyle(el.querySelector('.hit-probe')!).minBlockSize
-        return { button: getComputedStyle(button).blockSize, hit }
-      }
-      const touch = probe('touch')
-      const pointer = probe('pointer')
-      expect(touch.button).toBe('28px')
-      expect(pointer.button).toBe('28px')
-      expect(parseFloat(touch.hit)).toBeGreaterThanOrEqual(44)
-      expect(parseFloat(pointer.hit)).toBe(24)
+    /** A length in px; happy-dom resolves the var()s in max() but leaves max() itself to the reader. */
+    const px = (value: string) => {
+      const max = /^max\((.*)\)$/.exec(value)
+      return max ? Math.max(...max[1]!.split(',').map((v) => parseFloat(v))) : parseFloat(value)
+    }
+    const heights = (input: string, size: string) => {
+      const el = cases({ case: 'adaptive', input, size })
+      const height = (sel: string) => px(getComputedStyle(el.querySelector(sel)!).blockSize)
+      return { plain: height('.plain'), square: height('.square'), hit: px(getComputedStyle(el.querySelector('.hit-probe')!).minBlockSize) }
+    }
+
+    it('is 44 px tall at md on touch, and its control height on pointer', () => {
+      expect(heights('touch', 'md')).toMatchObject({ plain: 44, hit: 44 })
+      expect(heights('pointer', 'md')).toMatchObject({ plain: 36, hit: 24 })
+    })
+
+    it('keeps small and square buttons at their drawn size, reaching 44 px through the hit area', () => {
+      expect(heights('touch', 'sm')).toMatchObject({ plain: 28, square: 28 })
+      expect(heights('pointer', 'sm')).toMatchObject({ plain: 28, square: 28 })
+      expect(heights('touch', 'md').square).toBe(36)
+      expect(heights('pointer', 'md').square).toBe(36)
+      expect(heights('touch', 'lg')).toMatchObject({ plain: 44, square: 44 })
     })
   })
 })

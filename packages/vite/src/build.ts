@@ -206,15 +206,20 @@ const fsKey = (p: string) => (foldCase ? p.normalize('NFC').toLowerCase() : p.no
 type Taken = Map<string, { path: string; source: string }>
 const take = (taken: Taken, path: string, source = '') => taken.set(fsKey(path), { path, source })
 
-/** Bytes of brotli at quality 11, as the build compresses what it serves; pages share CSS, so each set is measured once. */
-const sentSizes = new Map<string, number>()
-function sentSize(css: string): number {
-  let size = sentSizes.get(css)
-  if (size === undefined) {
-    size = brotliCompressSync(css, { params: { [zlib.BROTLI_PARAM_QUALITY]: 11 } }).length
-    sentSizes.set(css, size)
+/**
+ * Bytes of brotli at quality 11, as the build compresses what it serves. Pages
+ * share CSS, so within one build each set is measured once.
+ */
+function sentSizes(): (css: string) => number {
+  const sizes = new Map<string, number>()
+  return (css) => {
+    let size = sizes.get(css)
+    if (size === undefined) {
+      size = brotliCompressSync(css, { params: { [zlib.BROTLI_PARAM_QUALITY]: 11 } }).length
+      sizes.set(css, size)
+    }
+    return size
   }
-  return size
 }
 
 /** Write the whole build into `dir`, a fresh folder of its own, and mark it. */
@@ -240,6 +245,7 @@ async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssI
   const hints: Manifest['hints'] = {}
   const routesJson: RoutesJson = { pages: [], notFound: null, app }
   const rules = speculationRules(app)
+  const sentSize = sentSizes()
   for (const page of pages) {
     // The theme, weft.css, the page's component CSS, then view transitions.
     const css = [baseCSS, page.css, VIEW_TRANSITION].filter(Boolean).join('\n') + '\n'

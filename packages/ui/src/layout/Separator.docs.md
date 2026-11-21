@@ -10,6 +10,6 @@ adapts:
 ---
 `label` (or the default slot) and `icon` sit between two lines. It is a
 `separator` with `aria-orientation`, named by `label`; `decorative` hides it
-from assistive technology (`role="none"`), for a rule that separates nothing
-a reader needs told about. `orientation="vertical"` stretches to the height
+from assistive technology (`role="none"`, `aria-hidden="true"`), for a rule
+that separates nothing a reader needs told about. `orientation="vertical"` stretches to the height
 of its row.
