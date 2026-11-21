@@ -548,6 +548,21 @@ describe('Calendar', () => {
       }
     })
 
+    // (Under a forced pointer the rule stands back through :not([data-weft-input="pointer"] *),
+    // a complex :not() happy-dom does not match; browsers do.)
+    it('spreads the dates over the width on a coarse pointer when no input is forced', async () => {
+      const unstyle = loadStyles()
+      const settings = (window as unknown as { happyDOM: { settings: { navigator: { maxTouchPoints: number } } } }).happyDOM.settings
+      settings.navigator.maxTouchPoints = 5
+      try {
+        await cases()
+        expect(getComputedStyle($('.weft-calendar')).display).toBe('flex')
+      } finally {
+        settings.navigator.maxTouchPoints = 0
+        unstyle()
+      }
+    })
+
     it('swipes to the next month leftwards and the previous rightwards, choosing nothing', async () => {
       const e = await cases({ input: 'touch' })
       const body = $('.weft-calendar__body')

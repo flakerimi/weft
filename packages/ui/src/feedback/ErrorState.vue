@@ -50,6 +50,8 @@ const emit = defineEmits<{
 defineSlots<{
   /** More content under the message. */
   default?: () => unknown
+  /** The buttons, in place of the retry button and `actions`. */
+  actions?: () => unknown
   /** Under everything: a support link. */
   footer?: () => unknown
 }>()
@@ -67,20 +69,22 @@ const message = computed(() => props.description ?? text.value.message)
     <p v-if="message" class="weft-empty-state__description weft-error-state__description">{{ message }}</p>
     <p v-if="text.code" class="weft-error-state__code">{{ text.code }}</p>
     <slot />
-    <template v-if="retry || actions?.length" #actions>
-      <Button v-if="retry" :label="retryLabel" :loading="loading" @click="emit('retry')" />
-      <Button
-        v-for="action in actions"
-        :key="action.label"
-        :label="action.label"
-        :icon="action.icon"
-        :to="action.to"
-        :disabled="action.disabled"
-        :loading="action.loading"
-        :tone="action.tone ?? 'neutral'"
-        :variant="action.variant ?? 'outline'"
-        @click="action.onClick?.($event)"
-      />
+    <template v-if="$slots.actions || retry || actions?.length" #actions>
+      <slot name="actions">
+        <Button v-if="retry" :label="retryLabel" :loading="loading" @click="emit('retry')" />
+        <Button
+          v-for="action in actions"
+          :key="action.label"
+          :label="action.label"
+          :icon="action.icon"
+          :to="action.to"
+          :disabled="action.disabled"
+          :loading="action.loading"
+          :tone="action.tone ?? 'neutral'"
+          :variant="action.variant ?? 'outline'"
+          @click="action.onClick?.($event)"
+        />
+      </slot>
     </template>
     <template v-if="$slots.footer" #footer><slot name="footer" /></template>
   </EmptyState>

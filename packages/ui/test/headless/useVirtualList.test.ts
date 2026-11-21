@@ -14,7 +14,7 @@ function scroller(height = 0) {
   return el
 }
 
-function setup(opts: { count?: number; height?: number; enabled?: boolean; pinned?: number; el?: HTMLElement | null } = {}) {
+function setup(opts: { count?: number; height?: number; enabled?: boolean; pinned?: number; el?: HTMLElement | null; leading?: number; stuck?: number } = {}) {
   const count = ref(opts.count ?? 10_000)
   const enabled = ref(opts.enabled ?? true)
   const pinned = ref(opts.pinned ?? -1)
@@ -27,6 +27,8 @@ function setup(opts: { count?: number; height?: number; enabled?: boolean; pinne
       overscan: 4,
       enabled: () => enabled.value,
       pinned: () => pinned.value,
+      ...(opts.leading === undefined ? {} : { leading: () => opts.leading! }),
+      ...(opts.stuck === undefined ? {} : { stuck: () => opts.stuck! }),
     }),
   )!
   return { list, count, enabled, pinned, el, scope }
@@ -114,6 +116,24 @@ describe('useVirtualList', () => {
     list.scrollTo(0)
     expect(el.value!.scrollTop).toBe(0)
     expect(list.indices.value).toEqual(range(0, 14))
+    scope.stop()
+  })
+
+  it('counts what comes before the rows (a caption and a header) and what sticks over the view\'s top', async () => {
+    // A 24 px caption and a 36 px header above row 0; the header sticks, covering the view's top 36 px.
+    const { list, el, scope } = setup({ height: 320, leading: 60, stuck: 36 })
+    await nextTick()
+    list.scrollTo(20) // rows 700–732: its bottom at the view's bottom
+    expect(el.value!.scrollTop).toBe(732 - 320)
+    // Row 11 is at 412–444, under the header (412–448); 12 (444–476) shows below it.
+    expect(list.indices.value).toEqual(range(7, 25))
+    list.scrollTo(12) // 444, 4 px under the header: just below it
+    expect(el.value!.scrollTop).toBe(444 - 36)
+    list.scrollTo(0) // 60: the header over the caption
+    expect(el.value!.scrollTop).toBe(24)
+    list.scrollTo(9_999)
+    expect(el.value!.scrollTop).toBe(60 + 320_000 - 320)
+    expect(list.indices.value.at(-1)).toBe(9_999)
     scope.stop()
   })
 

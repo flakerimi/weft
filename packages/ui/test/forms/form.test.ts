@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { reactive, toRaw } from 'vue'
+import { reactive, ref, toRaw } from 'vue'
 import FormProbe from '../../src/forms/Form.vue'
 import FormCases from '../fixtures/forms/FormCases.vue'
 import SearchForm from '../fixtures/forms/SearchForm.vue'
@@ -221,6 +221,10 @@ describe('Form', () => {
       const click = new MouseEvent('click', { bubbles: true, cancelable: true })
       link.dispatchEvent(click)
       expect(click.defaultPrevented, sel).toBe(true)
+      // A middle click (auxclick) opens nothing in a new tab either.
+      const aux = new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 })
+      link.dispatchEvent(aux)
+      expect(aux.defaultPrevented, sel).toBe(true)
       expect(press(link, 'Enter'), sel).toBe(false)
     }
     f.q<HTMLFormElement>('form').requestSubmit()
@@ -283,11 +287,16 @@ describe('Form', () => {
     press(button, ' ')
     await settle()
     expect(f.exposed.submitted).toHaveLength(1)
-    // Other buttons stay focusable too, and are unavailable.
-    const check = f.q<HTMLButtonElement>('.joined button')
-    expect(actuallyDisabled(check)).toBe(false)
-    expect(check.getAttribute('aria-disabled')).toBe('true')
-    expect(check.querySelector('.weft-spinner')).toBeNull()
+    // Other buttons work while it is busy (as in Nuxt UI), so a Stop or Cancel can abort it.
+    for (const [sel, count] of [['.joined button', 'checks'], ['button.stop', 'stops']] as const) {
+      const other = f.q<HTMLButtonElement>(sel)
+      expect(actuallyDisabled(other), sel).toBe(false)
+      expect(other.hasAttribute('aria-disabled'), sel).toBe(false)
+      expect(other.querySelector('.weft-spinner'), sel).toBeNull()
+      other.click()
+      await settle()
+      expect(f.exposed[count], sel).toBe(1)
+    }
     ;(f.exposed.finish as () => void)()
     await settle()
     expect(document.activeElement).toBe(button)
@@ -315,6 +324,39 @@ describe('Form', () => {
     ;(f.exposed.finish as () => void)()
     await settle()
     expect(nick.disabled).toBe(false)
+    expect(document.activeElement).toBe(nick)
+  })
+
+  it('gives focus back to the field it was in when a controlled loading ends', async () => {
+    const on = ref(false)
+    const f = render({ loading: () => on.value })
+    const nick = f.q('.nick input')
+    nick.focus()
+    on.value = true
+    await settle()
+    expect(nick.disabled).toBe(true)
+    // A browser drops focus to the body when the focused control is disabled; happy-dom keeps it.
+    const away = document.body.appendChild(document.createElement('button'))
+    away.focus()
+    away.remove()
+    on.value = false
+    await settle()
+    expect(nick.disabled).toBe(false)
+    expect(document.activeElement).toBe(nick)
+  })
+
+  it('gives focus back to the field Enter was pressed in even when the handler moves it at once', async () => {
+    const f = render({ slow: true, blurs: true })
+    type(f.q('.email input'), 'ada@example.com')
+    f.q('.terms input').click()
+    f.q('.plan input').click()
+    await settle()
+    const nick = f.q('.nick input')
+    expect(press(nick, 'Enter')).toBe(true)
+    await settle()
+    expect(document.activeElement).toBe(document.body)
+    ;(f.exposed.finish as () => void)()
+    await settle()
     expect(document.activeElement).toBe(nick)
   })
 

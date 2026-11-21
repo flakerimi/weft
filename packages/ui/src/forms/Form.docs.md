@@ -46,10 +46,13 @@ disabled as a disabled link is: no address, `aria-disabled`, no navigation.
 **Busy.** `loading`, or with `loading-auto` (on by default) a `@submit`
 handler that returns a promise, makes the form busy until it settles: it sets
 `aria-busy`, a second press or Enter submits nothing, its fields are
-disabled and its links have no address. Its buttons are not natively
-disabled, so the submit button keeps focus: it shows its spinner and is
-`aria-busy` and `aria-disabled`, and any other button is `aria-disabled`,
-all ignoring presses. A field that had focus (Enter pressed in it) gets it
+disabled and its links have no address. The submit button is not natively
+disabled, so it keeps focus: it shows its spinner, is `aria-busy` and
+`aria-disabled`, and ignores presses. Any other button works, so a Cancel or
+Stop can abort the submit (as in Nuxt UI). Raw native controls in the form (a
+plain `<input>` or `<button>`) are not blocked while busy, only while
+`disabled`; use Weft's components to have them follow the form. A field that
+had focus (Enter pressed in it, or focused as `loading` turned on) gets it
 back when the form is done. (`@submit` is a handler prop, as in Nuxt UI, so
 the form can wait for it.) The native form has `novalidate`: Weft shows the
 errors, not the browser.

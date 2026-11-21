@@ -17,15 +17,18 @@
 //   native controls are disabled as well as Weft's own, and Button and Link
 //   read the Form to drop their addresses (a fieldset leaves links alone).
 // - While busy (`loading`, or an async submit handler still running, with
-//   `loading-auto`), a submit does nothing, its fields are disabled and its
-//   links have no address, but its buttons are not natively disabled: they
-//   are aria-disabled and ignore presses (the submit button shows a spinner),
-//   so a focused submit button keeps focus. Focus that busy took from a
-//   field (a disabled control loses it) goes back when it is done.
+//   `loading-auto`), a submit does nothing, Weft's fields are disabled and
+//   its links have no address. The submit button is not natively disabled:
+//   it shows a spinner, is aria-disabled and ignores presses, so it keeps
+//   focus; other buttons work, so a Cancel can abort (as in Nuxt UI). Raw
+//   native controls in the slot (a plain <input>) are not blocked while
+//   busy, only while disabled. Focus that busy took from a field (a
+//   disabled control loses it) goes back when it is done, whether busy came
+//   from `loading` or from the handler.
 // - `setErrors` on a field the schema has no rule for: the error clears the
 //   first time the field changes, as there is nothing to check it against.
 // The native form keeps `novalidate`: Weft shows the errors, not the browser.
-import { computed, isProxy, nextTick, ref, toRaw, useTemplateRef } from 'vue'
+import { computed, isProxy, nextTick, ref, toRaw, useTemplateRef, watch } from 'vue'
 import { tabbables } from '../headless/dom.ts'
 import { provideForm } from './field.ts'
 import { validateField, validateFields, type FieldSchema } from './schema.ts'
@@ -68,6 +71,25 @@ const off = computed(() => props.disabled || busy.value)
 /** Fields whose error came from setErrors: leaving them keeps it. */
 const fromServer = new Set<string>()
 const form = useTemplateRef<HTMLFormElement>('form')
+
+/** The control in the form that had focus as it turned busy; undefined when none was noted. */
+let had: HTMLElement | null | undefined
+const inForm = (el: Element | null) => (el instanceof HTMLElement && form.value?.contains(el) ? el : null)
+// Synchronous, so the focus is noted before busy disables the field that has it.
+watch(busy, (on) => on && (had ??= inForm(document.activeElement)), { flush: 'sync' })
+// After the DOM update that enables the fields again: a field that had focus
+// was disabled while busy, which drops focus to the body; give it back.
+watch(
+  busy,
+  (on) => {
+    if (on) return
+    const back = had
+    had = undefined
+    const now = document.activeElement
+    if (back?.isConnected && (!now || now === document.body)) back.focus()
+  },
+  { flush: 'post' },
+)
 
 const ruleOf = (name: string) => (props.schema as FieldSchema)[name]
 /** Check one field now: show its error, or clear it. */
@@ -151,22 +173,16 @@ async function onSubmit(event: Event) {
     void focusFirstInvalid()
     return
   }
+  // Noted before the handler runs, which may move focus at once.
+  const focused = inForm(document.activeElement)
   const result = props.onSubmit?.(copy(props.state))
   if (!props.loadingAuto || !(result instanceof Promise)) return
-  const had = document.activeElement as HTMLElement | null
+  if (!busy.value) had = focused
   pending.value = true
   try {
     await result
   } finally {
     pending.value = false
-    // A field that had focus was disabled while busy, which drops focus to
-    // the body; give it back once the field is enabled again.
-    if (had && form.value?.contains(had)) {
-      void nextTick(() => {
-        const now = document.activeElement
-        if ((!now || now === document.body) && had.isConnected) had.focus()
-      })
-    }
   }
 }
 

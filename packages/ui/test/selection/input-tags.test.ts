@@ -187,6 +187,14 @@ describe('InputTags', () => {
     expect(active()).toBe(field())
   })
 
+  it('draws each tag through the item-label slot, and through its old name item-text', async () => {
+    for (const [custom, text] of [['item-label', ['0:vue', '1:vite']], ['item-text', ['0=vue', '1=vite']], [undefined, ['vue', 'vite']]] as const) {
+      const m = mount(InputTagsCases, { initial: ['vue', 'vite'], custom })
+      expect([...m.el.querySelectorAll('.weft-tag__text')].map((t) => t.textContent!.trim()), String(custom)).toEqual(text)
+      m.unmount()
+    }
+  })
+
   it('does nothing while disabled', async () => {
     const { e } = await cases({ initial: ['a'], disabled: true })
     expect(field().disabled).toBe(true)

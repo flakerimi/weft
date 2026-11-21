@@ -27,4 +27,6 @@ field. Inside a FormField the text field takes the field's id, description,
 error and required mark; with a `name` (or its FormField's) the tags submit
 in hidden inputs, one each. `required` sets `aria-required` (no native
 `required`, which would read the draft). `disabled` blocks typing and
-removing.
+removing. The `item-label` slot draws a tag's text (`{ item, index }`), as
+Combobox's does an option's; its old name `item-text` still works and is
+deprecated.

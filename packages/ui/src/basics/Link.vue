@@ -56,13 +56,16 @@ const current = computed(() => {
 const form = useFormState()
 const off = computed(() => props.disabled || !!form?.disabled())
 
+/** Disabled: no navigation, no handlers; by a click, or a middle click (auxclick). */
+function blocked(event: MouseEvent): boolean {
+  if (!off.value) return false
+  event.preventDefault()
+  event.stopPropagation()
+  return true
+}
+
 function onClick(event: MouseEvent) {
-  if (off.value) {
-    event.preventDefault()
-    event.stopPropagation()
-    return
-  }
-  emit('click', event)
+  if (!blocked(event)) emit('click', event)
 }
 </script>
 
@@ -77,5 +80,6 @@ function onClick(event: MouseEvent) {
     :aria-current="current ? 'page' : undefined"
     :data-standalone="standalone ? 'true' : undefined"
     @click="onClick"
+    @auxclick="blocked"
   ><slot /></a>
 </template>

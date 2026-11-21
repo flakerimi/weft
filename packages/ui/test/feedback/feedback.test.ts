@@ -20,7 +20,7 @@ async function cases(props: Record<string, unknown> = {}) {
   const m = mount(FeedbackCases, props)
   unmount = m.unmount
   await settle()
-  return m as typeof m & { exposed: { open: boolean; log: string[] } }
+  return m as typeof m & { exposed: { open: boolean; bannerOpen: boolean; log: string[] } }
 }
 const buttonIn = (root: Element, label: string) =>
   $$<HTMLElement>('button, a', root).find((b) => b.textContent!.trim() === label || b.getAttribute('aria-label') === label)!
@@ -125,6 +125,20 @@ describe('Banner', () => {
     expect($('.weft-banner')).toBeNull()
   })
 
+  it('binds its open state with v-model:open: closing sets it false, and the parent can close and reopen it', async () => {
+    const m = await cases()
+    buttonIn(banner(), 'Close').click()
+    await settle()
+    expect(m.exposed.bannerOpen).toBe(false)
+    expect(document.querySelector('.weft-banner')).toBeNull()
+    m.exposed.bannerOpen = true
+    await settle()
+    expect(document.querySelector('.weft-banner')).not.toBeNull()
+    m.exposed.bannerOpen = false
+    await settle()
+    expect(document.querySelector('.weft-banner')).toBeNull()
+  })
+
   it('links its title with `to`', async () => {
     await cases({ bannerTo: '/moving' })
     expect($<HTMLAnchorElement>('a.weft-banner__title').getAttribute('href')).toBe('/moving')
@@ -212,6 +226,13 @@ describe('ErrorState', () => {
     expect($('.weft-empty-state__title', state()).textContent).toBe('Something went wrong')
     buttonIn(state(), 'Try again').click()
     expect(m.exposed.log).toEqual(['retry'])
+  })
+
+  it('takes its buttons from an actions slot, in place of retry and actions', async () => {
+    await cases({ errorActions: true })
+    const row = $('.weft-empty-state__actions', state())
+    expect(row.querySelector('button.report')!.textContent).toBe('Report it')
+    expect(buttonIn(state(), 'Try again')).toBeUndefined()
   })
 
   it('shows the message of an Error, a string or a wire-format error, with its code', async () => {

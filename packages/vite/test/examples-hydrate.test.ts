@@ -7,12 +7,16 @@
 // (its props script taken out, its id scope provided); here each app is also
 // unmounted, so one example's listeners and timers do not reach the next.
 // examples.test.ts is the server half: each example as a page of its own.
+// The server cannot know the input, so it draws the pointer form; a phone
+// (a coarse pointer) must hydrate that same form and switch once mounted:
+// each example hydrates under both a fine and a coarse matchMedia.
 import { execFile } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createVaporSSRApp, type Component } from 'vue'
+import { setMatchMedia } from '@weft/ui'
 import { ISLAND_ID_SCOPE } from '../src/island-runtime.ts'
 
 const modules = import.meta.glob<{ default: Component }>('../../ui/examples/*/*.vue')
@@ -36,12 +40,16 @@ beforeAll(async () => {
 }, 120_000)
 
 afterEach(() => {
+  setMatchMedia(undefined)
   document.body.innerHTML = ''
   localStorage.clear()
   vi.restoreAllMocks()
 })
 
 const settle = () => new Promise((r) => setTimeout(r, 0))
+/** A matchMedia that reports a coarse pointer or a fine one, and never changes. */
+const media = (coarse: boolean) => (q: string) =>
+  ({ matches: coarse && q === '(pointer: coarse)', media: q, addEventListener() {}, removeEventListener() {} }) as unknown as MediaQueryList
 
 describe('every @weft/ui example, server-rendered in an island', () => {
   it('is every example there is', () => {
@@ -53,7 +61,13 @@ describe('every @weft/ui example, server-rendered in an island', () => {
   // own. Island's example is a page with an island; island.test.ts and the page build cover it.
   const islands = Object.keys(examples).filter((f) => !f.startsWith('Island/')).sort()
 
-  it.each(islands)('%s hydrates in place, without a warning', async (file) => {
+  const cases = islands.flatMap((file) => [
+    [file, 'pointer'],
+    [file, 'touch'],
+  ] as const)
+
+  it.each(cases)('%s hydrates in place on %s, without a warning', async (file, input) => {
+    setMatchMedia(media(input === 'touch'))
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     document.body.innerHTML = `<main>${server[file]}</main>`
@@ -82,6 +96,12 @@ describe('every @weft/ui example, server-rendered in an island', () => {
     expect(failed).toBeUndefined()
     expect(warn.mock.calls.map((c) => String(c[0]))).toEqual([])
     expect(error.mock.calls.map((c) => String(c[0]))).toEqual([])
+    // Then the touch form: a Combobox's text field opens its sheet without raising the keyboard.
+    if (file.startsWith('Combobox/')) {
+      for (const field of island.querySelectorAll('input[role="combobox"]')) {
+        expect(field.hasAttribute('readonly'), file).toBe(input === 'touch')
+      }
+    }
 
     app.unmount()
     await settle()

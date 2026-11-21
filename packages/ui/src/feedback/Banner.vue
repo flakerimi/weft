@@ -5,9 +5,10 @@
 // focus moves on to what follows it. With an `id` a closed banner stays
 // closed on later visits: localStorage, read once mounted (the server always
 // draws it), and before the first paint by a pre-paint snippet, so a reload
-// does not flash it. On touch the close button's hit area is at
-// least --weft-hit-min; when narrow the actions wrap under the title.
-import { nextTick, onMounted, ref, useTemplateRef } from 'vue'
+// does not flash it. `v-model:open` binds whether it shows. On touch the
+// close button's hit area is at least --weft-hit-min; when narrow the
+// actions wrap under the title.
+import { nextTick, onMounted, useTemplateRef } from 'vue'
 import Button from '../basics/Button.vue'
 import Icon from '../basics/Icon.vue'
 import Link from '../basics/Link.vue'
@@ -15,6 +16,7 @@ import CloseButton from '../overlays/CloseButton.vue'
 import type { Tone } from '../types.ts'
 import { usePrePaint } from '../head/usePrePaint.ts'
 import { focus } from '../headless/dom.ts'
+import { useControllable } from '../headless/useControllable.ts'
 import { focusAfter, type ActionItem } from './actions.ts'
 import { bannerKey, bannerSnippet } from './banner.ts'
 import '../styles/base.css'
@@ -39,13 +41,17 @@ const props = withDefaults(
     close?: boolean
     /** The close button's name for assistive technology. */
     closeLabel?: string
+    /** Shown; bind with `v-model:open` to close or reopen it from outside. Default open (unless its `id` was closed before). */
+    open?: boolean
   }>(),
-  { tone: 'primary', closeLabel: 'Close' },
+  { tone: 'primary', closeLabel: 'Close', open: undefined },
 )
 
 const emit = defineEmits<{
   /** Closed with its button. */
   close: []
+  /** Shown or hidden: closed with its button, or found closed under its `id`. */
+  'update:open': [open: boolean]
 }>()
 
 defineSlots<{
@@ -60,7 +66,7 @@ defineSlots<{
 const storeKey = () => bannerKey(props.id!)
 if (props.id && props.close) usePrePaint(bannerKey(props.id), bannerSnippet(props.id))
 const root = useTemplateRef<HTMLElement>('root')
-const shown = ref(true)
+const shown = useControllable(props, 'open', emit, true)
 onMounted(() => {
   if (!props.id) return
   try {

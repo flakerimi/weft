@@ -32,6 +32,7 @@ import type { Size } from '../types.ts'
 import { nextSort, parseSort, selectRange, TABLE_LABELS, textOf, valueOf, type RowKey, type TableColumn, type TableFetch, type TableLabels } from './table.ts'
 import { useTableGrid } from './tableGrid.ts'
 import { useTableData } from './useTableData.ts'
+import { useLocale } from '../adaptive/locale.ts'
 import '../styles/base.css'
 import '../styles/table.css'
 
@@ -116,10 +117,12 @@ defineSlots<{
 }>()
 
 const weft = useWeft()
+// Text sorts in the WeftProvider's locale (en-US without one), the same on the server and in the browser.
+const locale = useLocale(() => undefined)
 const t = computed<TableLabels>(() => ({ ...TABLE_LABELS, ...props.labels }))
 const root = useTemplateRef<HTMLElement>('root')
 const scroller = useTemplateRef<HTMLElement>('scroller')
-const table = useTemplateRef<HTMLElement>('table')
+const table = useTemplateRef<HTMLTableElement>('table')
 const width = useWidth(root)
 const cards = computed(() => width.value === 'narrow')
 
@@ -140,6 +143,7 @@ const data = useTableData<T>({
   loading: () => !!props.loading,
   active: () => mounted.value,
   needKeys: () => !!props.selectable,
+  locale: () => locale.value,
   onError: (error) => emit('error', error),
 })
 const { shown, total, perPage, pageCount, currentPage, busy, failed, load } = data
@@ -197,6 +201,16 @@ const list = useVirtualList(scroller, {
   itemHeight: () => rowPx.value,
   enabled: () => !cards.value && shown.value.length > 200,
   pinned: () => (grid.value ? pinned() : -1),
+  // Measured when scrolling: the caption and header above the rows, and the header where it sticks.
+  leading: () => {
+    const body = table.value?.tBodies[0]
+    const el = scroller.value
+    const box = el?.getBoundingClientRect()
+    // Not laid out (no rows yet, hidden): nothing to count.
+    if (!body || !el || !box?.height) return 0
+    return body.getBoundingClientRect().top - box.top - el.clientTop + el.scrollTop
+  },
+  stuck: () => (props.sticky ? (table.value?.tHead?.getBoundingClientRect().height ?? 0) : 0),
 })
 const windowed = computed(() => list.virtual.value)
 // Heard first (capture), so the roving focus below only keeps the tab stop.

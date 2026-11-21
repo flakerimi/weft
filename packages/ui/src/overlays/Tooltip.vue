@@ -53,7 +53,8 @@ defineSlots<{
 }>()
 
 // The trigger is named by the text when it has no name of its own, so an icon-only Button in it need not warn (its NAMES_TRIGGER).
-provide('weft:names-trigger', true)
+// The content is not the trigger: NotTrigger takes that back for what it holds.
+provide(NAMES_TRIGGER, true)
 
 const open = useControllable(props, 'open', emit, () => props.defaultOpen)
 const weft = useWeft()
@@ -146,6 +147,13 @@ const GRACE = 120
 /** ms after a tooltip hides in which the next one shows without a delay. */
 const SKIP = 300
 let lastClosed = 0
+/** Button's key for "a component names my trigger". */
+const NAMES_TRIGGER = 'weft:names-trigger'
+/** Renders its slot with NAMES_TRIGGER false: the tooltip's content names nothing for it. */
+function NotTrigger(_: object, { slots }: { slots: { default?: () => unknown } }) {
+  provide(NAMES_TRIGGER, false)
+  return slots.default?.()
+}
 </script>
 
 <template>
@@ -171,7 +179,7 @@ let lastClosed = 0
         :style="floating.styles.value"
         @pointerenter="clear"
         @pointerleave="hide(GRACE)"
-      ><slot name="content">{{ text }}</slot></div>
+      ><NotTrigger><slot name="content">{{ text }}</slot></NotTrigger></div>
     </div>
   </Teleport>
 </template>

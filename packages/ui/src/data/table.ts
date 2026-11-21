@@ -1,6 +1,7 @@
 // What a Table is told and what it works out: its columns, the query it
 // asks a `fetch` function (the wire format's `page`, `perPage` and `sort`),
 // the stable client-side sort, row keys and the words it says.
+import { DEFAULT_LOCALE } from '../adaptive/locale.ts'
 
 /** One column of a Table, and one label–value pair of each card when narrow. */
 export interface TableColumn<T = Record<string, unknown>> {
@@ -107,16 +108,23 @@ export function textOf<T>(column: TableColumn<T>, row: T): string {
   return value == null ? '' : String(value)
 }
 
-const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+const collators = new Map<string, Intl.Collator>()
+/** Text order in `locale` (numeric-aware, case and accents ignored where the language does), one collator per locale. */
+function collatorFor(locale: string): Intl.Collator {
+  let c = collators.get(locale)
+  if (!c) collators.set(locale, (c = new Intl.Collator(locale, { numeric: true, sensitivity: 'base' })))
+  return c
+}
 
 /**
  * Compare two cell values for an ascending sort: numbers and dates by
- * amount, booleans false first, anything else as text (numeric-aware, case
- * ignored). Empty values (null, undefined, '') sort last.
+ * amount, booleans false first, anything else as text in `locale` (default
+ * en-US, never the runtime's, so the server and the browser agree;
+ * numeric-aware, case ignored). Empty values (null, undefined, '') sort last.
  */
 const isEmpty = (v: unknown) => v == null || v === ''
 
-export function compareValues(a: unknown, b: unknown): number {
+export function compareValues(a: unknown, b: unknown, locale = DEFAULT_LOCALE): number {
   const emptyA = isEmpty(a)
   const emptyB = isEmpty(b)
   if (emptyA || emptyB) return emptyA === emptyB ? 0 : emptyA ? 1 : -1
@@ -124,22 +132,23 @@ export function compareValues(a: unknown, b: unknown): number {
   if (typeof a === 'number' && typeof b === 'number') return a - b
   if (typeof a === 'bigint' && typeof b === 'bigint') return a < b ? -1 : a > b ? 1 : 0
   if (typeof a === 'boolean' && typeof b === 'boolean') return Number(a) - Number(b)
-  return collator.compare(String(a), String(b))
+  return collatorFor(locale).compare(String(a), String(b))
 }
 
 /**
  * `rows` sorted by `sort` (a new array; `rows` as given when unsorted or
  * the key names no column). Stable: rows that compare equal keep their
  * order, in both directions. Empty values stay last when descending too.
+ * Text compares in `locale` (default en-US).
  */
-export function sortRows<T>(rows: readonly T[], columns: readonly TableColumn<T>[], sort: string | null | undefined): T[] {
+export function sortRows<T>(rows: readonly T[], columns: readonly TableColumn<T>[], sort: string | null | undefined, locale = DEFAULT_LOCALE): T[] {
   const s = parseSort(sort)
   const column = s && columns.find((c) => c.key === s.key)
   if (!s || !column) return [...rows]
   const keyed = rows.map((row, index) => ({ row, index, value: valueOf(column, row) }))
   const direction = s.desc ? -1 : 1
   keyed.sort((x, y) => {
-    const by = compareValues(x.value, y.value) * (isEmpty(x.value) || isEmpty(y.value) ? 1 : direction)
+    const by = compareValues(x.value, y.value, locale) * (isEmpty(x.value) || isEmpty(y.value) ? 1 : direction)
     return by || x.index - y.index
   })
   return keyed.map((k) => k.row)

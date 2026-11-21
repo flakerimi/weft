@@ -191,6 +191,7 @@ Every Weft component adapts to touch, pointer, landing and app inside itself, wh
 | ProseCallout | — | planned (phase 6b) | Content collections render Markdown with prose components. |
 | ProseCard | — | planned (phase 6b) | Content collections render Markdown with prose components. |
 | ProseCardGroup | — | planned (phase 6b) | Content collections render Markdown with prose components. |
+| ProseCaution | — | planned (phase 6b) | Content collections render Markdown with prose components; an `Alert` with a tone draws the same callout today. |
 | ProseCode | — | planned (phase 6b) | Content collections render Markdown with prose components. |
 | ProseCodeCollapse | — | planned (phase 6b) | Content collections render Markdown with prose components. |
 | ProseCodeGroup | — | planned (phase 6b) | Content collections render Markdown with prose components. |
@@ -210,6 +211,7 @@ Every Weft component adapts to touch, pointer, landing and app inside itself, wh
 | ProseImg | — | planned (phase 6b) | Content collections render Markdown with prose components. |
 | ProseKbd | — | planned (phase 6b) | Content collections render Markdown with prose components. |
 | ProseLi | — | planned (phase 6b) | Content collections render Markdown with prose components. |
+| ProseNote | — | planned (phase 6b) | Content collections render Markdown with prose components; an `Alert` with a tone draws the same callout today. |
 | ProseOl | — | planned (phase 6b) | Content collections render Markdown with prose components. |
 | ProseP | — | planned (phase 6b) | Content collections render Markdown with prose components. |
 | ProsePre | — | planned (phase 6b) | Content collections render Markdown with prose components. |
@@ -224,8 +226,10 @@ Every Weft component adapts to touch, pointer, landing and app inside itself, wh
 | ProseTd | — | planned (phase 6b) | Content collections render Markdown with prose components. |
 | ProseTh | — | planned (phase 6b) | Content collections render Markdown with prose components. |
 | ProseThead | — | planned (phase 6b) | Content collections render Markdown with prose components. |
+| ProseTip | — | planned (phase 6b) | Content collections render Markdown with prose components; an `Alert` with a tone draws the same callout today. |
 | ProseTr | — | planned (phase 6b) | Content collections render Markdown with prose components. |
 | ProseUl | — | planned (phase 6b) | Content collections render Markdown with prose components. |
+| ProseWarning | — | planned (phase 6b) | Content collections render Markdown with prose components; an `Alert` with a tone draws the same callout today. |
 
 ## Weft components without a Nuxt UI counterpart
 
@@ -233,11 +237,11 @@ Every Weft component adapts to touch, pointer, landing and app inside itself, wh
 
 ## Summary
 
-182 Nuxt UI components: 128 at the top level, 54 in its folders.
+186 Nuxt UI components: 128 at the top level, 58 in its folders (`prose/` holds its four callouts, Caution, Note, Tip and Warning, in `prose/callout/`).
 
 | Status | Count |
 | --- | ---: |
 | done | 13 |
 | partial | 59 |
-| planned | 74 |
+| planned | 78 |
 | not planned | 36 |

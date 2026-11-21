@@ -15,7 +15,9 @@ instead (`{ row, value, index, column }`), and `<key>-header` the header. A
 `rowHeader` column's cells are `th scope="row"`, and its value names each
 row's checkbox ("Select Ada").
 
-**Rows.** Give `rows` (an array), sorted and paged on the client, or
+**Rows.** Give `rows` (an array), sorted and paged on the client (text in
+the WeftProvider's `locale`, en-US without one, numbers and dates by
+amount), or
 `fetch(query)`, which receives the wire format's `{ page, perPage, sort }`
 (sort is `name` or `-since`, absent when unsorted) and answers `{ items,
 total }`, so paging and sorting happen on the server. `tableSearch(query)`

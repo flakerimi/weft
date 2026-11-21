@@ -16,12 +16,14 @@ withDefaults(
     error?: unknown
     input?: Input
     orientation?: 'vertical' | 'horizontal'
+    errorActions?: boolean
   }>(),
   { error: undefined },
 )
 const open = ref(true)
+const bannerOpen = ref(true)
 const log = ref<string[]>([])
-defineExpose({ open, log })
+defineExpose({ open, bannerOpen, log })
 </script>
 
 <template>
@@ -41,6 +43,7 @@ defineExpose({ open, log })
       More <strong>text</strong>
     </Alert>
     <Banner
+      v-model:open="bannerOpen"
       :id="bannerId"
       title="We are moving offices on Friday."
       :to="bannerTo"
@@ -59,6 +62,8 @@ defineExpose({ open, log })
     >
       <template #footer><a href="/help">Learn more</a></template>
     </EmptyState>
-    <ErrorState :error="error" retry :loading="retrying" @retry="log.push('retry')" />
+    <ErrorState :error="error" retry :loading="retrying" @retry="log.push('retry')">
+      <template v-if="errorActions" #actions><button type="button" class="report">Report it</button></template>
+    </ErrorState>
   </WeftProvider>
 </template>

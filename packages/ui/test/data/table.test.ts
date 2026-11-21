@@ -69,6 +69,12 @@ describe('table helpers', () => {
     expect(compareValues('', 'a')).toBeGreaterThan(0)
   })
 
+  it('compares text in the locale it is given: in Swedish ä comes after z, in English beside a', () => {
+    const rows = [{ name: 'zebra' }, { name: 'apple' }, { name: 'äpple' }]
+    expect(sortRows(rows, [{ key: 'name' }], 'name', 'sv-SE').map((r) => r.name)).toEqual(['apple', 'zebra', 'äpple'])
+    expect(sortRows(rows, [{ key: 'name' }], 'name', 'en-US').map((r) => r.name)).toEqual(['apple', 'äpple', 'zebra'])
+  })
+
   it('sorts stably in both directions, empty values last either way', () => {
     const cols = [{ key: 'age' }]
     const asc = sortRows(PEOPLE, cols, 'age').map((p) => p.name)
@@ -117,6 +123,14 @@ describe('Table', () => {
     expect(names()).toEqual(['Grace', 'Ada', 'Linus', 'Barbara', 'Alan'])
     // Not a grid: no cell is a tab stop.
     expect($$('.weft-table [tabindex]')).toHaveLength(0)
+  })
+
+  it("sorts text in the WeftProvider's locale, not the runtime's", async () => {
+    const rows = ['Zelda', 'Åsa', 'Anna'].map((name, i) => ({ id: i + 1, name, age: null, city: '' }))
+    await cases({ rows, locale: 'sv-SE' })
+    sortButton('Name').click()
+    await settle()
+    expect(names()).toEqual(['Anna', 'Zelda', 'Åsa'])
   })
 
   it('sorts by a header: ascending, descending, then as given, with aria-sort on that header only', async () => {
@@ -493,6 +507,31 @@ describe('Table', () => {
         expect(scroller.scrollTop).toBe(0)
         await press('ArrowDown')
         expect(active()!.textContent!.trim()).toBe('Person 1')
+      })
+
+      it('keeps the focused row clear of the caption and the sticky header as it scrolls', async () => {
+        await cases({ rows: many, rowHeight: 40, keyboard: true })
+        const scroller = $('.weft-table__scroller')
+        const table = $<HTMLTableElement>('table')
+        // A laid-out page, stubbed: a 400 px view at y 100; a 24 px caption and a 36 px header above the rows.
+        Object.defineProperty(scroller, 'clientHeight', { configurable: true, get: () => 400 })
+        scroller.getBoundingClientRect = () => ({ top: 100, bottom: 500, height: 400 }) as DOMRect
+        table.tHead!.getBoundingClientRect = () => ({ height: 36 }) as DOMRect
+        table.tBodies[0]!.getBoundingClientRect = () => ({ top: 100 + 60 - scroller.scrollTop }) as DOMRect
+        scroller.dispatchEvent(new Event('scroll'))
+        sortButton('Name').focus()
+        for (let i = 0; i < 10; i++) await press('ArrowDown')
+        // Row 9 is 420–460 under the caption and header: its bottom at the view's bottom.
+        expect(rowOf(active())).toBe(9)
+        expect(scroller.scrollTop).toBe(460 - 400)
+        for (let i = 0; i < 5; i++) await press('ArrowDown')
+        expect(scroller.scrollTop).toBe(660 - 400)
+        // Row 6 (300–340) still shows under the header (stuck over 260–296); row 5 (260–300) goes just below it.
+        for (let i = 0; i < 8; i++) await press('ArrowUp')
+        expect(scroller.scrollTop).toBe(660 - 400)
+        await press('ArrowUp')
+        expect(rowOf(active())).toBe(5)
+        expect(scroller.scrollTop).toBe(260 - 36)
       })
 
       it('keeps the focused row rendered when the pointer scrolls it away', async () => {

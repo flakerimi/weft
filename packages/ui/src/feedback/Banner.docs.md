@@ -22,5 +22,8 @@ closed one before the first paint, and the Banner leaves the page once
 mounted. Change the id for new news. Without an id it shows again on the
 next page.
 
+`v-model:open` binds whether it shows: closing it sets `false` (as does a
+closed `id` found once mounted), and the page can close or reopen it.
+
 It is a plain block, not a landmark or a live region: put it before the
 page's header so it is read first.

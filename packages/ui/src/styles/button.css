@@ -67,12 +67,12 @@
   background: color-mix(in srgb, var(--weft-tone, LinkText) 14%, transparent);
 }
 .weft-button[data-active][data-variant="solid"] {
-  background: color-mix(in srgb, var(--weft-tone, LinkText) 75%, var(--weft-tone-fg, Canvas));
+  background: var(--weft-tone-active, var(--weft-tone, LinkText));
 }
 
 @media (hover: hover) {
   .weft-button:not(:disabled, [aria-disabled="true"]):hover[data-variant="solid"] {
-    background: color-mix(in srgb, var(--weft-tone, LinkText) 85%, var(--weft-tone-fg, Canvas));
+    background: var(--weft-tone-hover, var(--weft-tone, LinkText));
   }
   .weft-button:not(:disabled, [aria-disabled="true"]):hover:is([data-variant="soft"]) {
     background: color-mix(in srgb, var(--weft-tone, LinkText) 22%, transparent);
@@ -82,7 +82,7 @@
   }
 }
 .weft-button:not(:disabled, [aria-disabled="true"]):active[data-variant="solid"] {
-  background: color-mix(in srgb, var(--weft-tone, LinkText) 75%, var(--weft-tone-fg, Canvas));
+  background: var(--weft-tone-active, var(--weft-tone, LinkText));
 }
 
 .weft-button:disabled,

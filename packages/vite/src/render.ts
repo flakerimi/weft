@@ -181,6 +181,8 @@ async function pageModules(
     seen.add(mod)
     const code = mod.transformResult!.code
     const { names: own, all } = exportsOf(code)
+    // No export read at all: the code is in a form not understood here. Take all of it, never none.
+    if (own.size === 0 && !all.length) return visitWhole(mod)
     const imported = importsOf(code)
     // What each import must give: by URL, the names wanted from it, or null for all of it.
     const wanted = new Map<string, Set<string> | null>()

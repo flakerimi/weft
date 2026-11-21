@@ -4,7 +4,7 @@ import {
   Button, Checkbox, CheckboxGroup, FieldGroup, Form, FormField, Input, InputNumber, Link, RadioGroup, type FieldSchema,
 } from '../../../src/index.ts'
 
-const props = defineProps<{ disabled?: boolean; loading?: boolean; slow?: boolean }>()
+const props = defineProps<{ disabled?: boolean; loading?: boolean; slow?: boolean; blurs?: boolean }>()
 const state = reactive({
   email: '',
   age: null as number | null,
@@ -24,8 +24,13 @@ const submitted = ref<(typeof state)[]>([])
 const failed = ref<Record<string, string>[]>([])
 // With `slow`, the handler returns a promise the test settles with finish().
 let finish: () => void = () => {}
+// Presses of the plain buttons, which work while the form is busy.
+const checks = ref(0)
+const stops = ref(0)
 function onSubmit(values: typeof state) {
   submitted.value.push(values)
+  // With `blurs`, the handler moves focus away at once, as one that opens a status message might.
+  if (props.blurs) (document.activeElement as HTMLElement | null)?.blur()
   if (props.slow) return new Promise<void>((resolve) => (finish = resolve))
 }
 const form = useTemplateRef<{ setErrors(e: Record<string, string>): void; validate(): boolean; clear(): void; errors: Record<string, string> }>('form')
@@ -33,6 +38,8 @@ defineExpose({
   state,
   submitted,
   failed,
+  checks,
+  stops,
   finish: () => finish(),
   setErrors: (e: Record<string, string>) => form.value?.setErrors(e),
   validate: () => form.value?.validate(),
@@ -50,7 +57,8 @@ defineExpose({
     <FormField label="Nickname" name="nick" class="nick"><Input v-model="state.nick" /></FormField>
     <FormField label="Fruit" name="fruit" class="fruit"><CheckboxGroup v-model="state.fruit" :items="['apple', 'pear']" /></FormField>
     <Input v-model="state.loose" class="bare" aria-label="Loose" />
-    <FieldGroup class="joined"><Input aria-label="Site" /><Button label="Check" /></FieldGroup>
+    <FieldGroup class="joined"><Input aria-label="Site" /><Button label="Check" @click="checks++" /></FieldGroup>
+    <Button class="stop" label="Stop" variant="outline" @click="stops++" />
     <Button class="cancel" to="/cancel" label="Cancel" variant="ghost" />
     <Link class="help" to="/help">Help</Link>
     <Button type="submit" label="Create account" />

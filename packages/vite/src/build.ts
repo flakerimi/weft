@@ -696,7 +696,8 @@ async function readStyles(root: string, theme: Theme): Promise<{ css: string; fi
 /**
  * Vite's `build.cssTarget` (browser versions such as `safari16.4`, as Vite
  * resolves it) as Lightning CSS targets, as Vite converts it when it minifies
- * CSS. `false` or `esnext` is no targets.
+ * CSS. `false`, `esnext` or an `es20xx` language version (Vite's default
+ * cssTarget is build.target, which may be one) constrains no browser.
  */
 export function cssTargets(target: string | string[] | false | undefined): Targets | undefined {
   if (!target) return undefined
@@ -706,7 +707,7 @@ export function cssTargets(target: string | string[] | false | undefined): Targe
   }
   const targets: Targets = {}
   for (const entry of Array.isArray(target) ? target : [target]) {
-    if (entry === 'esnext') continue
+    if (/^es(\d+|next)$/i.test(entry)) continue
     const m = /^([a-z]+)(\d+)(?:\.(\d+))?/.exec(entry)
     const browser = m ? names[m[1]!] : undefined
     if (browser === false) continue

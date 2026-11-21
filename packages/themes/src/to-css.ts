@@ -67,8 +67,35 @@ function toneColors(theme: Theme, scheme: 'light' | 'dark'): string[] {
     }
     if (!toned) throw new Error(`theme "${theme.name}": ${scheme}.text (${text}) does not reach 4.5:1 on its own grounds; darken or lighten it.`)
     lines.push(`  --weft-color-${tone}-fg: ${fg};`, `  --weft-color-${tone}-text: ${toned};`)
+    lines.push(...pressed(theme, `${scheme}.${tone}`, tone, fill, fg))
   }
+  // Neutral's solid fill is the text colour, with the page's background on it.
+  lines.push(...pressed(theme, `${scheme}.text`, 'neutral', text, hexOf(theme, `${scheme}.bg`)))
   return lines
+}
+
+/** How much of the fill stays on hover and when active (pressed, or the current one of a set). */
+const STATES = { hover: 0.85, active: 0.75 } as const
+
+/**
+ * A solid fill's hover and active colours, each still 4.5:1 with its text.
+ * The fill is mixed toward its text where both states keep AA (lighter under
+ * light text); otherwise both go toward the other ink (light.text when the
+ * text is light, dark.text when it is dark), which only raises the contrast.
+ */
+function pressed(theme: Theme, path: string, tone: string, fill: string, fg: string): string[] {
+  const lightInk = hexOf(theme, 'dark.text')
+  const darkInk = hexOf(theme, 'light.text')
+  const away = contrast(fg, lightInk) >= contrast(fg, darkInk) ? lightInk : darkInk
+  // One direction for both states, so hover and active read as the same move.
+  const toFg = Object.values(STATES).every((share) => contrast(mix(fill, fg, share), fg) >= AA)
+  return Object.entries(STATES).map(([state, share]) => {
+    const color = mix(fill, toFg ? fg : away, share)
+    if (contrast(color, fg) < AA) {
+      throw new Error(`theme "${theme.name}": no ${state} colour for ${path} (${fill}) keeps 4.5:1 with its text (${fg}); pick a ${tone} colour with more contrast.`)
+    }
+    return `  --weft-color-${tone}-${state}: ${color};`
+  })
 }
 
 // Input changes the hit area and the smallest drawn thumb: a control's drawn

@@ -320,4 +320,17 @@ describe('NavigationMenu, vertical', () => {
       unstyle()
     }
   })
+
+  it('leaves room inside the scrolling bar for focus rings and the current mark, without moving the bar', async () => {
+    const unstyle = loadStyles()
+    try {
+      // overflow-x: auto clips at the padding box: a ring or a mark at an item's edge sits in the padding.
+      const bar = ruleFor('.weft-nav[data-orientation="horizontal"]')!.style
+      expect(bar.getPropertyValue('overflow-x')).toBe('auto')
+      expect(bar.getPropertyValue('padding')).toBe('4px')
+      expect(bar.getPropertyValue('margin')).toBe('-4px')
+    } finally {
+      unstyle()
+    }
+  })
 })

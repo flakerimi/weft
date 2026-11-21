@@ -16,6 +16,7 @@ under the message). A warning sign sits above; `icon` replaces it.
 
 `retry` adds a button (`retry-label`, "Try again") that emits `retry`;
 while `loading` (retrying) it spins, says `aria-busy` and takes no presses.
-`actions` add more buttons after it; the default slot adds content under
-the message and `footer` a support link. `level`, `variant` and `size` are
+`actions` add more buttons after it; the `actions` slot replaces both with
+buttons of your own. The default slot adds content under the message and
+`footer` a support link. `level`, `variant` and `size` are
 EmptyState's.

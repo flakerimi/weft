@@ -16,6 +16,8 @@ const props = defineProps<{
   duplicate?: boolean
   disabled?: boolean
   upper?: boolean
+  /** Draw each tag's text through the `item-label` slot, or its deprecated old name `item-text`. */
+  custom?: 'item-label' | 'item-text'
 }>()
 const tags = ref<unknown[]>(props.initial ?? [])
 const log = ref<string[]>([])
@@ -42,7 +44,10 @@ defineExpose({ tags, log, submitted })
             @add-tag="(v: unknown) => log.push(`add:${v}`)"
             @remove-tag="(v: unknown) => log.push(`remove:${v}`)"
             @invalid="(v: unknown) => log.push(`invalid:${v}`)"
-          />
+          >
+            <template v-if="custom === 'item-label'" #item-label="{ item, index }"><b class="custom">{{ index }}:{{ item }}</b></template>
+            <template v-if="custom === 'item-text'" #item-text="{ item, index }"><i class="custom">{{ index }}={{ item }}</i></template>
+          </InputTags>
         </FormField>
       </form>
       <button class="after">after</button>

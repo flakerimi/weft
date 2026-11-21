@@ -35,6 +35,17 @@ describe('tone colours', () => {
     expect(css).not.toMatch(/--weft-tone-text: color-mix/)
   })
 
+  it('fill solid hover and active (pressed, current) from the colours the theme checked against fg', () => {
+    const toneCss = readFileSync(join(styles, 'tone.css'), 'utf8')
+    for (const tone of ['neutral', 'primary', 'danger', 'warning', 'success']) {
+      const rule = new RegExp(`\\[data-tone="${tone}"\\] \\{[^}]*\\}`).exec(toneCss)![0]
+      expect(rule).toContain(`--weft-tone-hover: var(--weft-color-${tone}-hover,`)
+      expect(rule).toContain(`--weft-tone-active: var(--weft-color-${tone}-active,`)
+    }
+    // No solid fill is mixed toward its text in the stylesheets: that is how hover fell under 4.5:1.
+    expect(css).not.toMatch(/color-mix\(in srgb, var\(--weft-tone, [^)]+\) \d+%, var\(--weft-tone-fg/)
+  })
+
   describe('in the document', () => {
     let unload: () => void
     let mounted: { unmount(): void }[] = []
@@ -57,6 +68,12 @@ describe('tone colours', () => {
         expect(colourOf(Badge, { label: 'x', tone: 'success', variant }), variant).toBe(value('success-text'))
       }
       expect(colourOf(Button, { label: 'x', tone: 'danger' })).toBe(value('danger-fg'))
+    })
+
+    it('a current solid button (a current page) fills with the tone\'s active colour', () => {
+      const m = mount(Button as never, { label: '2', tone: 'primary', active: true })
+      mounted.push(m)
+      expect(getComputedStyle(m.el.firstElementChild!).backgroundColor.toUpperCase()).toBe(value('primary-active'))
     })
   })
 })

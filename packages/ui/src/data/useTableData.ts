@@ -35,6 +35,8 @@ export interface TableDataOptions<T> {
   active: () => boolean
   /** Rows can be chosen, so they need keys of their own. */
   needKeys?: () => boolean
+  /** The locale text sorts in (a WeftProvider's); default en-US. */
+  locale?: () => string
   onError?: (error: unknown) => void
 }
 
@@ -111,7 +113,7 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
     }
     const entries = (opts.rows() ?? []).map((row, i) => ({ row, key: keyOf(row, rowKey, i) }))
     const byEntry: TableColumn<TableEntry<T>>[] = opts.columns().map((c) => ({ key: c.key, accessor: (e) => valueOf(c, e.row) }))
-    const sorted = sortRows(entries, byEntry, opts.sort.value)
+    const sorted = sortRows(entries, byEntry, opts.sort.value, opts.locale?.())
     if (!perPage.value) return sorted
     const start = (currentPage.value - 1) * perPage.value
     return sorted.slice(start, start + perPage.value)

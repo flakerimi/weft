@@ -28,6 +28,7 @@ const props = withDefaults(
     controls?: boolean
     rowHeight?: number
     height?: string
+    locale?: string
   }>(),
   { rows: undefined, fetch: undefined, columns: undefined, caption: 'People' },
 )
@@ -46,7 +47,7 @@ defineExpose({ sort, selected, page, errors, table })
 </script>
 
 <template>
-  <WeftProvider :input="input">
+  <WeftProvider :input="input" :locale="locale">
     <div :dir="dir">
       <Table
         ref="table"

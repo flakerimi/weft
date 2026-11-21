@@ -1243,7 +1243,25 @@ describe('cssTargets', () => {
     expect(cssTargets(['node20', 'chrome120'])).toEqual({ chrome: 120 << 16 })
   })
 
+  it('reads a JavaScript language target (es2020, the default cssTarget of build.target) as no browser constraint', () => {
+    expect(cssTargets('es2020')).toBeUndefined()
+    expect(cssTargets(['es2015', 'esnext'])).toBeUndefined()
+    expect(cssTargets(['es2020', 'safari16.4'])).toEqual({ safari: (16 << 16) | (4 << 8) })
+  })
+
   it('refuses a target that names no browser, in one sentence', () => {
-    expect(() => cssTargets('es2020')).toThrow(/^buildSite: build\.cssTarget "es2020" is not a browser version; name browsers, like "safari16\.4"\.$/)
+    expect(() => cssTargets('netscape4')).toThrow(/^buildSite: build\.cssTarget "netscape4" is not a browser version; name browsers, like "safari16\.4"\.$/)
+  })
+
+  it('builds a site whose Vite config sets build.target to es2020', { timeout: 60_000 }, async () => {
+    const root = linkedSite('site')
+    writeFileSync(
+      join(root, 'vite.config.ts'),
+      `import { defineConfig } from 'vite'\nexport default defineConfig({ build: { target: 'es2020', rollupOptions: { external: ['weft-test-external'] } } })\n`,
+    )
+    const out = tempDir()
+    const manifest = await buildSite({ root, outDir: out })
+    expect(existsSync(join(out, 'pages', 'index', 'index.html'))).toBe(true)
+    expect(Object.keys(manifest).length).toBeGreaterThan(0)
   })
 })

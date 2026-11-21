@@ -154,3 +154,9 @@ tbody .weft-calendar__week { padding: 0 var(--weft-space-1, 4px); font-size: 0.7
 [data-weft-input="touch"] .weft-calendar { display: flex; }
 [data-weft-input="touch"] .weft-calendar__month { flex: 1; }
 [data-weft-input="touch"] .weft-calendar__grid { inline-size: 100%; table-layout: fixed; }
+/* With no input forced on the page, the device says: as the theme's hit size does. */
+@media (pointer: coarse) {
+  :root:not([data-weft-input]) .weft-calendar:not([data-weft-input="pointer"] *) { display: flex; }
+  :root:not([data-weft-input]) .weft-calendar__month:not([data-weft-input="pointer"] *) { flex: 1; }
+  :root:not([data-weft-input]) .weft-calendar__grid:not([data-weft-input="pointer"] *) { inline-size: 100%; table-layout: fixed; }
+}

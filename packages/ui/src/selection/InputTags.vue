@@ -91,6 +91,8 @@ defineSlots<{
   /** After the text. */
   trailing?: () => unknown
   /** A tag's text. */
+  'item-label'?: (props: { item: unknown; index: number }) => unknown
+  /** @deprecated The old name of `item-label`, kept working; use `item-label`. */
   'item-text'?: (props: { item: unknown; index: number }) => unknown
 }>()
 
@@ -270,7 +272,7 @@ function onTagBlur(event: FocusEvent) {
           @keydown="onTagKeydown($event, i)"
           @blur="onTagBlur"
         >
-          <span class="weft-tag__text"><slot name="item-text" :item="v" :index="i">{{ display(v) }}</slot></span>
+          <span class="weft-tag__text"><slot name="item-label" :item="v" :index="i"><slot name="item-text" :item="v" :index="i">{{ display(v) }}</slot></slot></span>
           <button
             type="button"
             class="weft-tag__remove"

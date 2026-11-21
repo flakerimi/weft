@@ -8,7 +8,7 @@
 // --weft-hit-min through a pseudo-element. In a Form: as a link it is
 // disabled while the Form is disabled or busy (a disabled fieldset leaves
 // links alone); as a button, while the Form is busy, a submit button loads
-// and any other ignores presses, both keeping focus.
+// (keeping focus) and any other works as ever, so a Cancel can abort.
 import { computed, inject, useAttrs, useSlots } from 'vue'
 import { useFormState } from '../forms/field.ts'
 import { isExternal, relFor } from './address.ts'
@@ -84,11 +84,10 @@ const form = useFormState()
 const off = computed(() => props.disabled || (!!props.to && !!form?.disabled()))
 /** Loading: by its own prop, or as the submit button of a busy Form. */
 const busy = computed(() => props.loading || (!props.to && props.type === 'submit' && !!form?.busy()))
-/** Ignoring presses but focusable: loading, or any button of a busy Form. */
-const held = computed(() => busy.value || (!props.to && !!form?.busy()))
 
 function blocked(event: MouseEvent): boolean {
-  if (!held.value && !off.value) return false
+  // Loading ignores presses but stays focusable.
+  if (!busy.value && !off.value) return false
   // As a disabled button would: no navigation, no form submit, no handlers.
   event.preventDefault()
   event.stopPropagation()
@@ -124,7 +123,7 @@ function warnUnnamed() {
     :target="to && !off ? target : undefined"
     :role="to && off ? 'link' : undefined"
     :disabled="!to && off ? true : undefined"
-    :aria-disabled="held || (to && off) ? 'true' : undefined"
+    :aria-disabled="busy || (to && off) ? 'true' : undefined"
     :aria-busy="busy ? 'true' : undefined"
     :aria-current="to && active ? 'page' : undefined"
     :data-variant="variant"

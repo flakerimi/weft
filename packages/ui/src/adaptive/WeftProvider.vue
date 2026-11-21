@@ -23,10 +23,12 @@ const input = computed(() => props.input ?? parent.input.value)
 const surface = computed(() => props.surface ?? parent.surface.value)
 const locale = computed(() => props.locale ?? parent.locale.value)
 provide(weftKey, { input, surface, locale })
+// Only a forced input goes on the element: the detected one is CSS's own
+// `(pointer: coarse)` at the root, right before and after hydrating.
 </script>
 
 <template>
-  <component :is="as" class="weft-provider" :data-weft-input="input" :data-weft-surface="surface">
+  <component :is="as" class="weft-provider" :data-weft-input="props.input" :data-weft-surface="surface">
     <slot />
   </component>
 </template>
