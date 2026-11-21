@@ -79,6 +79,8 @@ const props = withDefaults(
     placement?: Placement
     /** Close the calendar when a range is chosen. */
     closeOnSelect?: boolean
+    /** Draw the calendar's popover in the overlay layer at the end of the body; false draws it in place, and an open one on the server too (Popover's `portal`). */
+    portal?: boolean
     /** The words it says, to translate them. */
     labels?: Partial<DateRangePickerLabels>
   }>(),
@@ -90,6 +92,7 @@ const props = withDefaults(
     defaultOpen: false,
     placement: 'bottom-start',
     closeOnSelect: true,
+    portal: true,
   },
 )
 
@@ -325,6 +328,7 @@ defineExpose({
       :title="dialogTitle"
       :placement="placement"
       :offset="4"
+      :portal="portal"
       class="weft-date-picker__popup"
       @update:open="onOpenChange"
     >

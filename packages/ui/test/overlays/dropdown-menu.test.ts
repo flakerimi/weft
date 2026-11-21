@@ -391,6 +391,34 @@ describe('DropdownMenu with :portal="false"', () => {
     }
   })
 
+  it('as a touch sheet in place, keeps the page and itself usable: nothing around it inert, no scroll lock', async () => {
+    const m = mount(InPlaceMenu, { input: 'touch' })
+    unmount = m.unmount
+    await settle()
+    $('.trigger').click()
+    await settle()
+    await settle()
+    const sheet = $('[role="menu"]')
+    expect(sheet.dataset.form).toBe('sheet')
+    expect($('.place').contains(sheet)).toBe(true)
+    expect(sheet.closest('[inert]')).toBeNull()
+    expect(document.querySelector('[inert]')).toBeNull()
+    expect(locked()).toBe(false)
+    named('Reboot', sheet).click()
+    await settle()
+    expect(m.exposed.chosen).toBe('reboot')
+    expect($('[role="menu"]')).toBeNull()
+  })
+
+  it('starting open in place locks nothing either', async () => {
+    const m = mount(InPlaceMenu, { input: 'touch', defaultOpen: true })
+    unmount = m.unmount
+    await settle()
+    await settle()
+    expect(document.querySelector('[inert]')).toBeNull()
+    expect(locked()).toBe(false)
+  })
+
   it('starts open in place when it starts open', async () => {
     const m = mount(InPlaceMenu, { defaultOpen: true })
     unmount = m.unmount

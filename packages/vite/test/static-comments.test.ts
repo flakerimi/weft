@@ -19,3 +19,17 @@ it('keeps the comments of every island, one after another or nested', () => {
 it('leaves a page with no comments as it is', () => {
   expect(dropStaticComments('<main><h1>Hi</h1></main>')).toBe('<main><h1>Hi</h1></main>')
 })
+
+it('leaves the text of raw-text elements as it is, outside islands too', () => {
+  const html = [
+    '<!--[-->',
+    '<script>if (a<!--b) x()</script>',
+    '<style>/* <!-- */ p { color: red }</style>',
+    '<textarea><!-- typed --></textarea>',
+    '<title>A <!-- title --></title>',
+    '<p>x</p><!--]-->',
+  ].join('')
+  expect(dropStaticComments(html)).toBe(
+    '<script>if (a<!--b) x()</script><style>/* <!-- */ p { color: red }</style><textarea><!-- typed --></textarea><title>A <!-- title --></title><p>x</p>',
+  )
+})

@@ -24,7 +24,8 @@
  *   once they are in; until then nothing is drawn for them, on the server
  *   as in the browser. `ready` turns true a tick after `view`: the popover
  *   is drawn closed first and then opened, as it would be had it been there
- *   all along, so it moves focus in as ever.
+ *   all along, so it moves focus in as ever. If the chunk cannot be fetched,
+ *   `open` turns false, and the next attempt fetches it again.
  * - `openingDay()`: today, where a calendar opened on nothing starts.
  * - `cycleTab(event, panel)`: Tab inside the floating calendar goes round
  *   its buttons, as the APG's date picker dialog asks (the popover is
@@ -208,7 +209,7 @@ export interface DateRangePickerLabels extends CalendarLabels {
 type Panel = typeof import('./picker-panel.ts')
 let panelModule: Promise<Panel> | undefined
 
-export function useLazyPanel(open: Readonly<Ref<boolean>>): { view: ShallowRef<Panel | undefined>; ready: Readonly<Ref<boolean>>; load: () => void } {
+export function useLazyPanel(open: Ref<boolean>): { view: ShallowRef<Panel | undefined>; ready: Readonly<Ref<boolean>>; load: () => void } {
   const view = shallowRef<Panel>()
   const ready = ref(false)
   let asked = false
@@ -222,9 +223,11 @@ export function useLazyPanel(open: Readonly<Ref<boolean>>): { view: ShallowRef<P
         void nextTick(() => (ready.value = true))
       },
       () => {
-        // Not fetched (offline, say): the next time the pointer or focus comes, it tries again.
+        // Not fetched (offline, say): the picker closes, so its button says
+        // so, and the next press, pointer or focus tries again.
         asked = false
         panelModule = undefined
+        open.value = false
       },
     )
   }

@@ -6,8 +6,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import MenuCases from '../fixtures/overlays/MenuCases.vue'
 import ModalCases from '../fixtures/overlays/ModalCases.vue'
 import PopoverCases from '../fixtures/overlays/PopoverCases.vue'
+import ReusedMark from '../fixtures/overlays/ReusedMark.vue'
 import { mount } from '../mount.ts'
-import { $, overlays, reset, settle } from './helpers.ts'
+import { $, key, overlays, reset, settle } from './helpers.ts'
 
 let unmount: (() => void) | undefined
 afterEach(() => {
@@ -50,5 +51,24 @@ describe.each(kinds)('$name opened from a marked subtree', (kind) => {
   it('carries the scheme of the nearest data-weft-scheme ancestor', async () => {
     const layer = await openInside(kind, { 'data-weft-scheme': 'dark' })
     expect(layer.getAttribute('data-weft-scheme')).toBe('dark')
+  })
+})
+
+describe('an overlay opened again from another place', () => {
+  it('drops the no-prefetch mark when it reopens from an unmarked part of the page', async () => {
+    const m = mount(ReusedMark)
+    unmount = m.unmount
+    await settle()
+    $('.trigger').click()
+    await settle()
+    expect($('.weft-overlay', overlays()!).hasAttribute('data-weft-no-prefetch')).toBe(true)
+    key('Escape', {}, $('.inside'))
+    await settle()
+    await settle()
+    m.exposed.marked = false
+    await settle()
+    $('.trigger').click()
+    await settle()
+    expect($('.weft-overlay', overlays()!).hasAttribute('data-weft-no-prefetch')).toBe(false)
   })
 })

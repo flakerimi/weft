@@ -9,7 +9,11 @@
 // focus returns to the trigger, except after a press outside. In `hover`
 // mode it opens while the pointer is over the trigger or the content (on
 // touch it is pressed, as ever). Modal, the page behind is inert. It fades
-// out when it closes, unless motion is reduced.
+// out when it closes, unless motion is reduced. With `:portal="false"` it is
+// drawn where it stands, and an open one by the server too: until mounted it
+// hangs from the element its trigger (or anchor) is in, by its placement
+// (overlay.css). In place it is part of the page, so it makes nothing inert
+// and locks no scroll; as a touch sheet its focus trap still holds focus.
 import { computed, onScopeDispose, useTemplateRef, watch } from 'vue'
 import { useWeft } from '../adaptive/context.ts'
 import { firstFocus, focus } from '../headless/dom.ts'
@@ -57,6 +61,8 @@ const props = withDefaults(
     closeDelay?: number
     /** Draw an arrow pointing at the trigger (floating form only). */
     arrow?: boolean
+    /** Draw it in the overlay layer at the end of the body; false draws it in place, and an open one on the server too. */
+    portal?: boolean
   }>(),
   {
     open: undefined,
@@ -69,6 +75,7 @@ const props = withDefaults(
     mode: 'click',
     openDelay: 100,
     closeDelay: 200,
+    portal: true,
   },
 )
 
@@ -145,8 +152,9 @@ useDismiss(live, {
 // A trap that ends because the popover became a floating one (touch to
 // pointer) leaves focus where it is; one that ends with the popover returns it.
 useFocusTrap(live, { active: trapping, returnFocus: () => !open.value })
-useScrollLock(trapping)
-useInert(trapping)
+// In place, the popover is inside the page: making the page inert would make it inert too.
+useScrollLock(computed(() => trapping.value && props.portal))
+useInert(computed(() => trapping.value && props.portal))
 
 watch(open, (on) => on && context.refresh(), { immediate: true, flush: 'sync' })
 // Not trapped: move focus in once, when the content appears; not when it
@@ -220,7 +228,7 @@ const side = computed(() => (sheet.value ? 'bottom' : floating.placement.value.s
     @pointerenter="onEnter"
     @pointerleave="onLeave"
   ><slot :open="open" /></span>
-  <Teleport v-if="mounted && presence.present.value" :to="overlayRoot()">
+  <Teleport v-if="(mounted || !portal) && presence.present.value" :to="portal ? overlayRoot() : 'body'" :disabled="!portal">
     <div class="weft-overlay" v-bind="context.attrs.value" :data-state="presence.closing.value ? 'closed' : 'open'">
       <div v-if="sheet" ref="backdrop" class="weft-overlay-backdrop" @click="onBackdrop"></div>
       <div
@@ -235,8 +243,9 @@ const side = computed(() => (sheet.value ? 'bottom' : floating.placement.value.s
         :aria-modal="trapping ? 'true' : undefined"
         :data-form="sheet ? 'sheet' : 'floating'"
         :data-side="side"
-        :data-positioned="sheet || floating.isPositioned.value ? 'true' : undefined"
-        :style="sheet ? undefined : floating.styles.value"
+        :data-positioned="sheet || !mounted || floating.isPositioned.value ? 'true' : undefined"
+        :data-in-place="!mounted && !sheet ? placement : undefined"
+        :style="sheet || !mounted ? undefined : floating.styles.value"
         @focusout="onFocusout"
         @pointerenter="onEnter"
         @pointerleave="onLeave"

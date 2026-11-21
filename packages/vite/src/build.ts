@@ -141,18 +141,23 @@ const TEXT = new Set(['.html', '.css', '.js', '.mjs', '.json', '.webmanifest', '
  * A page's HTML without the comments outside its islands: Vue's hydration
  * markers (`<!--[-->`, `<!---->`) and a template's own comments. Only an
  * island is ever hydrated, against everything inside its `<weft-island>`,
- * which stays as it is; outside one they are bytes that do nothing.
+ * which stays as it is; outside one they are bytes that do nothing. The text
+ * of a raw-text element (`<script>`, `<style>`, `<textarea>`, `<title>`) is
+ * not markup, so a `<!--` in it is left alone.
  */
 export function dropStaticComments(html: string): string {
   let out = ''
   let depth = 0
   let from = 0
-  for (const m of html.matchAll(/<weft-island\b|<\/weft-island>|<!--[\s\S]*?-->/g)) {
-    if (m[0] === '</weft-island>') depth--
-    else if (m[0].startsWith('<weft-island')) depth++
+  const tokens = /<weft-island\b|<\/weft-island>|<(script|style|textarea|title)\b[^>]*>[\s\S]*?<\/\1\s*>|<!--[\s\S]*?-->/gi
+  for (const m of html.matchAll(tokens)) {
+    const t = m[0]
+    if (m[1]) continue
+    if (t === '</weft-island>') depth--
+    else if (t.startsWith('<weft-island')) depth++
     else if (depth === 0) {
       out += html.slice(from, m.index)
-      from = m.index + m[0].length
+      from = m.index + t.length
     }
   }
   return out + html.slice(from)

@@ -21,9 +21,20 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: color-mix(in srgb, var(--weft-color-text, CanvasText) 32%, transparent);
+  /* From black in both schemes: it always darkens (the text colour is light in dark). */
+  background: color-mix(in srgb, black 40%, transparent);
   transition: opacity var(--weft-duration-dialog, 260ms) var(--weft-ease-standard, ease);
   @starting-style { opacity: 0; }
 }
 .weft-overlay[data-state="closed"] .weft-overlay-backdrop { opacity: 0; }
 .weft-overlay[data-state="closed"] { pointer-events: none; }
+
+/* Drawn in place (portal false) and not positioned yet, on the server or in
+   a page that is never hydrated: a floating panel hangs from the element its
+   trigger is in (which it makes the containing block), below and from the
+   start edge, or from the end edge for an -end placement, or above for top.
+   Once mounted the panel is positioned as ever. */
+:has(> .weft-overlay > [data-in-place][data-form="floating"]) { position: relative; }
+[data-in-place][data-form="floating"] { position: absolute; inset-block-start: calc(100% + 6px); inset-inline-start: 0; }
+[data-in-place$="-end"][data-form="floating"] { inset-inline: auto 0; }
+[data-in-place^="top"][data-form="floating"] { inset-block: auto calc(100% + 6px); }

@@ -14,9 +14,11 @@
 // inert), and a submenu is a sheet above it with a back item. It fades out
 // when it closes, unless motion is reduced. With `:portal="false"` it is
 // drawn where it stands instead of in the overlay layer at the end of the
-// body, and an open one is drawn by the server too: in place, unpositioned
-// until mounted, so a page can show it open with no script (a picture of an
-// app, made inert, which the page positions with its own CSS).
+// body, and an open one is drawn by the server too, so a page can show it
+// open with no script: until mounted it hangs from the element its trigger
+// is in (overlay.css), by its placement. In place it is part of the page,
+// so it makes nothing inert and locks no scroll; as a touch sheet its focus
+// trap still keeps focus in it.
 import { computed, inject, onScopeDispose, provide, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { useWeft } from '../adaptive/context.ts'
 import Icon from '../basics/Icon.vue'
@@ -158,8 +160,9 @@ useFocusTrap(live, {
   returnTo: () => trigger.el.value ?? anchorEl(),
   initial: () => edge(start),
 })
-useScrollLock(computed(() => open.value && !parent))
-useInert(computed(() => modal.value && !parent))
+// In place, the menu is inside the page: making the page inert would make it inert too.
+useScrollLock(computed(() => open.value && !parent && props.portal))
+useInert(computed(() => modal.value && !parent && props.portal))
 watch(open, (on) => on && context.refresh(), { immediate: true, flush: 'sync' })
 
 const roving = useRovingFocus(panel, { orientation: 'vertical' })
@@ -321,6 +324,7 @@ const CLOSE_DELAY = 150
         :data-form="sheet ? 'sheet' : 'floating'"
         :data-side="side"
         :data-positioned="sheet || !mounted || floating.isPositioned.value ? 'true' : undefined"
+        :data-in-place="!mounted && !sheet ? placement : undefined"
         :style="sheet || !mounted ? undefined : floating.styles.value"
         @keydown="onKeydown"
         @pointerenter="parent?.keep()"

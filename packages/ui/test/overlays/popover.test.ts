@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import AnchoredPopover from '../fixtures/overlays/AnchoredPopover.vue'
 import PopoverCases from '../fixtures/overlays/PopoverCases.vue'
+import InPlacePopover from '../fixtures/overlays/InPlacePopover.vue'
 import { mount } from '../mount.ts'
 import { press as pressKey } from '../keyboard.ts'
 import { $, active, key, locked, moveFocus, overlays, press, reset, settle } from './helpers.ts'
@@ -273,5 +274,35 @@ describe('Popover', () => {
       expect(locked()).toBe(false)
       expect(active()).toBe($('.trigger'))
     })
+  })
+})
+
+describe('Popover with :portal="false"', () => {
+  it('opens where it stands, on pointer, and closes with Escape', async () => {
+    const m = mount(InPlacePopover)
+    unmount = m.unmount
+    await settle()
+    $('.trigger').click()
+    await settle()
+    const panel = $('[role="dialog"]')
+    expect($('.place').contains(panel)).toBe(true)
+    expect(overlays()).toBeNull()
+    key('Escape', {}, $('.inside'))
+    await settle()
+    expect($('[role="dialog"]')).toBeNull()
+  })
+
+  it('as a touch sheet in place, makes nothing inert and locks no scroll, and its content is usable', async () => {
+    const m = mount(InPlacePopover, { input: 'touch', defaultOpen: true })
+    unmount = m.unmount
+    await settle()
+    await settle()
+    const sheet = $('[role="dialog"]')
+    expect(sheet.dataset.form).toBe('sheet')
+    expect($('.place').contains(sheet)).toBe(true)
+    expect(document.querySelector('[inert]')).toBeNull()
+    expect(locked()).toBe(false)
+    $('.inside').focus()
+    expect(document.activeElement).toBe($('.inside'))
   })
 })
