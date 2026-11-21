@@ -428,6 +428,7 @@ func newFakeRepo(t *testing.T) *fakeRepo {
 set -eu
 out="${2:-site/releases}"
 mkdir -p "$out/$1"
+[ -z "${RELEASE_FAILS:-}" ] || { echo "release: go build failed" >&2; exit 1; }
 echo "sums of $1" >"$out/$1/SHA256SUMS"
 echo "tarball of $1" >"$out/$1/weft_linux_amd64.tar.gz"
 echo "$1" >"$out/latest"
@@ -460,6 +461,7 @@ esac
 `, 0o755)
 	write(bin, "lisa", `#!/bin/sh
 echo "$*" >>"$FAKE/lisa.log"
+[ -z "${PUSH_FAILS:-}" ] || { echo "lisa: the server refused the push" >&2; exit 3; }
 [ "$1 $2 $3 $4" = "server push --name weft" ] && [ -f "$5/Dockerfile" ] || exit 2
 sed -n 's/.*weft.Version=\([^ "]*\).*/\1/p' "$5/Dockerfile" >"$FAKE/latest"
 (cd "$5" && find . -type f | sort) >"$FAKE/pushed-files"
@@ -497,7 +499,8 @@ func lastLine(s string) string {
 }
 
 // A verified push keeps the tree it pushed as site/pushed/<version>, one per
-// version, and leaves no tree behind in TMPDIR or beside the kept ones. The
+// version, and leaves no tree behind in TMPDIR or beside the kept ones (only
+// each publish's release build, in TMPDIR, for the owner to trash). The
 // tree's binary embeds the pages; its releases go into the image beside it.
 func TestPublishSiteKeepsOneTreePerVersion(t *testing.T) {
 	skipWindows(t)
@@ -547,8 +550,16 @@ func TestPublishSiteKeepsOneTreePerVersion(t *testing.T) {
 	if strings.Join(names, ",") != "0.0.3,0.0.4,releases" {
 		t.Fatalf("site/pushed holds %v, want 0.0.3, 0.0.4 and releases", names)
 	}
-	if left, _ := os.ReadDir(r.tmp); len(left) != 0 {
-		t.Fatalf("TMPDIR keeps %v", left)
+	// TMPDIR keeps each publish's release build, which the publish never
+	// deletes (the owner trashes it, from the path it prints), and nothing else.
+	left, _ := os.ReadDir(r.tmp)
+	for _, e := range left {
+		if !strings.HasPrefix(e.Name(), "weft-release.") {
+			t.Errorf("TMPDIR keeps %s", e.Name())
+		}
+	}
+	if len(left) != 2 {
+		t.Fatalf("TMPDIR keeps %v, want the two release builds", left)
 	}
 	if got := r.read("site/releases.txt"); got != "0.0.1\n0.0.2\n0.0.3\n0.0.4\n" {
 		t.Fatalf("releases.txt %q", got)
@@ -811,6 +822,98 @@ func TestPublishSiteRefusesAReleasedVersion(t *testing.T) {
 	}
 }
 
+// before is the state of site/releases and site/releases.txt a failed publish must leave as it found it.
+func (r *fakeRepo) before(t *testing.T) string {
+	t.Helper()
+	return files(t, filepath.Join(r.root, "site/releases")) + "|" + r.read("site/releases.txt")
+}
+
+// A real publish builds its release in TMPDIR, as a dry run does, and copies
+// it into site/releases only once the push has succeeded: a push that fails
+// leaves site/releases and its list as they were, says where the build is,
+// and the same version can be published again at once.
+func TestPublishSiteFailedPushLeavesSiteReleasesAlone(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	was := r.before(t)
+	env := r.env
+	r.env = append(env, "PUSH_FAILS=1")
+	out, err := r.run("publish-site.sh", "0.0.3")
+	r.env = env
+	if err == nil || !strings.Contains(out, "publish: stopped before 0.0.3 was pushed; site/releases and site/releases.txt are as they were. This run's release build is in "+r.tmp+"/weft-release.") {
+		t.Fatalf("a failed push: err %v, output\n%s", err, out)
+	}
+	if now := r.before(t); now != was {
+		t.Fatalf("a failed push changed site/releases:\nwas %s\nnow %s", was, now)
+	}
+	if out, err := r.run("publish-site.sh", "0.0.3"); err != nil {
+		t.Fatalf("retrying 0.0.3 after a failed push: %v\n%s", err, out)
+	}
+}
+
+// A release build that fails leaves no folder in site/releases.
+func TestPublishSiteFailedReleaseBuildLeavesNoFolder(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	was := r.before(t)
+	r.env = append(r.env, "RELEASE_FAILS=1")
+	out, err := r.run("publish-site.sh", "0.0.3")
+	if err == nil || !strings.Contains(out, "publish: stopped before 0.0.3 was pushed") {
+		t.Fatalf("a failed release build: err %v, output\n%s", err, out)
+	}
+	if now := r.before(t); now != was {
+		t.Fatalf("a failed release build changed site/releases:\nwas %s\nnow %s", was, now)
+	}
+	if r.lisa() != "" {
+		t.Fatalf("lisa ran: %s", r.lisa())
+	}
+}
+
+// Once pushed, the release is copied into site/releases, byte for byte what
+// the push staged, and named latest; the build folder is left for the owner,
+// and its path printed.
+func TestPublishSiteCopiesThePushedRelease(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	out, err := r.run("publish-site.sh", "0.0.3")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	staged := filepath.Join(r.root, "site/pushed/0.0.3/site-src/releases/releases/0.0.3")
+	copied := filepath.Join(r.root, "site/releases/0.0.3")
+	if got, want := files(t, copied), files(t, staged); got != want || got == "" {
+		t.Fatalf("site/releases/0.0.3 holds %s, the push staged %s", got, want)
+	}
+	for _, f := range strings.Split(files(t, staged), ",") {
+		a, _ := os.ReadFile(filepath.Join(staged, f))
+		b, _ := os.ReadFile(filepath.Join(copied, f))
+		if string(a) != string(b) {
+			t.Errorf("site/releases/0.0.3/%s differs from what was pushed", f)
+		}
+	}
+	if got := r.read("site/releases/latest"); got != "0.0.3\n" {
+		t.Fatalf("site/releases/latest %q", got)
+	}
+	builds, _ := filepath.Glob(filepath.Join(r.tmp, "weft-release.*"))
+	if len(builds) != 1 || !strings.Contains(out, builds[0]) {
+		t.Fatalf("the build folder %v is not named in the output:\n%s", builds, out)
+	}
+}
+
+// When the list cannot be written after a push, the publish says which
+// version to add to site/releases.txt by hand.
+func TestPublishSiteSaysWhenTheListCannotBeWritten(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	list := filepath.Join(r.root, "site/releases.txt")
+	os.Chmod(list, 0o444)
+	defer os.Chmod(list, 0o644)
+	out, err := r.run("publish-site.sh", "0.0.3")
+	if err == nil || !strings.Contains(out, "publish: 0.0.3 was pushed, but site/releases.txt could not be written; add the line 0.0.3 to it by hand, so the next publish keeps 0.0.3.") {
+		t.Fatalf("err %v, output\n%s", err, out)
+	}
+}
+
 // A version already published is refused before anything is built: building
 // it again would change the tarballs its users have checksums for.
 func TestPublishSiteRefusesAPublishedVersion(t *testing.T) {
@@ -838,7 +941,7 @@ func TestPublishSiteDryRunPushesNothing(t *testing.T) {
 	if err != nil || !strings.Contains(out, "dry run: not pushed") {
 		t.Fatalf("dry run: %v\n%s", err, out)
 	}
-	if !strings.Contains(out, "dry run: built 0.0.3 in "+r.tmp+"/weft-dry-release.") || !strings.Contains(out, "site/releases is as it was") {
+	if !strings.Contains(out, "dry run: built 0.0.3 in "+r.tmp+"/weft-release.") || !strings.Contains(out, "site/releases is as it was") {
 		t.Fatalf("the dry run does not say where it built 0.0.3:\n%s", out)
 	}
 	// It leaves site/releases as it was, so 0.0.3 can be published for real after it.

@@ -7,8 +7,11 @@
 # container whose /data/releases holds the installer and the releases.
 # Usage: scripts/publish-site.sh [--dry-run] <version>
 #   --dry-run  stop before the push and print the push tree's path (in
-#              TMPDIR); it builds the release in TMPDIR too, leaving
-#              site/releases as it was, and the site locally
+#              TMPDIR), and builds the site locally
+# The release is built in TMPDIR, by a dry run and a real publish alike, and
+# copied into site/releases only once pushed, so a publish that fails before
+# can be run again with the same version. Temporary folders are never
+# deleted here; their paths are printed for the owner to trash.
 # Every version in site/releases.txt must be in site/releases, and the version
 # published must be neither listed nor in site/releases (building it again
 # would change tarballs its users have checksums for). A version is listed in
@@ -71,16 +74,22 @@ fi
 store=site/pushed/releases
 scripts/stage-releases.sh --link-from "$store" ${unlisted:+--live "$unlisted"} --check site || exit 1
 
-# A dry run builds the release in TMPDIR, leaving site/releases as it was, so
-# the version can still be published for real.
+# The release is built in TMPDIR, by a dry run and a real publish alike, and
+# copied into site/releases only once it is pushed: until then a failure
+# leaves site/releases and site/releases.txt as they were, and the same
+# version can be published again. Nothing here deletes the build folder; its
+# path is printed for the owner to trash.
 tmp=${TMPDIR:-/tmp}
-if [ -n "$dry" ]; then
-	releases=$(mktemp -d "${tmp%/}/weft-dry-release.XXXXXX")
-	scripts/release.sh "$version" "$releases"
-else
-	releases=
-	scripts/release.sh "$version"
-fi
+releases=$(mktemp -d "${tmp%/}/weft-release.XXXXXX")
+tree=
+pushed=
+stopped() {
+	status=$?
+	[ "$status" -ne 0 ] && [ -z "$pushed" ] || return 0
+	echo "publish: stopped before $version was pushed; site/releases and site/releases.txt are as they were. This run's release build is in $releases${tree:+ and its push tree in $tree}; trash them when you no longer need them." >&2
+}
+trap stopped EXIT
+scripts/release.sh "$version" "$releases"
 scripts/site.sh build
 
 # The push tree: the weft package, the site's main package and its build, the
@@ -101,7 +110,7 @@ done
 mkdir "$tree/site-src"
 cp site-src/main.go "$tree/site-src/"
 cp -R site-src/dist "$tree/site-src/dist"
-scripts/stage-releases.sh --link-from "$store" ${unlisted:+--live "$unlisted"} ${releases:+--new-from "$releases"} site "$tree/site-src/releases" "$version"
+scripts/stage-releases.sh --link-from "$store" ${unlisted:+--live "$unlisted"} --new-from "$releases" site "$tree/site-src/releases" "$version"
 cat >"$tree/Dockerfile" <<EOF
 FROM golang:1.26 AS build
 WORKDIR /src
@@ -125,17 +134,25 @@ echo "push tree:"
 
 if [ -n "$dry" ]; then
 	echo "dry run: built $version in $releases/$version; site/releases is as it was, so $version can still be published."
-	echo "dry run: not pushed; the tree is $tree"
+	echo "dry run: not pushed; the tree is $tree (trash it and $releases when you no longer need them)"
 	exit 0
 fi
 
 lisa server push --name weft "$tree"
+pushed=1
 
 # Pushed, so published: the site may serve it from now on, and every later
 # publish must stage it. Listed at once, before waiting, so a wait that times
 # out cannot drop it (nor the live release this push carried).
-[ -z "$unlisted" ] || scripts/published-releases.sh add site "$unlisted"
-scripts/published-releases.sh add site "$version"
+for v in $unlisted "$version"; do
+	scripts/published-releases.sh add site "$v" ||
+		fail "$v was pushed, but site/releases.txt could not be written; add the line $v to it by hand, so the next publish keeps $v."
+done
+# And copied (never moved) into site/releases, as it was pushed, for the next
+# publish to stage; the build folder stays for the owner to trash.
+mkdir -p site/releases && cp -R "$releases/$version" "site/releases/$version" && diff -r "$releases/$version" "site/releases/$version" >/dev/null &&
+	printf '%s\n' "$version" >site/releases/latest ||
+	fail "$version was pushed and is listed in site/releases.txt, but its release could not be copied from $releases/$version into site/releases/$version; copy it there by hand, since the next publish stages it from there."
 
 # The server builds the image after the push; wait for the new site to answer.
 scripts/wait-live.sh "$version" ||
@@ -165,4 +182,4 @@ keep_releases() {
 }
 keep_releases ||
 	echo "publish: $kept holds every release it served, but not all could be kept once in $store; the next publish copies those again." >&2
-echo "published weft $version at $url; listed in site/releases.txt (commit it); its tree is $kept"
+echo "published weft $version at $url; listed in site/releases.txt (commit it); its tree is $kept; its release build in $releases can be trashed"
