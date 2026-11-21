@@ -1,0 +1,47 @@
+/* Collapsible: a trigger and content that opens below it. The content is
+   hidden with hidden="until-found" (content-visibility: hidden where the
+   browser has it, display: none where not), so it carries no padding of its
+   own: the body inside does. Its height animates between 0 and auto
+   (interpolate-size), the visibility switching at the end of a close and the
+   start of an open (from display: none, where until-found is missing, it
+   opens at once); reduced motion sets the duration to 0 (base.css), and a
+   browser without interpolate-size opens it at once. Accordion draws its
+   panels with these classes. */
+.weft-collapsible__wrap { display: contents; }
+.weft-collapsible__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--weft-space-2, 8px);
+  min-block-size: max(var(--weft-control-sm, 28px), var(--weft-hit-min, 24px));
+  padding: 0 var(--weft-space-1, 4px);
+  border: 0;
+  border-radius: var(--weft-radius-control, 8px);
+  background: none;
+  color: var(--weft-color-text, CanvasText);
+  font: inherit;
+  font-weight: var(--weft-weight-heading, 600);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.weft-collapsible__trigger:disabled { color: var(--weft-color-text-muted, GrayText); cursor: not-allowed; }
+.weft-collapsible__trigger:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: 2px; }
+.weft-collapsible__chevron {
+  flex: none;
+  inline-size: 16px;
+  block-size: 16px;
+  color: var(--weft-color-text-muted, GrayText);
+  transition: rotate var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease);
+}
+.weft-collapsible[data-state="open"] > .weft-collapsible__trigger .weft-collapsible__chevron { rotate: 180deg; }
+
+.weft-collapsible__content {
+  overflow: hidden;
+  interpolate-size: allow-keywords;
+  block-size: auto;
+  transition-property: block-size, content-visibility, display;
+  transition-duration: var(--weft-duration-layout, 220ms);
+  transition-timing-function: var(--weft-ease-standard, ease);
+  transition-behavior: allow-discrete;
+}
+.weft-collapsible__content[hidden] { block-size: 0px; }
+.weft-collapsible__body { padding-block: var(--weft-space-2, 8px); }

@@ -1,0 +1,23 @@
+/* Pagination: a row of Buttons, wrapping when it must. The ellipsis takes a
+   button's width so the row does not shift; the arrows mirror right to
+   left. */
+.weft-pagination__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--weft-space-1, 4px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.weft-pagination .weft-pagination__page { min-inline-size: var(--weft-control-md, 36px); justify-content: center; font-variant-numeric: tabular-nums; }
+.weft-pagination[data-size="sm"] .weft-pagination__page { min-inline-size: var(--weft-control-sm, 28px); }
+.weft-pagination[data-size="lg"] .weft-pagination__page { min-inline-size: var(--weft-control-lg, 44px); }
+.weft-pagination__ellipsis {
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: var(--weft-control-md, 36px);
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-pagination__glyph { inline-size: 16px; block-size: 16px; }
+[dir="rtl"] .weft-pagination__glyph { scale: -1 1; }

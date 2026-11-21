@@ -1,0 +1,33 @@
+/* Breadcrumb: the path in one line, items separated by a chevron that
+   mirrors right to left. Links are muted until hovered; the current page is
+   in the text colour. When the path is too long for its width it scrolls
+   sideways rather than wrap. */
+.weft-breadcrumb__list {
+  display: flex;
+  align-items: center;
+  gap: var(--weft-space-1, 4px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+  white-space: nowrap;
+}
+.weft-breadcrumb__item { display: inline-flex; align-items: center; gap: var(--weft-space-1, 4px); flex: none; }
+.weft-breadcrumb .weft-breadcrumb__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--weft-space-1, 4px);
+  color: var(--weft-color-text-muted, GrayText);
+  text-decoration: none;
+}
+@media (hover: hover) {
+  .weft-breadcrumb .weft-breadcrumb__link[href]:hover { color: var(--weft-color-text, CanvasText); text-decoration: underline; }
+}
+.weft-breadcrumb .weft-breadcrumb__link[aria-current="page"],
+.weft-breadcrumb__text[aria-current="page"] { color: var(--weft-color-text, CanvasText); font-weight: var(--weft-weight-heading, 600); }
+.weft-breadcrumb__text { display: inline-flex; align-items: center; gap: var(--weft-space-1, 4px); color: var(--weft-color-text-muted, GrayText); }
+.weft-breadcrumb__icon { flex: none; inline-size: 16px; block-size: 16px; }
+.weft-breadcrumb__separator { display: inline-flex; flex: none; color: var(--weft-color-text-muted, GrayText); }
+.weft-breadcrumb__separator svg { inline-size: 14px; block-size: 14px; }
+[dir="rtl"] .weft-breadcrumb__separator { scale: -1 1; }

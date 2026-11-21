@@ -1,0 +1,70 @@
+/* Stepper: indicators joined by lines. Horizontal, each step takes an equal
+   share of the row, its indicator above its text; vertical, the indicators
+   stand in a column with the line running down between them. Done steps and
+   the current one are in the tone (done ones filled), the rest muted. */
+.weft-stepper { display: flex; flex-direction: column; gap: var(--weft-space-4, 16px); }
+.weft-stepper__list { display: flex; margin: 0; padding: 0; list-style: none; }
+.weft-stepper[data-orientation="vertical"] > .weft-stepper__list { flex-direction: column; }
+.weft-stepper__item { position: relative; display: flex; flex: 1; min-inline-size: 0; }
+.weft-stepper[data-orientation="vertical"] .weft-stepper__item { padding-block-end: var(--weft-space-4, 16px); }
+.weft-stepper[data-orientation="vertical"] .weft-stepper__item:last-child { padding-block-end: 0; }
+
+.weft-stepper__trigger {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--weft-space-2, 8px);
+  min-block-size: var(--weft-hit-min, 24px);
+  padding: 0;
+  border: 0;
+  border-radius: var(--weft-radius-control, 8px);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.weft-stepper[data-orientation="horizontal"] .weft-stepper__trigger { flex-direction: column; align-items: center; text-align: center; inline-size: 100%; }
+.weft-stepper__trigger:disabled { cursor: not-allowed; }
+.weft-stepper__trigger:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: 2px; }
+
+.weft-stepper__indicator {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  inline-size: var(--weft-control-sm, 28px);
+  block-size: var(--weft-control-sm, 28px);
+  border: 2px solid var(--weft-color-border, GrayText);
+  border-radius: 50%;
+  background: var(--weft-color-bg, Canvas);
+  color: var(--weft-color-text-muted, GrayText);
+  font-weight: var(--weft-weight-heading, 600);
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+}
+.weft-stepper[data-size="lg"] .weft-stepper__indicator { inline-size: var(--weft-control-md, 36px); block-size: var(--weft-control-md, 36px); }
+.weft-stepper__indicator svg { inline-size: 16px; block-size: 16px; }
+.weft-stepper__item[data-state="active"] .weft-stepper__indicator { border-color: var(--weft-tone, CanvasText); color: var(--weft-tone-text, CanvasText); }
+.weft-stepper__item[data-state="completed"] .weft-stepper__indicator { border-color: var(--weft-tone, CanvasText); background: var(--weft-tone, CanvasText); color: var(--weft-tone-fg, Canvas); }
+
+.weft-stepper__text { display: grid; gap: 2px; padding-block: 2px; min-inline-size: 0; }
+.weft-stepper__title { font-weight: var(--weft-weight-heading, 600); }
+.weft-stepper__item[data-state="inactive"] .weft-stepper__title { color: var(--weft-color-text-muted, GrayText); }
+.weft-stepper__description { color: var(--weft-color-text-muted, GrayText); font-size: 0.875em; }
+.weft-stepper__trigger:disabled .weft-stepper__text { opacity: 0.6; }
+
+.weft-stepper__separator { position: absolute; background: var(--weft-color-border, GrayText); }
+.weft-stepper__item[data-state="completed"] .weft-stepper__separator { background: var(--weft-tone, CanvasText); }
+.weft-stepper[data-orientation="horizontal"] .weft-stepper__separator {
+  inset-block-start: calc(var(--weft-control-sm, 28px) / 2 - 1px);
+  inset-inline-start: calc(50% + var(--weft-control-sm, 28px) / 2 + var(--weft-space-1, 4px));
+  inset-inline-end: calc(-50% + var(--weft-control-sm, 28px) / 2 + var(--weft-space-1, 4px));
+  block-size: 2px;
+}
+.weft-stepper[data-orientation="vertical"] .weft-stepper__separator {
+  inset-block: calc(var(--weft-control-sm, 28px) + var(--weft-space-1, 4px)) var(--weft-space-1, 4px);
+  inset-inline-start: calc(var(--weft-control-sm, 28px) / 2 - 1px);
+  inline-size: 2px;
+}

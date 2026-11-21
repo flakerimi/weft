@@ -1,0 +1,33 @@
+/* Accordion: sections divided by lines, each header a full-width button at
+   least --weft-hit-min tall, its chevron turning when open. Panels animate
+   with collapsible.css. */
+.weft-accordion { display: grid; }
+.weft-accordion__item { border-block-end: 1px solid var(--weft-color-border, GrayText); }
+.weft-accordion__header { margin: 0; font: inherit; }
+.weft-accordion__trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--weft-space-2, 8px);
+  inline-size: 100%;
+  min-block-size: max(var(--weft-control-lg, 40px), var(--weft-hit-min, 24px));
+  padding: var(--weft-space-2, 8px) 0;
+  border: 0;
+  background: none;
+  color: var(--weft-color-text, CanvasText);
+  font: inherit;
+  font-weight: var(--weft-weight-heading, 600);
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.weft-accordion__trigger:disabled { color: var(--weft-color-text-muted, GrayText); cursor: not-allowed; }
+.weft-accordion__trigger[aria-disabled="true"] { cursor: default; }
+.weft-accordion__trigger:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: -2px; border-radius: var(--weft-radius-control, 8px); }
+@media (hover: hover) {
+  .weft-accordion__trigger:not(:disabled):hover .weft-accordion__label { text-decoration: underline; }
+}
+.weft-accordion__label { flex: 1; min-inline-size: 0; }
+.weft-accordion__icon, .weft-accordion__trailing { flex: none; inline-size: 16px; block-size: 16px; }
+.weft-accordion__trailing { color: var(--weft-color-text-muted, GrayText); transition: rotate var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease); }
+.weft-accordion__item[data-state="open"] .weft-accordion__chevron { rotate: 180deg; }
+.weft-accordion__body { padding-block: 0 var(--weft-space-4, 16px); color: var(--weft-color-text-muted, GrayText); }

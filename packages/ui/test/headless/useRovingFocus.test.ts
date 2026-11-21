@@ -220,4 +220,16 @@ describe('useRovingFocus', () => {
     expect(key('ArrowRight').defaultPrevented).toBe(false)
     expect(active()).toBe(q(0))
   })
+  it('with tabStops "all", moves with the arrows but leaves every item its own tab stop', () => {
+    const { q, root, scope, api } = setup({ orientation: 'vertical', tabStops: 'all' }, items(3, { 1: 'disabled' }))
+    expect(tabindexes(root)).toEqual([null, null, null])
+    q(0).focus()
+    key('ArrowDown')
+    expect(active()).toBe(q(2)) // the disabled one is skipped
+    expect(api.active.value).toBe(2)
+    key('Home')
+    expect(active()).toBe(q(0))
+    expect(tabindexes(root)).toEqual([null, null, null])
+    scope.stop()
+  })
 })

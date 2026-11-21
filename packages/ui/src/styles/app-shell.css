@@ -1,0 +1,135 @@
+/* AppShell: a grid of sidebar, header and main, in the layout data-layout
+   names. Every part is in the markup; the layout shows some and hides the
+   rest.
+   - sidebar: the sidebar beside the header and main, full height and sticky,
+     --weft-app-shell-sidebar wide (--weft-app-shell-rail collapsed, which
+     animates); the header's collapse toggle shows.
+   - drawer: header and main only; the header's menu button and the app's
+     title show.
+   - bar: as drawer, without the menu button, and the bottom bar under main,
+     sticky at the bottom above the safe area, its items at least 56 px tall.
+   Before mounting there is no data-layout, and the same rules come from the
+   viewport: narrow (under 640 px) is drawer, and bar with a coarse pointer. */
+.weft-app-shell {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "sidebar header" "sidebar main";
+  min-block-size: 100dvh;
+  background: var(--weft-color-bg, Canvas);
+}
+
+.weft-app-shell__sidebar {
+  grid-area: sidebar;
+  position: sticky;
+  inset-block-start: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-3, 12px);
+  inline-size: var(--weft-app-shell-sidebar, 16rem);
+  block-size: 100dvh;
+  padding: var(--weft-space-3, 12px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-inline-end: 1px solid var(--weft-color-border, GrayText);
+  background: var(--weft-color-surface, Canvas);
+  transition: inline-size var(--weft-duration-layout, 220ms) var(--weft-ease-standard, ease);
+}
+.weft-app-shell[data-collapsed] .weft-app-shell__sidebar { inline-size: var(--weft-app-shell-rail, 4.5rem); align-items: center; }
+.weft-app-shell__brand { display: flex; align-items: center; min-block-size: var(--weft-control-md, 36px); padding-inline: var(--weft-space-2, 8px); }
+.weft-app-shell[data-collapsed] .weft-app-shell__brand { padding-inline: 0; }
+.weft-app-shell .weft-app-shell__title { color: var(--weft-color-text, CanvasText); font-weight: var(--weft-weight-title, 700); font-size: 1.0625em; text-decoration: none; }
+.weft-app-shell__initial {
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--weft-control-md, 36px);
+  block-size: var(--weft-control-md, 36px);
+  border-radius: var(--weft-radius-control, 8px);
+  background: var(--weft-color-primary, LinkText);
+  color: var(--weft-color-primary-fg, Canvas);
+}
+.weft-app-shell__nav { flex: 1; min-block-size: 0; }
+.weft-app-shell__sidebar-footer { padding-block-start: var(--weft-space-3, 12px); border-block-start: 1px solid var(--weft-color-border, GrayText); }
+
+.weft-app-shell__header {
+  grid-area: header;
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: var(--weft-space-2, 8px);
+  min-block-size: calc(var(--weft-control-md, 36px) + 2 * var(--weft-space-3, 12px));
+  padding: var(--weft-space-2, 8px) var(--weft-space-4, 16px);
+  border-block-end: 1px solid var(--weft-color-border, GrayText);
+  background: var(--weft-color-bg, Canvas);
+}
+.weft-app-shell__glyph { inline-size: 20px; block-size: 20px; }
+[dir="rtl"] .weft-app-shell__collapse .weft-app-shell__glyph { scale: -1 1; }
+.weft-app-shell__menu { display: none; }
+.weft-app-shell__heading { display: none; align-items: center; }
+.weft-app-shell__header-main { display: flex; align-items: center; flex: 1; min-inline-size: 0; }
+.weft-app-shell__actions { display: flex; align-items: center; gap: var(--weft-space-2, 8px); flex: none; }
+
+.weft-app-shell__main { grid-area: main; min-inline-size: 0; padding: var(--weft-space-4, 16px); }
+
+.weft-app-shell__bar {
+  display: none;
+  grid-area: bar;
+  position: sticky;
+  inset-block-end: 0;
+  z-index: 40;
+  padding-block-end: env(safe-area-inset-bottom, 0px);
+  border-block-start: 1px solid var(--weft-color-border, GrayText);
+  background: var(--weft-color-surface, Canvas);
+}
+.weft-app-shell__bar-list { display: flex; margin: 0; padding: 0; list-style: none; }
+.weft-app-shell__bar-entry { display: flex; flex: 1; min-inline-size: 0; }
+.weft-app-shell__bar-entry > .weft-overlay-trigger { display: contents; }
+.weft-app-shell .weft-app-shell__bar-item {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-inline-size: 0;
+  min-block-size: max(56px, var(--weft-hit-min, 24px));
+  padding: var(--weft-space-1, 4px);
+  border: 0;
+  background: none;
+  color: var(--weft-color-text-muted, GrayText);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: var(--weft-weight-heading, 600);
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.weft-app-shell .weft-app-shell__bar-item[aria-current="page"] { color: var(--weft-color-primary-text, LinkText); }
+.weft-app-shell .weft-app-shell__bar-item:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: -2px; }
+.weft-app-shell__bar-icon { inline-size: 22px; block-size: 22px; }
+.weft-app-shell__bar-label { max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* drawer and bar, once mounted */
+.weft-app-shell:is([data-layout="drawer"], [data-layout="bar"]) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "main"; }
+.weft-app-shell:is([data-layout="drawer"], [data-layout="bar"]) .weft-app-shell__sidebar,
+.weft-app-shell:is([data-layout="drawer"], [data-layout="bar"]) .weft-app-shell__collapse { display: none; }
+.weft-app-shell:is([data-layout="drawer"], [data-layout="bar"]) .weft-app-shell__heading { display: flex; }
+.weft-app-shell[data-layout="drawer"] .weft-app-shell__menu { display: contents; }
+.weft-app-shell[data-layout="bar"] { grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "header" "main" "bar"; }
+.weft-app-shell[data-layout="bar"] .weft-app-shell__bar { display: block; }
+
+/* the same, before mounting, from the viewport */
+@media (max-width: 639.98px) {
+  .weft-app-shell:not([data-layout]) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "main"; }
+  .weft-app-shell:not([data-layout]) .weft-app-shell__sidebar,
+  .weft-app-shell:not([data-layout]) .weft-app-shell__collapse { display: none; }
+  .weft-app-shell:not([data-layout]) .weft-app-shell__heading { display: flex; }
+  .weft-app-shell:not([data-layout]) .weft-app-shell__menu { display: contents; }
+}
+@media (max-width: 639.98px) and (pointer: coarse) {
+  .weft-app-shell:not([data-layout]) { grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "header" "main" "bar"; }
+  .weft-app-shell:not([data-layout]) .weft-app-shell__menu { display: none; }
+  .weft-app-shell:not([data-layout]) .weft-app-shell__bar { display: block; }
+}

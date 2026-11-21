@@ -1,0 +1,24 @@
+/* Header: one row, the brand at the start, the middle growing, the actions
+   at the end, on the page colour with a line under it. Sticky, it stays at
+   the top while the page scrolls. */
+.weft-header {
+  inline-size: 100%;
+  border-block-end: 1px solid var(--weft-color-border, GrayText);
+  background: var(--weft-color-bg, Canvas);
+}
+.weft-header[data-sticky] { position: sticky; inset-block-start: 0; z-index: 40; }
+.weft-header__inner {
+  display: flex;
+  align-items: center;
+  gap: var(--weft-space-3, 12px);
+  min-block-size: calc(var(--weft-control-md, 36px) + 2 * var(--weft-space-3, 12px));
+  max-inline-size: var(--weft-page-max, 72rem);
+  margin-inline: auto;
+  padding: var(--weft-space-2, 8px) var(--weft-space-4, 16px);
+}
+.weft-header__menu { display: contents; }
+.weft-header__glyph { inline-size: 20px; block-size: 20px; }
+.weft-header__leading { display: flex; align-items: center; gap: var(--weft-space-2, 8px); flex: none; }
+.weft-header .weft-header__title { color: var(--weft-color-text, CanvasText); font-weight: var(--weft-weight-title, 700); font-size: 1.125em; text-decoration: none; }
+.weft-header__center { display: flex; align-items: center; flex: 1; min-inline-size: 0; }
+.weft-header__actions { display: flex; align-items: center; gap: var(--weft-space-2, 8px); margin-inline-start: auto; flex: none; }

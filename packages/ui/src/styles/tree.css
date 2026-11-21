@@ -1,0 +1,44 @@
+/* Tree: rows indented by level, a chevron that turns when the node is open
+   (mirrored right to left). The focused row is highlighted, the chosen ones
+   tinted. Each row is a control height tall, at least --weft-hit-min on
+   touch. Windowed (past 200 visible rows), the tree scrolls inside itself
+   and every row is exactly --weft-tree-row tall, placed by its offset. */
+.weft-tree {
+  --weft-tree-indent: 16px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 2px;
+  outline: none;
+}
+.weft-tree[data-virtual] { display: block; max-block-size: var(--weft-tree-height, 20rem); overflow: auto; overscroll-behavior: contain; }
+.weft-tree__spacer { inline-size: 1px; }
+.weft-tree__item {
+  display: flex;
+  align-items: center;
+  gap: var(--weft-space-1, 4px);
+  min-block-size: max(var(--weft-control-sm, 28px), var(--weft-hit-min, 24px));
+  padding-inline: calc(var(--weft-tree-level, 0) * var(--weft-tree-indent) + var(--weft-space-1, 4px)) var(--weft-space-2, 8px);
+  border-radius: calc(var(--weft-radius-control, 8px) - 2px);
+  color: var(--weft-color-text, CanvasText);
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.weft-tree[data-size="md"] .weft-tree__item { min-block-size: max(var(--weft-control-md, 32px), var(--weft-hit-min, 24px)); }
+.weft-tree[data-size="lg"] .weft-tree__item { min-block-size: max(var(--weft-control-lg, 40px), var(--weft-hit-min, 24px)); }
+.weft-tree[data-virtual] .weft-tree__item { position: absolute; inset-inline: 2px; block-size: var(--weft-tree-row, 32px); min-block-size: 0; }
+@media (hover: hover) {
+  .weft-tree__item:hover { background: color-mix(in srgb, var(--weft-color-text, CanvasText) 6%, transparent); }
+}
+.weft-tree__item:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: -2px; }
+.weft-tree__item[aria-selected="true"] { background: var(--weft-color-primary-soft, color-mix(in srgb, LinkText 14%, transparent)); font-weight: var(--weft-weight-heading, 600); }
+.weft-tree__item[aria-disabled="true"] { color: var(--weft-color-text-muted, GrayText); cursor: not-allowed; }
+.weft-tree__toggle { display: inline-grid; place-items: center; flex: none; inline-size: 16px; block-size: 16px; color: var(--weft-color-text-muted, GrayText); }
+.weft-tree__toggle svg { inline-size: 100%; block-size: 100%; transition: rotate var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease); }
+[dir="rtl"] .weft-tree__toggle svg { scale: -1 1; }
+.weft-tree__item[aria-expanded="true"] .weft-tree__toggle svg { rotate: 90deg; }
+[dir="rtl"] .weft-tree__item[aria-expanded="true"] .weft-tree__toggle svg { rotate: -90deg; }
+.weft-tree__icon { flex: none; inline-size: 16px; block-size: 16px; color: var(--weft-color-text-muted, GrayText); }
+.weft-tree__label { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -1,5 +1,5 @@
 /**
- * useRovingFocus(container, { orientation, loop?, rtl?, items?, columns? })
+ * useRovingFocus(container, { orientation, loop?, rtl?, items?, columns?, tabStops? })
  *
  * One tab stop for a group of items, moved with the arrow keys: the roving
  * tabindex of the WAI-ARIA APG (toolbars, tabs, radio groups, menus,
@@ -31,6 +31,10 @@
  * - Home and End go to the first and last item (horizontal and vertical).
  * - `loop` (default true) wraps at the ends; false stops there.
  *
+ * `tabStops: 'all'` keeps the arrow keys but leaves every item its own tab
+ * stop (no tabindex is set): for widgets whose items APG keeps in the tab
+ * order, such as accordion headers and the links of a navigation menu.
+ *
  * `rtl` (a ref) overrides the direction; without it, the direction is read
  * from the container (`dir="rtl"` on any ancestor) at each key press.
  *
@@ -50,6 +54,8 @@ export interface RovingFocusOptions {
   items?: string
   /** Items per row in a grid. */
   columns?: () => number
+  /** `one` (default): a roving tabindex, one tab stop for the group. `all`: arrows only, each item keeps its own tab stop. */
+  tabStops?: 'one' | 'all'
 }
 
 export interface RovingFocus {
@@ -85,9 +91,11 @@ export function useRovingFocus(
     if (!current || !items.includes(current) || !enabled(current)) {
       current = items.find((el) => enabled(el) && el.matches(SELECTED)) ?? items.find(enabled) ?? null
     }
-    for (const el of items) {
-      const want = el === current ? '0' : '-1'
-      if (el.getAttribute('tabindex') !== want) el.setAttribute('tabindex', want)
+    if (opts.tabStops !== 'all') {
+      for (const el of items) {
+        const want = el === current ? '0' : '-1'
+        if (el.getAttribute('tabindex') !== want) el.setAttribute('tabindex', want)
+      }
     }
     active.value = current ? items.indexOf(current) : -1
   }

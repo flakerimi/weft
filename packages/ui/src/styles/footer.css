@@ -1,0 +1,20 @@
+/* Footer: a muted band at the end of the page, a line above it. The row
+   puts its parts at the start, middle and end; narrow, it stacks them,
+   centred. */
+.weft-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-4, 16px);
+  max-inline-size: var(--weft-page-max, 72rem);
+  margin-inline: auto;
+  padding: var(--weft-space-6, 24px) var(--weft-space-4, 16px);
+  border-block-start: 1px solid var(--weft-color-border, GrayText);
+  color: var(--weft-color-text-muted, GrayText);
+  font-size: 0.875em;
+}
+.weft-footer__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--weft-space-3, 12px) var(--weft-space-6, 24px); }
+.weft-footer__leading, .weft-footer__trailing { display: flex; align-items: center; gap: var(--weft-space-2, 8px); }
+.weft-footer__center { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--weft-space-3, 12px); flex: 1; }
+.weft-footer__trailing { margin-inline-start: auto; }
+.weft-footer[data-width="narrow"] .weft-footer__row { flex-direction: column; text-align: center; }
+.weft-footer[data-width="narrow"] .weft-footer__trailing { margin-inline-start: 0; }
