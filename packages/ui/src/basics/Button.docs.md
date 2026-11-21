@@ -13,7 +13,8 @@ adapts:
 Give the text as `label` or as the default slot; the `leading` and
 `trailing` slots replace `icon` and `trailing-icon`. With only an icon the
 button is square (`square` makes any button square): give it an
-`aria-label`, or it warns once in development. `active` draws it as the
+`aria-label`, or put it in a `Tooltip`, whose text names it; otherwise it
+warns once in development. `active` draws it as the
 current one of a set; with `to` it also sets `aria-current="page"`.
 
 **Touch:** an md button grows to 44 px tall on touch, so the visible target

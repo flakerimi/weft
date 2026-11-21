@@ -96,6 +96,15 @@
             "open"
           ],
           "dynamic": false
+        },
+        {
+          "name": "<key>",
+          "props": [
+            "item",
+            "index",
+            "open"
+          ],
+          "dynamic": true
         }
       ],
       "notes": "`items` are `{ label, value, icon, trailingIcon, content, disabled, slot }`.\nA section's value is its `value`, else its index as a string. `type`\n`single` (the default) keeps one section open, bound with `v-model` as its\nvalue (`null` when none is); `multiple` binds an array of values. With\n`single`, `collapsible` (the default) lets the open section close again;\nfalse keeps one open always. `disabled` stops every section. The `label`\nslot replaces a header's text, the `content` slot a panel's content, and a\nslot named by an item's `slot` renders that item's panel.\n\nIt follows the WAI-ARIA APG Accordion pattern. Each header is a heading\n(`h3`; `level` changes it to fit the page's outline) holding a button with\n`aria-expanded` and `aria-controls`; each panel is a `region` named by its\nheader. When the open section of a non-collapsible accordion cannot close,\nits header says `aria-disabled=\"true\"`.\n\n**Keyboard.** Enter and Space toggle the focused section. ArrowDown and\nArrowUp move to the next and previous header, wrapping, Home and End to the\nfirst and last; disabled headers are skipped. Every header stays in the tab\norder.\n\n**Find in page.** Panels are rendered, on the server too, and hidden with\n`hidden=\"until-found\"`: find-in-page searches them and opens the section it\nfinds text in. Heights animate in CSS, not under reduced motion.",
@@ -876,7 +885,7 @@
           "dynamic": false
         }
       ],
-      "notes": "`variant` is `solid`, `soft`, `outline` or `ghost`; `tone` is `neutral`,\n`primary`, `danger`, `warning` or `success`; `size` is `sm`, `md` or `lg`.\nGive the text as `label` or as the default slot; the `leading` and\n`trailing` slots replace `icon` and `trailing-icon`. With only an icon the\nbutton is square (`square` makes any button square): give it an\n`aria-label`, or it warns once in development. `active` draws it as the\ncurrent one of a set; with `to` it also sets `aria-current=\"page\"`.\n\n**Touch:** an md button grows to 44 px tall on touch, so the visible target\nis the hit target. A small or square button keeps its size (a toolbar would\nchange shape otherwise) and its `::before` reaches 44 px instead.\n\n**Loading** shows a spinner (or `loading-icon`, turning) over the content,\nwhich stays in place (hidden), so the button keeps its width. It sets `aria-busy=\"true\"` and\n`aria-disabled=\"true\"`, and blocks activation by mouse, keyboard and form\nsubmit, but stays focusable, so a keyboard user does not lose their place.\n\n**Disabled** is the native `disabled` attribute on a button. With `to` the\nbutton is an `<a>`, taking `rel` and `target`, with `noopener` added for\nanother site; disabled, it has no address and is announced as a disabled\nlink; loading, it keeps its address (and focus) but neither a click, a\nmiddle click nor Enter follows it.\n\n**Keyboard:** a native button, so Enter and Space press it; as a link, Enter\nfollows it. Focus shows the theme's focus ring.\n\n**In a Form.** As a link it is disabled while the Form is disabled or busy,\nso a Cancel cannot navigate mid-submit (a disabled fieldset disables native\nbuttons but leaves links alone). While the Form is busy, a `type=\"submit\"`\nbutton loads and any other button ignores presses, both keeping focus.\n\n`click` is emitted only when the button is pressed while neither loading nor\ndisabled. `type` defaults to `button`, so a Button inside a form submits it\nonly with `type=\"submit\"`.",
+      "notes": "`variant` is `solid`, `soft`, `outline` or `ghost`; `tone` is `neutral`,\n`primary`, `danger`, `warning` or `success`; `size` is `sm`, `md` or `lg`.\nGive the text as `label` or as the default slot; the `leading` and\n`trailing` slots replace `icon` and `trailing-icon`. With only an icon the\nbutton is square (`square` makes any button square): give it an\n`aria-label`, or put it in a `Tooltip`, whose text names it; otherwise it\nwarns once in development. `active` draws it as the\ncurrent one of a set; with `to` it also sets `aria-current=\"page\"`.\n\n**Touch:** an md button grows to 44 px tall on touch, so the visible target\nis the hit target. A small or square button keeps its size (a toolbar would\nchange shape otherwise) and its `::before` reaches 44 px instead.\n\n**Loading** shows a spinner (or `loading-icon`, turning) over the content,\nwhich stays in place (hidden), so the button keeps its width. It sets `aria-busy=\"true\"` and\n`aria-disabled=\"true\"`, and blocks activation by mouse, keyboard and form\nsubmit, but stays focusable, so a keyboard user does not lose their place.\n\n**Disabled** is the native `disabled` attribute on a button. With `to` the\nbutton is an `<a>`, taking `rel` and `target`, with `noopener` added for\nanother site; disabled, it has no address and is announced as a disabled\nlink; loading, it keeps its address (and focus) but neither a click, a\nmiddle click nor Enter follows it.\n\n**Keyboard:** a native button, so Enter and Space press it; as a link, Enter\nfollows it. Focus shows the theme's focus ring.\n\n**In a Form.** As a link it is disabled while the Form is disabled or busy,\nso a Cancel cannot navigate mid-submit (a disabled fieldset disables native\nbuttons but leaves links alone). While the Form is busy, a `type=\"submit\"`\nbutton loads and any other button ignores presses, both keeping focus.\n\n`click` is emitted only when the button is pressed while neither loading nor\ndisabled. `type` defaults to `button`, so a Button inside a form submits it\nonly with `type=\"submit\"`.",
       "examples": [
         {
           "name": "basic",
@@ -1230,7 +1239,7 @@
           "name": "basic",
           "title": "Basic",
           "file": "packages/ui/examples/Card/basic.vue",
-          "source": "<script setup vapor lang=\"ts\">\nimport { Card } from '@weft/ui'\n</script>\n\n<template>\n  <Card>\n    <template #header>Pro plan</template>\n    <template #actions><button type=\"button\">Change</button></template>\n    <p>10 seats, 100 GB storage.</p>\n    <template #footer>Renews monthly</template>\n  </Card>\n</template>\n"
+          "source": "<script setup vapor lang=\"ts\">\nimport { Button, Card } from '@weft/ui'\n</script>\n\n<template>\n  <Card>\n    <template #header>Pro plan</template>\n    <template #actions><Button label=\"Change\" size=\"sm\" variant=\"outline\" tone=\"neutral\" /></template>\n    <p>10 seats, 100 GB storage.</p>\n    <template #footer>Renews monthly</template>\n  </Card>\n</template>\n"
         }
       ]
     },
@@ -5163,7 +5172,7 @@
       ],
       "emits": [],
       "slots": [],
-      "notes": "The component must be a `<script setup>` single-file component: its file name\nis the island's id. `props` travel to the browser as JSON, so they may hold\nonly strings, finite numbers, booleans, null, arrays and plain objects; the\nbuild refuses anything else with a sentence naming the prop. `when=\"media\"`\nneeds a `media` query. Ids from `useId` inside an island are counted per\nisland, so they match between the server and the browser.\n\nIds are counted by the island's position among the page's islands, the\nsame on the server (render order) and in the browser (document order). So an\nisland inside a `<Teleport>`, whose markup lands elsewhere in the document,\nis not supported: its position, and so its ids, would differ.\n\nThe page inlines the CSS of everything the island's component imports, not\nonly what it draws on the server, since the browser may draw the rest later\n(a menu that opens, a field that appears). So an island that imports the\n`@weft/ui` index, `import { Button } from '@weft/ui'`, carries the stylesheet\nof every Weft component. Import components by path in an island instead:\n`import Button from '@weft/ui/basics/Button.vue'` (the path is the\ncomponent's file under `src/`). Outside islands it makes no difference: the\npage carries only the CSS of the components it renders.\n\nIt has no stylesheet of its own: `<weft-island>` is an unstyled element around the component.",
+      "notes": "The component must be a `<script setup>` single-file component: its file name\nis the island's id. `props` travel to the browser as JSON, so they may hold\nonly strings, finite numbers, booleans, null, arrays and plain objects; the\nbuild refuses anything else with a sentence naming the prop. `when=\"media\"`\nneeds a `media` query. Ids from `useId` inside an island are counted per\nisland, so they match between the server and the browser.\n\nIds are counted by the island's position among the page's islands, the\nsame on the server (render order) and in the browser (document order). So an\nisland inside a `<Teleport>`, whose markup lands elsewhere in the document,\nis not supported: its position, and so its ids, would differ.\n\nThe page inlines the CSS of everything the island's component uses, not\nonly what it draws on the server, since the browser may draw the rest later\n(a menu that opens, a field that appears). A name taken from the `@weft/ui`\nindex, `import { Button } from '@weft/ui'`, brings that component's\nstylesheet and those of what it draws with, not every component's: the\nbuild follows the names through the index, as a bundler's tree-shaking does\n(`@weft/ui` declares its scripts free of side effects in its package.json).\n`import * as Weft from '@weft/ui'` takes every name, and so every\nstylesheet. Outside islands the page carries only the CSS of the components\nit renders.\n\nIt has no stylesheet of its own: `<weft-island>` is an unstyled element around the component.",
       "examples": [
         {
           "name": "basic",
@@ -5772,7 +5781,7 @@
           "name": "basic",
           "title": "Basic",
           "file": "packages/ui/examples/OverlayPanel/basic.vue",
-          "source": "<script setup vapor lang=\"ts\">\nimport { Button, OverlayPanel } from '@weft/ui'\n</script>\n\n<template>\n  <!-- The inside of Dialog, Sheet and Drawer, here on the page. -->\n  <div style=\"display: flex; flex-direction: column; max-inline-size: 24rem; border: 1px solid; border-radius: 16px\">\n    <OverlayPanel title=\"Invite\" description=\"They get an email with a link.\" title-id=\"invite-title\" close>\n      <template #body><p>Who should join?</p></template>\n      <template #footer=\"{ close }\"><Button label=\"Send\" @click=\"close()\" /></template>\n    </OverlayPanel>\n  </div>\n</template>\n"
+          "source": "<script setup vapor lang=\"ts\">\nimport { Button, OverlayPanel } from '@weft/ui'\n</script>\n\n<template>\n  <!-- The inside of Dialog, Sheet and Drawer, here on the page. -->\n  <div style=\"display: flex; flex-direction: column; max-inline-size: 24rem; border: 1px solid var(--weft-color-border, GrayText); border-radius: var(--weft-radius-panel, 16px)\">\n    <OverlayPanel title=\"Invite\" description=\"They get an email with a link.\" title-id=\"invite-title\" close>\n      <template #body><p>Who should join?</p></template>\n      <template #footer=\"{ close }\"><Button label=\"Send\" @click=\"close()\" /></template>\n    </OverlayPanel>\n  </div>\n</template>\n"
         }
       ]
     },
@@ -5828,7 +5837,7 @@
           "name": "basic",
           "title": "Basic",
           "file": "packages/ui/examples/Page/basic.vue",
-          "source": "<script setup vapor lang=\"ts\">\nimport { Page, Section } from '@weft/ui'\n</script>\n\n<template>\n  <Page title=\"Customers\" description=\"Everyone with an active plan.\">\n    <template #actions><button type=\"button\">New customer</button></template>\n    <Section title=\"Recent\">\n      <p>No customers yet.</p>\n    </Section>\n  </Page>\n</template>\n"
+          "source": "<script setup vapor lang=\"ts\">\nimport { Button, Page, Section } from '@weft/ui'\n</script>\n\n<template>\n  <Page title=\"Customers\" description=\"Everyone with an active plan.\">\n    <template #actions><Button label=\"New customer\" icon=\"plus\" /></template>\n    <Section title=\"Recent\">\n      <p>No customers yet.</p>\n    </Section>\n  </Page>\n</template>\n"
         }
       ]
     },
@@ -6523,7 +6532,7 @@
           "name": "basic",
           "title": "Basic",
           "file": "packages/ui/examples/Section/basic.vue",
-          "source": "<script setup vapor lang=\"ts\">\nimport { Section } from '@weft/ui'\n</script>\n\n<template>\n  <Section title=\"Billing\" description=\"How and when you pay.\">\n    <template #actions><button type=\"button\">Edit</button></template>\n    <p>Visa ending 4242, renews on 1 December.</p>\n  </Section>\n</template>\n"
+          "source": "<script setup vapor lang=\"ts\">\nimport { Button, Section } from '@weft/ui'\n</script>\n\n<template>\n  <Section title=\"Billing\" description=\"How and when you pay.\">\n    <template #actions><Button label=\"Edit\" size=\"sm\" variant=\"outline\" tone=\"neutral\" /></template>\n    <p>Visa ending 4242, renews on 1 December.</p>\n  </Section>\n</template>\n"
         }
       ]
     },
@@ -7321,7 +7330,7 @@
           "name": "row",
           "title": "Row",
           "file": "packages/ui/examples/Stack/row.vue",
-          "source": "<script setup vapor lang=\"ts\">\nimport { Stack } from '@weft/ui'\n</script>\n\n<template>\n  <Stack direction=\"row\" :gap=\"2\" align=\"center\" justify=\"between\" wrap>\n    <strong>3 selected</strong>\n    <Stack direction=\"row\" :gap=\"2\">\n      <button type=\"button\">Archive</button>\n      <button type=\"button\">Delete</button>\n    </Stack>\n  </Stack>\n</template>\n"
+          "source": "<script setup vapor lang=\"ts\">\nimport { Button, Stack } from '@weft/ui'\n</script>\n\n<template>\n  <Stack direction=\"row\" :gap=\"2\" align=\"center\" justify=\"between\" wrap>\n    <strong>3 selected</strong>\n    <Stack direction=\"row\" :gap=\"2\">\n      <Button label=\"Archive\" size=\"sm\" variant=\"outline\" tone=\"neutral\" />\n      <Button label=\"Delete\" size=\"sm\" variant=\"soft\" tone=\"danger\" />\n    </Stack>\n  </Stack>\n</template>\n"
         }
       ]
     },
@@ -7520,23 +7529,48 @@
       "slots": [
         {
           "name": "indicator",
-          "props": [],
+          "props": [
+            "item",
+            "index",
+            "state"
+          ],
           "dynamic": false
         },
         {
           "name": "title",
-          "props": [],
+          "props": [
+            "item",
+            "index",
+            "state"
+          ],
           "dynamic": false
         },
         {
           "name": "description",
-          "props": [],
+          "props": [
+            "item",
+            "index",
+            "state"
+          ],
           "dynamic": false
         },
         {
           "name": "content",
-          "props": [],
+          "props": [
+            "item",
+            "index",
+            "state"
+          ],
           "dynamic": false
+        },
+        {
+          "name": "<key>",
+          "props": [
+            "item",
+            "index",
+            "state"
+          ],
+          "dynamic": true
         }
       ],
       "notes": "`items` are `{ title, description, value, icon, content, disabled, slot }`;\na step's value is its `value`, else its index. Bind the current step with\n`v-model`. The `indicator`, `title` and `description` slots replace those\nparts of a step, the `content` slot the current step's content, and a slot\nnamed by an item's `slot` renders that step's content.\n\nThe steps are an ordered list of buttons; the current one says\n`aria-current=\"step\"`, those before it are drawn done (a check), those after\nit waiting. `linear` (the default) lets a press reach only the steps done and\nthe next one; disabled steps are never reached. The component exposes\n`next()`, `prev()`, `hasNext` and `hasPrev` (through a template ref), for a\nform's Back and Continue buttons, and emits `next` and `prev`.\n\n**Keyboard.** The step buttons are one tab stop: the arrow keys move\nbetween them (Left and Right mirrored right to left), Home and End go to the\nends, Enter and Space choose.",
@@ -7877,6 +7911,23 @@
           "name": "empty",
           "props": [],
           "dynamic": false
+        },
+        {
+          "name": "<key>-cell",
+          "props": [
+            "row",
+            "value",
+            "index",
+            "column"
+          ],
+          "dynamic": true
+        },
+        {
+          "name": "<key>-header",
+          "props": [
+            "column"
+          ],
+          "dynamic": true
         }
       ],
       "notes": "`columns` is a typed array: `{ key, label, sortable, align, width,\naccessor, format, rowHeader }`. A cell shows `accessor(row)` (default\n`row[key]`) as text, or `format(value, row)`; the `<key>-cell` slot draws it\ninstead (`{ row, value, index, column }`), and `<key>-header` the header. A\n`rowHeader` column's cells are `th scope=\"row\"`, and its value names each\nrow's checkbox (\"Select Ada\").\n\n**Rows.** Give `rows` (an array), sorted and paged on the client, or\n`fetch(query)`, which receives the wire format's `{ page, perPage, sort }`\n(sort is `name` or `-since`, absent when unsorted) and answers `{ items,\ntotal }`, so paging and sorting happen on the server. `tableSearch(query)`\nwrites those as search parameters (`page=2&perPage=20&sort=-since`) for a\nGo `weft.Resource`. It asks once mounted (the server draws skeleton rows),\nagain whenever the page or the sort changes, ignores an answer a newer query\novertook, and shows a message with a Try again button (and emits `error`)\nwhen the promise rejects; `refresh()` asks again. `rowKey` (a property name\nor a function; default the row's `id`, else its place) keys the rows. The\ndata source is `useTableData`, exported for a view of its own.\n\n**Sorting.** A sortable header holds a button: ascending, descending, then\nas given. The sort is `v-model:sort` in the wire format. On the client it is\nstable (equal rows keep their order both ways), numbers and dates by amount,\ntext numeric-aware and case-blind, empty values last. A press on a header\ngoes back to page 1; a parent that sets the page and the sort together keeps\nits page. The sorted header says `aria-sort`; the others say nothing (APG\nsortable table).\n\n**Selection.** `selectable` adds a checkbox per row and one in the header,\nbound with `v-model:selected` (the rows' keys). The header box is ticked\nwhen every row shown is chosen, indeterminate when some are; it chooses or\nclears the rows shown (on this page). Shift+click on a row's box sets every\nrow from the last one clicked to it, in the order shown. Keys persist\nacross pages and sorts: a row chosen on page 1 stays chosen on page 3 and\nafter a new sort. So rows from `fetch` that can be chosen need keys of their\nown, an `id` or `rowKey`; without one a row's key is its place on its page,\nand development builds warn once.\n\n**Paging.** `per-page` pages the rows with a Pagination under the table\n(`v-model:page`), shown when there is more than one page; with `fetch` it\ndefaults to 20.\n\n**States.** `loading` makes it `aria-busy` and draws skeleton rows (hidden\nfrom assistive technology, a status saying Loading) until there are rows;\nrows it already has stay, dimmed. With no rows the `empty` slot (or\n`empty`, default \"Nothing to show.\") fills the body.\n\n**Sticky header.** With `sticky` (on by default) the header stays in view.\nWith a `height` (or once windowed) the rows scroll inside the table's box\nand the header sticks at its top. Without one the box clips rather than\nscrolls once mounted, so the header sticks against the page as it scrolls,\nbelow `--weft-table-sticky-top` (set it to a sticky page header's height);\nbut a table wider than its box must scroll sideways, and then its header\nsticks only inside it: give it a `height`. Before it mounts (and on a page\nwith no island) the box scrolls, so a wide table is never cut off.\n\n**Windowing.** Past 200 rows on a page it renders only the rows in view,\nspacer rows standing for the rest (`useVirtualList`): every row is then\n`row-height` px (default by size, at least 44 on touch), its text on one\nline, the box 30rem tall unless `height` says otherwise, and the table\nstates `aria-rowcount` and each row `aria-rowindex`. The narrow cards are\nnot windowed; page long lists.\n\n**Keyboard.** By default it is a plain `<table>` (caption, `th scope`), and\neach control in it (sort buttons, checkboxes, controls in cells) is its own\ntab stop. With `keyboard` it is an APG grid, one tab stop, so Tab enters and\nleaves it in one step: arrows move between cells (mirrored right to left)\nand stop at the edges, Home and End go along the row, Ctrl+Home to the first\nheader cell and Ctrl+End to the last cell of the last row, windowed or not.\nThe focused cell scrolls into view, and a windowed table keeps its row drawn\nwhen the pointer scrolls it away, so focus is never lost. A sort button or a\ncheckbox stands in for its cell. Controls a cell slot draws leave the tab\norder (`tabindex=\"-1\"`); Enter or F2 on the cell gives them back and focuses\nthe first, keys pressed in it are its own, and Escape, or focus leaving the\ncell, takes them out again. `caption` names the table (and the\nlist of cards); `hide-caption` keeps it for assistive technology only.\n`labels` translate its words.",
@@ -8028,6 +8079,15 @@
             "index"
           ],
           "dynamic": false
+        },
+        {
+          "name": "<key>",
+          "props": [
+            "item",
+            "index",
+            "selected"
+          ],
+          "dynamic": true
         }
       ],
       "notes": "`items` are `{ label, value, icon, badge, content, disabled, slot }`; a tab's\nvalue is its `value`, else its index. Bind the selected tab with `v-model`.\nThe `leading`, default and `trailing` slots replace a tab's icon, label and\nbadge; the `content` slot a panel's content, and a slot named by an item's\n`slot` renders that item's panel. `content: false` draws the tab list alone.\n`variant` is `pill` (a tinted track, the default) or `link` (an underline);\n`tone` colours the selected tab.\n\nIt follows the WAI-ARIA APG Tabs pattern: a `tablist` (named by the\n`aria-label` or `aria-labelledby` given to Tabs) with `aria-orientation`,\n`tab`s with `aria-selected` and `aria-controls`, and `tabpanel`s named by\ntheir tab, each focusable (`tabindex=\"0\"`).\n\n**Keyboard.** The tab list is one tab stop, on the selected tab. Left and\nRight (mirrored right to left), or Up and Down when vertical, move along it,\nwrapping and skipping disabled tabs; Home and End go to the ends. With\n`activation=\"automatic\"` (the default) the tab focus lands on is selected;\nwith `manual`, Enter or Space selects it.\n\n**Panels.** Only the selected panel's content is rendered (lazy). With\n`keep-alive`, a panel's content stays mounted, hidden, once shown, so a\nform's input or a scroll position survives switching away.\n\n**Address.** With `hash`, the address's `#fragment` selects the tab whose\nvalue it names, at mounting and on every `hashchange`, and the selected tab\nis written there (replacing the history entry, not adding one). A fragment\nnaming a disabled tab, or none, is ignored. Off by default. One Tabs per\npage owns the hash, the first mounted with `hash`; a second warns once and\nleaves the address alone, so give `hash` to one Tabs per page.",

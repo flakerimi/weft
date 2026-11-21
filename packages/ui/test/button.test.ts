@@ -3,6 +3,7 @@ import { nextTick, ref } from 'vue'
 import { registerIcon } from '../src/basics/icons.ts'
 import Button from '../src/basics/Button.vue'
 import ButtonCases from './fixtures/basics/ButtonCases.vue'
+import TooltipIconButton from './fixtures/basics/TooltipIconButton.vue'
 import { navigations, press } from './keyboard.ts'
 import { mount } from './mount.ts'
 import { loadStyles, ruleFor } from './styles.ts'
@@ -107,6 +108,17 @@ describe('Button', () => {
   })
 
   describe('naming', () => {
+    // First: the warning is given once per page, so a later case would pass whatever it did.
+    it('does not warn when a Tooltip around it names it', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const m = mount(TooltipIconButton)
+      mounted.push(m)
+      await nextTick()
+      expect(m.el.querySelector('button')!.getAttribute('aria-label')).toBe('Add')
+      expect(warn).not.toHaveBeenCalled()
+      warn.mockRestore()
+    })
+
     it('warns once, in development, when it has only an icon and no name', () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
       render({ icon: 'plus', 'aria-label': 'Add' })

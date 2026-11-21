@@ -36,10 +36,11 @@
      checks all of this.
    The page build (@weft/vite) inlines, per page: the theme, this file, then
    the stylesheets of the components the page renders (and those they import),
-   in import order; for an island, of every component its file imports, drawn
-   on the server or not. An island that imports the @weft/ui index so carries
-   every component's sheet: islands import components by path
-   (`@weft/ui/basics/Button.vue`). */
+   in import order; for an island, of every component its file uses, drawn
+   on the server or not. A name taken from the @weft/ui index leads to that
+   component alone, as tree-shaking would: package.json declares every
+   script free of side effects and only the stylesheets as having them
+   (`sideEffects`), so keep module-level code in src/ free of side effects. */
 *, *::before, *::after { box-sizing: border-box; }
 
 html {

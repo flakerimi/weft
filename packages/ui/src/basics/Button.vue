@@ -9,7 +9,7 @@
 // disabled while the Form is disabled or busy (a disabled fieldset leaves
 // links alone); as a button, while the Form is busy, a submit button loads
 // and any other ignores presses, both keeping focus.
-import { computed, useAttrs, useSlots } from 'vue'
+import { computed, inject, useAttrs, useSlots } from 'vue'
 import { useFormState } from '../forms/field.ts'
 import { isExternal, relFor } from './address.ts'
 import Icon from './Icon.vue'
@@ -74,7 +74,9 @@ defineSlots<{
 const slots = useSlots()
 if (import.meta.env.DEV && !slots.default && !props.label && (props.icon || props.trailingIcon)) {
   const attrs = useAttrs()
-  if (!attrs['aria-label'] && !attrs['aria-labelledby'] && !attrs.title) warnUnnamed()
+  // A Tooltip around it names it with its text (NAMES_TRIGGER, a string key, so Button imports nothing of it).
+  const named = attrs['aria-label'] || attrs['aria-labelledby'] || attrs.title || inject(NAMES_TRIGGER, false)
+  if (!named) warnUnnamed()
 }
 
 const form = useFormState()
@@ -99,6 +101,8 @@ function onClick(event: MouseEvent) {
 </script>
 
 <script lang="ts">
+/** Provided as true by a component that names its trigger when it has none of its own: Tooltip. */
+const NAMES_TRIGGER = 'weft:names-trigger'
 let warned = false
 /** Once per page: an icon alone names nothing for assistive technology. */
 function warnUnnamed() {

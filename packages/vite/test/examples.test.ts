@@ -1,9 +1,13 @@
-// Every @weft/ui example renders on the server through the page pipeline:
-// each component's server render, with its icons drawn, under Node, where
-// there is no window or document. Later components join by adding examples.
+// Review Focus 5, the server half: every @weft/ui example renders on the
+// server through the page pipeline (renderPage): each component's server
+// render, with its icons drawn, under Node, where there is no window or
+// document, so a component that touches either while it sets up fails here.
+// Later components join by adding examples. examples-hydrate.test.ts renders
+// each inside an island and hydrates it.
 import { readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { ViteDevServer } from 'vite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createRenderServer, renderPage } from '../src/render.ts'
@@ -34,5 +38,15 @@ describe('@weft/ui examples', () => {
     for (const m of html.matchAll(/<script\b([^>]*)>/g)) expect(m[1]).toContain('type="application/json"')
     // Every icon is drawn, none blank.
     for (const m of html.matchAll(/<svg class="weft-icon"[^>]*>([\s\S]*?)<\/svg>/g)) expect(m[1]).not.toBe('')
+  })
+})
+
+describe('the server render', () => {
+  it.each([
+    ['window', 'pages/window.vue'],
+    ['document', 'pages/document.vue'],
+  ])('fails for a component that reads the %s while it sets up, on a page or in an island', async (global, page) => {
+    const root = fileURLToPath(new URL('./fixtures/touches-dom', import.meta.url))
+    await expect(renderPage({ root, page })).rejects.toThrow(`${global} is not defined`)
   })
 })

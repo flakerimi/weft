@@ -11,7 +11,7 @@ import { buildSite } from '../src/build.ts'
 import { createRenderServer, renderPage } from '../src/render.ts'
 
 const root = fileURLToPath(new URL('./fixtures/css-site', import.meta.url))
-const pages = ['button', 'field', 'island', 'barrel-island', 'dialog-island', 'link', 'plain']
+const pages = ['button', 'field', 'island', 'barrel-island', 'barrel-button-island', 'dialog-island', 'link', 'plain']
 let parent: string
 let out: string
 /** Each page's CSS before minifying, which could merge a rule given twice: the theme, base.css, then the render's. */
@@ -138,8 +138,19 @@ describe('per-page CSS', () => {
     const css = styleOf('barrel-island')
     // The rule for the track itself, not those for a track inside a switch in some state.
     expect(css.match(/\}\.weft-switch__track\{/g)).toHaveLength(1)
-    // The index brings every component's stylesheet: why islands import components by path.
-    expect(css).toMatch(/\.weft-slider\s*\{/)
+    // A name taken from the index brings that component's stylesheet, not every one the index exports.
+    expect(css).not.toMatch(/\.weft-slider\s*\{/)
+    expect(css).not.toMatch(/\.weft-button\s*\{/)
+  })
+
+  it('gives an island that takes { Button } from the @weft/ui index the CSS a page drawing a Button gets', () => {
+    // Button's sheet and those of what it draws with (its spinner, its icons, tone), after the theme and base.css.
+    expect(new Set(rules(unminified['barrel-button-island']!))).toEqual(new Set(rules(unminified.button!)))
+    const css = styleOf('barrel-button-island')
+    expect(css.match(/\.weft-button\s*\{/g)).toHaveLength(1)
+    for (const other of ['.weft-dialog', '.weft-table', '.weft-input', '.weft-switch', '.weft-menu', '.weft-toast', '.weft-calendar']) {
+      expect(css, other).not.toContain(other)
+    }
   })
 
   it('inlines the CSS of a Dialog an island opens after hydrating, and of the Button inside it', () => {

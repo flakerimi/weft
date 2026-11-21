@@ -177,5 +177,5 @@ Tests cover the ARIA patterns, current page and `aria-current`, the keyboard, an
 1. **`docs/parity.md`:** every Nuxt UI 4.13.0 component (list it from the npm package in a temp dir) mapped to its Weft equivalent, "planned (phase N)", or "not planned" with a reason (e.g. the AI chat family, Editor, Dashboard, which belong to later block plans).
 2. **`docs/sizes.md`:** brotli JS and CSS per component, from a Vite build of each example alone, plus a tree-shaking test showing that importing `Button` alone does not pull in `Dialog`.
 3. **Catalogue:** `catalog/components.json` must be complete and fresh.
-4. **Playground:** update it so every component's first example renders under the adaptive controls. Check it in headless Chrome at 1280 and 390 px, pointer and touch, light and dark, and save screenshots to `docs/assets/components-*.png`.
+4. **Playground:** update it so every component's first example renders under the adaptive controls. Check it in headless Chrome at 1280 and 390 px, pointer and touch, light and dark, and save screenshots to `docs/assets/components-*.webp` (WebP, cropped to the first 2400 px).
 5. **Review Focus 5:** an SSR-render test for every example, through `renderPage`, plus a hydrate-in-island test for the interactive ones.

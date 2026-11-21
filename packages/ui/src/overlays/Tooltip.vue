@@ -9,7 +9,7 @@
 // own (an icon alone) is named by the text, as aria-label, and then not
 // described by it too. On touch, where nothing hovers, it renders nothing:
 // that name is what remains.
-import { computed, onScopeDispose, useTemplateRef, watch } from 'vue'
+import { computed, onScopeDispose, provide, useTemplateRef, watch } from 'vue'
 import { useWeft } from '../adaptive/context.ts'
 import { useControllable } from '../headless/useControllable.ts'
 import { useDismiss } from '../headless/useDismiss.ts'
@@ -51,6 +51,9 @@ defineSlots<{
   /** The tooltip's content, in place of `text`. */
   content?: () => unknown
 }>()
+
+// The trigger is named by the text when it has no name of its own, so an icon-only Button in it need not warn (its NAMES_TRIGGER).
+provide('weft:names-trigger', true)
 
 const open = useControllable(props, 'open', emit, () => props.defaultOpen)
 const weft = useWeft()

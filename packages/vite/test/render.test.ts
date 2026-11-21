@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { createRenderServer, renderPage } from '../src/render.ts'
 
 afterEach(() => vi.restoreAllMocks())
@@ -75,6 +75,9 @@ describe('renderPage', () => {
     class Thing {}
     const loop: Record<string, unknown> = {}
     loop.self = loop
+    // One server for the twelve renders, rather than one each.
+    const server = await createRenderServer(bad)
+    onTestFinished(() => server.close())
     const warned = expectVueErrorWarnings()
     const sentence = (path: string, what: string) =>
       `Island: prop ${path} of island Counter is ${what}, which JSON cannot carry to the browser; pass only strings, finite numbers, booleans, null, arrays and plain objects.`
@@ -91,14 +94,14 @@ describe('renderPage', () => {
       [[1, , 3], 'extra[1]', 'an empty array slot'],
       [loop, 'extra.self', 'an object that contains itself'],
     ] as const) {
-      await expect(renderPage({ root: bad, page: 'pages/props.vue', props: { value } }), String(path)).rejects.toThrow(
+      await expect(renderPage({ root: bad, page: 'pages/props.vue', props: { value }, server }), String(path)).rejects.toThrow(
         new Error(sentence(path, what)),
       )
     }
     warned()
     // Plain data, a null-prototype object included, renders.
     const plain = Object.assign(Object.create(null) as object, { a: [1, 'x', true, null, { b: 2 }] })
-    const { html } = await renderPage({ root: bad, page: 'pages/props.vue', props: { value: plain } })
+    const { html } = await renderPage({ root: bad, page: 'pages/props.vue', props: { value: plain }, server })
     expect(/<script type="application\/json">([\s\S]*?)<\/script>/.exec(html)![1]).toBe('{"start":1,"extra":{"a":[1,"x",true,null,{"b":2}]}}')
   })
 

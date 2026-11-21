@@ -3,6 +3,7 @@ import { join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createServer, isCSSRequest, normalizePath, type EnvironmentModuleNode, type ViteDevServer } from 'vite'
 import { siteConfig } from './config.ts'
+import { exportsOf, importsOf, sideEffectFree } from './imports.ts'
 import { sfcName } from './plugin.ts'
 
 export interface RenderOptions {
@@ -117,6 +118,10 @@ export async function renderPage(opts: RenderOptions): Promise<RenderResult> {
 /** A component's own module: a `.vue` file, not one of its blocks (`?vue&type=style…`). */
 const isSFC = (mod: EnvironmentModuleNode) => !!mod.id && mod.id.endsWith('.vue')
 
+/** A module of script: JavaScript or TypeScript, or a component's own module. */
+const isScript = (mod: EnvironmentModuleNode) =>
+  !!mod.file && /\.(?:[cm]?[jt]sx?|vue)$/.test(mod.file) && !isCSSRequest(mod.url) && !mod.url.includes('?')
+
 /**
  * Every module the page imports, directly or not, in load order (a module
  * after its imports). With `only`, just what the page's CSS needs:
@@ -125,8 +130,13 @@ const isSFC = (mod: EnvironmentModuleNode) => !!mod.id && mod.id.endsWith('.vue'
  *   directly (it may draw it later, as a Button draws its Spinner once loading);
  * - one reached only through other modules, such as an index re-exporting
  *   every component, is left out with what it imports;
- * - under an island's file (`islands`), everything is followed, since the
- *   browser may draw any of it.
+ * - under an island's file (`islands`), everything the island uses is
+ *   followed, since the browser may draw any of it. "Uses" as a bundler
+ *   tree-shakes: names taken from a module that its package declares free of
+ *   side effects (package.json `sideEffects`, as @weft/ui does) lead only to
+ *   the modules that define them, so `import { Button } from '@weft/ui'`
+ *   brings Button and what Button imports, not every component the index
+ *   exports.
  */
 async function pageModules(
   vite: ViteDevServer,
@@ -135,29 +145,76 @@ async function pageModules(
 ): Promise<EnvironmentModuleNode[]> {
   const order: EnvironmentModuleNode[] = []
   const placed = new Set<EnvironmentModuleNode>()
+  const place = (mod: EnvironmentModuleNode) => {
+    if (placed.has(mod)) return
+    placed.add(mod)
+    order.push(mod)
+  }
   // Visited at all, and visited with everything under it followed (a module
-  // first reached outside an island is visited again from inside one).
+  // first reached outside an island is visited again from inside one), and
+  // the names a module was visited for, when only those were.
   const seen = new Set<EnvironmentModuleNode>()
   const seenWhole = new Set<EnvironmentModuleNode>()
-  const visit = (mod: EnvironmentModuleNode, fromSFC: boolean, whole: boolean) => {
-    const file = mod.file ? normalizePath(mod.file) : ''
-    whole ||= !only || (isSFC(mod) && only.islands.has(file))
-    if (whole) {
-      if (seenWhole.has(mod)) return
-      seenWhole.add(mod)
-    } else {
-      if (seen.has(mod)) return
-      if (isSFC(mod) && !fromSFC && !only!.rendered.has(file)) return
-    }
+  const seenNames = new Map<EnvironmentModuleNode, Set<string>>()
+  const narrowable = (mod: EnvironmentModuleNode) => isScript(mod) && !isSFC(mod) && !!mod.transformResult && sideEffectFree(mod.file!)
+  /** Follow `dep`, imported by code that takes `names` from it (null: all of it), whole or for those names. */
+  const follow = (dep: EnvironmentModuleNode, names: Set<string> | null | undefined) => {
+    // Without `only`, every module the page imports: the island files are found among them.
+    if (only && names && narrowable(dep)) visitNames(dep, names)
+    else visitWhole(dep)
+  }
+  const visitWhole = (mod: EnvironmentModuleNode) => {
+    if (seenWhole.has(mod)) return
+    seenWhole.add(mod)
     seen.add(mod)
-    for (const dep of mod.importedModules) visit(dep, isSFC(mod), whole)
-    if (!placed.has(mod)) {
-      placed.add(mod)
-      order.push(mod)
+    const imports = mod.transformResult ? importsOf(mod.transformResult.code) : new Map<string, Set<string> | null>()
+    for (const dep of mod.importedModules) follow(dep, imports.get(dep.url))
+    place(mod)
+  }
+  /** A module of a package free of side effects, for the names its importers take: only what defines them. */
+  const visitNames = (mod: EnvironmentModuleNode, names: Set<string>) => {
+    if (seenWhole.has(mod)) return
+    const had = seenNames.get(mod) ?? new Set<string>()
+    const fresh = [...names].filter((n) => !had.has(n))
+    if (!fresh.length) return
+    seenNames.set(mod, new Set([...had, ...fresh]))
+    seen.add(mod)
+    const code = mod.transformResult!.code
+    const { names: own, all } = exportsOf(code)
+    const imported = importsOf(code)
+    // What each import must give: by URL, the names wanted from it, or null for all of it.
+    const wanted = new Map<string, Set<string> | null>()
+    const want = (url: string, name: string | null) => {
+      const set = wanted.get(url)
+      if (set === null) return
+      if (name === null) wanted.set(url, null)
+      else wanted.set(url, new Set([...(set ?? []), name]))
     }
+    for (const name of fresh) {
+      const from = own.get(name)
+      // Defined here, so what it is made of may be anything this module imports.
+      if (from === null) return visitWhole(mod)
+      if (from) want(from.url, from.name)
+      else for (const url of all) want(url, name)
+    }
+    for (const dep of mod.importedModules) {
+      if (wanted.has(dep.url)) follow(dep, wanted.get(dep.url))
+      // A script that gives none of the names is dropped; a stylesheet, a module with side effects or one the code does not name stays.
+      else if (!isScript(dep) || !sideEffectFree(dep.file!) || !imported.has(dep.url)) visitWhole(dep)
+    }
+    place(mod)
+  }
+  const visit = (mod: EnvironmentModuleNode, fromSFC: boolean) => {
+    const file = mod.file ? normalizePath(mod.file) : ''
+    if (!only || (isSFC(mod) && only.islands.has(file))) return visitWhole(mod)
+    if (seen.has(mod)) return
+    if (isSFC(mod) && !fromSFC && !only.rendered.has(file)) return
+    seen.add(mod)
+    for (const dep of mod.importedModules) visit(dep, isSFC(mod))
+    place(mod)
   }
   const start = await vite.environments.ssr.moduleGraph.getModuleByUrl(page)
-  if (start) visit(start, true, false)
+  if (start) visit(start, true)
   return order
 }
 

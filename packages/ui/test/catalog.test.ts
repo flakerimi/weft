@@ -223,6 +223,42 @@ defineProps<Props & Extra & { last: number }>()
     expect(thing!.slots).toEqual([{ name: '`cell-${c}`', props: ['value'], dynamic: true }])
   })
 
+  it('index-signature slots in defineSlots as dynamic slot patterns, and slot props through aliases and unions', () => {
+    const sfc = [
+      '<script setup vapor lang="ts">',
+      'type Row = (props: { item: string; index: number }) => unknown',
+      'defineSlots<{',
+      '  empty?: () => unknown',
+      '  row?: Row',
+      '  [cell: `${string}-cell`]: ((props: { row: unknown; value: unknown }) => unknown) | undefined',
+      '  [name: string]: Row | undefined',
+      '}>()',
+      '</script>',
+      '<template><i /></template>',
+      '',
+    ].join('\n')
+    const [thing] = buildCatalog(repoWith({ sfc })).components
+    expect(thing!.slots).toEqual([
+      { name: 'empty', props: [], dynamic: false },
+      { name: 'row', props: ['item', 'index'], dynamic: false },
+      { name: '<key>-cell', props: ['row', 'value'], dynamic: true },
+      { name: '<key>', props: ['item', 'index'], dynamic: true },
+    ])
+  })
+
+  it("lists Table's cell and header slots and Tabs' panel slots as patterns", () => {
+    const catalog = buildCatalog(repo)
+    const slots = (name: string) => catalog.components.find((c) => c.name === name)!.slots
+    expect(slots('Table')).toEqual(
+      expect.arrayContaining([
+        { name: '<key>-cell', props: ['row', 'value', 'index', 'column'], dynamic: true },
+        { name: '<key>-header', props: ['column'], dynamic: true },
+      ]),
+    )
+    expect(slots('Tabs')).toContainEqual({ name: '<key>', props: ['item', 'index', 'selected'], dynamic: true })
+    expect(slots('Stepper')).toContainEqual({ name: 'title', props: ['item', 'index', 'state'], dynamic: false })
+  })
+
   it('options from a plain <script> beside <script setup>, with or without TypeScript', () => {
     const plain = (lang: string) => `<script${lang}>
 const shared = { a: String }

@@ -2,6 +2,7 @@
 import { computed, ref, watchEffect } from 'vue'
 import { Card, Divider, Grid, Page, Section, Stack, WeftProvider, type InputMethod, type Surface } from '@weft/ui'
 import Controls from './Controls.vue'
+import Gallery from './Gallery.vue'
 import Readout from './Readout.vue'
 import { applyScheme, applyTheme, type Scheme, type ThemeName } from './themes.ts'
 
@@ -29,6 +30,10 @@ const cards = ['Customers', 'Revenue', 'Open tickets', 'ONTs online', 'Churn', '
       <template #actions><Readout /></template>
 
       <Controls v-model:theme="theme" v-model:scheme="scheme" v-model:input="input" v-model:surface="surface" />
+
+      <Gallery />
+
+      <Divider />
 
       <Section title="Grid" description="Columns follow the grid's own width: 1 narrow, 2 regular, 3 wide.">
         <Grid>

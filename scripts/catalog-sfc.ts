@@ -16,7 +16,11 @@
  * - Emits come from the compiled list, with payloads from `defineEmits<…>()`
  *   or implied by `defineModel`.
  * - Slots come from `defineSlots<…>()`, else from the template's `<slot>`s;
- *   a `<slot :name="…">` is a dynamic slot, its name the expression.
+ *   a `<slot :name="…">` is a dynamic slot, its name the expression. In
+ *   `defineSlots`, an index signature is a dynamic slot named by its key's
+ *   pattern, `<key>` standing for the part named at run time
+ *   (`` [cell: `${string}-cell`] `` is `<key>-cell`). A slot's props are the
+ *   members of its function's first parameter, through aliases and unions.
  * - Options from a plain `<script>` beside `<script setup>` are read too,
  *   when they are object literals in that script. Options it cannot read (an
  *   imported object, a call, defaults that are not an object literal) stop
@@ -404,6 +408,46 @@ function templateSlots(node: TemplateNode | undefined, out: CatalogSlot[] = []):
   return out
 }
 
+/** The names of a slot's props: the members of its first parameter's type. */
+function paramProps(param: Node | undefined, scope: Scope): string[] {
+  const ann = param && child(child(param, 'typeAnnotation') ?? ({} as Node), 'typeAnnotation')
+  return ann ? members(ann, scope).map((x) => keyName(x.node)).filter((k): k is string => !!k) : []
+}
+
+/** The props of a slot whose type is `t`: a function type, through parentheses, a union (`… | undefined`) or an alias. */
+function slotProps(t: Node | undefined, scope: Scope, depth = 0): string[] {
+  if (!t || depth > 8) return []
+  if (t.type === 'TSFunctionType') return paramProps(children(t, 'parameters')[0], scope)
+  if (t.type === 'TSParenthesizedType') return slotProps(child(t, 'typeAnnotation'), scope, depth + 1)
+  if (t.type === 'TSUnionType') {
+    for (const u of children(t, 'types')) {
+      const found = slotProps(u, scope, depth + 1)
+      if (found.length) return found
+    }
+    return []
+  }
+  if (t.type === 'TSTypeReference') {
+    const found = findAlias((child(t, 'typeName') as Node & { name?: string }).name ?? '', scope)
+    if (found?.node.type === 'TSTypeAliasDeclaration') return slotProps(child(found.node, 'typeAnnotation'), found.scope, depth + 1)
+  }
+  return []
+}
+
+/**
+ * The name pattern of an index-signature slot, from its key's type, with
+ * `<key>` for the part named at run time: `string` is `<key>`, and
+ * `` `${string}-cell` `` is `<key>-cell`.
+ */
+function slotPattern(key: Node, scope: Scope): string {
+  if (key.type === 'TSStringKeyword') return '<key>'
+  const literal = key.type === 'TSLiteralType' ? child(key, 'literal') : undefined
+  if (literal?.type === 'TemplateLiteral') {
+    const quasis = children(literal, 'quasis').map((q) => (q as Node & { value: { cooked: string } }).value.cooked)
+    return quasis.map((q, i) => (i ? '<key>' : '') + q).join('')
+  }
+  return squash(typeText(key, scope))
+}
+
 /** What a component takes and gives: its props, emits and slots. */
 export interface ComponentApi {
   props: CatalogProp[]
@@ -483,13 +527,19 @@ export function readComponent(file: string, rel = file): ComponentApi {
   let slots: CatalogSlot[] = []
   const slotsType = scope && calls(setup, 'defineSlots').map(typeArg).find(Boolean)
   if (scope && slotsType) {
-    slots = members(slotsType, scope).flatMap(({ node: m, scope: s }) => {
+    slots = members(slotsType, scope).flatMap(({ node: m, scope: s }): CatalogSlot[] => {
+      const value = child(child(m, 'typeAnnotation') ?? ({} as Node), 'typeAnnotation')
+      // `[cell: \`${string}-cell\`]: …`: slots named at run time, by a pattern.
+      if (m.type === 'TSIndexSignature') {
+        const key = child(child(children(m, 'parameters')[0] ?? ({} as Node), 'typeAnnotation') ?? ({} as Node), 'typeAnnotation')
+        const pattern = key && slotPattern(key, s)
+        return pattern ? [{ name: pattern, props: slotProps(value, s), dynamic: true }] : []
+      }
       const name = keyName(m)
       if (!name) return []
-      const param = children(m, 'parameters')[0] ?? children(child(child(m, 'typeAnnotation') ?? ({} as Node), 'typeAnnotation') ?? ({} as Node), 'parameters')[0]
-      const ann = param && child(child(param, 'typeAnnotation') ?? ({} as Node), 'typeAnnotation')
-      const names = ann ? members(ann, s).map((x) => keyName(x.node)).filter((k): k is string => !!k) : []
-      return [{ name, props: names, dynamic: false }]
+      // A method (`row?(props: …): unknown`) or a property holding a function type.
+      const props = m.type === 'TSMethodSignature' ? paramProps(children(m, 'parameters')[0], s) : slotProps(value, s)
+      return [{ name, props, dynamic: false }]
     })
   } else {
     slots = templateSlots(descriptor.template?.ast as unknown as TemplateNode | undefined)
