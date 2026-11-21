@@ -1,0 +1,27 @@
+/* Banner: a full-width strip filled in its tone, its content centred,
+   wrapping when narrow. The close button sits at the inline end. */
+.weft-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--weft-space-2, 8px);
+  min-block-size: max(var(--weft-control-lg, 44px), var(--weft-hit-min, 24px));
+  padding-block: var(--weft-space-2, 8px);
+  padding-inline: var(--weft-space-4, 16px) var(--weft-space-2, 8px);
+  background: var(--weft-tone, LinkText);
+  color: var(--weft-tone-fg, Canvas);
+}
+.weft-banner__inner {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--weft-space-2, 8px) var(--weft-space-3, 12px);
+  text-align: center;
+}
+.weft-banner__leading { display: inline-flex; flex: none; }
+.weft-banner__title { font-weight: var(--weft-weight-heading, 600); }
+.weft-banner .weft-banner__title.weft-link { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.weft-banner__actions { display: flex; flex-wrap: wrap; gap: var(--weft-space-2, 8px); }
+.weft-banner .weft-banner__close { color: inherit; }

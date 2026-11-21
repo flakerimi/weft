@@ -1,0 +1,5 @@
+/* The data components' stylesheets, in order. Each component imports its
+   own; weft.css imports this group with the others. */
+@import './table.css';
+@import './stat-card.css';
+@import './timeline.css';

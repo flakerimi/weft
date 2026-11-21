@@ -1,0 +1,37 @@
+/* ScrollArea: the browser's own scrolling, its scrollbars thin and in the
+   theme's border colour (the standard properties; the WebKit pseudo-
+   elements where those are missing). Focus rings it inside its edge. With
+   shadow, a mask fades each edge that has content beyond it. */
+.weft-scroll-area {
+  --weft-scroll-fade: 24px;
+  position: relative;
+  min-block-size: 0;
+  min-inline-size: 0;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--weft-color-border, GrayText) transparent;
+  border-radius: inherit;
+}
+.weft-scroll-area[data-orientation="vertical"] { overflow-x: hidden; overflow-y: auto; }
+.weft-scroll-area[data-orientation="horizontal"] { overflow-x: auto; overflow-y: hidden; }
+.weft-scroll-area[data-orientation="both"] { overflow: auto; }
+.weft-scroll-area[data-orientation="horizontal"] > .weft-scroll-area__content { inline-size: max-content; min-inline-size: 100%; }
+.weft-scroll-area[data-orientation="both"] > .weft-scroll-area__content { inline-size: max-content; min-inline-size: 100%; }
+.weft-scroll-area:focus-visible { outline-offset: -2px; }
+@supports not (scrollbar-color: auto) {
+  .weft-scroll-area::-webkit-scrollbar { inline-size: 8px; block-size: 8px; }
+  .weft-scroll-area::-webkit-scrollbar-thumb { border-radius: 4px; background: var(--weft-color-border, GrayText); }
+  .weft-scroll-area::-webkit-scrollbar-track { background: transparent; }
+}
+.weft-scroll-area[data-fade-start][data-orientation="vertical"] { mask-image: linear-gradient(to bottom, transparent, #000 var(--weft-scroll-fade)); }
+.weft-scroll-area[data-fade-end][data-orientation="vertical"] { mask-image: linear-gradient(to top, transparent, #000 var(--weft-scroll-fade)); }
+.weft-scroll-area[data-fade-start][data-fade-end][data-orientation="vertical"] {
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--weft-scroll-fade), #000 calc(100% - var(--weft-scroll-fade)), transparent);
+}
+.weft-scroll-area[data-fade-start][data-orientation="horizontal"] { mask-image: linear-gradient(to right, transparent, #000 var(--weft-scroll-fade)); }
+.weft-scroll-area[data-fade-end][data-orientation="horizontal"] { mask-image: linear-gradient(to left, transparent, #000 var(--weft-scroll-fade)); }
+.weft-scroll-area[data-fade-start][data-fade-end][data-orientation="horizontal"] {
+  mask-image: linear-gradient(to right, transparent, #000 var(--weft-scroll-fade), #000 calc(100% - var(--weft-scroll-fade)), transparent);
+}
+[dir="rtl"] .weft-scroll-area[data-fade-start][data-orientation="horizontal"] { mask-image: linear-gradient(to left, transparent, #000 var(--weft-scroll-fade)); }
+[dir="rtl"] .weft-scroll-area[data-fade-end][data-orientation="horizontal"] { mask-image: linear-gradient(to right, transparent, #000 var(--weft-scroll-fade)); }

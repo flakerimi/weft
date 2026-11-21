@@ -1,0 +1,45 @@
+/* StatCard: a card holding a muted label, a large figure in tabular
+   digits, and the delta as a small tinted badge in its tone. The sparkline
+   sits under the figure, as wide as the card. */
+.weft-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-3, 12px);
+  padding: var(--weft-space-4, 16px);
+  border: 1px solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-card, 12px);
+  background: var(--weft-color-surface, Canvas);
+  color: var(--weft-color-text, CanvasText);
+  min-inline-size: 0;
+}
+.weft-stat-card__stat { display: grid; gap: var(--weft-space-1, 4px); margin: 0; }
+.weft-stat-card__label { display: flex; align-items: center; gap: var(--weft-space-2, 8px); color: var(--weft-color-text-muted, GrayText); }
+.weft-stat-card__icon { display: inline-flex; }
+.weft-stat-card__value {
+  margin: 0;
+  font-size: 1.85em;
+  font-weight: var(--weft-weight-title, 700);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.weft-stat-card__value .weft-skeleton { display: inline-block; vertical-align: middle; }
+.weft-stat-card__delta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--weft-space-2, 8px); margin: 0; }
+.weft-stat-card__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px var(--weft-space-1, 4px);
+  border-radius: var(--weft-radius-control, 8px);
+  background: color-mix(in srgb, var(--weft-tone, CanvasText) 14%, transparent);
+  color: var(--weft-tone-text, CanvasText);
+  font-weight: var(--weft-weight-heading, 600);
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+}
+.weft-stat-card__arrow { inline-size: 14px; block-size: 14px; }
+[dir="rtl"] .weft-stat-card__arrow { scale: -1 1; }
+.weft-stat-card__description { color: var(--weft-color-text-muted, GrayText); font-size: 0.9em; }
+.weft-stat-card__sparkline { block-size: 40px; color: var(--weft-color-primary, LinkText); }
+.weft-stat-card__sparkline > svg { display: block; inline-size: 100%; block-size: 100%; }
+.weft-stat-card__footer { padding-block-start: var(--weft-space-3, 12px); border-block-start: 1px solid var(--weft-color-border, GrayText); }

@@ -1,5 +1,5 @@
 /**
- * useRovingFocus(container, { orientation, loop?, rtl?, items?, columns?, tabStops? })
+ * useRovingFocus(container, { orientation, loop?, rtl?, items?, columns?, tabStops?, inner? })
  *
  * One tab stop for a group of items, moved with the arrow keys: the roving
  * tabindex of the WAI-ARIA APG (toolbars, tabs, radio groups, menus,
@@ -35,6 +35,10 @@
  * stop (no tabindex is set): for widgets whose items APG keeps in the tab
  * order, such as accordion headers and the links of a navigation menu.
  *
+ * `inner: 'ignore'` leaves keys pressed inside an item, in a control the
+ * item holds (a button in a grid cell), to that control: only keys on an
+ * item itself move the tab stop. By default they move it too.
+ *
  * `rtl` (a ref) overrides the direction; without it, the direction is read
  * from the container (`dir="rtl"` on any ancestor) at each key press.
  *
@@ -56,6 +60,8 @@ export interface RovingFocusOptions {
   columns?: () => number
   /** `one` (default): a roving tabindex, one tab stop for the group. `all`: arrows only, each item keeps its own tab stop. */
   tabStops?: 'one' | 'all'
+  /** `move` (default): keys inside an item move as keys on it do. `ignore`: they are left to the control they were pressed in. */
+  inner?: 'move' | 'ignore'
 }
 
 export interface RovingFocus {
@@ -171,6 +177,7 @@ export function useRovingFocus(
     const items = all()
     const item = (event.target as Element | null)?.closest<HTMLElement>(selector)
     if (!item || !items.includes(item)) return
+    if (opts.inner === 'ignore' && item !== event.target) return
     const index = target(event, items.indexOf(item), items)
     if (index === null) return
     event.preventDefault()

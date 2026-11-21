@@ -1,0 +1,8 @@
+/* ErrorState: an EmptyState whose icon disc is in the danger tone, with
+   the error's code in small monospace under its message. */
+.weft-error-state .weft-empty-state__icon {
+  background: color-mix(in srgb, var(--weft-color-danger, #DC2626) 14%, transparent);
+  color: var(--weft-color-danger-text, #AB2323);
+}
+.weft-error-state__glyph { inline-size: 24px; block-size: 24px; }
+.weft-error-state__code { font-family: var(--weft-font-mono, ui-monospace, monospace); font-size: 0.85em; color: var(--weft-color-text-muted, GrayText); }

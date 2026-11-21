@@ -232,4 +232,24 @@ describe('useRovingFocus', () => {
     expect(tabindexes(root)).toEqual([null, null, null])
     scope.stop()
   })
+
+  it('with inner "ignore", leaves keys pressed in a control inside an item to it', () => {
+    const cells = '<div data-weft-item class="i0" tabindex="0">a</div><div data-weft-item class="i1"><input class="field"></div><div data-weft-item class="i2">c</div>'
+    const moving = setup({ orientation: 'horizontal' }, cells)
+    $('.field', moving.root).focus()
+    expect(key('ArrowRight').defaultPrevented).toBe(true)
+    expect(active()).toBe(moving.q(2))
+    moving.scope.stop()
+    reset()
+    const { q, root, scope } = setup({ orientation: 'horizontal', inner: 'ignore' }, cells)
+    const field = $('.field', root)
+    field.focus()
+    expect(key('ArrowRight').defaultPrevented).toBe(false)
+    expect(active()).toBe(field)
+    // On the item itself, the arrows still move.
+    q(1).focus()
+    key('ArrowRight')
+    expect(active()).toBe(q(2))
+    scope.stop()
+  })
 })

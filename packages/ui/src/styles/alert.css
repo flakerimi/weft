@@ -1,0 +1,26 @@
+/* Alert: a card in its tone. Soft is tinted, solid filled, outline bordered
+   in the tone, ghost the tone's text alone. Actions sit under the text, or
+   at the inline end when horizontal (wrapping under it when there is no
+   room). */
+.weft-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--weft-space-3, 12px);
+  padding: var(--weft-space-3, 12px) var(--weft-space-4, 16px);
+  border: 1px solid transparent;
+  border-radius: var(--weft-radius-card, 12px);
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-alert[data-variant="soft"] { background: color-mix(in srgb, var(--weft-tone, LinkText) 14%, transparent); }
+.weft-alert[data-variant="solid"] { background: var(--weft-tone, LinkText); color: var(--weft-tone-fg, Canvas); }
+.weft-alert[data-variant="outline"] { border-color: color-mix(in srgb, var(--weft-tone, LinkText) 45%, transparent); }
+.weft-alert__leading { flex: none; display: inline-flex; padding-block: 1px; color: var(--weft-tone-text, LinkText); }
+.weft-alert[data-variant="solid"] .weft-alert__leading { color: inherit; }
+.weft-alert__body { flex: 1; min-inline-size: 0; display: flex; flex-direction: column; gap: var(--weft-space-3, 12px); }
+.weft-alert[data-orientation="horizontal"] .weft-alert__body { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.weft-alert__text { display: grid; gap: 2px; min-inline-size: min(100%, 16rem); }
+.weft-alert__title { font-weight: var(--weft-weight-heading, 600); }
+.weft-alert[data-variant="ghost"] .weft-alert__title { color: var(--weft-tone-text, LinkText); }
+.weft-alert__description { opacity: 0.9; }
+.weft-alert__actions { display: flex; flex-wrap: wrap; gap: var(--weft-space-2, 8px); }
+.weft-alert__close { margin-block: -4px; margin-inline-end: -8px; color: inherit; }

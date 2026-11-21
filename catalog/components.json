@@ -115,6 +115,129 @@
       ]
     },
     {
+      "name": "Alert",
+      "group": "feedback",
+      "file": "packages/ui/src/feedback/Alert.vue",
+      "purpose": "A message in the page that asks for attention, in a tone, with actions and a close button.",
+      "use": "Above a form that failed, at the top of a page whose data is stale, beside a setting with a consequence (a trial ending, a payment declined).",
+      "avoid": "For news about the whole site or app, use Banner; for a passing confirmation, use a Toast; for a page with nothing to show, use EmptyState or ErrorState.",
+      "adapts": {
+        "input": "On touch the close button's hit area is at least --weft-hit-min, and the actions are Buttons (their rule).",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "Horizontal actions wrap under the text when its box has no room for them beside it."
+      },
+      "props": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The message, in bold."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "More about it, under the title; the default slot replaces it."
+        },
+        {
+          "name": "icon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon before the text; the leading slot replaces it."
+        },
+        {
+          "name": "tone",
+          "type": "'neutral' | 'primary' | 'danger' | 'warning' | 'success'",
+          "required": false,
+          "default": "'primary'",
+          "description": "The colour and what it says: `danger` for a failure, `success` for done."
+        },
+        {
+          "name": "variant",
+          "type": "'solid' | 'soft' | 'outline' | 'ghost'",
+          "required": false,
+          "default": "'soft'",
+          "description": "`soft` (default) tinted, `solid` filled, `outline` bordered, `ghost` text in the tone."
+        },
+        {
+          "name": "orientation",
+          "type": "'vertical' | 'horizontal'",
+          "required": false,
+          "default": "'vertical'",
+          "description": "`vertical`: actions under the text; `horizontal`: beside it."
+        },
+        {
+          "name": "actions",
+          "type": "ActionItem[]",
+          "required": false,
+          "default": null,
+          "description": "Buttons: `{ label, onClick, to, icon, tone, variant }`; the actions slot replaces them."
+        },
+        {
+          "name": "close",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Show a close button."
+        },
+        {
+          "name": "closeLabel",
+          "type": "string",
+          "required": false,
+          "default": "'Close'",
+          "description": "The close button's name for assistive technology."
+        },
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "Shown, bound with `v-model:open`; the close button sets it false."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:open",
+          "payload": "[open: boolean]",
+          "description": "Closed with its button (false)."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "title",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "leading",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "actions",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "`title` is the message, `description` (or the default slot) says more,\n`icon` (or the leading slot) sits before them. `tone` (`primary`) says what\nit is about: `danger` for a failure, `warning`, `success`, `neutral`.\n`variant` is `soft` (default, tinted), `solid` (filled), `outline` or\n`ghost`.\n\n`actions` are Buttons given as data, `{ label, onClick, to, icon, tone,\nvariant }`, or the actions slot; they sit under the text, or beside it with\n`orientation=\"horizontal\"`. `close` adds a close button (`close-label`,\n\"Close\"); pressing it sets `v-model:open` to false and the alert leaves the\npage.\n\nIt has no live role of its own: a message that is there when the page\nloads is not news, and announcing every alert would drown the important\nones. Give `role=\"alert\"` to one that appears after something failed and\nmust be heard at once, or `role=\"status\"` to a polite one; either must be\nin the page before its text changes to be announced.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Alert/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Alert, Stack } from '@weft/ui'\n\nconst open = ref(true)\n</script>\n\n<template>\n  <Stack :gap=\"3\">\n    <Alert\n      v-model:open=\"open\"\n      tone=\"danger\"\n      icon=\"circle-alert\"\n      title=\"Payment failed\"\n      description=\"The card ending 4242 was declined. Update it to keep your plan.\"\n      :actions=\"[{ label: 'Update card' }]\"\n      close\n    />\n    <Alert tone=\"success\" variant=\"outline\" orientation=\"horizontal\" title=\"Backup finished\" description=\"All 1,284 records were saved.\" :actions=\"[{ label: 'View' }]\" />\n    <Alert tone=\"warning\" variant=\"solid\" icon=\"info\" title=\"Your trial ends in 3 days.\" />\n  </Stack>\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "AppShell",
       "group": "shell",
       "file": "packages/ui/src/shell/AppShell.vue",
@@ -434,6 +557,110 @@
           "title": "Variants and sizes",
           "file": "packages/ui/examples/Badge/variants-and-sizes.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { Badge, Stack } from '@weft/ui'\n</script>\n\n<template>\n  <Stack :gap=\"3\">\n    <Stack direction=\"row\" :gap=\"2\" align=\"center\">\n      <Badge label=\"Solid\" />\n      <Badge label=\"Soft\" variant=\"soft\" />\n      <Badge label=\"Outline\" variant=\"outline\" />\n      <Badge label=\"Ghost\" variant=\"ghost\" />\n    </Stack>\n    <Stack direction=\"row\" :gap=\"2\" align=\"center\">\n      <Badge label=\"Small\" size=\"sm\" tone=\"neutral\" />\n      <Badge label=\"Medium\" size=\"md\" tone=\"neutral\" />\n      <Badge label=\"Large\" size=\"lg\" tone=\"neutral\" />\n    </Stack>\n  </Stack>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "Banner",
+      "group": "feedback",
+      "file": "packages/ui/src/feedback/Banner.vue",
+      "purpose": "A strip across the top of a page or app for news that concerns everyone, which can be closed for good.",
+      "use": "For maintenance windows, a new feature, a policy change: above the Header, on every page, until read.",
+      "avoid": "For a message about one part of a page, use Alert; for a confirmation of something the person did, use a Toast.",
+      "adapts": {
+        "input": "On touch the close button's hit area is at least --weft-hit-min, and the actions are Buttons (their rule).",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "When narrow the actions wrap under the title, both centred."
+      },
+      "props": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Remembers being closed under this id, in localStorage; without it, it shows again on the next page."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The news."
+        },
+        {
+          "name": "icon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon before the title."
+        },
+        {
+          "name": "to",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "An address: the title links there."
+        },
+        {
+          "name": "tone",
+          "type": "'neutral' | 'primary' | 'danger' | 'warning' | 'success'",
+          "required": false,
+          "default": "'primary'",
+          "description": "The colour."
+        },
+        {
+          "name": "actions",
+          "type": "ActionItem[]",
+          "required": false,
+          "default": null,
+          "description": "Buttons after the title: `{ label, onClick, to, icon, tone, variant }`."
+        },
+        {
+          "name": "close",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Show a close button."
+        },
+        {
+          "name": "closeLabel",
+          "type": "string",
+          "required": false,
+          "default": "'Close'",
+          "description": "The close button's name for assistive technology."
+        }
+      ],
+      "emits": [
+        {
+          "name": "close",
+          "payload": "[]",
+          "description": "Closed with its button."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "leading",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "actions",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "`title` (or the default slot) is the news, `icon` (or the leading slot)\nbefore it, `actions` (`{ label, onClick, to }`, or the actions slot) after\nit. `to` makes the title a link. `tone` (`primary`) fills the strip.\n\n`close` adds a close button, which hides the banner and emits `close`. With\nan `id` the banner stays closed on later visits: it records `closed` under\n`weft-banner:<id>` in localStorage and reads it once mounted, so the server\nalways draws the banner and a closed one leaves just after the page loads.\nChange the id for new news. Without an id it shows again on the next page.\n\nIt is a plain block, not a landmark or a live region: put it before the\npage's header so it is read first.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Banner/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Banner } from '@weft/ui'\n</script>\n\n<template>\n  <Banner\n    id=\"maintenance-2026-11\"\n    icon=\"info\"\n    title=\"Scheduled maintenance on Saturday, 02:00 to 04:00.\"\n    :actions=\"[{ label: 'Details', to: '/status' }]\"\n    close\n  />\n</template>\n"
         }
       ]
     },
@@ -3193,6 +3420,229 @@
           "title": "Basic",
           "file": "packages/ui/examples/DropdownMenu/basic.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { computed, ref } from 'vue'\nimport { Button, DropdownMenu, type MenuItem } from '@weft/ui'\n\nconst grid = ref(true)\nconst sort = ref('name')\nconst items = computed<MenuItem[][]>(() => [\n  [\n    { type: 'label', label: 'File' },\n    { label: 'Rename', icon: 'pencil' },\n    { label: 'Duplicate', icon: 'copy' },\n    { label: 'Share', icon: 'share', children: [{ label: 'Copy link' }, { label: 'Email' }] },\n  ],\n  [\n    { type: 'checkbox', label: 'Show grid', checked: grid.value, onUpdateChecked: (on) => (grid.value = on) },\n    { type: 'radio', label: 'By name', checked: sort.value === 'name', onUpdateChecked: () => (sort.value = 'name') },\n    { type: 'radio', label: 'By date', checked: sort.value === 'date', onUpdateChecked: () => (sort.value = 'date') },\n  ],\n  [{ label: 'Delete', icon: 'trash', tone: 'danger' }],\n])\n</script>\n\n<template>\n  <!-- On touch it opens as a bottom sheet with large items. -->\n  <DropdownMenu :items=\"items\">\n    <Button label=\"Actions\" variant=\"outline\" tone=\"neutral\" trailing-icon=\"chevron-down\" />\n  </DropdownMenu>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "EmptyState",
+      "group": "feedback",
+      "file": "packages/ui/src/feedback/EmptyState.vue",
+      "purpose": "What a list, a search or a page shows when it has nothing yet, with the actions that would fill it.",
+      "use": "In a Table's empty slot, for a new account with no records, for a search with no results; it replaces the hand-built empty states of admin panels such as Negenet's.",
+      "avoid": "When loading failed, use ErrorState; while loading, use Skeleton rows or the Table's loading state.",
+      "adapts": {
+        "input": "On touch its buttons are at least --weft-hit-min tall (Button's rule).",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "The actions wrap and stay centred when its box is narrow; the text keeps a readable measure."
+      },
+      "props": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "What is empty: \"No customers yet\"."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "What to do about it, under the title."
+        },
+        {
+          "name": "icon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon above the title; the leading slot replaces it."
+        },
+        {
+          "name": "level",
+          "type": "2 | 3 | 4 | 5 | 6",
+          "required": false,
+          "default": null,
+          "description": "The title's heading level; without it the title is bold text, not a heading."
+        },
+        {
+          "name": "actions",
+          "type": "ActionItem[]",
+          "required": false,
+          "default": null,
+          "description": "Buttons under the text: `{ label, onClick, to, icon, tone, variant }`; the first is solid, the rest outlined."
+        },
+        {
+          "name": "variant",
+          "type": "'outline' | 'soft' | 'ghost'",
+          "required": false,
+          "default": "'outline'",
+          "description": "`outline` a dashed border, `soft` a tinted box, `ghost` none."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": "'md'",
+          "description": "`sm`, `md` or `lg`: its space and icon size."
+        },
+        {
+          "name": "loading",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Still looking: a spinner in place of the icon, and aria-busy."
+        }
+      ],
+      "emits": [],
+      "slots": [
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "leading",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "actions",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "footer",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "`title` says what is empty, `description` what to do about it, `icon` (or\nthe leading slot) sits in a disc above them. The default slot adds more\ncontent, the `footer` slot a help link. `actions` are Buttons given as data\n(`{ label, onClick, to, icon, tone, variant }`): the first solid primary,\nthe rest outlined; the actions slot replaces them.\n\nThe title is a heading at `level` (2 to 6) when given, so it takes its\nplace in the page's outline; without a level it is bold text. `variant` is\n`outline` (dashed border, default), `soft` (tinted) or `ghost`; `size`\nsets its space and icon. `loading` turns the icon into a spinner and makes\nit `aria-busy`, for a search still running.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/EmptyState/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { EmptyState, Link } from '@weft/ui'\n</script>\n\n<template>\n  <EmptyState\n    icon=\"user-plus\"\n    title=\"No customers yet\"\n    description=\"Customers you add, or who sign up, appear here.\"\n    :level=\"2\"\n    :actions=\"[{ label: 'Add customer', icon: 'user-plus' }, { label: 'Import a CSV' }]\"\n  >\n    <template #footer><Link to=\"/docs/customers\">How customers work</Link></template>\n  </EmptyState>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "ErrorState",
+      "group": "feedback",
+      "file": "packages/ui/src/feedback/ErrorState.vue",
+      "purpose": "What a list or a page shows when loading it failed, with the error's message and a way to try again.",
+      "use": "In place of a Table, a chart or a page whose request failed; it reads an Error, a string or the wire format's error body.",
+      "avoid": "For a form field's error, use FormField; for a failure the person can fix in the page, use Alert; for nothing to show, use EmptyState.",
+      "adapts": {
+        "input": "On touch its buttons are at least --weft-hit-min tall (Button's rule).",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "As EmptyState: the actions wrap and stay centred when narrow."
+      },
+      "props": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": "'Something went wrong'",
+          "description": "What failed, in bold."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "What happened; default the error's message."
+        },
+        {
+          "name": "error",
+          "type": "unknown",
+          "required": false,
+          "default": null,
+          "description": "The error: an Error, a string, or a wire-format error body."
+        },
+        {
+          "name": "icon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon in place of the warning sign."
+        },
+        {
+          "name": "level",
+          "type": "2 | 3 | 4 | 5 | 6",
+          "required": false,
+          "default": null,
+          "description": "The title's heading level; without it the title is bold text."
+        },
+        {
+          "name": "retry",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Show a button that emits `retry`."
+        },
+        {
+          "name": "retryLabel",
+          "type": "string",
+          "required": false,
+          "default": "'Try again'",
+          "description": "The retry button's text."
+        },
+        {
+          "name": "loading",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Retrying: the retry button spins and takes no presses."
+        },
+        {
+          "name": "actions",
+          "type": "ActionItem[]",
+          "required": false,
+          "default": null,
+          "description": "More buttons after the retry button."
+        },
+        {
+          "name": "variant",
+          "type": "'outline' | 'soft' | 'ghost'",
+          "required": false,
+          "default": "'outline'",
+          "description": "`outline`, `soft` or `ghost`, as EmptyState."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": "'md'",
+          "description": "`sm`, `md` or `lg`."
+        }
+      ],
+      "emits": [
+        {
+          "name": "retry",
+          "payload": "[]",
+          "description": "The retry button was pressed."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "footer",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "An EmptyState in the danger tone with `role=\"alert\"`, so it is announced\nwhen it appears. `title` defaults to \"Something went wrong\"; `description`\ndefaults to the message of `error`, which may be an `Error`, a string, or\nthe wire format's `{ error: { code, message } }` (its `code` shows small\nunder the message). A warning sign sits above; `icon` replaces it.\n\n`retry` adds a button (`retry-label`, \"Try again\") that emits `retry`;\nwhile `loading` (retrying) it spins, says `aria-busy` and takes no presses.\n`actions` add more buttons after it; the default slot adds content under\nthe message and `footer` a support link. `level`, `variant` and `size` are\nEmptyState's.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/ErrorState/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { ErrorState } from '@weft/ui'\n\nconst retrying = ref(false)\nfunction retry() {\n  retrying.value = true\n  setTimeout(() => (retrying.value = false), 1200)\n}\n</script>\n\n<template>\n  <ErrorState\n    title=\"Customers could not be loaded\"\n    :error=\"{ error: { code: 'unavailable', message: 'The server did not answer in time.' } }\"\n    retry\n    :loading=\"retrying\"\n    @retry=\"retry\"\n  />\n</template>\n"
         }
       ]
     },
@@ -5967,6 +6417,66 @@
       ]
     },
     {
+      "name": "ScrollArea",
+      "group": "layout",
+      "file": "packages/ui/src/layout/ScrollArea.vue",
+      "purpose": "A box whose content scrolls inside it, with the browser's own scrolling and thin themed scrollbars.",
+      "use": "For a long list in a fixed-height panel, a wide strip of cards that scrolls sideways, a code block or a log.",
+      "avoid": "For the page itself, let the page scroll; for thousands of rows, use Table or Listbox, which render only those in view.",
+      "adapts": {
+        "input": "On touch the browser's own overlay scrollbars and momentum scrolling apply; nothing is drawn over them.",
+        "surface": "Nothing changes.",
+        "width": "Nothing changes; it scrolls whatever overflows its box."
+      },
+      "props": [
+        {
+          "name": "orientation",
+          "type": "'vertical' | 'horizontal' | 'both'",
+          "required": false,
+          "default": "'vertical'",
+          "description": "Which way it scrolls: `vertical` (default), `horizontal` or `both`."
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Its name, for assistive technology: it becomes a region. Give one when it is a tab stop."
+        },
+        {
+          "name": "maxHeight",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The most it may be tall before it scrolls, any CSS length; or set its height from outside."
+        },
+        {
+          "name": "shadow",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Fade the edges that have more content beyond them."
+        }
+      ],
+      "emits": [],
+      "slots": [
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "It is the browser's scrolling, not a drawn one: wheel, touch, momentum,\nscroll anchoring, find-in-page and the keyboard all work as they do on the\npage. The scrollbars are thin and drawn in the theme's border colour\n(`scrollbar-width` and `scrollbar-color`, with the WebKit pseudo-elements\nwhere those are missing).\n\n`orientation` is `vertical` (default), `horizontal` or `both`. Give it a\nheight from outside, or `max-height`. While its content overflows it is a\ntab stop (`tabindex=\"0\"`), so a keyboard alone can scroll it with the\narrows, Page Up and Down, Home, End and Space; once it fits it leaves the\ntab order. With `label` it is a named region, which assistive technology\nlists; give one whenever it is a tab stop.\n\n`shadow` fades the edges with more content beyond them (a mask, mirrored\nright to left). Rows that must render only while in view belong in Table\nor Listbox, which window long lists themselves.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/ScrollArea/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ScrollArea } from '@weft/ui'\n\nconst notes = Array.from({ length: 30 }, (_, i) => `Release 1.${30 - i}: fixes and small improvements.`)\n</script>\n\n<template>\n  <ScrollArea label=\"Release notes\" max-height=\"14rem\" shadow>\n    <ul>\n      <li v-for=\"note in notes\" :key=\"note\">{{ note }}</li>\n    </ul>\n  </ScrollArea>\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "Section",
       "group": "layout",
       "file": "packages/ui/src/layout/Section.vue",
@@ -6816,6 +7326,111 @@
       ]
     },
     {
+      "name": "StatCard",
+      "group": "data",
+      "file": "packages/ui/src/data/StatCard.vue",
+      "purpose": "One figure that matters on a card, with how it changed and an optional sparkline.",
+      "use": "In a row of key figures at the top of a dashboard (revenue, active customers, open tickets); it replaces the hand-built stat cards of admin panels such as Negenet's.",
+      "avoid": "For many figures to compare, use Table; for a figure inside a sentence, write the sentence.",
+      "adapts": {
+        "input": "Nothing changes; it is not interactive (a link in its footer follows Link's rules).",
+        "surface": "Nothing changes in behaviour; the figure and label follow the surface's type scale.",
+        "width": "It fills its grid cell, and a long figure wraps rather than overflow; lay several out with Grid, which stacks them when narrow."
+      },
+      "props": [
+        {
+          "name": "label",
+          "type": "string",
+          "required": true,
+          "default": null,
+          "description": "What the figure is: \"Revenue\"."
+        },
+        {
+          "name": "value",
+          "type": "string | number",
+          "required": false,
+          "default": "undefined",
+          "description": "The figure: a number (formatted for the locale) or text as it should read (\"$1.2M\")."
+        },
+        {
+          "name": "delta",
+          "type": "number",
+          "required": false,
+          "default": "undefined",
+          "description": "How much it changed, as a number: 4 for a 4% rise, -2 for a fall."
+        },
+        {
+          "name": "deltaUnit",
+          "type": "string",
+          "required": false,
+          "default": "'%'",
+          "description": "After the delta's number: `%` (default), ` pts`, or nothing."
+        },
+        {
+          "name": "invert",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Less is better (churn, errors): a fall is good news, drawn in the success tone."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A sentence after the delta: \"vs last month\"."
+        },
+        {
+          "name": "icon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon before the label."
+        },
+        {
+          "name": "loading",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Still counting: a skeleton in place of the value, and aria-busy."
+        },
+        {
+          "name": "labels",
+          "type": "Partial<StatLabels>",
+          "required": false,
+          "default": null,
+          "description": "The words it says; give some or all to translate them."
+        }
+      ],
+      "emits": [],
+      "slots": [
+        {
+          "name": "sparkline",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "leading",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "footer",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "`label` names the figure and `value` is the figure: a number is formatted\nfor the locale (a WeftProvider's, else `en-US`, so the server and the\nbrowser agree), text shows as given (`$1.2M`). It is a description list,\nso assistive technology reads the label with the value.\n\n`delta` is how it changed, as a number (4 for a 4% rise, -2 for a fall),\nfollowed by `delta-unit` (`%`). Its sign picks the tone: success up, danger\ndown, neutral for 0; `invert` swaps them for figures where less is better\n(churn, errors). It is drawn as `+4%` with an arrow and said as \"up 4%\",\n\"down 2%\" or \"no change\" (translate with `labels`). `description` follows\nthe delta (\"vs last month\"). `icon` (or the leading slot) sits before the\nlabel.\n\nThe `sparkline` slot holds a small chart under the figure, as wide as the\ncard, in the primary colour (an svg drawn with `currentColor` follows it);\nit is drawing only, hidden from assistive technology, so the figure and the\ndelta must carry the meaning. `footer` holds a link to the details.\n`loading` makes it `aria-busy`, a skeleton in place of the value and no\ndelta.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/StatCard/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Grid, StatCard } from '@weft/ui'\n</script>\n\n<template>\n  <Grid :cols=\"{ narrow: 1, regular: 3 }\" :gap=\"4\">\n    <StatCard label=\"Revenue\" value=\"€48,210\" :delta=\"12.4\" description=\"vs last month\" icon=\"banknote\">\n      <template #sparkline>\n        <svg viewBox=\"0 0 100 40\" preserveAspectRatio=\"none\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><polyline points=\"0,32 15,28 30,30 45,20 60,22 75,12 100,6\" /></svg>\n      </template>\n    </StatCard>\n    <StatCard label=\"Active customers\" :value=\"1284\" :delta=\"-2\" description=\"vs last month\" icon=\"users\" />\n    <StatCard label=\"Churn\" value=\"1.8%\" :delta=\"-0.4\" delta-unit=\" pts\" invert description=\"vs last quarter\" />\n  </Grid>\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "Stepper",
       "group": "navigation",
       "file": "packages/ui/src/navigation/Stepper.vue",
@@ -7064,6 +7679,219 @@
           "title": "Basic",
           "file": "packages/ui/examples/Switch/basic.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Stack, Switch } from '@weft/ui'\n\nconst wifi = ref(true)\nconst sync = ref(false)\nconst saving = ref(false)\nfunction save(on: boolean) {\n  sync.value = on\n  saving.value = true\n  setTimeout(() => (saving.value = false), 1200)\n}\n</script>\n\n<template>\n  <Stack :gap=\"1\">\n    <Switch v-model=\"wifi\" label=\"Wi-Fi\" description=\"Join known networks automatically.\" />\n    <!-- Loading blocks toggling while the change is saved. -->\n    <Switch :model-value=\"sync\" label=\"Sync photos\" :loading=\"saving\" @update:model-value=\"save\" />\n  </Stack>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "Table",
+      "group": "data",
+      "file": "packages/ui/src/data/Table.vue",
+      "purpose": "Rows of data under column headers, sorted, chosen, paged and loaded from an array or from a server.",
+      "use": "For records a person compares, sorts or acts on in bulk (customers, invoices, devices), from a plain array or a Go resource speaking the wire format.",
+      "avoid": "For a few label–value pairs about one thing, use a description list or StatCard; for items a person reads one by one, use a list of Cards; for a hierarchy, use Tree.",
+      "adapts": {
+        "input": "On touch every row is at least --weft-hit-min (44 px) tall, and its checkbox takes a 44 px press (Checkbox's rule).",
+        "surface": "Nothing changes in behaviour; `size` sets the row height and text follows the surface's type scale.",
+        "width": "When its own box is narrow (under 640 px, even in a side panel on a wide screen) each row becomes a card, a list item of label–value pairs from the same columns, with a Select all checkbox and the sort buttons above the cards; wide again, it is a table again."
+      },
+      "props": [
+        {
+          "name": "columns",
+          "type": "TableColumn<T>[]",
+          "required": true,
+          "default": null,
+          "description": "The columns: `{ key, label, sortable, align, width, accessor, format, rowHeader }`."
+        },
+        {
+          "name": "rows",
+          "type": "T[]",
+          "required": false,
+          "default": "undefined",
+          "description": "The rows, sorted and paged on the client."
+        },
+        {
+          "name": "fetch",
+          "type": "TableFetch<T>",
+          "required": false,
+          "default": "undefined",
+          "description": "Asks for a page of rows instead (`{ page, perPage, sort }` → `{ items, total }`): sorting and paging happen on the server."
+        },
+        {
+          "name": "rowKey",
+          "type": "string | ((row: T) => RowKey)",
+          "required": false,
+          "default": null,
+          "description": "A row's key, for selection and rendering: a property name or a function; default the row's `id`, else its place."
+        },
+        {
+          "name": "sort",
+          "type": "string | null",
+          "required": false,
+          "default": "undefined",
+          "description": "The sort, in the wire format (`name`, `-since`; null for none), bound with `v-model:sort`."
+        },
+        {
+          "name": "defaultSort",
+          "type": "string | null",
+          "required": false,
+          "default": "null",
+          "description": "The sort when `v-model:sort` is not bound."
+        },
+        {
+          "name": "selectable",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "A checkbox on each row, and one in the header for every row shown."
+        },
+        {
+          "name": "selected",
+          "type": "RowKey[]",
+          "required": false,
+          "default": "undefined",
+          "description": "The keys of the chosen rows, bound with `v-model:selected`."
+        },
+        {
+          "name": "defaultSelected",
+          "type": "RowKey[]",
+          "required": false,
+          "default": null,
+          "description": "The rows chosen when `v-model:selected` is not bound."
+        },
+        {
+          "name": "perPage",
+          "type": "number",
+          "required": false,
+          "default": null,
+          "description": "Rows per page: the table pages with a Pagination. With `fetch`, default 20."
+        },
+        {
+          "name": "page",
+          "type": "number",
+          "required": false,
+          "default": "undefined",
+          "description": "The page, from 1, bound with `v-model:page`."
+        },
+        {
+          "name": "defaultPage",
+          "type": "number",
+          "required": false,
+          "default": "1",
+          "description": "The page shown first when `v-model:page` is not bound."
+        },
+        {
+          "name": "loading",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Busy: skeleton rows until there are rows, and aria-busy."
+        },
+        {
+          "name": "empty",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The text shown when there are no rows; the `empty` slot replaces it."
+        },
+        {
+          "name": "caption",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The table's caption, which names it (and the list of cards)."
+        },
+        {
+          "name": "hideCaption",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Draw the caption for assistive technology only."
+        },
+        {
+          "name": "sticky",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "The header stays in view while the rows scroll inside the table."
+        },
+        {
+          "name": "height",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The most the table may be tall before its rows scroll, any CSS length; default 30rem once windowed past 200 rows."
+        },
+        {
+          "name": "rowHeight",
+          "type": "number",
+          "required": false,
+          "default": null,
+          "description": "px of every row once windowed past 200 rows; default from the size (44 at least on touch)."
+        },
+        {
+          "name": "keyboard",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "APG grid: one tab stop, arrow keys between cells. Off: a plain table, every control its own tab stop."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": "'md'",
+          "description": "`sm`, `md` or `lg`: the rows' height."
+        },
+        {
+          "name": "labels",
+          "type": "Partial<TableLabels>",
+          "required": false,
+          "default": null,
+          "description": "The words it says; give some or all to translate them."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:sort",
+          "payload": "[sort: string | null]",
+          "description": "The sort changed: a header was pressed."
+        },
+        {
+          "name": "update:selected",
+          "payload": "[keys: RowKey[]]",
+          "description": "The chosen rows changed."
+        },
+        {
+          "name": "update:page",
+          "payload": "[page: number]",
+          "description": "Another page was chosen, or the sort went back to page 1."
+        },
+        {
+          "name": "error",
+          "payload": "[error: unknown]",
+          "description": "`fetch` failed."
+        }
+      ],
+      "slots": [
+        {
+          "name": "empty",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "`columns` is a typed array: `{ key, label, sortable, align, width,\naccessor, format, rowHeader }`. A cell shows `accessor(row)` (default\n`row[key]`) as text, or `format(value, row)`; the `<key>-cell` slot draws it\ninstead (`{ row, value, index, column }`), and `<key>-header` the header. A\n`rowHeader` column's cells are `th scope=\"row\"`, and its value names each\nrow's checkbox (\"Select Ada\").\n\n**Rows.** Give `rows` (an array), sorted and paged on the client, or\n`fetch(query)`, which receives the wire format's `{ page, perPage, sort }`\n(sort is `name` or `-since`, absent when unsorted) and answers `{ items,\ntotal }`, so paging and sorting happen on the server. `tableSearch(query)`\nwrites those as search parameters (`page=2&perPage=20&sort=-since`) for a\nGo `weft.Resource`. It asks once mounted (the server draws skeleton rows),\nagain whenever the page or the sort changes, ignores an answer a newer query\novertook, and shows a message with a Try again button (and emits `error`)\nwhen the promise rejects; `refresh()` asks again. `rowKey` (a property name\nor a function; default the row's `id`, else its place) keys the rows.\n\n**Sorting.** A sortable header holds a button: ascending, descending, then\nas given. The sort is `v-model:sort` in the wire format. On the client it is\nstable (equal rows keep their order both ways), numbers and dates by amount,\ntext numeric-aware and case-blind, empty values last. A new sort goes back\nto page 1. The sorted header says `aria-sort`; the others say nothing (APG\nsortable table).\n\n**Selection.** `selectable` adds a checkbox per row and one in the header,\nbound with `v-model:selected` (the rows' keys). The header box is ticked\nwhen every row shown is chosen, indeterminate when some are; it chooses or\nclears the rows shown (on this page). Shift+click on a row's box sets every\nrow from the last one clicked to it, in the order shown.\n\n**Paging.** `per-page` pages the rows with a Pagination under the table\n(`v-model:page`), shown when there is more than one page; with `fetch` it\ndefaults to 20.\n\n**States.** `loading` makes it `aria-busy` and draws skeleton rows (hidden\nfrom assistive technology, a status saying Loading) until there are rows;\nrows it already has stay, dimmed. With no rows the `empty` slot (or\n`empty`, default \"Nothing to show.\") fills the body.\n\n**Sticky header and windowing.** The rows scroll inside the table's own box\nunder a sticky header (`sticky`, on by default) when `height` limits it.\nPast 200 rows on a page it renders only the rows in view between two spacer\nrows (`useVirtualList`): every row is then `row-height` px (default by size,\nat least 44 on touch), its text on one line, the box 30rem tall unless\n`height` says otherwise, and the table states `aria-rowcount` and each row\n`aria-rowindex`. The narrow cards are not windowed; page long lists.\n\n**Keyboard.** By default it is a plain `<table>` (caption, `th scope`), and\neach control in it (sort buttons, checkboxes, controls in cells) is its own\ntab stop. With `keyboard` it is an APG grid: one tab stop; arrows move\nbetween cells (mirrored right to left), Home and End along the row,\nCtrl+Home and Ctrl+End to the first and last cell; a sort button or a\ncheckbox stands in for its cell; Enter or F2 moves into a cell's control and\nEscape back to the cell, and keys pressed in that control are its own.\nControls in cells stay in the tab order. `caption` names the table (and the\nlist of cards); `hide-caption` keeps it for assistive technology only.\n`labels` translate its words.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Table/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Badge, Table, type RowKey, type TableColumn } from '@weft/ui'\n\ninterface Invoice {\n  id: number\n  customer: string\n  status: 'paid' | 'open' | 'overdue'\n  amount: number\n}\n\nconst rows: Invoice[] = [\n  { id: 1041, customer: 'Ada Lovelace', status: 'paid', amount: 1250 },\n  { id: 1042, customer: 'Grace Hopper', status: 'open', amount: 320.5 },\n  { id: 1043, customer: 'Alan Turing', status: 'overdue', amount: 980 },\n  { id: 1044, customer: 'Barbara Liskov', status: 'paid', amount: 45 },\n  { id: 1045, customer: 'Linus Torvalds', status: 'open', amount: 610 },\n  { id: 1046, customer: 'Margaret Hamilton', status: 'paid', amount: 2210 },\n]\nconst columns: TableColumn<Invoice>[] = [\n  { key: 'id', label: 'Invoice', sortable: true, format: (v) => `#${v}` },\n  { key: 'customer', label: 'Customer', sortable: true, rowHeader: true },\n  { key: 'status', label: 'Status' },\n  { key: 'amount', label: 'Amount', sortable: true, align: 'end', format: (v) => `€${(v as number).toFixed(2)}` },\n]\nconst tones = { paid: 'success', open: 'neutral', overdue: 'danger' } as const\nconst sort = ref<string | null>('-amount')\nconst selected = ref<RowKey[]>([])\n</script>\n\n<template>\n  <Table v-model:sort=\"sort\" v-model:selected=\"selected\" :rows=\"rows\" :columns=\"columns\" caption=\"Invoices\" selectable :per-page=\"5\">\n    <template #status-cell=\"{ row }\">\n      <Badge :label=\"row.status\" :tone=\"tones[row.status]\" variant=\"soft\" />\n    </template>\n  </Table>\n</template>\n"
+        },
+        {
+          "name": "server",
+          "title": "Server",
+          "file": "packages/ui/examples/Table/server.vue",
+          "source": "<script setup vapor lang=\"ts\">\n// A Table driven by a server speaking the wire format: each page and sort\n// is a request (here answered in memory, as a weft.Resource would).\nimport { EmptyState, Table, tableSearch, type TableColumn, type TableQuery, type TableResult } from '@weft/ui'\n\ninterface Customer {\n  id: number\n  name: string\n  plan: string\n  since: string\n}\n\nconst all: Customer[] = Array.from({ length: 87 }, (_, i) => ({\n  id: i + 1,\n  name: `Customer ${String(i + 1).padStart(2, '0')}`,\n  plan: ['basic', 'pro', 'business'][i % 3]!,\n  since: `2026-${String((i % 12) + 1).padStart(2, '0')}-01`,\n}))\n\n/** In an app: `fetch('/api/customers?' + tableSearch(query)).then((r) => r.json())`. */\nasync function load(query: TableQuery): Promise<TableResult<Customer>> {\n  const params = tableSearch(query)\n  const sort = params.get('sort')\n  const key = (sort?.replace(/^-/, '') ?? 'id') as keyof Customer\n  const sorted = [...all].sort((a, b) => String(a[key]).localeCompare(String(b[key]), undefined, { numeric: true }) * (sort?.startsWith('-') ? -1 : 1))\n  const start = (query.page - 1) * query.perPage\n  return { items: sorted.slice(start, start + query.perPage), total: all.length, page: query.page, perPage: query.perPage }\n}\n\nconst columns: TableColumn<Customer>[] = [\n  { key: 'name', label: 'Name', sortable: true, rowHeader: true },\n  { key: 'plan', label: 'Plan', sortable: true },\n  { key: 'since', label: 'Customer since', sortable: true, align: 'end' },\n]\n</script>\n\n<template>\n  <Table :fetch=\"load\" :columns=\"columns\" :per-page=\"10\" caption=\"Customers\" height=\"24rem\">\n    <template #empty>\n      <EmptyState title=\"No customers yet\" icon=\"users\" variant=\"ghost\" />\n    </template>\n  </Table>\n</template>\n"
         }
       ]
     },
@@ -7343,6 +8171,127 @@
       ]
     },
     {
+      "name": "Timeline",
+      "group": "data",
+      "file": "packages/ui/src/data/Timeline.vue",
+      "purpose": "Events in order, each a dot on a line with its date, title and description, the ones up to now marked done.",
+      "use": "For an order's progress, an account's history or a changelog: what happened, and when.",
+      "avoid": "For steps a person moves through and can go back to, use Stepper; for a log to search and sort, use Table.",
+      "adapts": {
+        "input": "Nothing changes; it is not interactive.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "A horizontal timeline turns vertical when its own box is narrow, so the text keeps its width."
+      },
+      "props": [
+        {
+          "name": "items",
+          "type": "TimelineItem[]",
+          "required": false,
+          "default": "() => []",
+          "description": "The events: `{ date, title, description, icon, value }`, oldest first."
+        },
+        {
+          "name": "modelValue",
+          "type": "string | number",
+          "required": false,
+          "default": "undefined",
+          "description": "The current item's value (or its place, from 0): those before it are done."
+        },
+        {
+          "name": "defaultValue",
+          "type": "string | number",
+          "required": false,
+          "default": "undefined",
+          "description": "The current item when `v-model` is not bound."
+        },
+        {
+          "name": "orientation",
+          "type": "'vertical' | 'horizontal'",
+          "required": false,
+          "default": "'vertical'",
+          "description": "`vertical` (default) or `horizontal`; vertical whenever its box is narrow."
+        },
+        {
+          "name": "reverse",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "List the newest first."
+        },
+        {
+          "name": "tone",
+          "type": "'neutral' | 'primary' | 'danger' | 'warning' | 'success'",
+          "required": false,
+          "default": "'primary'",
+          "description": "The colour of the done and current items."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": "'md'",
+          "description": "`sm`, `md` or `lg`: the dots and the text."
+        },
+        {
+          "name": "labels",
+          "type": "Partial<TimelineLabels>",
+          "required": false,
+          "default": null,
+          "description": "The words it says; give some or all to translate them."
+        }
+      ],
+      "emits": [],
+      "slots": [
+        {
+          "name": "indicator",
+          "props": [
+            "item",
+            "index"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "date",
+          "props": [
+            "item",
+            "index"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "title",
+          "props": [
+            "item",
+            "index"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "description",
+          "props": [
+            "item",
+            "index"
+          ],
+          "dynamic": false
+        }
+      ],
+      "notes": "`items` are `{ date, title, description, icon, value }`, oldest first;\n`reverse` lists the newest first. `date` is text as it should read (\"Mar\n4\", \"2 hours ago\"). An item with an `icon` draws it in a disc; the others\nare dots.\n\nGive the current item with `v-model` (its `value`, or its place from 0):\nthe items before it are done, drawn in `tone` with their line, and said as\n\"Done:\" before the title (translate with `labels`); the current one is\nringed and says `aria-current=\"step\"`; the later ones are muted. With no\ncurrent item every item is drawn alike. The timeline only shows this; it\nnever changes it.\n\nIt is an ordered list; the dots and lines are hidden from assistive\ntechnology. The `indicator`, `date`, `title` and `description` slots draw\nan item's parts (`{ item, index }`). `orientation` is `vertical` (default)\nor `horizontal`; `size` sets the dots and text.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Timeline/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Timeline } from '@weft/ui'\n\nconst events = [\n  { value: 'ordered', date: 'Mar 1, 09:12', title: 'Order placed', description: 'Paid by card ending 4242.', icon: 'shopping-cart' },\n  { value: 'shipped', date: 'Mar 2, 16:40', title: 'Shipped', description: 'Handed to the courier in Prishtina.', icon: 'truck' },\n  { value: 'delivered', date: 'Expected Mar 4', title: 'Delivered', icon: 'package-check' },\n]\n</script>\n\n<template>\n  <Timeline :items=\"events\" model-value=\"shipped\" />\n</template>\n"
+        },
+        {
+          "name": "horizontal",
+          "title": "Horizontal",
+          "file": "packages/ui/examples/Timeline/horizontal.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Timeline } from '@weft/ui'\n\nconst releases = [\n  { date: 'Jan', title: 'Alpha' },\n  { date: 'Apr', title: 'Beta' },\n  { date: 'Jul', title: 'Release candidate' },\n  { date: 'Oct', title: '1.0' },\n]\n</script>\n\n<template>\n  <Timeline :items=\"releases\" orientation=\"horizontal\" :model-value=\"2\" tone=\"success\" />\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "Toast",
       "group": "overlays",
       "file": "packages/ui/src/overlays/Toast.vue",
@@ -7518,6 +8467,312 @@
           "title": "Basic",
           "file": "packages/ui/examples/Toaster/basic.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { Button, Stack, Toaster, useToast } from '@weft/ui'\n\nconst toast = useToast()\nfunction save() {\n  toast.add({ title: 'Saved', description: 'Your draft is safe.', tone: 'success', icon: 'circle-check' })\n}\nfunction remove() {\n  toast.add({ title: 'Message deleted', actions: [{ label: 'Undo', onClick: () => toast.add({ title: 'Restored' }) }] })\n}\n</script>\n\n<template>\n  <Stack direction=\"row\" :gap=\"2\">\n    <Button label=\"Save\" @click=\"save\" />\n    <Button label=\"Delete\" variant=\"outline\" tone=\"neutral\" @click=\"remove\" />\n  </Stack>\n  <!-- Once, in the app's layout. -->\n  <Toaster position=\"bottom-end\" />\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "Toggle",
+      "group": "forms",
+      "file": "packages/ui/src/forms/Toggle.vue",
+      "purpose": "A button that stays pressed or not, such as Bold in a text toolbar.",
+      "use": "For an on-off choice shown as a button among other buttons (bold, mute, pin), where the press itself says the state.",
+      "avoid": "For a setting with a label beside it, use Switch; for one choice among several buttons, use ToggleGroup; for an action, use Button.",
+      "adapts": {
+        "input": "On touch an md toggle is at least --weft-hit-min (44 px) tall, a small or square one through its hit area (Button's rule).",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "Nothing changes; it does not wrap."
+      },
+      "props": [
+        {
+          "name": "modelValue",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "Pressed or not, bound with `v-model`."
+        },
+        {
+          "name": "defaultValue",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "Pressed at first when `v-model` is not bound."
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The text; the default slot replaces it."
+        },
+        {
+          "name": "icon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon before the label; alone, the toggle is square and needs an `aria-label`."
+        },
+        {
+          "name": "trailingIcon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon after the label."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The form field name: it posts `value` while pressed."
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "required": false,
+          "default": "'on'",
+          "description": "What a form post sends while pressed (default `on`)."
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The button's id."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": null,
+          "description": "`sm`, `md` or `lg`."
+        },
+        {
+          "name": "tone",
+          "type": "'neutral' | 'primary' | 'danger' | 'warning' | 'success'",
+          "required": false,
+          "default": "'neutral'",
+          "description": "The colour while not pressed."
+        },
+        {
+          "name": "variant",
+          "type": "'solid' | 'soft' | 'outline' | 'ghost'",
+          "required": false,
+          "default": "'ghost'",
+          "description": "The variant while not pressed."
+        },
+        {
+          "name": "activeTone",
+          "type": "'neutral' | 'primary' | 'danger' | 'warning' | 'success'",
+          "required": false,
+          "default": "'primary'",
+          "description": "The colour while pressed."
+        },
+        {
+          "name": "activeVariant",
+          "type": "'solid' | 'soft' | 'outline' | 'ghost'",
+          "required": false,
+          "default": "'soft'",
+          "description": "The variant while pressed."
+        },
+        {
+          "name": "square",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Square, its width equal to its height."
+        },
+        {
+          "name": "loading",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Work in progress (the change is being saved): a spinner, aria-busy, and no toggling."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Unavailable: natively disabled."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:modelValue",
+          "payload": "[value: boolean]",
+          "description": "Pressed or released."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "leading",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "trailing",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "Bind `v-model` to a boolean. It is a Button that says `aria-pressed`, so\nassistive technology reads it as a toggle button (APG button pattern); a\npress, Enter or Space changes it. Not pressed it is drawn with `variant`\nand `tone` (`ghost`, `neutral`), pressed with `active-variant` and\n`active-tone` (`soft`, `primary`). `label`, `icon`, `trailing-icon`,\n`square`, `size` and the leading, default and trailing slots are Button's;\nwith only an icon give it an `aria-label`.\n\nWith a `name` it posts `value` (default `on`) with a plain form while\npressed, and nothing while not, as a checkbox does. `loading` (the change is\nbeing saved) shows a spinner, says `aria-busy` and blocks every press;\n`disabled` is the native attribute. In a FormField it takes the field's id\nand disabled state.\n\nIt has no stylesheet of its own: it is drawn by Button's.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Toggle/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Stack, Toggle } from '@weft/ui'\n\nconst bold = ref(true)\nconst italic = ref(false)\nconst pinned = ref(false)\n</script>\n\n<template>\n  <Stack direction=\"row\" :gap=\"2\">\n    <Toggle v-model=\"bold\" icon=\"bold\" aria-label=\"Bold\" />\n    <Toggle v-model=\"italic\" icon=\"italic\" aria-label=\"Italic\" />\n    <Toggle v-model=\"pinned\" label=\"Pinned\" variant=\"outline\" />\n  </Stack>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "ToggleGroup",
+      "group": "forms",
+      "file": "packages/ui/src/forms/ToggleGroup.vue",
+      "purpose": "A row of toggle buttons, one pressed or none, or any number with `multiple`.",
+      "use": "For a small set of choices shown as buttons in a toolbar: text alignment, a view (list or grid), the styles of a selection.",
+      "avoid": "For a choice in a form with labels, use RadioGroup or CheckboxGroup; for switching panels, use Tabs; for more than five or six options, use Select.",
+      "adapts": {
+        "input": "On touch every button is at least --weft-hit-min tall (Button's rule).",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "A horizontal group wraps onto more lines when its box is narrow (unless attached)."
+      },
+      "props": [
+        {
+          "name": "items",
+          "type": "ToggleGroupItem[]",
+          "required": false,
+          "default": "() => []",
+          "description": "The buttons: `{ label, value, icon, trailingIcon, ariaLabel, disabled }`."
+        },
+        {
+          "name": "modelValue",
+          "type": "string | number | null | Value[]",
+          "required": false,
+          "default": "undefined",
+          "description": "The pressed value (null for none), or the pressed values with `multiple`, bound with `v-model`."
+        },
+        {
+          "name": "defaultValue",
+          "type": "string | number | null | Value[]",
+          "required": false,
+          "default": "undefined",
+          "description": "What is pressed when `v-model` is not bound."
+        },
+        {
+          "name": "multiple",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Any number can be pressed."
+        },
+        {
+          "name": "orientation",
+          "type": "'horizontal' | 'vertical'",
+          "required": false,
+          "default": "'horizontal'",
+          "description": "`horizontal` (default) or `vertical`: which arrow keys move."
+        },
+        {
+          "name": "loop",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "The arrow keys wrap round at the ends."
+        },
+        {
+          "name": "attached",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Join the buttons into one bar."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The form field name: each pressed value posts under it."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": null,
+          "description": "`sm`, `md` or `lg`."
+        },
+        {
+          "name": "tone",
+          "type": "'neutral' | 'primary' | 'danger' | 'warning' | 'success'",
+          "required": false,
+          "default": "'neutral'",
+          "description": "The colour of the buttons not pressed."
+        },
+        {
+          "name": "variant",
+          "type": "'solid' | 'soft' | 'outline' | 'ghost'",
+          "required": false,
+          "default": "'ghost'",
+          "description": "The variant of the buttons not pressed."
+        },
+        {
+          "name": "activeTone",
+          "type": "'neutral' | 'primary' | 'danger' | 'warning' | 'success'",
+          "required": false,
+          "default": "'primary'",
+          "description": "The colour of the pressed buttons."
+        },
+        {
+          "name": "activeVariant",
+          "type": "'solid' | 'soft' | 'outline' | 'ghost'",
+          "required": false,
+          "default": "'soft'",
+          "description": "The variant of the pressed buttons."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Every button is disabled."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:modelValue",
+          "payload": "[value: Value | null | Value[]]",
+          "description": "The pressed value or values changed."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [
+            "item",
+            "index",
+            "pressed"
+          ],
+          "dynamic": false
+        }
+      ],
+      "notes": "`items` are `{ label, value, icon, trailingIcon, ariaLabel, tone, variant,\ndisabled }` (a value defaults to the item's place). Bind `v-model` to the\npressed value (null for none), or, with `multiple`, to the list of pressed\nvalues. Pressing the pressed item of a single group releases it.\n\nIt is a `role=\"group\"` (give it an `aria-label`) of buttons that say\n`aria-pressed`. **Keyboard:** the group is one tab stop, which rests on the\npressed item; the arrow keys move along it (Left and Right, mirrored right\nto left; Up and Down when `orientation=\"vertical\"`), wrapping round unless\n`loop` is off; Home and End go to the ends; disabled items are passed by;\nEnter and Space press.\n\n`variant` and `tone` (`ghost`, `neutral`) draw the buttons not pressed,\n`active-variant` and `active-tone` (`soft`, `primary`) the pressed ones.\n`attached` joins them into one bar. With a `name` each pressed value posts\nwith a plain form. `disabled` disables every button. The default slot draws\na button's label (`{ item, index, pressed }`).",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/ToggleGroup/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { ToggleGroup, type ToggleGroupItem } from '@weft/ui'\n\nconst align = ref<string | number | null | (string | number)[]>('left')\nconst items: ToggleGroupItem[] = [\n  { value: 'left', icon: 'align-left', ariaLabel: 'Left' },\n  { value: 'center', icon: 'align-center', ariaLabel: 'Center' },\n  { value: 'right', icon: 'align-right', ariaLabel: 'Right' },\n]\n</script>\n\n<template>\n  <ToggleGroup v-model=\"align\" aria-label=\"Text alignment\" :items=\"items\" />\n</template>\n"
+        },
+        {
+          "name": "multiple-attached",
+          "title": "Multiple attached",
+          "file": "packages/ui/examples/ToggleGroup/multiple-attached.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { ToggleGroup, type ToggleGroupItem } from '@weft/ui'\n\nconst styles = ref<string | number | null | (string | number)[]>(['bold'])\nconst items: ToggleGroupItem[] = [\n  { value: 'bold', icon: 'bold', label: 'Bold' },\n  { value: 'italic', icon: 'italic', label: 'Italic' },\n  { value: 'underline', icon: 'underline', label: 'Underline' },\n]\n</script>\n\n<template>\n  <ToggleGroup v-model=\"styles\" multiple attached variant=\"outline\" aria-label=\"Text style\" :items=\"items\" />\n</template>\n"
         }
       ]
     },

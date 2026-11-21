@@ -1,0 +1,42 @@
+/* EmptyState and ErrorState: a centred column (an icon in a soft disc, a
+   title, a sentence, the actions), boxed by a dashed border, a tint or
+   nothing. The actions stack when there is no room for them side by side. */
+.weft-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--weft-space-2, 8px);
+  padding: var(--weft-space-8, 32px) var(--weft-space-4, 16px);
+  border-radius: var(--weft-radius-card, 12px);
+  text-align: center;
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-empty-state[data-size="sm"] { padding: var(--weft-space-4, 16px) var(--weft-space-3, 12px); }
+.weft-empty-state[data-size="lg"] { padding: var(--weft-space-8, 32px) var(--weft-space-6, 24px); gap: var(--weft-space-3, 12px); }
+.weft-empty-state[data-variant="outline"] { border: 1px dashed var(--weft-color-border, GrayText); }
+.weft-empty-state[data-variant="soft"] { background: color-mix(in srgb, var(--weft-color-text, CanvasText) 4%, transparent); }
+.weft-empty-state__icon {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 48px;
+  block-size: 48px;
+  margin-block-end: var(--weft-space-1, 4px);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--weft-color-text, CanvasText) 6%, transparent);
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-empty-state[data-size="sm"] .weft-empty-state__icon { inline-size: 36px; block-size: 36px; }
+.weft-empty-state[data-size="lg"] .weft-empty-state__icon { inline-size: 64px; block-size: 64px; }
+.weft-empty-state__icon .weft-icon { inline-size: 24px; block-size: 24px; }
+.weft-empty-state[data-size="lg"] .weft-empty-state__icon .weft-icon { inline-size: 32px; block-size: 32px; }
+.weft-empty-state__title { margin: 0; font-size: 1.15em; font-weight: var(--weft-weight-heading, 600); }
+.weft-empty-state__description { max-inline-size: 36em; color: var(--weft-color-text-muted, GrayText); }
+.weft-empty-state__body { max-inline-size: 36em; }
+.weft-empty-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--weft-space-2, 8px);
+  margin-block-start: var(--weft-space-2, 8px);
+}
+.weft-empty-state__footer { margin-block-start: var(--weft-space-2, 8px); color: var(--weft-color-text-muted, GrayText); font-size: 0.9em; }

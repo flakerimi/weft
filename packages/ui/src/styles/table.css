@@ -1,0 +1,150 @@
+/* Table: rows under a header that stays in view as they scroll inside the
+   table's own box (which scrolls sideways too when the columns are wider).
+   Rows are a control height tall, at least --weft-hit-min on touch, and
+   exactly --weft-table-row once windowed. Chosen rows are tinted. A sort
+   button fills its header; its arrow mirrors nothing (up is up). When
+   narrow, each row is a card of label–value pairs. */
+.weft-table {
+  --weft-table-pad-block: var(--weft-space-2, 8px);
+  --weft-table-pad-inline: var(--weft-space-3, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-3, 12px);
+  min-inline-size: 0;
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-table[data-size="sm"] { --weft-table-pad-block: var(--weft-space-1, 4px); --weft-table-pad-inline: var(--weft-space-2, 8px); }
+.weft-table[data-size="lg"] { --weft-table-pad-block: var(--weft-space-3, 12px); --weft-table-pad-inline: var(--weft-space-4, 16px); }
+.weft-table__scroller {
+  overflow: auto;
+  overscroll-behavior-inline: contain;
+  border: 1px solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-card, 12px);
+  background: var(--weft-color-surface, Canvas);
+}
+.weft-table__table {
+  inline-size: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.weft-table__caption {
+  padding: var(--weft-table-pad-block) var(--weft-table-pad-inline);
+  text-align: start;
+  font-weight: var(--weft-weight-heading, 600);
+}
+.weft-table__table th,
+.weft-table__table td {
+  block-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
+  padding: var(--weft-table-pad-block) var(--weft-table-pad-inline);
+  border-block-end: 1px solid var(--weft-color-border, GrayText);
+  text-align: start;
+  vertical-align: middle;
+}
+.weft-table[data-size="sm"] .weft-table__table :is(th, td) { block-size: max(var(--weft-control-sm, 28px), var(--weft-hit-min, 24px)); }
+.weft-table[data-size="lg"] .weft-table__table :is(th, td) { block-size: max(var(--weft-control-lg, 44px), var(--weft-hit-min, 24px)); }
+.weft-table__table tbody tr:last-child :is(th, td) { border-block-end: 0; }
+.weft-table__table tbody th { font-weight: var(--weft-weight-heading, 600); }
+.weft-table__table thead th {
+  background: var(--weft-color-surface, Canvas);
+  color: var(--weft-color-text-muted, GrayText);
+  font-weight: var(--weft-weight-heading, 600);
+  white-space: nowrap;
+}
+.weft-table[data-sticky] .weft-table__table thead th { position: sticky; inset-block-start: 0; z-index: 1; }
+.weft-table__table [data-align="center"] { text-align: center; }
+.weft-table__table [data-align="end"] { text-align: end; }
+.weft-table__select { inline-size: 1%; }
+.weft-table__table tbody tr[data-selected] :is(th, td) { background: var(--weft-color-primary-soft, color-mix(in srgb, LinkText 10%, transparent)); }
+.weft-table[data-loading] tbody tr:not(.weft-table__skeleton) { opacity: 0.6; }
+.weft-table__skeleton .weft-skeleton { max-inline-size: 12em; }
+.weft-table__empty,
+.weft-table__error {
+  padding: var(--weft-space-6, 24px) var(--weft-table-pad-inline);
+  text-align: center;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-table__error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--weft-space-3, 12px);
+  color: var(--weft-color-danger-text, #AB2323);
+}
+.weft-table__table td:has(> .weft-table__error) { padding: 0; }
+/* Windowed: every row exactly one height, its text on one line; the spacers take the rest. */
+.weft-table[data-virtual] .weft-table__table tbody tr:not(.weft-table__spacer) :is(th, td) {
+  block-size: var(--weft-table-row, 44px);
+  padding-block: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.weft-table__spacer td { padding: 0; border: 0; }
+
+/* A sort button fills its header: the whole header is the hit target. */
+.weft-table__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--weft-space-1, 4px);
+  min-block-size: max(var(--weft-control-sm, 28px), var(--weft-hit-min, 24px));
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  border-radius: calc(var(--weft-radius-control, 8px) - 2px);
+}
+.weft-table__table th[data-align="end"] .weft-table__sort { flex-direction: row-reverse; }
+.weft-table__sort:hover { color: var(--weft-color-text, CanvasText); }
+.weft-table__arrow { flex: none; inline-size: 14px; block-size: 14px; opacity: 0.5; }
+.weft-table__arrow[data-dir] { opacity: 1; }
+.weft-table__table th[aria-sort] { color: var(--weft-color-text, CanvasText); }
+
+/* Grid: the focused cell is ringed inside its edges. */
+.weft-table__table[role="grid"] td:focus-visible,
+.weft-table__table[role="grid"] th:focus-visible {
+  outline: 2px solid var(--weft-color-focus, Highlight);
+  outline-offset: -2px;
+}
+
+/* Cards, when narrow. */
+.weft-table__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--weft-space-2, 8px) var(--weft-space-4, 16px);
+}
+.weft-table__sorts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--weft-space-1, 4px) var(--weft-space-3, 12px); }
+.weft-table__sorts-label { color: var(--weft-color-text-muted, GrayText); }
+.weft-table__sorts .weft-table__sort { padding-inline: var(--weft-space-2, 8px); color: var(--weft-color-text-muted, GrayText); }
+.weft-table__sorts .weft-table__sort[data-active] { color: var(--weft-color-primary-text, LinkText); font-weight: var(--weft-weight-heading, 600); }
+.weft-table__cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-2, 8px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.weft-table__card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--weft-space-3, 12px);
+  padding: var(--weft-space-3, 12px);
+  border: 1px solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-card, 12px);
+  background: var(--weft-color-surface, Canvas);
+}
+.weft-table__card[data-selected] { border-color: var(--weft-color-primary, LinkText); background: var(--weft-color-primary-soft, color-mix(in srgb, LinkText 10%, transparent)); }
+.weft-table__card.weft-table__skeleton { flex-direction: column; }
+.weft-table__card-select { display: flex; align-items: center; min-block-size: var(--weft-hit-min, 24px); }
+.weft-table__pairs { flex: 1; min-inline-size: 0; display: grid; gap: var(--weft-space-1, 4px); margin: 0; }
+.weft-table__pair { display: flex; justify-content: space-between; gap: var(--weft-space-3, 12px); min-block-size: var(--weft-hit-min, 24px); align-items: baseline; }
+.weft-table__pair dt { color: var(--weft-color-text-muted, GrayText); }
+.weft-table__pair dd { margin: 0; text-align: end; overflow-wrap: anywhere; }
+.weft-table__pagination { align-self: center; }
