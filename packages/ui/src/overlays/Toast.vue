@@ -4,7 +4,8 @@
 // --weft-duration-toast), a bar showing the time left, by emitting `close`
 // once its leave transition has played; its time stops while `paused` (a
 // Toaster pauses every toast while it is hovered or has focus), resuming
-// with what it had left, and starts again when `duration` changes. Escape
+// with what it had left, and starts again when `revision` goes up (the
+// message was replaced) or `duration` changes. Escape
 // on it closes it; on touch a swipe towards `swipe` (its Toaster's edge)
 // throws it away. Toaster renders these from useToast(); render one
 // yourself only inside a live region.
@@ -44,6 +45,8 @@ const props = withDefaults(
     actions?: ToastAction[]
     /** Show the time left as a bar. */
     progress?: boolean
+    /** Counts the message's replacements (useToast sets it); each one starts its time again. */
+    revision?: number
     /** The edge a swipe on touch throws it towards: its Toaster's side. */
     swipe?: 'start' | 'end'
   }>(),
@@ -104,7 +107,7 @@ function restart() {
   go()
 }
 onMounted(restart)
-watch(() => props.duration, restart)
+watch([() => props.duration, () => props.revision], restart)
 watch(() => props.paused, (on) => (on ? stop() : go()))
 
 /** Play the leave transition, then emit close. */

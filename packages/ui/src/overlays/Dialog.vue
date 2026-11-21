@@ -89,7 +89,8 @@ const full = computed(() => props.fullscreen || width.value === 'narrow')
         :role="role"
         aria-modal="true"
         :aria-labelledby="title || $slots.header ? m.ids.title : undefined"
-        :aria-describedby="description ? m.ids.description : undefined"
+        :aria-describedby="description && !$slots.header ? m.ids.description : undefined"
+        :inert="m.closing.value || undefined"
         :data-fullscreen="full ? 'true' : undefined"
       >
         <OverlayPanel

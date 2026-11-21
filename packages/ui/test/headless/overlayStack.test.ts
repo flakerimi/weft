@@ -211,11 +211,11 @@ describe('overlayStack', () => {
   })
 
   it('passes presses on from a pass-through entry (a tooltip) to the one below, but not Escape', () => {
-    const root = html('<div class="menu"><button class="item">i</button></div><div class="tip">t</div><p class="out">o</p>')
+    const root = html('<div class="menu"><button class="item">i</button></div><div class="tip">t</div><button class="tip-trigger">?</button><p class="out">o</p>')
     const menu = { onOutside: vi.fn(), onEscape: vi.fn() }
     const tip = { onOutside: vi.fn(), onEscape: vi.fn() }
     overlayStack.push('menu', { el: () => $('.menu', root), ...menu })
-    overlayStack.push('tip', { el: () => $('.tip', root), passThrough: true, ...tip })
+    overlayStack.push('tip', { el: () => $('.tip', root), passThrough: true, ignore: () => [$('.tip-trigger', root)], ...tip })
     press($('.out', root)) // outside both: each takes it
     expect(tip.onOutside).toHaveBeenCalledOnce()
     expect(menu.onOutside).toHaveBeenCalledOnce()
@@ -227,6 +227,9 @@ describe('overlayStack', () => {
     expect(menu.onOutside).toHaveBeenCalledOnce()
     press($('.out', root), 'touch') // on touch, at the click
     expect(menu.onOutside).toHaveBeenCalledTimes(2)
+    press($('.tip-trigger', root)) // on the tooltip's own trigger: not its outside, the menu's still
+    expect(tip.onOutside).toHaveBeenCalledTimes(3)
+    expect(menu.onOutside).toHaveBeenCalledTimes(3)
     key('Escape')
     expect(tip.onEscape).toHaveBeenCalledOnce()
     expect(menu.onEscape).not.toHaveBeenCalled()

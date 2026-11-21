@@ -34,8 +34,10 @@ elsewhere. On touch a press on the backdrop closes it and does return focus.
 
 **Hover mode.** `mode="hover"` opens it too while the pointer is over the
 trigger or the content (after `open-delay`, 100 ms) and closes it when the
-pointer has left both (after `close-delay`, 200 ms), without moving focus;
-a press still toggles it, and on touch it is pressed as ever. `arrow` draws
+pointer has left both (after `close-delay`, 200 ms), without moving focus.
+A click on the trigger while the hover has it open pins it open (the pointer
+leaving no longer closes it; the next click does), and on touch it is pressed
+as ever. `arrow` and `offset` can change while it is open. `arrow` draws
 an arrow pointing at the trigger. When it starts open (`default-open`) it
 does not take focus, so a page that hydrates keeps its own. Modal, the page
 behind is inert. It fades out when it closes, unless motion is reduced.

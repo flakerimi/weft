@@ -78,7 +78,8 @@ const open = m.open
         role="dialog"
         aria-modal="true"
         :aria-labelledby="title || $slots.header ? m.ids.title : undefined"
-        :aria-describedby="description ? m.ids.description : undefined"
+        :aria-describedby="description && !$slots.header ? m.ids.description : undefined"
+        :inert="m.closing.value || undefined"
         :data-side="side"
       >
         <OverlayPanel

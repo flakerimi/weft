@@ -19,8 +19,10 @@
  *   it, so a scroll that starts outside does not close anything. A
  *   `passThrough` entry (a tooltip) takes a press outside it and passes it
  *   on to the entry below, so one press closes a tooltip and the menu it
- *   shows over; Escape still stops at it. An entry that declines a press
- *   (`onOutside` returning false, as a modal does) passes nothing on.
+ *   shows over; Escape still stops at it. A press on one of its `ignore`
+ *   elements (the tooltip's trigger) is not outside it, but goes on down
+ *   just the same. An entry that declines a press (`onOutside` returning
+ *   false, as a modal does) passes nothing on.
  * - Restoring focus: the stack is the one owner of returning focus when an
  *   overlay closes. `pop` returns focus to the entry's `returnTo` (an element,
  *   ref or getter, read at pop), by default the element that had focus when
@@ -82,11 +84,13 @@ const elOf = (e: Entry) => {
 }
 const topEntry = () => entries[entries.length - 1]
 
-function isOutside(e: Entry, target: EventTarget | null): boolean {
-  if (!(target instanceof Node) || !target.isConnected) return false
-  if (elOf(e)?.contains(target)) return false
-  return !(e.ignore?.() ?? []).some((el) => el?.contains(target))
+/** Where a press landed for `e`: in its element, on one of its ignored elements (its trigger), or outside. */
+function placeOf(e: Entry, target: EventTarget | null): 'inside' | 'ignored' | 'outside' {
+  if (!(target instanceof Node) || !target.isConnected) return 'inside'
+  if (elOf(e)?.contains(target)) return 'inside'
+  return (e.ignore?.() ?? []).some((el) => el?.contains(target)) ? 'ignored' : 'outside'
 }
+const isOutside = (e: Entry, target: EventTarget | null) => placeOf(e, target) === 'outside'
 
 function onKeydown(event: KeyboardEvent) {
   if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return
@@ -133,9 +137,17 @@ function onPointerdown(event: PointerEvent) {
       if (e.passThrough) continue
       return
     }
-    if (!isOutside(e, event.target)) {
+    const place = placeOf(e, event.target)
+    if (place === 'inside') {
       // A press inside this overlay is outside none below it that it covers.
       e.closedOutside = false
+      return
+    }
+    if (place === 'ignored') {
+      e.closedOutside = false
+      // A pass-through overlay's trigger (a toolbar button with a tooltip)
+      // is not part of the overlay below: the press goes on down.
+      if (e.passThrough) continue
       return
     }
     if (event.pointerType === 'touch') pendingTouch.push(e)

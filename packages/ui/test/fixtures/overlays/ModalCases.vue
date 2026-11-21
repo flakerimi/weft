@@ -12,7 +12,7 @@ const props = withDefaults(
     dismissible?: boolean
     fullscreen?: boolean
     side?: 'start' | 'end' | 'top' | 'bottom'
-    work?: 'none' | 'resolve' | 'reject'
+    work?: 'none' | 'resolve' | 'reject' | 'throw' | 'thenable'
     overlay?: boolean
     scrollable?: boolean
     header?: boolean
@@ -27,6 +27,11 @@ let settleWork: (() => void) | undefined
 function onConfirm() {
   confirms.value++
   if (props.work === 'none') return
+  if (props.work === 'throw') throw new Error('at once')
+  if (props.work === 'thenable') {
+    // A thenable that is not a native Promise (a library's own).
+    return { then: (_: () => void, fail: (e: unknown) => void) => void (settleWork = () => fail(new Error('later'))) }
+  }
   return new Promise<void>((resolve, reject) => {
     settleWork = props.work === 'resolve' ? resolve : () => reject(new Error('no'))
   })

@@ -62,6 +62,8 @@ describe('Dialog', () => {
     await openFromTrigger()
     const dialog = $('[role="dialog"]')
     expect(document.getElementById(dialog.getAttribute('aria-labelledby')!)!.textContent).toBe('My heading')
+    // The slot replaced the description too: nothing to describe it by.
+    expect(dialog.hasAttribute('aria-describedby')).toBe(false)
   })
 
   it('draws no backdrop with overlay off, still modal; scrollable lets the layer scroll', async () => {
@@ -85,6 +87,7 @@ describe('Dialog', () => {
       expect(m.exposed.open).toBe(false)
       expect(dialog.isConnected).toBe(true)
       expect(dialog.parentElement!.dataset.state).toBe('closed')
+      expect(dialog.inert).toBe(true) // not to be pressed or focused on its way out
       expect(active()).toBe($('.trigger')) // focus is home already
       await new Promise((r) => setTimeout(r, 120))
       expect(dialog.isConnected).toBe(false)
@@ -95,6 +98,25 @@ describe('Dialog', () => {
       await settle()
       expect(again.isConnected).toBe(false)
     } finally {
+      unstyle()
+    }
+  })
+
+  it('goes at once under reduced motion, whose base.css rule zeroes every transition', async () => {
+    const settings = (window as unknown as { happyDOM: { settings: { device: { prefersReducedMotion: string } } } }).happyDOM.settings.device
+    const unstyle = loadStyles()
+    settings.prefersReducedMotion = 'reduce'
+    try {
+      await cases({ case: 'dialog' })
+      await openFromTrigger()
+      const dialog = $('[role="dialog"]')
+      dialog.style.transitionDuration = '40ms' // base.css's !important rule wins over it
+      expect(getComputedStyle(dialog).transitionDuration).toBe('0ms')
+      key('Escape')
+      await settle()
+      expect(dialog.isConnected).toBe(false)
+    } finally {
+      settings.prefersReducedMotion = 'no-preference'
       unstyle()
     }
   })
@@ -225,6 +247,28 @@ describe('Sheet', () => {
     expect(m.exposed.open).toBe(false)
     expect(active()).toBe($('.trigger'))
     expect(locked()).toBe(false)
+  })
+
+  it('makes its leaving panel inert, and Drawer too', async () => {
+    const unstyle = loadStyles()
+    try {
+      for (const kind of ['sheet', 'drawer']) {
+        const m = await cases({ case: kind })
+        await openFromTrigger()
+        const panel = $('[role="dialog"]')
+        panel.style.transitionDuration = '40ms'
+        key('Escape')
+        await settle()
+        expect(m.exposed.open, kind).toBe(false)
+        expect(panel.inert, kind).toBe(true)
+        await new Promise((r) => setTimeout(r, 120))
+        unmount?.()
+        unmount = undefined
+        reset()
+      }
+    } finally {
+      unstyle()
+    }
   })
 
   it.each(['start', 'top', 'bottom'])('opens from the %s side', async (side) => {
@@ -376,5 +420,30 @@ describe('ConfirmDialog', () => {
     expect(confirm.hasAttribute('aria-busy')).toBe(false)
     // Not swallowed: the error reaches the page.
     expect((m.exposed.errors as unknown[]).map((e) => (e as Error).message)).toEqual(['no'])
+  })
+
+  it('takes a handler that throws at once down the same failure path', async () => {
+    const m = await cases({ case: 'confirm', work: 'throw' })
+    await openFromTrigger()
+    const confirm = $$('button', $('[role="alertdialog"]'))[1]!
+    confirm.click()
+    await settle()
+    expect(m.exposed.open).toBe(true)
+    expect(confirm.hasAttribute('aria-busy')).toBe(false)
+    expect((m.exposed.errors as unknown[]).map((e) => (e as Error).message)).toEqual(['at once'])
+  })
+
+  it('waits on a thenable that is not a native Promise, and fails the same way', async () => {
+    const m = await cases({ case: 'confirm', work: 'thenable' })
+    await openFromTrigger()
+    const confirm = $$('button', $('[role="alertdialog"]'))[1]!
+    confirm.click()
+    await settle()
+    expect(confirm.getAttribute('aria-busy')).toBe('true')
+    ;(m.exposed.finish as () => void)()
+    await settle()
+    expect(m.exposed.open).toBe(true)
+    expect(confirm.hasAttribute('aria-busy')).toBe(false)
+    expect((m.exposed.errors as unknown[]).map((e) => (e as Error).message)).toEqual(['later'])
   })
 })

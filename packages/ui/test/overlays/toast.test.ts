@@ -78,6 +78,41 @@ describe('Toaster and useToast', () => {
     expect(toasts()).toHaveLength(0)
   })
 
+  it('restarts its time and announces it again when the same id is added again, with no duration', async () => {
+    await toaster()
+    const t = useToast()
+    t.add({ id: 'saved', title: 'Saved' })
+    await flush()
+    const polite = $('[aria-live="polite"]', region())
+    const first = polite.textContent
+    expect(first!.trim()).toBe('Saved')
+    await vi.advanceTimersByTimeAsync(3000)
+    t.add({ id: 'saved', title: 'Saved' })
+    await flush()
+    // Said again: the announcer's text changes, though the words are the same.
+    expect(polite.textContent!.trim()).toBe('Saved')
+    expect(polite.textContent).not.toBe(first)
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(toasts()).toHaveLength(1) // 6 s after the first, 3 s after the second
+    await vi.advanceTimersByTimeAsync(1010)
+    expect(toasts()).toHaveLength(0)
+  })
+
+  it('restarts its time when update() replaces its title', async () => {
+    await toaster()
+    const t = useToast()
+    const one = t.add({ title: 'Uploading' })
+    await flush()
+    await vi.advanceTimersByTimeAsync(3000)
+    t.update(one.id, { title: 'Uploaded' })
+    await flush()
+    expect($('[aria-live="polite"]', region()).textContent!.trim()).toBe('Uploaded')
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(toasts()).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(1010)
+    expect(toasts()).toHaveLength(0)
+  })
+
   it('shows its remaining time as a progress bar that stops while paused', async () => {
     await toaster()
     useToast().add({ title: 'Saved' })

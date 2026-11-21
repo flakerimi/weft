@@ -138,6 +138,23 @@ describe('a tooltip over a menu passes presses on', () => {
   })
 })
 
+describe('a press on a tooltip’s own trigger', () => {
+  it('hides the tooltip and still closes the menu open below it', async () => {
+    await cases()
+    $('.open-actions').click()
+    await settle()
+    expect($('[role="menu"]')).not.toBeNull()
+    hover($('.help').parentElement!) // a toolbar button shows its tooltip, over the open menu
+    await settle()
+    expect($('[role="tooltip"]')).not.toBeNull()
+    expect(overlayStack.ids()).toHaveLength(2)
+    press($('.help'))
+    await settle()
+    expect($('[role="tooltip"]')).toBeNull()
+    expect($('[role="menu"]')).toBeNull()
+  })
+})
+
 describe('the page behind a modal', () => {
   it('is inert while a modal is open, the toaster aside, and reachable again after', async () => {
     const m = await cases()

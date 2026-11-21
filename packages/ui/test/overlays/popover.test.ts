@@ -93,6 +93,45 @@ describe('Popover', () => {
     expect(m.exposed.open).toBe(false)
   })
 
+  it('stays open when the trigger is clicked just after a hover opened it', async () => {
+    const m = await cases({ mode: 'hover' })
+    const wrap = $('.trigger').parentElement!
+    wrap.dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse' }))
+    await settle()
+    expect(m.exposed.open).toBe(true)
+    $('.trigger').click()
+    await settle()
+    expect(m.exposed.open).toBe(true)
+    wrap.dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse' })) // pinned by the click
+    await settle()
+    expect(m.exposed.open).toBe(true)
+    $('.trigger').click() // a second click closes it, as a press does
+    await settle()
+    expect(m.exposed.open).toBe(false)
+  })
+
+  it('follows a change of arrow and offset while open', async () => {
+    const html = document.documentElement
+    Object.defineProperty(html, 'clientWidth', { value: 1024, configurable: true })
+    Object.defineProperty(html, 'clientHeight', { value: 768, configurable: true })
+    try {
+      const m = await cases()
+      $('.trigger').click()
+      await settle()
+      expect($('.weft-popover__arrow')).toBeNull()
+      const top = parseFloat(panel().style.top)
+      m.exposed.offset = 20
+      m.exposed.arrow = true
+      await settle()
+      await settle()
+      expect(parseFloat(panel().style.top) - top).toBe(12)
+      expect($('.weft-popover__arrow').style.left).toMatch(/px$/)
+    } finally {
+      Reflect.deleteProperty(html, 'clientWidth')
+      Reflect.deleteProperty(html, 'clientHeight')
+    }
+  })
+
   it('draws an arrow towards its trigger when asked', async () => {
     await cases({ arrow: true })
     $('.trigger').click()

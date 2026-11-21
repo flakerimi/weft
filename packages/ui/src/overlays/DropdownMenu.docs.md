@@ -15,7 +15,8 @@ submenu) and `onSelect(event)`; `type: 'label'` is a group's heading,
 `'separator'` a line, `'checkbox'` and `'radio'` items with `checked` and
 `onUpdateChecked(checked)`. An item's `description` shows under its label
 (and describes it), `kbds` shows its shortcut with Kbd (shown, not bound),
-`loading` turns a spinner and keeps it from being chosen, and `color` is
+`loading` turns a spinner and keeps it from being chosen (a link loses its
+address meanwhile, so no Ctrl-click or middle click follows it), and `color` is
 `tone` under Nuxt UI's name. The `item` slot replaces an item's label.
 
 It follows the WAI-ARIA APG Menu Button and Menu patterns. The trigger, the
@@ -27,7 +28,7 @@ its first item, ArrowUp on its last. In the menu: ArrowDown and ArrowUp move
 (looping), Home and End go to the ends, typing jumps to the item whose label
 starts so, Enter and Space choose. ArrowRight opens a submenu on its first
 item, ArrowLeft closes it back to its item (mirrored right to left). Escape
-closes one level; Tab closes the menu. Disabled items are reached but cannot
+closes one level; Tab closes the menu, as a sheet on touch too. Disabled items are reached but cannot
 be chosen.
 
 **Choosing** an item calls `onSelect`, closes every level and puts focus back

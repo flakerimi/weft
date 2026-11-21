@@ -6,7 +6,8 @@
 // the confirm button loading (and nothing else closing it) until the
 // promise settles: it closes when the work succeeds and stays, ready again,
 // when it fails, emitting `error` with what it failed with (or, with no
-// error listener, rethrowing it). Cancel, Escape and the backdrop emit
+// error listener, rethrowing it). A handler that throws at once, or returns
+// any thenable, takes the same path. Cancel, Escape and the backdrop emit
 // `cancel` and close.
 import { ref } from 'vue'
 import Button from '../basics/Button.vue'
@@ -64,10 +65,26 @@ function cancel() {
   open.value = false
   emit('cancel')
 }
+/** Any thenable counts as work to wait for, not only a native Promise. */
+const isThenable = (value: unknown): value is PromiseLike<unknown> =>
+  !!value && (typeof value === 'object' || typeof value === 'function') && typeof (value as PromiseLike<unknown>).then === 'function'
+
+/** The work failed (thrown at once or rejected): stay open, ready again, so the person can retry or cancel. */
+function failed(error: unknown) {
+  busy.value = false
+  if (props.onError) props.onError(error)
+  else throw error
+}
+
 async function confirm() {
   if (busy.value) return
-  const work = props.onConfirm?.()
-  if (!(work instanceof Promise)) {
+  let work: unknown
+  try {
+    work = props.onConfirm?.()
+  } catch (error) {
+    return failed(error)
+  }
+  if (!isThenable(work)) {
     open.value = false
     return
   }
@@ -77,10 +94,7 @@ async function confirm() {
     busy.value = false
     open.value = false
   } catch (error) {
-    // It failed: stay open, ready again, so the person can retry or cancel.
-    busy.value = false
-    if (props.onError) props.onError(error)
-    else throw error
+    failed(error)
   }
 }
 </script>

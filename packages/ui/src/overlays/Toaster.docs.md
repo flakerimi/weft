@@ -13,7 +13,9 @@ adapts:
     toast.add({ title: 'Deleted', actions: [{ label: 'Undo', onClick: restore }] })
 
 `add` returns the toast with its `id`, for `update(id, patch)` and
-`remove(id)`; `clear()` empties the queue and `toasts` reads it. A toast
+`remove(id)`; `clear()` empties the queue and `toasts` reads it. Adding a
+toast again with the same id (`add({ id: 'saved', … })` on every save), or
+updating it, replaces it: its time starts again and it is announced again. A toast
 leaves after its `duration`, by default the theme's `--weft-duration-toast`.
 
 The Toaster is a region named "Notifications" (`label`). A new toast is

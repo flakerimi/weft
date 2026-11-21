@@ -33,7 +33,7 @@ const items = computed<MenuItem[][]>(() => [
       ],
     },
     { label: 'Delete', tone: 'danger', onSelect: () => log.value.push('delete') },
-    { label: 'Sync', loading: true, color: 'warning', onSelect: () => log.value.push('sync') },
+    { label: 'Sync', loading: true, color: 'warning', to: '/sync', onSelect: () => log.value.push('sync') },
   ],
 ])
 defineExpose({ input, open, log, grid, sort })

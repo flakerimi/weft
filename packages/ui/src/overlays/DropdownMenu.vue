@@ -5,9 +5,9 @@
 // ArrowDown (first item focused) or ArrowUp (last). Inside: the arrows move
 // and loop, Home and End go to the ends, typing jumps to an item by its
 // label, Enter and Space choose. Choosing closes every level and returns
-// focus to the trigger; Escape closes one level; Tab closes the menu. A
-// submenu opens with ArrowRight (ArrowLeft right to left), Enter, a press or
-// a hover, and closes with the opposite arrow. Disabled items are reached
+// focus to the trigger; Escape closes one level; Tab closes the menu (as a
+// sheet too). A submenu opens with ArrowRight (ArrowLeft right to left),
+// Enter, a press or a hover, and closes with the opposite arrow. Disabled items are reached
 // but not chosen, and so are loading ones. While open, the page does not
 // scroll. On pointer it floats beside the trigger; on touch the same menu
 // is a bottom sheet with large items, modal (focus trapped, the page behind
@@ -211,6 +211,8 @@ provide(menuLevel, {
   keep: cancelHover,
 })
 
+/** A link only while it can be followed: disabled or loading, it has no address (no Ctrl-click, no middle click). */
+const linked = (item: MenuItem) => !!item.to && !item.disabled && !item.loading
 const itemOf = (event: Event) => (event.target as Element).closest<HTMLElement>('[data-weft-item]')
 
 function choose(item: MenuItem, key: string, event: MouseEvent) {
@@ -245,13 +247,21 @@ function onHover(item: MenuItem, key: string, event: PointerEvent) {
   }
 }
 
+// Tab closes the menu, every level, in both forms. Heard in the capture
+// phase on the panel, before the touch sheet's focus trap could cycle it.
+function onTab(event: KeyboardEvent) {
+  if (event.key !== 'Tab' || event.defaultPrevented) return
+  event.preventDefault()
+  closeAll(true)
+}
+watch(panel, (el, _, cleanup) => {
+  if (!el) return
+  el.addEventListener('keydown', onTab, true)
+  cleanup(() => el.removeEventListener('keydown', onTab, true))
+})
+
 function onKeydown(event: KeyboardEvent) {
   if (event.defaultPrevented) return
-  if (event.key === 'Tab') {
-    event.preventDefault()
-    closeAll(true)
-    return
-  }
   if (typeahead.onKeydown(event, roving.active.value)) {
     event.preventDefault()
     return
@@ -320,13 +330,13 @@ const CLOSE_DELAY = 150
               <div v-if="item.type === 'label'" :id="i === 0 ? `${id}-g${g}` : undefined" class="weft-menu__heading">{{ item.label }}</div>
               <div v-else-if="item.type === 'separator'" class="weft-menu__separator" role="separator"></div>
               <component
-                :is="item.to && !item.disabled ? 'a' : 'div'"
+                :is="linked(item) ? 'a' : 'div'"
                 v-else
                 class="weft-menu__item"
                 data-weft-item
                 :role="roleOf(item)"
-                :href="item.to && !item.disabled ? item.to : undefined"
-                :target="item.to && !item.disabled ? item.target : undefined"
+                :href="linked(item) ? item.to : undefined"
+                :target="linked(item) ? item.target : undefined"
                 :aria-disabled="item.disabled || item.loading ? 'true' : undefined"
                 :aria-busy="item.loading ? 'true' : undefined"
                 :aria-describedby="item.description ? `${id}-d${g}-${i}` : undefined"

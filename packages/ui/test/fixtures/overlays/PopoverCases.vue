@@ -10,7 +10,9 @@ const props = withDefaults(defineProps<{ input?: Input; dir?: 'ltr' | 'rtl'; mod
 })
 const input = ref<Input | undefined>(props.input)
 const open = ref(props.defaultOpen ?? false)
-defineExpose({ input, open })
+const offset = ref(8)
+const arrowOn = ref(props.arrow ?? false)
+defineExpose({ input, open, offset, arrow: arrowOn })
 </script>
 
 <template>
@@ -25,7 +27,8 @@ defineExpose({ input, open })
         :dismissible="dismissible"
         :auto-focus="autoFocus"
         :mode="mode"
-        :arrow="arrow"
+        :arrow="arrowOn"
+        :offset="offset"
         :open-delay="0"
         :close-delay="0"
       >

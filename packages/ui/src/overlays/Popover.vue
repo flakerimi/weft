@@ -107,11 +107,11 @@ const context = useOverlayContext(() => trigger.el.value ?? wrap.value)
 const reference = computed(() => props.anchor ?? trigger.el.value)
 const floating = useFloating(reference, computed(() => (sheet.value ? null : panel.value)), {
   placement: () => props.placement,
-  offset: props.offset,
+  offset: () => props.offset,
   flip: true,
   shift: true,
   size: true,
-  middleware: props.arrow ? [arrowMiddleware(() => ({ element: arrowEl.value as Element, padding: 8 }))] : [],
+  middleware: () => (props.arrow ? [arrowMiddleware(() => ({ element: arrowEl.value as Element, padding: 8 }))] : []),
 })
 const arrowStyle = computed(() => {
   const at = floating.middlewareData.value.arrow
@@ -119,9 +119,19 @@ const arrowStyle = computed(() => {
 })
 
 const close = () => (open.value = false)
-watch(open, (on) => !on && (hovered = false))
+watch(open, (on) => {
+  if (!on) hovered = pinned = false
+})
 function toggle(event: MouseEvent) {
-  if (!event.defaultPrevented) open.value = !open.value
+  if (event.defaultPrevented) return
+  // A click on a trigger the hover has just opened keeps it open, pinned: the next one closes it.
+  if (open.value && hovered) {
+    hovered = false
+    pinned = true
+    cancelHover()
+    return
+  }
+  open.value = !open.value
 }
 
 useDismiss(live, {
@@ -157,6 +167,8 @@ watch(
 
 // Hover mode: open while the pointer is over the trigger or the content.
 let hovered = false
+/** Clicked open in hover mode: the pointer leaving no longer closes it. */
+let pinned = false
 let hoverTimer: ReturnType<typeof setTimeout> | undefined
 const cancelHover = () => {
   if (hoverTimer !== undefined) clearTimeout(hoverTimer)
@@ -177,7 +189,7 @@ function onEnter(event: PointerEvent) {
   })
 }
 function onLeave(event: PointerEvent) {
-  if (props.mode !== 'hover' || isTouch(event) || sheet.value) return
+  if (props.mode !== 'hover' || isTouch(event) || sheet.value || pinned) return
   later(props.closeDelay, () => {
     hovered = false
     close()

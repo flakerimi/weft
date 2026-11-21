@@ -152,6 +152,9 @@ describe('DropdownMenu', () => {
     expect(sync.getAttribute('aria-disabled')).toBe('true')
     expect($('.weft-spinner', sync)).not.toBeNull()
     expect(sync.dataset.tone).toBe('warning')
+    // A link while loading has no address: no Ctrl-click or middle click follows it.
+    expect(sync.tagName).toBe('DIV')
+    expect(sync.hasAttribute('href')).toBe(false)
     sync.click()
     await settle()
     expect(m.exposed.log).toEqual([])
@@ -333,6 +336,16 @@ describe('DropdownMenu', () => {
       expect(menus()).toHaveLength(1)
       expect(active()).toBe(named('Share'))
       expect(m.exposed.open).toBe(true)
+    })
+
+    it('closes on Tab, as on pointer, though it traps focus otherwise', async () => {
+      const m = await cases({ input: 'touch' })
+      await openWith()
+      const tab = key('Tab')
+      await settle()
+      expect(tab.defaultPrevented).toBe(true)
+      expect(m.exposed.open).toBe(false)
+      expect(active()).toBe(trigger())
     })
 
     it('closes on a press on the backdrop, returning focus to the trigger', async () => {

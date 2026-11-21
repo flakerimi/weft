@@ -38,22 +38,25 @@ watch(
   },
   { immediate: true },
 )
-// What the announcers say: each toast's text once, at its own politeness.
+// What the announcers say: each toast's text once per revision, at its own
+// politeness. Words the same as the last are told apart by a trailing
+// no-break space, so a replaced "Saved" is announced again.
 const polite = ref('')
 const assertive = ref('')
-const said = new Set<string>()
+const said = new Map<string, number>()
 const textOf = (t: ToastMessage) => [t.title, t.description].filter(Boolean).join(' ')
+const fresh = (text: string, was: string) => (was.trimEnd() === text && was === text ? `${text}\u00a0` : text)
 watch(
   queue.toasts,
   (list) => {
     for (const t of list) {
-      if (said.has(t.id)) continue
-      said.add(t.id)
+      if (said.get(t.id) === t.revision) continue
+      said.set(t.id, t.revision)
       const loud = (t.type ?? (t.tone === 'danger' ? 'foreground' : 'background')) === 'foreground'
-      if (loud) assertive.value = textOf(t)
-      else polite.value = textOf(t)
+      if (loud) assertive.value = fresh(textOf(t), assertive.value)
+      else polite.value = fresh(textOf(t), polite.value)
     }
-    for (const id of said) if (!list.some((t) => t.id === id)) said.delete(id)
+    for (const id of said.keys()) if (!list.some((t) => t.id === id)) said.delete(id)
   },
   { immediate: true },
 )
@@ -113,6 +116,7 @@ if (typeof document !== 'undefined') {
             :tone="t.tone"
             :icon="t.icon"
             :duration="t.duration"
+            :revision="t.revision"
             :close="t.close ?? true"
             :actions="t.actions"
             :progress="t.progress ?? true"

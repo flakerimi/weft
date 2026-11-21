@@ -9,7 +9,7 @@
  *
  * - `placement`: a floating-ui placement (`'bottom-start'`, `'top'`, ...),
  *   or a ref or getter for one.
- * - `offset`: the gap to the reference, in px.
+ * - `offset`: the gap to the reference, in px, or a ref or getter for it.
  * - `flip`: move to the opposite side when there is no room.
  * - `shift`: slide along the side to stay in view (8 px from the edge).
  * - `size`: set `--weft-floating-reference-width`,
@@ -18,8 +18,9 @@
  *   height to the room left.
  * - `strategy`: `'absolute'` (default) or `'fixed'`.
  * - `middleware`: more floating-ui middleware, run after the ones above, such
- *   as `arrow({ element })` or `hide()` (both re-exported here); their results
- *   are in `middlewareData`.
+ *   as `arrow({ element })` or `hide()` (both re-exported here), or a ref or
+ *   getter for them; their results are in `middlewareData`. A change of
+ *   placement, offset or middleware positions it again.
  *
  * Right to left: `start` and `end` placements mirror when the reference is
  * in a right-to-left context (`dir="rtl"` on an ancestor), even when the
@@ -54,12 +55,12 @@ export type { Middleware, MiddlewareData, Placement } from '@floating-ui/dom'
 
 export interface FloatingOptions {
   placement: MaybeRefOrGetter<Placement>
-  offset: number
+  offset: MaybeRefOrGetter<number>
   flip: boolean
   shift: boolean
   size?: boolean
   strategy?: Strategy
-  middleware?: Middleware[]
+  middleware?: MaybeRefOrGetter<Middleware[] | undefined>
 }
 
 export interface Floating {
@@ -93,7 +94,7 @@ export function useFloating(
     const float = floating.value
     if (!ref_ || !float) return
     const mine = ++run
-    const middleware: Middleware[] = [offsetMiddleware(opts.offset)]
+    const middleware: Middleware[] = [offsetMiddleware(toValue(opts.offset))]
     if (opts.flip) middleware.push(flipMiddleware({ padding: EDGE }))
     if (opts.shift) middleware.push(shiftMiddleware({ padding: EDGE }))
     if (opts.size) {
@@ -109,7 +110,7 @@ export function useFloating(
         }),
       )
     }
-    middleware.push(...(opts.middleware ?? []))
+    middleware.push(...(toValue(opts.middleware) ?? []))
     // The reference's direction decides, not the floating element's: overlays
     // often render at the end of the body, outside the rtl subtree.
     const rtl = isRtl(ref_ instanceof Element ? ref_ : ref_.contextElement ?? float)
@@ -138,7 +139,7 @@ export function useFloating(
     },
     { immediate: true, flush: 'post' },
   )
-  watch(() => toValue(opts.placement), () => void update())
+  watch([() => toValue(opts.placement), () => toValue(opts.offset), () => toValue(opts.middleware)], () => void update())
   onScopeDispose(() => {
     stop?.()
     stop = undefined

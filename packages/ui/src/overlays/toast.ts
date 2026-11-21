@@ -11,8 +11,9 @@
  * - `toasts` is the queue, reactive, oldest first.
  *
  * A toast leaves on its own after `duration` ms, by default the theme's
- * `--weft-duration-toast`; 0 keeps it until it is closed. Changing its
- * duration (update, or add with its id) starts its time again. The queue is one
+ * `--weft-duration-toast`; 0 keeps it until it is closed. Replacing it
+ * (add again with its id, or update) starts its time again and has it
+ * announced again: `revision` counts those replacements. The queue is one
  * per page, so add toasts from the browser (event handlers): on the server
  * `add` does nothing, as a module shared by every request must not keep one
  * request's toasts for the next.
@@ -29,6 +30,8 @@ export interface ToastAction {
 
 export interface ToastMessage {
   id: string
+  /** How many times it has been replaced (added again with its id, or updated); set by the queue. */
+  revision: number
   title?: string
   description?: string
   /** The colour and what it says: `success`, `danger`, … */
@@ -49,21 +52,22 @@ export interface ToastMessage {
   onClose?: () => void
 }
 
-export type ToastInput = Omit<ToastMessage, 'id'> & { id?: string }
+export type ToastInput = Omit<ToastMessage, 'id' | 'revision'> & { id?: string }
 
 const queue = shallowRef<readonly ToastMessage[]>([])
 let next = 0
 
 function add(input: ToastInput): ToastMessage {
-  const message: ToastMessage = { ...input, id: input.id ?? `toast-${++next}` }
+  const id = input.id ?? `toast-${++next}`
+  const at = queue.value.findIndex((t) => t.id === id)
+  const message: ToastMessage = { ...input, id, revision: at < 0 ? 0 : queue.value[at]!.revision + 1 }
   if (typeof document === 'undefined') return message
-  const at = queue.value.findIndex((t) => t.id === message.id)
   queue.value = at < 0 ? [...queue.value, message] : queue.value.map((t, i) => (i === at ? message : t))
   return message
 }
 
 function update(id: string, patch: Partial<ToastInput>): void {
-  queue.value = queue.value.map((t) => (t.id === id ? { ...t, ...patch, id } : t))
+  queue.value = queue.value.map((t) => (t.id === id ? { ...t, ...patch, id, revision: t.revision + 1 } : t))
 }
 
 function remove(id: string): void {
