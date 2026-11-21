@@ -26,16 +26,20 @@ const warned = new Set<string>()
 /**
  * The drawing for `name`, for `Icon` to render. A name the build did not
  * include throws on the server, so a page rendered at build never ships a
- * blank icon; in the browser it warns once per name and draws nothing.
+ * blank icon; in the browser it draws nothing, and in development warns once
+ * per name. (As Vue's own warnings, the browser's is left out of a
+ * production build: it would ship in every chunk that draws a Button.)
  */
 export function drawIcon(name: string): string {
   const found = bodies.get(name)
   if (found !== undefined) return found
-  const why = `Icon: "${name}" is not in this build; write it where the build can find it (name="…" on Icon, icon="…" on a component, icon: '…' in a script) or list it in the icons option of weftIcons().`
-  if (import.meta.env.SSR) throw new Error(why)
-  if (!warned.has(name)) {
-    warned.add(name)
-    console.warn(why)
+  if (import.meta.env.SSR || import.meta.env.DEV) {
+    const why = `Icon: "${name}" is not in this build; write it where the build can find it (name="…" on Icon, icon="…" on a component, icon: '…' in a script) or list it in the icons option of weftIcons().`
+    if (import.meta.env.SSR) throw new Error(why)
+    if (!warned.has(name)) {
+      warned.add(name)
+      console.warn(why)
+    }
   }
   return ''
 }

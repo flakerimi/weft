@@ -66,11 +66,15 @@ export function llmsTxt({ docs, skills, components }: AgentInput): string {
   return lines.join('\n')
 }
 
-/** llms-full.txt: every doc, in the docs' order, then every skill, each after the lines naming its page and file. */
+/**
+ * llms-full.txt: every doc, in the docs' order, then every skill, each after
+ * the lines naming its page and file. Each rule has a blank line before it:
+ * read as Markdown, a line of text right above a line of = is a heading.
+ */
 export function llmsFull({ docs, skills }: AgentInput): string {
   const rule = '='.repeat(80)
   const parts = [...docs, ...skills].map((p) =>
-    [rule, `Source: ${SITE}${p.path}`, `File: ${repoFile(p.file)}`, rule, '', p.source.endsWith('\n') ? p.source : p.source + '\n'].join('\n'),
+    [rule, `Source: ${SITE}${p.path}`, `File: ${repoFile(p.file)}`, '', rule, '', p.source.endsWith('\n') ? p.source : p.source + '\n'].join('\n'),
   )
   return [
     '# Weft: the docs and skills in full',

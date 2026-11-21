@@ -13,6 +13,8 @@ export default defineConfig({
   },
   test: {
     environment: 'happy-dom',
+    // A date picker's on-demand chunk, taken as fetched (see test/setup.ts).
+    setupFiles: ['test/setup.ts'],
     // A fresh worker per test file: the headless layer keeps page-wide state
     // (the overlay stack, scroll locks), which must not leak between files.
     // Set explicitly, which also settles vitest's hint about turning it off.

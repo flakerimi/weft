@@ -26,3 +26,7 @@ where it was opened from. It opens on the start typed, else the end, else
 today, two months on pointer and one on touch (`number-of-months` sets it).
 Its button, keys, dialog, Escape, field wiring, `disabled`, `readonly`,
 `min`, `max`, disabled dates and slots are DatePicker's.
+
+`:portal="false"` draws the calendar's popover in place, as Popover's
+`portal` does, so a page can show a picker open (`default-open`) with no
+script: the calendar hangs below the field until mounted.

@@ -1,5 +1,5 @@
 import { computed, getCurrentScope, hasInjectionContext, inject, onMounted, provide, readonly, ref, shallowRef, type InjectionKey, type Ref } from 'vue'
-import { sharedInput, type Input, type Surface } from './detect.ts'
+import { sharedInput, type Input, type Surface, type Width } from './detect.ts'
 
 export interface WeftContext {
   input: Readonly<Ref<Input>>
@@ -14,6 +14,12 @@ export interface WeftContext {
    * and one h1, and a preview leaves nothing behind for the next.
    */
   inset: Readonly<Ref<boolean>>
+  /**
+   * The width class a WeftProvider said to draw before anything can be
+   * measured (on the server, and while hydrating); undefined when none did,
+   * and useWidth then starts at `wide`. Once mounted, useWidth measures.
+   */
+  width: Readonly<Ref<Width | undefined>>
 }
 
 export const weftKey: InjectionKey<WeftContext> = Symbol('weft')
@@ -21,6 +27,7 @@ export const weftKey: InjectionKey<WeftContext> = Symbol('weft')
 const appSurface = readonly(ref<Surface>('app'))
 const noLocale = readonly(ref<string | undefined>(undefined))
 const notInset = readonly(ref(false))
+const noWidth = readonly(ref<Width | undefined>(undefined))
 
 /** Whether the nearest WeftProvider marked this part of the page `inset`, a preview of a page; read once, at setup. */
 export function useInset(): boolean {
@@ -48,7 +55,7 @@ export function useWeft(): WeftContext {
   const given = inject(weftKey, null)
   if (given) return given
   // Outside a component's setup there is nothing to hydrate: the detection as it is.
-  if (!hasInjectionContext() || !getCurrentScope()) return { input: sharedInput(), surface: appSurface, locale: noLocale, inset: notInset }
+  if (!hasInjectionContext() || !getCurrentScope()) return { input: sharedInput(), surface: appSurface, locale: noLocale, inset: notInset, width: noWidth }
   const mounted = shallowRef(false)
   onMounted(() => (mounted.value = true))
   const detected = sharedInput()
@@ -57,6 +64,7 @@ export function useWeft(): WeftContext {
     surface: appSurface,
     locale: noLocale,
     inset: notInset,
+    width: noWidth,
   }
   provide(weftKey, context)
   return context

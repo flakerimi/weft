@@ -1,7 +1,8 @@
 <script setup vapor lang="ts">
 // /components: every component in the catalogue, by group, each a card with
-// its first example drawn live by the server (inert, and with no script: an
-// island in an example is drawn in place), its name and its purpose. A
+// its first example drawn live by the server at its own size on a white
+// stage (inert, and with no script: an island in an example is drawn in
+// place), its name and its purpose. A
 // filter box (an island) narrows the cards as you type;
 // without JavaScript every card shows. The page also writes the catalogue
 // as it is, at /catalog.json, for agents.
@@ -12,10 +13,9 @@ import '../../styles/shell.css'
 import '../../styles/gallery.css'
 import '../../styles/gallery-index.css'
 import { catalogText, components, groups, parityText, sizesText } from '../../gallery/catalog.ts'
-import { inlineHTML } from '../../gallery/model.ts'
 import GalleryFilter from '../../components/gallery/GalleryFilter.vue'
 import GalleryNav from '../../components/gallery/GalleryNav.vue'
-import StillPreview from '../../components/gallery/StillPreview.vue'
+import GalleryTile from '../../components/gallery/GalleryTile.vue'
 import SiteFooter from '../../components/SiteFooter.vue'
 import SiteHeader from '../../components/SiteHeader.vue'
 
@@ -34,7 +34,7 @@ const words = (c: (typeof components)[number]) => `${c.name} ${c.purpose}`.toLow
     <SiteHeader current="components" path="/components" menu="components-nav" />
     <div class="docs">
       <GalleryNav />
-      <Page id="main" class="docs-page gallery-page">
+      <Page id="main" class="docs-page gallery-page gallery-index">
         <template #header>
           <h1 class="docs-title">Components</h1>
           <p class="docs-lead">{{ description }}</p>
@@ -47,13 +47,7 @@ const words = (c: (typeof components)[number]) => `${c.name} ${c.purpose}`.toLow
         <section v-for="g in groups" :key="g.group" class="gallery-group" :aria-labelledby="`group-${g.group}`" data-gallery-group>
           <h2 :id="`group-${g.group}`">{{ g.label }}</h2>
           <ul class="gallery-cards">
-            <li v-for="c in g.components" :key="c.name" class="gallery-card" :data-gallery-card="words(c)">
-              <div class="gallery-thumb" inert data-weft-no-prefetch :data-component="c.name" :data-example="c.examples[0]!.file">
-                <StillPreview :scope="`t${components.indexOf(c)}`"><component :is="c.examples[0]!.component" /></StillPreview>
-              </div>
-              <h3><a :href="c.path">{{ c.name }}</a></h3>
-              <p v-html="inlineHTML(c.purpose)" />
-            </li>
+            <GalleryTile v-for="c in g.components" :key="c.name" :component="c" :scope="`t${components.indexOf(c)}`" :data-gallery-card="words(c)" />
           </ul>
         </section>
       </Page>

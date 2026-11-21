@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -256,16 +259,18 @@ func allPages(t *testing.T, d fs.FS) []string {
 	return append(paths, "/no-such-page")
 }
 
-// No page scrolls sideways on a phone or a tablet: at 320, 390 and 768 px
-// wide, the document is no wider than the viewport, and nothing on the root
-// hides what would overflow (overflow-x: clip or hidden on html or body).
+// No page scrolls sideways, from a phone to a wide screen: at 320, 390, 768,
+// 1024, 1440 and 2560 px (the landing hero reaches past its column and its
+// thread spans the page only above 900 px), the document is no wider than
+// the viewport, and nothing on the root hides what would overflow
+// (overflow-x: clip or hidden on html or body).
 func TestNoPageScrollsSideways(t *testing.T) {
 	d := dist(t)
 	b := startBrowser(t)
 	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
 	defer srv.Close()
 	pages := allPages(t, d)
-	for _, width := range []int{320, 390, 768} {
+	for _, width := range []int{320, 390, 768, 1024, 1440, 2560} {
 		b.doing, b.deadline = fmt.Sprintf("emulating %d px", width), time.Now().Add(pageTimeout)
 		b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": width, "height": 800, "deviceScaleFactor": 1, "mobile": width < 700})
 		for _, path := range pages {
@@ -333,7 +338,7 @@ func TestGalleryExampleHeadingsKeepTheirOwnLook(t *testing.T) {
 		b.open(srv.URL + path)
 		var got struct {
 			Own, Examples int
-			Ruled          []string
+			Ruled         []string
 		}
 		b.eval(`(() => {
 			const ruled = (h) => getComputedStyle(h).borderTopStyle !== 'none' && parseFloat(getComputedStyle(h).borderTopWidth) > 0
@@ -357,5 +362,176 @@ func TestGalleryExampleHeadingsKeepTheirOwnLook(t *testing.T) {
 	}
 	if examples == 0 {
 		t.Fatal("no example on a gallery page has a heading")
+	}
+}
+
+// hover moves the mouse onto the middle of the first element matching
+// selector, which must be on screen.
+func (b *browser) hover(selector string) {
+	b.t.Helper()
+	var at struct{ X, Y float64 }
+	b.eval(`(() => {
+		const r = document.querySelector(`+jsString(selector)+`).getBoundingClientRect()
+		return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+	})()`, &at)
+	b.call(b.session, "Input.dispatchMouseEvent", map[string]any{"type": "mouseMoved", "x": at.X, "y": at.Y})
+}
+
+// until waits, in the page, for the expression to be true, failing after a few seconds.
+func (b *browser) until(expr string) {
+	b.t.Helper()
+	var ok bool
+	b.eval(`new Promise((done) => {
+		const end = Date.now() + 5000
+		const check = () => (`+expr+`) ? done(true) : Date.now() > end ? done(false) : setTimeout(check, 20)
+		check()
+	})`, &ok)
+	if !ok {
+		b.t.Fatalf("%s: never became true: %s", b.doing, expr)
+	}
+}
+
+func jsString(s string) string {
+	data, _ := json.Marshal(s)
+	return string(data)
+}
+
+// A link in an overlay opened from a gallery example is no more prefetched
+// than one in the example itself: the Sheet teleports to the overlay root
+// under <body>, outside the stage's [data-weft-no-prefetch], so its layer
+// must carry the mark. A link of the site's own, hovered first, is
+// prefetched, so the browser is shown to prefetch at all.
+func TestOverlayLinksFromAnExampleAreNotPrefetched(t *testing.T) {
+	dist(t)
+	b := startBrowser(t)
+	var mu sync.Mutex
+	var prefetched []string
+	site := siteHandler(t, stagedReleases(t))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Sec-Purpose") != "" {
+			mu.Lock()
+			prefetched = append(prefetched, r.URL.Path)
+			mu.Unlock()
+		}
+		site.ServeHTTP(w, r)
+	}))
+	defer srv.Close()
+	got := func(path string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Contains(prefetched, path)
+	}
+	// Wait long enough for a moderate prefetch (200 ms of hover) to be sent, and answered.
+	settle := func() {
+		var ok bool
+		b.eval(`new Promise((done) => setTimeout(() => done(true), 1000))`, &ok)
+	}
+
+	b.doing, b.deadline = "emulating 1280 px", time.Now().Add(pageTimeout)
+	b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 1280, "height": 900, "deviceScaleFactor": 1, "mobile": false})
+	b.open(srv.URL + "/components/sheet")
+	b.doing, b.deadline = "hovering on /components/sheet", time.Now().Add(pageTimeout)
+	b.until(`document.querySelector('.gallery-toolbar[data-ready]')`)
+
+	b.hover(`.site-nav a[href="/skills"]`)
+	settle()
+	if !got("/skills") {
+		t.Fatalf("hovering the header's /skills link prefetched nothing (prefetched: %v): the browser does not prefetch, so this test proves nothing", prefetched)
+	}
+
+	b.eval(`(document.querySelector('.gallery-canvas button[aria-label="Open menu"]').click(), true)`, new(bool))
+	b.until(`document.querySelector('#weft-overlays a[href="/settings"]')`)
+	b.until(`document.querySelector('#weft-overlays .weft-sheet').getAnimations().length === 0`)
+	b.hover(`#weft-overlays a[href="/settings"]`)
+	settle()
+	if got("/settings") {
+		t.Errorf("hovering the Settings link in the stage's Sheet prefetched /settings, a page of the example's app that is not here")
+	}
+}
+
+// click presses and releases the mouse on the middle of the first element
+// matching selector, as a person does: a user activation, which the
+// clipboard needs.
+func (b *browser) click(selector string) {
+	b.t.Helper()
+	var at struct{ X, Y float64 }
+	b.eval(`(() => {
+		const e = document.querySelector(`+jsString(selector)+`)
+		e.scrollIntoView({ block: 'center' })
+		const r = e.getBoundingClientRect()
+		return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+	})()`, &at)
+	for _, kind := range []string{"mousePressed", "mouseReleased"} {
+		b.call(b.session, "Input.dispatchMouseEvent", map[string]any{"type": kind, "x": at.X, "y": at.Y, "button": "left", "clickCount": 1})
+	}
+}
+
+// The site's copy button is Weft's Button, one island for both its uses: a
+// command it shows (the docs, the skills, the landing page) and a code block
+// it names by id (the gallery). Pressed, it puts that text on the clipboard
+// and says so.
+func TestCopyButtonsCopy(t *testing.T) {
+	dist(t)
+	b := startBrowser(t)
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
+	defer srv.Close()
+	b.call("", "Browser.grantPermissions", map[string]any{"origin": srv.URL, "permissions": []string{"clipboardReadWrite", "clipboardSanitizedWrite"}})
+	b.doing, b.deadline = "emulating 1280 px", time.Now().Add(pageTimeout)
+	b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 1280, "height": 900, "deviceScaleFactor": 1, "mobile": false})
+	for _, c := range []struct{ path, button, text string }{
+		{"/docs/getting-started/install", ".copy-command .copy-button", `document.querySelector('.copy-command__text').textContent`},
+		{"/", ".landing-install .copy-button", `document.querySelector('.landing-install .copy-command__text').textContent`},
+		{"/components/button", ".copy-code .copy-button", `document.getElementById(document.querySelector('.copy-code .copy-button').getAttribute('aria-controls')).textContent`},
+	} {
+		b.open(srv.URL + c.path)
+		b.doing, b.deadline = "copying on "+c.path, time.Now().Add(pageTimeout)
+		// The island has started once its props script is gone.
+		b.until(`!document.querySelector('weft-island[data-id="CopyCommand"] > script')`)
+		var isButton bool
+		b.eval(`document.querySelector(`+jsString(c.button)+`).matches('button.weft-button')`, &isButton)
+		if !isButton {
+			t.Errorf("%s: the copy button is not Weft's Button", c.path)
+		}
+		b.click(c.button)
+		b.until(`document.querySelector(` + jsString(c.button) + `).textContent.trim() === 'Copied'`)
+		var got struct{ Copied, Want string }
+		b.eval(`navigator.clipboard.readText().then((copied) => ({ copied, want: `+c.text+` }))`, &got)
+		if got.Want == "" || got.Copied != got.Want {
+			t.Errorf("%s: the clipboard has %q, want %q", c.path, got.Copied, got.Want)
+		}
+	}
+}
+
+// The landing page's date picker loads its popover and calendar on demand
+// (a chunk of their own): pressed, it fetches them, opens the calendar on
+// the bound date with focus on it, drawn with its styles.
+func TestLandingDatePickerOpensOnDemand(t *testing.T) {
+	dist(t)
+	b := startBrowser(t)
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
+	defer srv.Close()
+	b.doing, b.deadline = "emulating 1280 px", time.Now().Add(pageTimeout)
+	b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 1280, "height": 900, "deviceScaleFactor": 1, "mobile": false, "hasTouch": false})
+	b.open(srv.URL + "/")
+	b.doing, b.deadline = "opening the landing page's date picker", time.Now().Add(pageTimeout)
+	b.eval(`(document.querySelector('.landing-try').scrollIntoView({ block: 'center' }), true)`, new(bool))
+	b.until(`document.querySelector('.landing-try .weft-date-picker__button, .landing-try .weft-date-picker__trigger')`)
+	var before bool
+	b.eval(`performance.getEntriesByType('resource').some((e) => /\/picker-panel-/.test(e.name))`, &before)
+	if before {
+		t.Error("the popover and calendar were fetched before anyone reached for the date picker")
+	}
+	b.click(`.landing-try .weft-date-picker button`)
+	b.until(`document.querySelector('#weft-overlays [role="grid"]') && document.activeElement && document.activeElement.dataset.date`)
+	var got struct {
+		Focused string
+		Styled  bool
+	}
+	b.eval(`({ focused: document.activeElement.dataset.date, styled: getComputedStyle(document.querySelector('#weft-overlays .weft-popover')).boxShadow !== 'none' && getComputedStyle(document.querySelector('#weft-overlays .weft-calendar')).display !== 'inline' })`, &got)
+	if got.Focused != "2026-12-03" {
+		t.Errorf("the calendar opened with focus on %q, want the bound 2026-12-03", got.Focused)
+	}
+	if !got.Styled {
+		t.Error("the popover or its calendar is drawn without its styles")
 	}
 }

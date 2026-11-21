@@ -11,7 +11,7 @@ import { buildSite } from '../src/build.ts'
 import { createRenderServer, renderPage } from '../src/render.ts'
 
 const root = fileURLToPath(new URL('./fixtures/css-site', import.meta.url))
-const pages = ['button', 'field', 'island', 'barrel-island', 'barrel-button-island', 'dialog-island', 'link', 'nav', 'plain']
+const pages = ['button', 'field', 'island', 'barrel-island', 'barrel-button-island', 'dialog-island', 'on-demand-island', 'link', 'nav', 'plain']
 let parent: string
 let out: string
 /** Each page's CSS before minifying, which could merge a rule given twice: the theme, base.css, then the render's. */
@@ -178,6 +178,19 @@ describe('per-page CSS', () => {
     // By path, so no other overlay comes with it.
     expect(css).not.toContain('.weft-menu')
     expect(css).not.toContain('.weft-toast')
+  })
+
+  it('ships the CSS of what an island loads on demand, which the server never drew', () => {
+    const html = readFileSync(join(out, 'pages', 'on-demand-island', 'index.html'), 'utf8').replace(/<style>[\s\S]*?<\/style>/, '')
+    expect(html).not.toContain('class="later"')
+    expect(html).not.toContain('weft-popover')
+    const css = styleOf('on-demand-island')
+    // A component of the site's, loaded with import().
+    expect(css).toMatch(/\.later\s*\{/)
+    // The DatePicker's Popover and Calendar, which it loads on demand from @weft/ui.
+    expect(css).toMatch(/\.weft-popover\[data-form="?floating"?\]\s*\{/)
+    expect(css).toMatch(/\.weft-calendar\s*\{/)
+    expect(css).toMatch(/\.weft-sheet\s*\{/)
   })
 
   it('keeps what the browser targets need when minifying', () => {

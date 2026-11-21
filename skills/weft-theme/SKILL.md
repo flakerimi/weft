@@ -51,8 +51,9 @@ The tokens:
 | `--weft-color-bg`, `-surface`, `-surface-raised`, `-border` | the page, cards, raised panels, lines |
 | `--weft-color-text`, `-text-muted` | text |
 | `--weft-color-primary`, `-danger`, `-warning`, `-success`, `-info`, `-focus` | tones and the focus ring |
+| `--weft-color-primary-soft` | a pale ground of the primary, under selected table rows and tree items |
 | `--weft-color-<tone>-fg`, `-text`, `-hover`, `-active` | derived per tone, worked out at theme build |
-| `--weft-space-1` to `-8`, `--weft-radius-control`, `-card`, `-panel` | spacing and corners |
+| `--weft-space-1`, `-2`, `-3`, `-4`, `-6`, `-8` (no 5 or 7), `--weft-radius-control`, `-card`, `-panel` | spacing and corners |
 | `--weft-control-sm`, `-md`, `-lg` | drawn control heights |
 | `--weft-font-sans`, `-mono`, `--weft-weight-body`, `-heading`, `-title` | type |
 | `--weft-duration-*`, `--weft-ease-*` | motion |
@@ -86,7 +87,7 @@ Weft has no Tailwind inside. If your own components use Tailwind, import `@weft/
    - `font`, `radius`, `control`, `space`, `motion` and `ease`.
    Copy `weft.ts` as a start.
 2. Export it from `src/index.ts`, write it in `scripts/build.ts`, and add `"./<name>.css"` to the package's `exports`.
-3. Add it to `THEMES` in `packages/vite/src/build.ts`, to the usage line in `packages/vite/bin/weft-build-pages.mjs`, and to the docs' Themes and CLI pages.
+3. In `packages/vite/src/build.ts`, add it to the `Theme` type (`export type Theme = 'neutral' | 'lisa' | 'weft'`) and to `THEMES`. Add it to the usage line in `packages/vite/bin/weft-build-pages.mjs`, and to the docs' Themes and CLI pages.
 4. Test it in `packages/themes/test/<name>.test.ts`, as `weft.test.ts` does: every colour key in both schemes, and focus at 3:1 on the page.
 5. Run `pnpm --filter @weft/themes build`. It refuses a theme whose text, `-fg` or hover and active fills cannot reach 4.5:1, and names the colour to change.
 

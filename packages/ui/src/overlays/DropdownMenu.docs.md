@@ -41,3 +41,15 @@ motion is reduced.
 
 The menu renders into `#weft-overlays` once mounted; attributes go to it.
 `anchor` positions it against another element or a point (ContextMenu).
+
+`:portal="false"` renders it where it stands instead, and an open one
+(`default-open`) on the server too, so a page can show it open with no
+script. Until mounted it has no floating coordinates: it hangs from the
+element its trigger is in (which becomes its containing block), below it
+and from its start edge, from its end edge for an `-end` placement, above
+it for a `top` one; once mounted it is positioned as ever. As a touch sheet
+over its backdrop it stays `position: fixed`, so an ancestor with
+`contain: paint` or a transform keeps it inside (a picture of a phone).
+In place it is part of the page: it makes nothing inert and does not lock
+the page's scroll (both would reach the menu itself); as a sheet its focus
+trap still keeps focus in it. Its submenus render in place too.

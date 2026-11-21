@@ -19,6 +19,18 @@ it("uses the design's ground, ink and indigo, light and dark", () => {
   expect(weft.dark).toMatchObject({ bg: '#0F1530' })
 })
 
+// The second pass (docs/design/site-2026-11-21-v2): tiles and stages are the
+// raised surface, white in light, on the ground; the surface (a Card, a
+// field, a tab list) is one step below it, so a Card or a Tabs pill on a
+// white stage separates from it by more than a border.
+it('raises surfaces one step above the surface, white in light', () => {
+  expect(weft.light).toMatchObject({ surface: '#F4F6FA', 'surface-raised': '#FFFFFF' })
+  expect(weft.dark).toMatchObject({ surface: '#161E40', 'surface-raised': '#1C2448' })
+  for (const scheme of ['light', 'dark'] as const) {
+    expect(contrast(weft[scheme].surface, weft[scheme]['surface-raised']), scheme).toBeGreaterThan(1.05)
+  }
+})
+
 it('sets Bricolage Grotesque for text and JetBrains Mono for code', () => {
   expect(weft.font.sans).toMatch(/^'Bricolage Grotesque Variable', /)
   expect(weft.font.mono).toMatch(/^'JetBrains Mono Variable', /)

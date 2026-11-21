@@ -19,7 +19,7 @@ import '../../styles/shell.css'
 import '../../styles/gallery.css'
 import { componentBySlug } from '../../gallery/catalog.ts'
 import { groupLabel, inlineHTML, neighbours } from '../../gallery/model.ts'
-import CopyCode from '../../components/CopyCode.vue'
+import CopyCommand from '../../components/CopyCommand.vue'
 import GalleryNav from '../../components/gallery/GalleryNav.vue'
 import SiteFooter from '../../components/SiteFooter.vue'
 import SiteHeader from '../../components/SiteHeader.vue'
@@ -65,7 +65,7 @@ const codeId = (example: string) => `code-${example}`
           <figure class="gallery-code">
             <figcaption>
               <span>{{ first.file.replace('packages/ui/', '') }}</span>
-              <Island when="idle" :component="CopyCode" :props="{ from: codeId(first.name) }" />
+              <Island when="idle" :component="CopyCommand" :props="{ from: codeId(first.name) }" />
             </figcaption>
             <div :id="codeId(first.name)" v-html="first.html" />
           </figure>
@@ -93,7 +93,7 @@ const codeId = (example: string) => `code-${example}`
                 <tr v-for="p in c.props" :key="p.name">
                   <th scope="row"><code>{{ p.name }}</code><span v-if="p.required" class="gallery-required"> required</span></th>
                   <td><code>{{ p.type }}</code></td>
-                  <td><code v-if="p.default !== null">{{ p.default }}</code><span v-else aria-label="none">—</span></td>
+                  <td><code v-if="p.default !== null">{{ p.default }}</code><template v-else><span aria-hidden="true">—</span><span class="weft-visually-hidden">none</span></template></td>
                   <td v-html="inlineHTML(p.description)" />
                 </tr>
               </tbody>
@@ -109,7 +109,7 @@ const codeId = (example: string) => `code-${example}`
                   <th scope="row"><code>{{ s.name }}</code><span v-if="s.dynamic"> (dynamic)</span></th>
                   <td>
                     <template v-if="s.props.length"><code v-for="sp in s.props" :key="sp.name">{{ sp.name }}: {{ sp.type }}</code></template>
-                    <span v-else aria-label="none">—</span>
+                    <template v-else><span aria-hidden="true">—</span><span class="weft-visually-hidden">none</span></template>
                   </td>
                 </tr>
               </tbody>
@@ -136,14 +136,14 @@ const codeId = (example: string) => `code-${example}`
           <h2 id="examples">More examples</h2>
           <article v-for="e in more" :key="e.name" class="gallery-more" :aria-labelledby="`example-${e.name}`">
             <h3 :id="`example-${e.name}`">{{ e.title }}</h3>
-            <div class="gallery-preview" data-weft-no-prefetch :data-example="e.file">
+            <div class="gallery-preview" data-weft-no-prefetch data-site-picture :data-example="e.file">
               <Island v-if="e.interactive" when="visible" :component="e.island" />
               <WeftProvider v-else inset><component :is="e.component" /></WeftProvider>
             </div>
             <figure class="gallery-code">
               <figcaption>
                 <span>{{ e.file.replace('packages/ui/', '') }}</span>
-                <Island when="idle" :component="CopyCode" :props="{ from: codeId(e.name) }" />
+                <Island when="idle" :component="CopyCommand" :props="{ from: codeId(e.name) }" />
               </figcaption>
               <div :id="codeId(e.name)" v-html="e.html" />
             </figure>

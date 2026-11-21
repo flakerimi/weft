@@ -90,7 +90,8 @@ export interface Manifest {
  * the app's: an API call may change something, and the app is not a page. Nor
  * a link inside an element marked `data-weft-no-prefetch` (or marked so
  * itself), such as a gallery's live examples, whose links name pages of an
- * app that is not there.
+ * app that is not there. An overlay opened from inside one carries the mark
+ * onto its layer (@weft/ui's useOverlayContext), so this reaches it too.
  */
 function speculationRules(app: RoutesJson['app']): string {
   const skip = ['/api', ...(app ? [app.prefix] : [])].flatMap((p) => [p, `${p}/*`])
@@ -136,6 +137,32 @@ const TYPES: Record<string, string> = {
 const TEXT = new Set(['.html', '.css', '.js', '.mjs', '.json', '.webmanifest', '.svg', '.txt', '.md', '.xml'])
 
 /** The Content-Type a file is served with, from its extension. */
+/**
+ * A page's HTML without the comments outside its islands: Vue's hydration
+ * markers (`<!--[-->`, `<!---->`) and a template's own comments. Only an
+ * island is ever hydrated, against everything inside its `<weft-island>`,
+ * which stays as it is; outside one they are bytes that do nothing. The text
+ * of a raw-text element (`<script>`, `<style>`, `<textarea>`, `<title>`) is
+ * not markup, so a `<!--` in it is left alone.
+ */
+export function dropStaticComments(html: string): string {
+  let out = ''
+  let depth = 0
+  let from = 0
+  const tokens = /<weft-island\b|<\/weft-island>|<(script|style|textarea|title)\b[^>]*>[\s\S]*?<\/\1\s*>|<!--[\s\S]*?-->/gi
+  for (const m of html.matchAll(tokens)) {
+    const t = m[0]
+    if (m[1]) continue
+    if (t === '</weft-island>') depth--
+    else if (t.startsWith('<weft-island')) depth++
+    else if (depth === 0) {
+      out += html.slice(from, m.index)
+      from = m.index + t.length
+    }
+  }
+  return out + html.slice(from)
+}
+
 export const contentType = (file: string) => TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream'
 
 const sha256 = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex')
@@ -542,7 +569,7 @@ async function writeBuild(
       preload: [...client.imports, ...(startsOnLoad(page.html) ? client.runtime : [])],
     }
     const file = htmlFile(page.path)
-    await write(file, pageHTML({ body: page.html, head: page.head, prePaint: page.prePaint, fonts, css, stylesheet, scripts, rules }))
+    await write(file, pageHTML({ body: dropStaticComments(page.html), head: page.head, prePaint: page.prePaint, fonts, css, stylesheet, scripts, rules }))
 
     const links = [
       ...fonts.map((f) => `<${f}>; rel=preload; as=font; type="font/woff2"; crossorigin`),

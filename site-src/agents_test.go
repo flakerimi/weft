@@ -128,7 +128,7 @@ func TestSkillPages(t *testing.T) {
 		}
 	}
 	size := brotliSize(t, d, m, "/pages/skills/index.html")
-	for _, chunk := range islandChunks(t, d, m, islandsOf(t, r, "/skills")) {
+	for _, chunk := range islandChunks(t, d, pageRuntime(t, d, index), islandsOf(t, r, "/skills")) {
 		size += brotliSize(t, d, m, chunk)
 	}
 	t.Logf("/skills: %d B brotli", size)
@@ -283,7 +283,7 @@ func TestLLMsFull(t *testing.T) {
 			t.Fatal(err)
 		}
 		shown := path.Clean("site-src/" + file)
-		marker := fmt.Sprintf("Source: %s%s\nFile: %s\n%s\n\n", site, route, shown, strings.Repeat("=", 80))
+		marker := fmt.Sprintf("Source: %s%s\nFile: %s\n\n%s\n\n", site, route, shown, strings.Repeat("=", 80))
 		at := strings.Index(text, marker)
 		if at == -1 || !strings.HasPrefix(text[at+len(marker):], string(want)) {
 			t.Errorf("llms-full.txt does not hold %s as it is, after its source", shown)

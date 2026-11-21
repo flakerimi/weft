@@ -10,7 +10,7 @@
 // links alone); as a button, while the Form is busy, a submit button loads
 // (keeping focus) and any other works as ever, so a Cancel can abort.
 import { computed, inject, useAttrs, useSlots } from 'vue'
-import { useFormState } from '../forms/field.ts'
+import { useForm } from '../forms/form-state.ts'
 import { isExternal, relFor } from './address.ts'
 import Icon from './Icon.vue'
 import Spinner from './Spinner.vue'
@@ -71,15 +71,14 @@ defineSlots<{
   trailing?: () => unknown
 }>()
 
-const slots = useSlots()
-if (import.meta.env.DEV && !slots.default && !props.label && (props.icon || props.trailingIcon)) {
+if (import.meta.env.DEV && !useSlots().default && !props.label && (props.icon || props.trailingIcon)) {
   const attrs = useAttrs()
   // A Tooltip around it names it with its text (NAMES_TRIGGER, a string key, so Button imports nothing of it).
   const named = attrs['aria-label'] || attrs['aria-labelledby'] || attrs.title || inject(NAMES_TRIGGER, false)
   if (!named) warnUnnamed()
 }
 
-const form = useFormState()
+const form = useForm()
 /** Disabled: by its own prop, or, as a link, by a disabled or busy Form. */
 const off = computed(() => props.disabled || (!!props.to && !!form?.disabled()))
 /** Loading: by its own prop, or as the submit button of a busy Form. */

@@ -12,7 +12,13 @@
 // scroll. On pointer it floats beside the trigger; on touch the same menu
 // is a bottom sheet with large items, modal (focus trapped, the page behind
 // inert), and a submenu is a sheet above it with a back item. It fades out
-// when it closes, unless motion is reduced.
+// when it closes, unless motion is reduced. With `:portal="false"` it is
+// drawn where it stands instead of in the overlay layer at the end of the
+// body, and an open one is drawn by the server too, so a page can show it
+// open with no script: until mounted it hangs from the element its trigger
+// is in (overlay.css), by its placement. In place it is part of the page,
+// so it makes nothing inert and locks no scroll; as a touch sheet its focus
+// trap still keeps focus in it.
 import { computed, inject, onScopeDispose, provide, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { useWeft } from '../adaptive/context.ts'
 import Icon from '../basics/Icon.vue'
@@ -51,8 +57,10 @@ const props = withDefaults(
     placement?: Placement
     /** Float against this element or point instead of the trigger (ContextMenu gives the pointer's). */
     anchor?: Anchor
+    /** Draw it in the overlay layer at the end of the body; false draws it in place, and an open one on the server too. */
+    portal?: boolean
   }>(),
-  { items: () => [], open: undefined, defaultOpen: false, placement: 'bottom-start' },
+  { items: () => [], open: undefined, defaultOpen: false, placement: 'bottom-start', portal: true },
 )
 
 const emit = defineEmits<{
@@ -152,8 +160,9 @@ useFocusTrap(live, {
   returnTo: () => trigger.el.value ?? anchorEl(),
   initial: () => edge(start),
 })
-useScrollLock(computed(() => open.value && !parent))
-useInert(computed(() => modal.value && !parent))
+// In place, the menu is inside the page: making the page inert would make it inert too.
+useScrollLock(computed(() => open.value && !parent && props.portal))
+useInert(computed(() => modal.value && !parent && props.portal))
 watch(open, (on) => on && context.refresh(), { immediate: true, flush: 'sync' })
 
 const roving = useRovingFocus(panel, { orientation: 'vertical' })
@@ -298,7 +307,7 @@ const CLOSE_DELAY = 150
 
 <template>
   <span v-if="!parent && $slots.default" ref="wrap" class="weft-overlay-trigger" @click="onTriggerClick" @keydown="onTriggerKey"><slot :open="open" /></span>
-  <Teleport v-if="mounted && presence.present.value" :to="overlayRoot()">
+  <Teleport v-if="(mounted || !portal) && presence.present.value" :to="portal ? overlayRoot() : 'body'" :disabled="!portal">
     <div class="weft-overlay" v-bind="context.attrs.value" :data-state="presence.closing.value ? 'closed' : 'open'">
       <div v-if="sheet" ref="backdrop" class="weft-overlay-backdrop" @click="onBackdrop"></div>
       <div
@@ -314,8 +323,9 @@ const CLOSE_DELAY = 150
         :aria-modal="sheet ? 'true' : undefined"
         :data-form="sheet ? 'sheet' : 'floating'"
         :data-side="side"
-        :data-positioned="sheet || floating.isPositioned.value ? 'true' : undefined"
-        :style="sheet ? undefined : floating.styles.value"
+        :data-positioned="sheet || !mounted || floating.isPositioned.value ? 'true' : undefined"
+        :data-in-place="!mounted && !sheet ? placement : undefined"
+        :style="sheet || !mounted ? undefined : floating.styles.value"
         @keydown="onKeydown"
         @pointerenter="parent?.keep()"
       >
@@ -370,6 +380,7 @@ const CLOSE_DELAY = 150
           :anchor="s.el"
           :open="true"
           :placement="subPlacement"
+          :portal="portal"
           @update:open="(on: boolean) => !on && closeSub()"
         >
           <template v-if="$slots.item" #item="{ item }"><slot name="item" :item="item" /></template>

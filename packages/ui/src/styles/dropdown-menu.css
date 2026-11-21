@@ -5,6 +5,8 @@
 .weft-menu {
   outline: none;
   color: var(--weft-color-text, CanvasText);
+  /* Drawn in place (portal false), it does not take the alignment of where it is. */
+  text-align: start;
 }
 .weft-menu[data-form="floating"] {
   z-index: 50;

@@ -13,6 +13,11 @@
 // and focused date and focus, and the button is the same element in both
 // forms. It binds an ISO date (YYYY-MM-DD) or, with value-format="object",
 // a CalendarDate, and submits the ISO date under its name.
+//
+// What it draws only while open, the popover and the calendar in it, is
+// code of its own, loaded when the picker is about to open: when the pointer
+// or focus comes to it (useLazyPanel). The popover opens once it is in, so
+// focus lands on the calendar's date as ever.
 import { computed, nextTick, shallowRef, useTemplateRef, watch } from 'vue'
 import Icon from '../basics/Icon.vue'
 import { useId } from '../headless/useId.ts'
@@ -20,10 +25,8 @@ import { useControllable } from '../headless/useControllable.ts'
 import type { Placement } from '../headless/useFloating.ts'
 import { useControlAttrs, useField } from '../forms/field.ts'
 import { pressFocuses } from '../forms/dom.ts'
-import Popover from '../overlays/Popover.vue'
-import Calendar from './Calendar.vue'
 import { format, fromDate, pattern, toDate, type CalendarDate, type DateInput, type ValueFormat } from './dates.ts'
-import { cycleTab, keepFocusOnSwitch, openingDay, useFormReset, usePicker, useTypedDate, type DatePickerLabels } from './picker.ts'
+import { cycleTab, keepFocusOnSwitch, openingDay, useFormReset, useLazyPanel, usePicker, useTypedDate, type DatePickerLabels } from './picker.ts'
 import type { Size } from '../types.ts'
 import '../styles/base.css'
 import '../styles/input.css'
@@ -119,6 +122,9 @@ const { own, box, describedBy } = useControlAttrs(f)
 const model = useControllable(props, 'modelValue', emit, () => props.defaultValue)
 const picker = usePicker(props, emit, f)
 const { open, touch, locale, blocked } = picker
+const lazy = useLazyPanel(open)
+/** Whether the popover is open: once it is loaded (at once after the first time). */
+const shown = computed(() => open.value && lazy.ready.value)
 const date = computed(() => toDate(model.value))
 const min = computed(() => toDate(props.min))
 const max = computed(() => toDate(props.max))
@@ -183,7 +189,7 @@ function onButtonDown(event: MouseEvent) {
 /** The calendar's dialog, while it is open. */
 const panel = () => (typeof document === 'undefined' ? null : document.querySelector(`[data-weft-picker="${valueId}"]`)?.closest<HTMLElement>('.weft-popover'))
 const panelId = shallowRef<string>()
-watch(open, (on) => {
+watch(shown, (on) => {
   panelId.value = undefined
   if (on) void nextTick(() => (panelId.value = panel()?.id))
 })
@@ -194,6 +200,7 @@ function onFocusout(event: FocusEvent) {
   })
 }
 function onFocusin(event: FocusEvent) {
+  lazy.load()
   const from = event.relatedTarget as Node | null
   if (!from || !(boxEl.value?.contains(from) || panel()?.contains(from))) emit('focus', event)
 }
@@ -219,6 +226,7 @@ defineExpose({
     @mousedown="!touch && pressFocuses($event, input)"
     @focusout="onFocusout"
     @focusin="onFocusin"
+    @pointerenter="lazy.load"
   >
     <span v-if="$slots.leading || icon" class="weft-input__leading">
       <slot name="leading"><Icon v-if="icon" :name="icon" /></slot>
@@ -265,8 +273,10 @@ defineExpose({
       <svg class="weft-date-picker__glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" /></svg>
     </button>
     <input v-if="f.name.value" type="hidden" :name="f.name.value" :value="date?.toString() ?? ''" :disabled="f.disabled.value || undefined" />
-    <Popover
-      :open="open"
+    <component
+      :is="lazy.view.value.Popover"
+      v-if="lazy.view.value"
+      :open="shown"
       :anchor="boxEl ?? undefined"
       :title="dialogTitle"
       :placement="placement"
@@ -275,7 +285,8 @@ defineExpose({
       @update:open="onOpenChange"
     >
       <template #content>
-        <Calendar
+        <component
+          :is="lazy.view.value.Calendar"
           :data-weft-picker="valueId"
           :model-value="date"
           value-format="object"
@@ -294,8 +305,8 @@ defineExpose({
           @keydown="cycleTab($event, panel())"
         >
           <template v-if="$slots.day" #day="p"><slot name="day" v-bind="p" /></template>
-        </Calendar>
+        </component>
       </template>
-    </Popover>
+    </component>
   </span>
 </template>

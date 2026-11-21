@@ -104,6 +104,13 @@ describe('llms-full.txt', () => {
     expect(repoFile('../skills/weft-go/SKILL.md')).toBe('skills/weft-go/SKILL.md')
   })
 
+  it('has a blank line before each rule, so Markdown reads no line above one as a heading', () => {
+    const lines = text.split('\n')
+    const rules = lines.flatMap((line, i) => (/^=+$/.test(line) ? [i] : []))
+    expect(rules).toHaveLength(2 * (docs.length + skills.length))
+    for (const i of rules) expect(lines[i - 1], `line ${i}: ${lines[i - 1]}`).toBe('')
+  })
+
   it('has the docs first, in their order, then the skills', () => {
     const order = [...text.matchAll(/^Source: (.+)$/gm)].map((m) => m[1])
     expect(order).toEqual([...docs, ...skills].map((p) => SITE + p.path))

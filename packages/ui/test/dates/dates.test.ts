@@ -1,7 +1,7 @@
 // @vitest-environment node
 // The date helpers under Node (no DOM): values, grids, names and typed dates in a locale.
 import { CalendarDate, CalendarDateTime, toCalendar, BuddhistCalendar } from '@internationalized/date'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { clamp, dayOfWeek, formatRange, fromDate, isoWeek, monthWeeks, parseLocalDate, pattern, toDate, weekdays } from '../../src/dates/dates.ts'
 
 const ref = new CalendarDate(2026, 11, 21)
@@ -116,5 +116,20 @@ describe('ranges written out', () => {
     const text = formatRange('en-US', { month: 'long', year: 'numeric' }, new CalendarDate(2026, 12, 1), new CalendarDate(2027, 1, 1))
     expect(text).toBe('December 2026 – January 2027')
     expect(formatRange('en-US', { year: 'numeric', month: 'long', day: 'numeric' }, new CalendarDate(2026, 12, 20), new CalendarDate(2026, 12, 27))).not.toMatch(/[\u2009\u202f]/)
+  })
+
+  it('make only the spaces round the dash plain, no-break ones too, and keep the no-break spaces elsewhere', () => {
+    // As an ICU might write it: no-break spaces inside each date, and a different one each side of the dash.
+    const written = '1\u00a0déc.\u202f2026\u00a0\u2013\u20093\u00a0janv.\u202f2027'
+    const spy = vi.spyOn(Intl.DateTimeFormat.prototype, 'formatRange').mockReturnValue(written)
+    try {
+      expect(formatRange('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }, new CalendarDate(2026, 12, 1), new CalendarDate(2027, 1, 3))).toBe(
+        '1\u00a0déc.\u202f2026 \u2013 3\u00a0janv.\u202f2027',
+      )
+      spy.mockReturnValue('20\u202f\u2014\u00a027 декабря')
+      expect(formatRange('ru-RU', { day: 'numeric', month: 'long' }, new CalendarDate(2026, 12, 20), new CalendarDate(2026, 12, 27))).toBe('20 \u2014 27 декабря')
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

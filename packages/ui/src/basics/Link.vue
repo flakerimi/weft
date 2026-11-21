@@ -8,7 +8,7 @@
 // lines above and below. In a disabled or busy Form it is disabled (a
 // disabled fieldset leaves links alone), so it cannot navigate mid-submit.
 import { computed, onMounted, ref } from 'vue'
-import { useFormState } from '../forms/field.ts'
+import { useFormState } from '../forms/form-state.ts'
 import { isCurrentPage, isExternal as looksExternal, relFor } from './address.ts'
 import '../styles/base.css'
 import '../styles/link.css'

@@ -1,7 +1,8 @@
 import type { Theme } from './tokens.ts'
 
 /**
- * weft.base.al's theme, from the approved design (docs/design/site-2026-11-21):
+ * weft.base.al's theme, from the approved design (docs/design/site-2026-11-21,
+ * its raised surface white since the second pass, site-2026-11-21-v2):
  * an indigo ink on a cool ground, saffron for the thread, Bricolage Grotesque
  * for text and JetBrains Mono for code. The fonts are named, not shipped: a
  * site that uses this theme serves them itself.
@@ -9,7 +10,7 @@ import type { Theme } from './tokens.ts'
 export const weft: Theme = {
   name: 'weft',
   light: {
-    bg: '#E8ECF4', surface: '#F4F6FA', 'surface-raised': '#FAFBFD', border: '#C9D0E0',
+    bg: '#E8ECF4', surface: '#F4F6FA', 'surface-raised': '#FFFFFF', border: '#C9D0E0',
     text: '#141C3A', 'text-muted': '#5A6482', primary: '#2B3D8F', 'primary-soft': '#D6DCF0',
     // Saffron is the thread; as a focus ring on the light ground it is under 3:1, so focus is indigo there.
     danger: '#B3261E', warning: '#E2A11B', success: '#246B43', info: '#2F6DB5', focus: '#2B3D8F',

@@ -6,7 +6,10 @@
 // `useField`, so Select, Combobox and DatePicker join forms the same way.
 import { computed, inject, provide, useAttrs, type ComputedRef, type InjectionKey } from 'vue'
 import { joinIds } from './dom.ts'
+import { formKey, useForm, type FormContext } from './form-state.ts'
 import type { Size } from '../types.ts'
+
+export { formKey, useForm, useFormState, type FormContext } from './form-state.ts'
 
 /** What a FormField gives the control inside it. */
 export interface FieldContext {
@@ -33,18 +36,6 @@ export interface FieldContext {
   namedByLabel(): void
 }
 
-/** What a Form gives each FormField in it. */
-export interface FormContext {
-  error(name: string): string | undefined
-  required(name: string): boolean
-  /** Disabled, or busy submitting: every control in the form is disabled. */
-  disabled: () => boolean
-  /** Busy submitting (`loading`, or an async submit handler running). */
-  busy: () => boolean
-  blur(name: string): void
-  input(name: string): void
-}
-
 /** What a FieldGroup gives the controls in it. */
 export interface FieldGroupContext {
   size: () => Size | undefined
@@ -52,24 +43,12 @@ export interface FieldGroupContext {
 }
 
 export const fieldKey: InjectionKey<FieldContext> = Symbol('weft-field')
-export const formKey: InjectionKey<FormContext> = Symbol('weft-form')
 export const fieldGroupKey: InjectionKey<FieldGroupContext> = Symbol('weft-field-group')
 
 export const provideField = (field: FieldContext) => provide(fieldKey, field)
 export const provideForm = (form: FormContext) => provide(formKey, form)
 export const provideFieldGroup = (group: FieldGroupContext) => provide(fieldGroupKey, group)
-export const useForm = () => inject(formKey, null)
 
-/**
- * For a control that is not a form control (Button, Link): the Form it is
- * in, as `disabled` (disabled or busy) and `busy`. A disabled fieldset
- * disables native buttons but not links, and a busy Form keeps its buttons
- * focusable (see Form.vue), so these read the Form themselves.
- */
-export function useFormState(): { disabled: () => boolean; busy: () => boolean } | null {
-  const form = useForm()
-  return form ? { disabled: form.disabled, busy: form.busy } : null
-}
 /**
  * For a group control (CheckboxGroup, RadioGroup): the group takes its
  * FormField's wiring itself, so the controls inside it must not, or each would

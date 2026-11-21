@@ -1,21 +1,35 @@
 <script setup vapor lang="ts">
+// The site's copy button, an island, for one of two things:
+// - `command`: a one-line command, shown in a bar with the button beside it.
+//   The command is in the server HTML, so it can be read and selected
+//   before the island starts.
+// - `from`: a block of code elsewhere on the page, named by its id; the
+//   button alone, which copies that element's text, so the code is sent
+//   once, in the page.
+// Until the island starts, and without JavaScript, the button is hidden: it
+// could do nothing. Without a clipboard (an insecure origin, a denied
+// permission) it selects the text instead.
+import { Button } from '@weft/ui'
 import { ref } from 'vue'
 
-const props = defineProps<{ command: string }>()
+const props = defineProps<{
+  /** The command to show and copy. */
+  command?: string
+  /** The id of the element whose text it copies, in place of `command`. */
+  from?: string
+}>()
 
-// The command is in the server HTML, so it can be read and selected before this
-// island starts; the button copies it once it has.
 const label = ref('Copy')
 let reset: ReturnType<typeof setTimeout> | undefined
 
-async function copy(e: MouseEvent) {
+async function copy(event: MouseEvent) {
+  // The command's text is the element before the button.
+  const source = props.from ? document.getElementById(props.from) : (event.currentTarget as HTMLElement).previousElementSibling
   try {
-    await navigator.clipboard.writeText(props.command)
+    await navigator.clipboard.writeText(props.command ?? source?.textContent ?? '')
     label.value = 'Copied'
   } catch {
-    // No clipboard (an insecure origin, a denied permission): select it instead.
-    const text = (e.currentTarget as HTMLElement).previousElementSibling
-    if (text) getSelection()?.selectAllChildren(text)
+    if (source) getSelection()?.selectAllChildren(source)
     label.value = 'Selected'
   }
   clearTimeout(reset)
@@ -24,9 +38,16 @@ async function copy(e: MouseEvent) {
 </script>
 
 <template>
-  <div class="copy-command">
-    <code class="copy-command__text">{{ command }}</code>
-    <button type="button" class="copy-command__button" aria-live="polite" @click="copy">{{ label }}</button>
+  <div :class="command !== undefined ? 'copy-command' : 'copy-code'">
+    <code v-if="command !== undefined" class="copy-command__text">{{ command }}</code>
+    <Button
+      class="copy-button"
+      :size="command !== undefined ? 'md' : 'sm'"
+      :label="label"
+      :aria-controls="from"
+      aria-live="polite"
+      @click="copy"
+    />
   </div>
 </template>
 
@@ -47,21 +68,9 @@ async function copy(e: MouseEvent) {
   overflow-wrap: anywhere;
   font: 0.85em/1.6 var(--weft-font-mono);
 }
-.copy-command__button {
-  flex: none;
-  min-height: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
-  min-width: 5.5em;
-  padding: 0 var(--weft-space-4);
-  font: inherit;
-  font-size: 0.85em;
-  font-weight: var(--weft-weight-title);
-  color: var(--weft-color-primary-fg);
-  background: var(--weft-color-primary);
-  border: 0;
-  border-radius: calc(var(--weft-radius-control) - 4px);
-  cursor: pointer;
-  transition: filter var(--weft-duration-control) var(--weft-ease-standard);
-}
-.copy-command__button:hover { filter: brightness(1.1); }
-.copy-command__button:active { filter: brightness(0.95); }
+.copy-button { flex: none; min-inline-size: 5.5em; }
+.copy-command .copy-button { font-size: 0.85em; }
+.copy-code { display: contents; }
+/* The island runtime takes the props script out as the island starts: until then the button is not offered. */
+weft-island:has(> script[type="application/json"]) .copy-button { visibility: hidden; }
 </style>

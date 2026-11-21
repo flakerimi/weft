@@ -20,8 +20,10 @@
  * - `useOverlayContext(from)`: what teleported content must carry, since it
  *   leaves the subtree it was opened from: `dir` (read from `from()` when
  *   `refresh()` is called, at opening), the scheme of a `data-weft-scheme`
- *   ancestor, and the WeftProvider's input and surface, which set the
- *   tokens (`--weft-hit-min`) inside.
+ *   ancestor, a `data-weft-no-prefetch` mark when an ancestor (or `from()`
+ *   itself) has one, so the speculation rules leave the overlay's links
+ *   alone as they do the subtree's, and the WeftProvider's input and
+ *   surface, which set the tokens (`--weft-hit-min`) inside.
  *
  * Nothing here runs on the server: the DOM is touched only from watchers
  * that run once elements exist, and from `overlayRoot()`, called by a
@@ -116,8 +118,14 @@ export function useTrigger(
 }
 
 export interface OverlayContext {
-  attrs: ComputedRef<{ dir: 'ltr' | 'rtl'; 'data-weft-input': string; 'data-weft-surface': string; 'data-weft-scheme': string | undefined }>
-  /** Read the direction and scheme of where the overlay opens from, now. */
+  attrs: ComputedRef<{
+    dir: 'ltr' | 'rtl'
+    'data-weft-input': string
+    'data-weft-surface': string
+    'data-weft-scheme': string | undefined
+    'data-weft-no-prefetch': '' | undefined
+  }>
+  /** Read the direction, scheme and no-prefetch mark of where the overlay opens from, now. */
   refresh: () => void
 }
 
@@ -125,18 +133,21 @@ export function useOverlayContext(from: () => Element | null | undefined): Overl
   const weft = useWeft()
   const dir = ref<'ltr' | 'rtl'>('ltr')
   const scheme = ref<string | undefined>()
+  const noPrefetch = ref(false)
   return {
     attrs: computed(() => ({
       dir: dir.value,
       'data-weft-input': weft.input.value,
       'data-weft-surface': weft.surface.value,
       'data-weft-scheme': scheme.value,
+      'data-weft-no-prefetch': noPrefetch.value ? '' : undefined,
     })),
     refresh() {
       if (typeof document === 'undefined') return
       const el = from() ?? document.activeElement
       dir.value = isRtl(el) ? 'rtl' : 'ltr'
       scheme.value = el?.closest('[data-weft-scheme]')?.getAttribute('data-weft-scheme') ?? undefined
+      noPrefetch.value = !!el?.closest('[data-weft-no-prefetch]')
     },
   }
 }

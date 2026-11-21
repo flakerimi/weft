@@ -1,7 +1,7 @@
 ---
 group: forms
 purpose: One choice among a few options, all in view.
-use: For a choice of two to six options the reader should compare at a glance (a plan, a shipping speed).
+use: For a choice of two to five options the reader should compare at a glance (a plan, a shipping speed).
 avoid: For many options, use a select; for on or off, use Switch or Checkbox.
 adapts:
   input: Each row is at least 44 px tall on touch, and each radio's hit area 44 px square.

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import MenuCases from '../fixtures/overlays/MenuCases.vue'
+import InPlaceMenu from '../fixtures/overlays/InPlaceMenu.vue'
 import { mount } from '../mount.ts'
 import { loadStyles, ruleFor } from '../styles.ts'
 import { px } from '../forms/helpers.ts'
@@ -356,5 +357,83 @@ describe('DropdownMenu', () => {
       expect(m.exposed.open).toBe(false)
       expect(active()).toBe(trigger())
     })
+  })
+})
+
+describe('DropdownMenu with :portal="false"', () => {
+  it('opens where it stands, not in the overlay layer, and still works as a menu', async () => {
+    const m = mount(InPlaceMenu)
+    unmount = m.unmount
+    await settle()
+    $('.trigger').click()
+    await settle()
+    const panel = $('[role="menu"]')
+    expect(panel).not.toBeNull()
+    expect($('.place').contains(panel)).toBe(true)
+    expect(overlays()).toBeNull()
+    expect(panel.dataset.positioned).toBe('true')
+    expect(active()?.textContent?.trim()).toBe('Open device')
+    key('Escape')
+    await settle()
+    expect($('[role="menu"]')).toBeNull()
+  })
+
+  it('lines its items up from the start edge, whatever the place it is drawn in aligns', async () => {
+    const unstyle = loadStyles()
+    try {
+      const m = mount(InPlaceMenu, { defaultOpen: true })
+      unmount = m.unmount
+      await settle()
+      ;($('.place') as HTMLElement).style.textAlign = 'end'
+      expect(getComputedStyle($('[role="menu"]')).textAlign).toBe('start')
+    } finally {
+      unstyle()
+    }
+  })
+
+  it('as a touch sheet in place, keeps the page and itself usable: nothing around it inert, no scroll lock', async () => {
+    const m = mount(InPlaceMenu, { input: 'touch' })
+    unmount = m.unmount
+    await settle()
+    $('.trigger').click()
+    await settle()
+    await settle()
+    const sheet = $('[role="menu"]')
+    expect(sheet.dataset.form).toBe('sheet')
+    expect($('.place').contains(sheet)).toBe(true)
+    expect(sheet.closest('[inert]')).toBeNull()
+    expect(document.querySelector('[inert]')).toBeNull()
+    expect(locked()).toBe(false)
+    named('Reboot', sheet).click()
+    await settle()
+    expect(m.exposed.chosen).toBe('reboot')
+    expect($('[role="menu"]')).toBeNull()
+  })
+
+  it('starting open in place locks nothing either', async () => {
+    const m = mount(InPlaceMenu, { input: 'touch', defaultOpen: true })
+    unmount = m.unmount
+    await settle()
+    await settle()
+    expect(document.querySelector('[inert]')).toBeNull()
+    expect(locked()).toBe(false)
+  })
+
+  it('in place and not yet positioned, sizes to its items, not to the narrow cell it hangs from', () => {
+    const unstyle = loadStyles()
+    try {
+      const rule = ruleFor('[data-in-place][data-form="floating"]')!
+      expect(rule.style.position).toBe('absolute')
+      expect(rule.style.inlineSize).toBe('max-content')
+    } finally {
+      unstyle()
+    }
+  })
+
+  it('starts open in place when it starts open', async () => {
+    const m = mount(InPlaceMenu, { defaultOpen: true })
+    unmount = m.unmount
+    await settle()
+    expect($('.place').contains($('[role="menu"]'))).toBe(true)
   })
 })

@@ -7,43 +7,47 @@
 .gallery-group > h2 { font-size: 1.375rem; padding-block-start: 0.5em; border-block-start: 2px solid var(--site-saffron); }
 .gallery-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   margin: 20px 0 0;
   padding: 0;
   list-style: none;
 }
-/* A card is a link as a whole: the name's link stretches over it. The thumbnail is inert, so nothing in it is a control. */
+/* A card is a link as a whole: the name's link stretches over it. The
+   preview is inert, so nothing in it is a control. */
 .gallery-card {
   position: relative;
   display: grid;
   grid-template-rows: auto auto 1fr;
-  gap: 6px;
-  padding: 0 0 16px;
   overflow: hidden;
-  background: var(--weft-color-surface);
+  background: var(--weft-color-surface-raised);
   border: 1px solid var(--weft-color-border);
-  border-radius: 14px;
+  border-radius: 16px;
   transition: border-color var(--weft-duration-control) var(--weft-ease-standard);
 }
 .gallery-card:hover, .gallery-card:focus-within { border-color: var(--weft-color-primary); }
-.gallery-card h3 { margin: 6px 16px 0; font-size: 1.0625rem; }
+.gallery-card h3 { margin: 14px 18px 0; font-size: 1.0625rem; }
 .gallery-card h3 a { color: var(--weft-color-text); text-decoration: none; }
 .gallery-card h3 a::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
 .gallery-card h3 a:focus-visible { outline: none; }
 .gallery-card:has(h3 a:focus-visible) { outline: 2px solid var(--weft-color-focus); outline-offset: 2px; }
-.gallery-card p { margin: 0 16px; font-size: 0.875rem; color: var(--weft-color-text-muted); }
+.gallery-card p { margin: 2px 18px 16px; font-size: 0.9375rem; color: var(--weft-color-text-muted); }
+/* The first example at its own size, 1:1, centred on a white stage 200 px
+   tall; what does not fit is clipped (from its start, so its beginning shows). */
 .gallery-thumb {
   display: grid;
-  /* Centred, unless the example is larger than the card: then from its start, so its beginning shows. */
   place-content: safe center;
-  block-size: 11rem;
-  padding: 16px;
+  block-size: 200px;
+  padding: 20px;
   overflow: hidden;
-  background: var(--weft-color-bg);
+  background: var(--weft-color-surface-raised);
   border-block-end: 1px solid var(--weft-color-border);
   pointer-events: none;
-  zoom: 0.72;
 }
 .gallery-thumb > * { max-inline-size: 100%; }
 
+/* The index lays its cards on the ground, not on the page's white panel. */
+.gallery-index.docs-page.weft-page { padding-inline: 0; background: none; border: 0; }
+@media (max-width: 1099.98px) { .gallery-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 639.98px) { .gallery-cards { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 767.98px) { .gallery-index.docs-page.weft-page { padding-inline: 16px; } }

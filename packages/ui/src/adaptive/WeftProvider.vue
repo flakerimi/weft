@@ -1,7 +1,7 @@
 <script setup vapor lang="ts">
 import { computed, provide } from 'vue'
 import { useWeft, weftKey } from './context.ts'
-import type { Input, Surface } from './detect.ts'
+import type { Input, Surface, Width } from './detect.ts'
 import '../styles/base.css'
 import '../styles/weft-provider.css'
 
@@ -22,6 +22,14 @@ const props = withDefaults(defineProps<{
    * makes every one inside it inset too.
    */
   inset?: boolean
+  /**
+   * The width class to draw everything inside with before it can be
+   * measured: on the server and while hydrating (`narrow`, `regular` or
+   * `wide`); unset passes on the outer one, else `wide`. Once mounted, each
+   * component measures its own box. For a part of the page drawn at a known
+   * width, such as a picture of a phone.
+   */
+  width?: Width
 }>(), {
   as: 'div',
 })
@@ -31,7 +39,8 @@ const input = computed(() => props.input ?? parent.input.value)
 const surface = computed(() => props.surface ?? parent.surface.value)
 const locale = computed(() => props.locale ?? parent.locale.value)
 const inset = computed(() => props.inset || parent.inset.value)
-provide(weftKey, { input, surface, locale, inset })
+const width = computed(() => props.width ?? parent.width.value)
+provide(weftKey, { input, surface, locale, inset, width })
 // Only a forced input goes on the element: the detected one is CSS's own
 // `(pointer: coarse)` at the root, right before and after hydrating.
 </script>

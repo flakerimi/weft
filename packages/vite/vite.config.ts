@@ -8,6 +8,8 @@ export default defineConfig({
   test: {
     // Node by default (renderPage); browser tests opt in with `@vitest-environment happy-dom`.
     environment: 'node',
+    // A date picker's on-demand chunk, taken as fetched (see test/setup.ts).
+    setupFiles: ['test/setup.ts'],
     // Under Node, Vue's packages resolve to their CommonJS builds, which lack the
     // Vapor runtime. Tests load the bundler builds, the ones Vite uses for apps.
     // renderPage is unaffected: it imports Vue by file URL, not by these names.

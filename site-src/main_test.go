@@ -82,8 +82,8 @@ var (
 	// runtime (client-*.js: Vue, the registry, the hydration) the script
 	// names when the first island is due.
 	runtimeName = regexp.MustCompile(`<script type="module" src="/assets/boot-[\w-]+\.js" data-weft-runtime="(client-[\w-]+\.js)">`)
-	hintURL       = regexp.MustCompile(`^<([^>]+)>; rel=(modulepreload|preload; as=style)`)
-	loadIsland    = regexp.MustCompile(`<weft-island\b[^>]*>`)
+	hintURL     = regexp.MustCompile(`^<([^>]+)>; rel=(modulepreload|preload; as=style)`)
+	loadIsland  = regexp.MustCompile(`<weft-island\b[^>]*>`)
 )
 
 // pageRuntime is the runtime the page's loader imports, or "" for a page with no loader.
@@ -533,10 +533,19 @@ func contentDocs(t *testing.T) []doc {
 var chunkImport = regexp.MustCompile(`(?:from|import)\s*"\./([^"]+\.js)"`)
 
 // islandChunks are the scripts a page loads for its islands, the shared
-// loader (boot-*.js) and runtime (client-*.js) aside: each island's chunk,
-// /assets/<id>-<hash>.js, and the chunks it imports.
-func islandChunks(t *testing.T, d fs.FS, m builtFiles, islands []string) []string {
+// loader (boot-*.js) and the runtime (client-*.js) aside: each island's
+// chunk as the page's runtime registers it, and the chunks it imports. A
+// site with several runtimes builds an island once for each, and the page
+// loads only its runtime's.
+func islandChunks(t *testing.T, d fs.FS, runtime string, islands []string) []string {
 	t.Helper()
+	if len(islands) == 0 {
+		return nil
+	}
+	b, err := fs.ReadFile(d, strings.TrimPrefix(runtime, "/"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	seen := map[string]bool{}
 	var walk func(key string)
 	walk = func(key string) {
@@ -544,25 +553,20 @@ func islandChunks(t *testing.T, d fs.FS, m builtFiles, islands []string) []strin
 			return
 		}
 		seen[key] = true
-		b, err := fs.ReadFile(d, strings.TrimPrefix(key, "/"))
+		c, err := fs.ReadFile(d, strings.TrimPrefix(key, "/"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, imp := range chunkImport.FindAllStringSubmatch(string(b), -1) {
+		for _, imp := range chunkImport.FindAllStringSubmatch(string(c), -1) {
 			walk("/assets/" + imp[1])
 		}
 	}
 	for _, id := range islands {
-		found := false
-		for key := range m.Files {
-			if strings.HasPrefix(key, "/assets/"+id+"-") && strings.HasSuffix(key, ".js") {
-				walk(key)
-				found = true
-			}
+		chunk := regexp.MustCompile(`\./(` + regexp.QuoteMeta(id) + `-[\w-]+\.js)`).FindStringSubmatch(string(b))
+		if chunk == nil {
+			t.Fatalf("the runtime %s registers no chunk for the island %s", runtime, id)
 		}
-		if !found {
-			t.Fatalf("the build has no chunk for the island %s", id)
-		}
+		walk("/assets/" + chunk[1])
 	}
 	var out []string
 	for key := range seen {
@@ -600,7 +604,7 @@ func TestDocsPageBudgets(t *testing.T) {
 		}
 		html := string(b)
 		size := firstView(t, d, m, path, file, html)
-		for _, chunk := range islandChunks(t, d, m, islands[path]) {
+		for _, chunk := range islandChunks(t, d, pageRuntime(t, d, html), islands[path]) {
 			size += brotliSize(t, d, m, chunk)
 		}
 		t.Logf("%s: %d B brotli", path, size)
@@ -753,7 +757,7 @@ func TestWordmarkIsTheOwners(t *testing.T) {
 // so light, dark and data-weft-scheme follow the theme.
 func TestSiteStylesUseTokens(t *testing.T) {
 	colour := regexp.MustCompile(`#[0-9A-Fa-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|lab)\(`)
-	for _, name := range []string{"styles/site.css", "styles/shell.css", "styles/docs.css", "styles/gallery.css", "styles/gallery-index.css", "styles/stage.css", "styles/landing.css", "styles/not-found.css", "components/CopyCode.vue", "components/landing/AdaptiveDemo.vue"} {
+	for _, name := range []string{"styles/site.css", "styles/shell.css", "styles/docs.css", "styles/gallery.css", "styles/gallery-index.css", "styles/stage.css", "styles/landing.css", "styles/not-found.css", "components/CopyCommand.vue", "components/landing/AdaptiveDemo.vue"} {
 		b, err := os.ReadFile(name)
 		if err != nil {
 			t.Fatal(err)
@@ -761,6 +765,88 @@ func TestSiteStylesUseTokens(t *testing.T) {
 		for i, line := range strings.Split(string(b), "\n") {
 			if colour.MatchString(line) {
 				t.Errorf("%s:%d draws with a colour of its own: %s", name, i+1, strings.TrimSpace(line))
+			}
+		}
+	}
+}
+
+// No label on any page points at nothing: every <label for="x"> has an
+// element with id="x" on the same page (a group's fieldset, a slider's
+// thumb), as the server drew it.
+func TestLabelsPointAtSomething(t *testing.T) {
+	d := dist(t)
+	var r builtRoutes
+	readJSON(t, d, "routes.json", &r)
+	forAttr := regexp.MustCompile(`<label\b[^>]*\sfor="([^"]+)"`)
+	for _, p := range r.Pages {
+		b, err := fs.ReadFile(d, p.HTML)
+		if err != nil {
+			t.Fatal(err)
+		}
+		html := string(b)
+		for _, m := range forAttr.FindAllStringSubmatch(html, -1) {
+			if !strings.Contains(html, `id="`+m[1]+`"`) {
+				t.Errorf("%s: a label is for %q, which no element on the page is", p.Path, m[1])
+			}
+		}
+	}
+}
+
+// The site's type: Bricolage Grotesque from the same file as before the
+// second pass (weight and optical size; no width axis), its headings
+// narrowed by letter-spacing alone, nothing asking for a width the font
+// does not have; and headings inside a picture of a component (marked
+// data-site-picture) keep their component's look.
+func TestSiteType(t *testing.T) {
+	fonts, err := os.ReadFile("styles/fonts.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(fonts), "bricolage-grotesque-latin-opsz-normal.woff2") || strings.Contains(string(fonts), "font-stretch") {
+		t.Error("styles/fonts.css does not load Bricolage's latin opsz file as before the second pass")
+	}
+	entries, err := os.ReadDir("styles")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		b, err := os.ReadFile("styles/" + e.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(b), "font-stretch") {
+			t.Errorf("styles/%s asks for font-stretch; the font has no width axis", e.Name())
+		}
+	}
+	site, err := os.ReadFile("styles/site.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(site), `.site :is(h1, h2, h3):not([data-site-picture] *)`) {
+		t.Error("styles/site.css does not narrow h1 to h3 outside pictures marked data-site-picture")
+	}
+}
+
+// Every picture of a component the site draws (the landing's frames and
+// tiles, the gallery's thumbnails, stage and previews) carries
+// data-site-picture, the mark the site's own heading style keeps out of.
+func TestPicturesAreMarked(t *testing.T) {
+	d := dist(t)
+	picture := regexp.MustCompile(`<[^>]*\bclass="(hero-frame|landing-tile__stage|gallery-thumb|gallery-canvas|gallery-preview)\b[^"]*"[^>]*>`)
+	for _, path := range []string{"/", "/components", "/components/button", "/components/tabs"} {
+		var html string
+		if path == "/" {
+			_, html = landing(t)
+		} else {
+			html = readPage(t, d, path)
+		}
+		tags := picture.FindAllString(html, -1)
+		if len(tags) == 0 {
+			t.Errorf("%s has no picture of a component", path)
+		}
+		for _, tag := range tags {
+			if !strings.Contains(tag, "data-site-picture") {
+				t.Errorf("%s: %.80s is not marked data-site-picture", path, tag)
 			}
 		}
 	}

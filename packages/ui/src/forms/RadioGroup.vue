@@ -130,6 +130,7 @@ onScopeDispose(() => listening?.removeEventListener('keydown', onKeydownCapture,
     :data-size="f.size.value"
     :data-tone="tone"
     :disabled="f.disabled.value || undefined"
+    :id="f.id.value"
     :aria-labelledby="f.field && !legend && !$slots.legend ? f.field.labelId : undefined"
     :aria-describedby="f.aria.value['aria-describedby']"
     :aria-invalid="f.aria.value['aria-invalid']"
