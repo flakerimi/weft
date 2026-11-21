@@ -46,7 +46,6 @@
 .weft-file-upload__label { font-weight: var(--weft-weight-heading, 600); }
 .weft-file-upload__description { color: var(--weft-color-text-muted, GrayText); font-size: 0.875em; }
 .weft-file-upload__glyph { inline-size: 1.15em; block-size: 1.15em; }
-.weft-file-upload[data-form="button"] > .weft-file-upload__browse { align-self: flex-start; }
 
 .weft-file-upload__files {
   display: flex;
@@ -88,3 +87,34 @@
 .weft-file-upload__size { color: var(--weft-color-text-muted, GrayText); font-size: 0.85em; font-variant-numeric: tabular-nums; }
 .weft-file-upload__error { color: var(--weft-color-danger-text, #AB2323); font-size: 0.85em; }
 .weft-file-upload__progress { margin-block-start: var(--weft-space-1, 4px); }
+
+/* The area holds the zone (or the touch button) and the files. With
+   position inside the area is the zone, its prompt and its files inside the
+   dashed frame. */
+.weft-file-upload__area { display: flex; flex-direction: column; gap: var(--weft-space-3, 12px); }
+.weft-file-upload__prompt { display: flex; flex-direction: column; align-items: center; gap: var(--weft-space-2, 8px); }
+.weft-file-upload__zone > .weft-file-upload__files { align-self: stretch; text-align: start; }
+.weft-file-upload[data-form="button"] .weft-file-upload__area > .weft-file-upload__browse { align-self: flex-start; }
+
+/* Grid: tiles of a square preview with the name and size under it, the
+   remove button over the preview's corner. */
+.weft-file-upload__files[data-layout="grid"] {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  gap: var(--weft-space-3, 12px);
+}
+.weft-file-upload__files[data-layout="grid"] .weft-file-upload__file {
+  position: relative;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--weft-space-2, 8px);
+}
+.weft-file-upload__files[data-layout="grid"] .weft-file-upload__thumb { inline-size: 100%; block-size: auto; aspect-ratio: 1; }
+.weft-file-upload__files[data-layout="grid"] .weft-file-upload__thumb svg { inline-size: 32px; block-size: 32px; }
+.weft-file-upload__files[data-layout="grid"] .weft-file-upload__remove {
+  position: absolute;
+  inset-block-start: var(--weft-space-3, 12px);
+  inset-inline-end: var(--weft-space-3, 12px);
+  background: var(--weft-color-surface-raised, Canvas);
+}
+.weft-file-upload__files[data-layout="grid"] .weft-file-upload__retry { align-self: flex-start; }

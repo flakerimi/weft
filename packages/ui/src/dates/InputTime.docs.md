@@ -28,6 +28,12 @@ follow), A and P (or the locale's words' first letters) set AM and PM,
 Backspace clears a digit, then the part, Left and Right move between parts
 (mirrored right to left), and a separator typed moves on.
 
+With `range` it is two times, a start and an end, bound as `{ start, end }`
+(each null while empty; null when both are) and submitted as `name[start]`
+and `name[end]`: on pointer two groups of parts, named "Start time" and "End
+time", Left and Right going on from one to the other; on touch two platform
+fields so named. An end before the start is marked invalid.
+
 A time before `min` or after `max` is marked invalid (`aria-invalid`,
 `data-invalid`) but still bound, as a native time field does. `disabled`
 takes the parts out of the tab order; `readonly` keeps them focusable and

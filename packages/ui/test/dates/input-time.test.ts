@@ -189,6 +189,40 @@ describe('InputTime', () => {
     })
   })
 
+  describe('range', () => {
+    it('is two times, start and end, each a named group of parts, bound as { start, end }', async () => {
+      const e = await cases({ locale: 'en-GB', range: true, initial: { start: '09:00', end: '17:30' } })
+      const groups = $$('.weft-input-time [role="group"]')
+      expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual(['Start time', 'End time'])
+      expect(group().getAttribute('aria-labelledby')).toBe($('label').id)
+      expect(texts()).toEqual(['09', '00', '17', '30'])
+      $$('[role="spinbutton"][aria-label="Hour"]')[1]!.focus()
+      await keys('ArrowUp')
+      expect(e.value).toEqual({ start: '09:00', end: '18:30' })
+      // From the start's last part, Right goes on to the end's first.
+      $$('[role="spinbutton"][aria-label="Minute"]')[0]!.focus()
+      await keys('ArrowRight')
+      expect(active()).toBe($$('[role="spinbutton"][aria-label="Hour"]')[1])
+      $<HTMLButtonElement>('.submit').click()
+      await settle()
+      expect(e.submitted).toBe('09:00–18:30')
+    })
+
+    it('marks an end before the start invalid, and is two platform fields on touch', async () => {
+      await cases({ locale: 'en-GB', range: true, initial: { start: '18:00', end: '09:00' } })
+      expect(group().dataset.invalid).toBe('true')
+      unmount!()
+      const t = await cases({ input: 'touch', range: true, initial: { start: '09:00', end: '17:30' } })
+      const natives = $$<HTMLInputElement>('.weft-input-time input[type="time"]')
+      expect(natives.map((n) => n.value)).toEqual(['09:00', '17:30'])
+      expect(natives.map((n) => n.getAttribute('aria-label'))).toEqual(['Start time', 'End time'])
+      natives[0]!.value = '08:15'
+      natives[0]!.dispatchEvent(new Event('input', { bubbles: true }))
+      await settle()
+      expect(t.value).toEqual({ start: '08:15', end: '17:30' })
+    })
+  })
+
   describe('on touch', () => {
     const native = () => $<HTMLInputElement>('.weft-input-time input[type="time"]')
 

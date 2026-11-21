@@ -3,14 +3,24 @@
 // hydrates. No calendar that opens, no #weft-overlays root, and no today
 // marker: the server and the browser may not agree on the day.
 import { fileURLToPath } from 'node:url'
-import { expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { renderPage } from '../src/render.ts'
 import { datesIsland } from './fixtures/dates-island/markup.ts'
 
+afterEach(() => vi.useRealTimers())
+const root = fileURLToPath(new URL('./fixtures/dates-island', import.meta.url))
+/** The page rendered as if built on `day`. */
+async function renderOn(day: string) {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(`${day}T12:00:00`))
+  const { html } = await renderPage({ root, page: 'pages/index.vue' })
+  vi.useRealTimers()
+  return html
+}
+
 it('renders an island of every date and file component, in its locale', async () => {
   expect(typeof window).toBe('undefined')
-  const root = fileURLToPath(new URL('./fixtures/dates-island', import.meta.url))
-  const { html } = await renderPage({ root, page: 'pages/index.vue' })
+  const html = await renderOn('2024-06-15')
   expect(html).toContain(datesIsland)
   expect(html).not.toContain('weft-overlays')
   expect(html).not.toContain('weft-popover')
@@ -19,4 +29,12 @@ it('renders an island of every date and file component, in its locale', async ()
   expect(datesIsland).toContain('abbr="Monday"')
   expect(datesIsland).toContain('value="01/03/2024"')
   expect(datesIsland).not.toContain('style=""')
+})
+
+it('renders a Calendar with no value the same whatever day it is built on: an empty, busy grid', async () => {
+  const later = await renderOn('2023-01-01')
+  expect(later).toContain(datesIsland)
+  const loose = /<div class="weft-calendar loose"[\s\S]*?<\/table>/.exec(datesIsland)![0]
+  expect(loose).toContain('aria-busy="true"')
+  expect(loose).not.toContain('weft-calendar__day')
 })

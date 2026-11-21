@@ -16,6 +16,17 @@ extensions), `max-size` (bytes) and `max-files` refuse files, which `reject`
 reports with a reason each (`type`, `size`, `count`): the dialog only
 suggests `accept`, and drops and pastes ignore it, so every file is checked.
 
+`layout="grid"` lists the files as tiles (a square preview, the name and
+size under it, the remove button over its corner) in place of rows;
+`position="inside"` puts them inside the zone, where they take the place of
+its icon and text once there are some (Browse stays; a press on a file does
+not open the dialog). `reset` makes a choice in the file dialog replace the
+files instead of adding to them; drops and pastes still add. After every
+choice in the dialog the hidden input holds exactly the files listed, so a
+refused file never submits. A file dragged anywhere over the component is
+kept from the browser, which would otherwise open it in place of the page,
+even while it is disabled.
+
 Each file is listed with its name and its size in the locale (`1.5 kB`, `2,5
 MB`), an image with a preview: an object URL, revoked when the file is
 removed, replaced or the component goes. No file is ever read. Its remove

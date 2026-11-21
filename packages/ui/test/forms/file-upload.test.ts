@@ -212,10 +212,76 @@ describe('FileUpload', () => {
       const { e } = await cases({ multiple: true, disabled: true })
       expect(browse().disabled).toBe(true)
       expect(native().disabled).toBe(true)
-      const { over } = await drop(zone(), [png()])
-      expect(over.defaultPrevented).toBe(false)
+      // A file dropped is still kept from the browser, which would open it in place of the page.
+      const { over, dropped } = await drop(zone(), [png()])
+      expect(over.defaultPrevented).toBe(true)
+      expect(dropped.defaultPrevented).toBe(true)
+      expect(zone().dataset.dragging).toBeUndefined()
       await paste(zone(), [png()])
       expect(e.value).toEqual([])
+    })
+
+    it('keeps the browser from opening a file dropped anywhere on it, its list too', async () => {
+      const { e } = await cases({ multiple: true })
+      await pick([png('a.png')])
+      const { over, dropped } = await drop($('.weft-file-upload__files'), [png('b.png')])
+      expect(over.defaultPrevented).toBe(true)
+      expect(dropped.defaultPrevented).toBe(true)
+      expect((e.value as File[]).map((f) => f.name)).toEqual(['a.png'])
+    })
+
+    it('keeps the native input to the files it holds after the dialog: a refused choice submits nothing', async () => {
+      const { e } = await cases({ accept: 'image/*' })
+      await pick([txt()])
+      expect(e.value).toBeNull()
+      expect(native().files!.length).toBe(0)
+      $<HTMLButtonElement>('.submit').click()
+      await settle()
+      expect(e.submitted.filter(Boolean)).toEqual([])
+    })
+
+    it('keeps the native input to every file listed after a second choice in the dialog', async () => {
+      const { e } = await cases({ multiple: true, accept: 'image/*' })
+      await pick([png('a.png')])
+      await pick([txt(), png('b.png')])
+      expect([...native().files!].map((f) => f.name)).toEqual(['a.png', 'b.png'])
+      await pick([txt()])
+      expect([...native().files!].map((f) => f.name)).toEqual(['a.png', 'b.png'])
+      $<HTMLButtonElement>('.submit').click()
+      await settle()
+      expect(e.submitted).toEqual(['a.png', 'b.png'])
+    })
+
+    it('starts again from each choice in the dialog with reset', async () => {
+      const { e } = await cases({ multiple: true, reset: true })
+      await pick([png('a.png'), png('b.png')])
+      await pick([png('c.png')])
+      expect((e.value as File[]).map((f) => f.name)).toEqual(['c.png'])
+      expect(revoked).toEqual(['blob:test/0', 'blob:test/1'])
+      // A drop still adds.
+      await drop(zone(), [png('d.png')])
+      expect((e.value as File[]).map((f) => f.name)).toEqual(['c.png', 'd.png'])
+    })
+
+    it('lays files out as a list or a grid of tiles, below the zone or inside it', async () => {
+      const first = await cases({ multiple: true, layout: 'grid', position: 'inside' })
+      expect(zone().textContent).toContain('Drop files here')
+      await pick([png('a.png')])
+      const list = $('.weft-file-upload__files')
+      expect(list.dataset.layout).toBe('grid')
+      expect(zone().contains(list)).toBe(true)
+      // With files inside, the zone's prompt gives way to them; Browse stays.
+      expect($('.weft-file-upload__label')).toBeNull()
+      expect(browse()).not.toBeNull()
+      const click = vi.spyOn(native(), 'click').mockImplementation(() => {})
+      items()[0]!.click()
+      expect(click).not.toHaveBeenCalled()
+      first.unmount()
+      unmount = undefined
+      await cases({ multiple: true })
+      await pick([png('a.png')])
+      expect($('.weft-file-upload__files').dataset.layout).toBe('list')
+      expect(zone().contains($('.weft-file-upload__files'))).toBe(false)
     })
 
     it('marks the zone while dragging and rings its button on focus', async () => {

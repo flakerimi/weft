@@ -8,17 +8,20 @@
 // platform's time field, whose picker the phone draws, with the same min,
 // max and step. It binds HH:mm (HH:mm:ss with granularity second) or, with
 // value-format="object", a Time; null until every part is filled. A time
-// outside min and max is marked invalid. Inside a FormField the label names
-// the group (aria-labelledby).
-import { computed, nextTick, reactive, useTemplateRef, watch } from 'vue'
+// outside min and max is marked invalid. With `range` it is two times, a
+// start and an end (each a named group, or a platform field, on touch),
+// bound as { start, end }. Inside a FormField the label names the group
+// (aria-labelledby).
+import { computed, nextTick, useTemplateRef, watch } from 'vue'
 import Icon from '../basics/Icon.vue'
 import { useWeft } from '../adaptive/context.ts'
-import { focus, isRtl } from '../headless/dom.ts'
+import { focus } from '../headless/dom.ts'
 import { useControllable } from '../headless/useControllable.ts'
 import { useControlAttrs, useField } from '../forms/field.ts'
 import { leavesGroup } from '../forms/dom.ts'
 import { useLocale } from '../adaptive/locale.ts'
-import { dayPeriods, digits, fromTime, hourCycleOf, segmentsOf, Time, toTime, type Granularity, type InputTimeLabels, type SegmentType, type TimeFormat, type TimeInput } from './time.ts'
+import { fromTime, hourCycleOf, toTime, type Granularity, type InputTimeLabels, type Time, type TimeFormat, type TimeInput, type TimeRange } from './time.ts'
+import { useTimeParts } from './timeParts.ts'
 import type { Size } from '../types.ts'
 import '../styles/base.css'
 import '../styles/input.css'
@@ -29,10 +32,12 @@ defineOptions({ inheritAttrs: false })
 
 const props = withDefaults(
   defineProps<{
-    /** The time, bound with `v-model`: `HH:mm` (`HH:mm:ss` with granularity second), or a Time with `value-format="object"`; null while a part is empty. */
-    modelValue?: TimeInput | null
+    /** The time, bound with `v-model`: `HH:mm` (`HH:mm:ss` with granularity second), or a Time with `value-format="object"`; null while a part is empty. With `range`, `{ start, end }`. */
+    modelValue?: TimeInput | TimeRange | null
     /** The time it starts with when `v-model` is not bound. */
-    defaultValue?: TimeInput | null
+    defaultValue?: TimeInput | TimeRange | null
+    /** Two times, a start and an end, bound as `{ start, end }`; an end before the start is marked invalid. */
+    range?: boolean
     /** `iso`: bound as an `HH:mm` string. `object`: as a `Time`. */
     valueFormat?: TimeFormat
     /** The smallest part shown: `hour`, `minute` or `second`. */
@@ -68,10 +73,10 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  /** The time changed: `HH:mm`, a Time, or null. */
-  'update:modelValue': [value: TimeInput | null]
+  /** The time changed: `HH:mm`, a Time, `{ start, end }` with range, or null. */
+  'update:modelValue': [value: TimeInput | TimeRange | null]
   /** The time was changed by a key or by the platform's picker. */
-  change: [value: TimeInput | null]
+  change: [value: TimeInput | TimeRange | null]
   /** Focus left the time. */
   blur: [event: FocusEvent]
   /** The time took focus. */
@@ -92,135 +97,59 @@ const weft = useWeft()
 const touch = computed(() => weft.input.value === 'touch')
 const locale = useLocale(() => props.locale)
 const cycle = computed(() => hourCycleOf(locale.value, props.hourCycle))
-const parts = computed(() => segmentsOf(locale.value, cycle.value, props.granularity))
-const periods = computed(() => dayPeriods(locale.value))
-const t = computed(() => ({ hour: 'Hour', minute: 'Minute', second: 'Second', dayPeriod: 'AM/PM', empty: 'Empty', ...props.labels }))
+const t = computed(() => ({ hour: 'Hour', minute: 'Minute', second: 'Second', dayPeriod: 'AM/PM', empty: 'Empty', start: 'Start time', end: 'End time', ...props.labels }))
 const group = useTemplateRef<HTMLElement>('group')
 
-// The parts typed so far; the hour as shown (1–12 in 12-hour time).
-const state = reactive<{ hour: number | null; minute: number | null; second: number | null; period: 0 | 1 | null }>({ hour: null, minute: null, second: null, period: null })
-function load(time: Time | null) {
-  state.hour = time ? (cycle.value === 12 ? time.hour % 12 || 12 : time.hour) : null
-  state.minute = time?.minute ?? null
-  state.second = time?.second ?? null
-  state.period = time ? (time.hour >= 12 ? 1 : 0) : null
-}
-/** The time the parts make, or null while one is missing. */
-function current(): Time | null {
-  const { hour, minute, second, period } = state
-  if (hour === null || (cycle.value === 12 && period === null)) return null
-  if (props.granularity !== 'hour' && minute === null) return null
-  if (props.granularity === 'second' && second === null) return null
-  const h = cycle.value === 12 ? (hour % 12) + (period === 1 ? 12 : 0) : hour
-  return new Time(h, props.granularity === 'hour' ? 0 : minute!, props.granularity === 'second' ? second! : 0)
-}
+// The bound times: one, or a range's start and end.
+const asRange = () => (model.value && typeof model.value === 'object' && 'start' in model.value ? (model.value as TimeRange) : null)
+const bound = (which: 'start' | 'end') => toTime(props.range ? asRange()?.[which] : which === 'start' ? model.value : null)
 const iso = (time: Time | null) => fromTime(time, props.granularity, 'iso') as string | null
-watch(
-  [() => iso(toTime(model.value)), cycle, () => props.granularity],
-  () => {
-    const bound = toTime(model.value)
-    if (iso(bound) !== iso(current())) load(bound)
-  },
-  { immediate: true },
-)
-function commit() {
-  const time = current()
-  if (iso(time) === iso(toTime(model.value))) return
-  const value = fromTime(time, props.granularity, props.valueFormat) as TimeInput | null
+const out = (time: Time | null) => fromTime(time, props.granularity, props.valueFormat) as TimeInput | null
+function commit(which: 'start' | 'end', time: Time | null) {
+  if (iso(time) === iso(bound(which))) return
+  let value: TimeInput | TimeRange | null
+  if (!props.range) value = out(time)
+  else {
+    const start = which === 'start' ? time : bound('start')
+    const end = which === 'end' ? time : bound('end')
+    value = start || end ? { start: out(start), end: out(end) } : null
+  }
   model.value = value
   emit('change', value)
   f.input()
 }
+const partsFor = (which: 'start' | 'end') =>
+  useTimeParts({
+    locale,
+    cycle,
+    granularity: () => props.granularity,
+    step: () => props.step,
+    labels: () => t.value,
+    value: () => bound(which),
+    onChange: (time) => commit(which, time),
+    editable: () => !props.readonly,
+    disabled: () => f.disabled.value,
+    group: () => group.value,
+  })
+const startParts = partsFor('start')
+const endParts = partsFor('end')
+const fields = computed(() =>
+  props.range
+    ? [
+        { key: 'start', label: t.value.start, parts: startParts, value: bound('start') },
+        { key: 'end', label: t.value.end, parts: endParts, value: bound('end') },
+      ]
+    : [{ key: 'time', label: undefined, parts: startParts, value: bound('start') }],
+)
 
 const min = computed(() => toTime(props.min))
 const max = computed(() => toTime(props.max))
+const outOfRange = (time: Time | null) => !!time && ((!!min.value && time.compare(min.value) < 0) || (!!max.value && time.compare(max.value) > 0))
 const invalid = computed(() => {
-  const time = toTime(model.value)
-  return f.invalid.value || (!!time && ((!!min.value && time.compare(min.value) < 0) || (!!max.value && time.compare(max.value) > 0)))
+  const start = bound('start')
+  const end = bound('end')
+  return f.invalid.value || outOfRange(start) || outOfRange(end) || (!!start && !!end && end.compare(start) < 0)
 })
-
-// Each part's range, value and text.
-const range = (type: SegmentType): [number, number] =>
-  type === 'hour' ? (cycle.value === 12 ? [1, 12] : [0, 23]) : type === 'dayPeriod' ? [0, 1] : [0, 59]
-const valueOf = (type: SegmentType): number | null => (type === 'dayPeriod' ? state.period : state[type])
-function setPart(type: SegmentType, n: number | null) {
-  if (type === 'dayPeriod') state.period = n as 0 | 1 | null
-  else state[type] = n
-  commit()
-}
-function textOf(type: SegmentType): string {
-  const n = valueOf(type)
-  if (n === null) return '––'
-  if (type === 'dayPeriod') return periods.value[n]!
-  return digits(n, locale.value, type === 'hour' && cycle.value === 12 ? 1 : 2)
-}
-const segments = computed(() =>
-  parts.value.map((p, i) =>
-    p.type === 'literal'
-      ? { key: `l${i}`, literal: true as const, text: p.text }
-      : { key: p.type, literal: false as const, type: p.type, label: t.value[p.type], range: range(p.type), value: valueOf(p.type), text: textOf(p.type) },
-  ),
-)
-
-/** Digits typed into the focused part so far. */
-let typed = ''
-const stepOf = (type: SegmentType) => (type === 'dayPeriod' ? 1 : Math.max(1, props.step?.[type] ?? 1))
-function bump(type: SegmentType, k: 1 | -1) {
-  const [lo, hi] = range(type)
-  const n = valueOf(type)
-  if (n === null) return setPart(type, k > 0 ? lo : hi)
-  const span = hi - lo + 1
-  setPart(type, ((n - lo + k * stepOf(type)) % span + span) % span + lo)
-}
-function typeDigit(type: SegmentType, d: string, el: HTMLElement) {
-  const [lo, hi] = range(type)
-  let text = typed + d
-  if (Number(text) > hi) text = d
-  typed = text
-  const n = Number(text)
-  if (n >= lo) setPart(type, n)
-  if (text.length >= 2 || n * 10 > hi) move(el, 1)
-}
-/** Focus the part `k` places from `el` (in the time's order). */
-function move(el: HTMLElement, k: 1 | -1) {
-  const all = [...(group.value?.querySelectorAll<HTMLElement>('[role="spinbutton"]') ?? [])]
-  const next = all[all.indexOf(el) + k]
-  if (next) focus(next)
-}
-/** Digits in the locale's numbering read as 0–9. */
-const digitOf = (key: string) => {
-  for (let i = 0; i <= 9; i++) if (digits(i, locale.value, 1) === key || String(i) === key) return String(i)
-  return null
-}
-
-function onKeydown(event: KeyboardEvent, type: SegmentType) {
-  if (f.disabled.value || event.ctrlKey || event.metaKey || event.altKey) return
-  const el = event.currentTarget as HTMLElement
-  const rtl = isRtl(group.value)
-  const editable = !props.readonly
-  const k = event.key
-  if (k === 'ArrowRight' || k === 'ArrowLeft') move(el, (k === 'ArrowRight') !== rtl ? 1 : -1)
-  else if (k === 'ArrowUp' || k === 'ArrowDown') editable && bump(type, k === 'ArrowUp' ? 1 : -1)
-  else if (k === 'Home' || k === 'End') editable && setPart(type, range(type)[k === 'Home' ? 0 : 1])
-  else if (k === 'Backspace' || k === 'Delete') {
-    if (!editable) return
-    typed = typed.slice(0, -1)
-    setPart(type, typed && type !== 'dayPeriod' ? Number(typed) : null)
-  } else if (type === 'dayPeriod' && k.length === 1 && /\p{L}/u.test(k)) {
-    if (!editable) return
-    const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
-    const which = periods.value.findIndex((w, i) => fold(w).startsWith(fold(k)) || fold(k) === (i ? 'p' : 'a'))
-    if (which < 0) return
-    setPart(type, which)
-  } else if (type !== 'dayPeriod' && digitOf(k) !== null) {
-    if (editable) typeDigit(type, digitOf(k)!, el)
-  } else if (k.length === 1 && /[\s:.,]/.test(k)) move(el, 1)
-  else return
-  event.preventDefault()
-}
-function onSegmentFocus() {
-  typed = ''
-}
 
 // Touch: the platform's time field.
 const nativeStep = computed(() => {
@@ -230,11 +159,6 @@ const nativeStep = computed(() => {
   return minutes === 1 ? undefined : minutes * 60
 })
 const nativeGranularity = computed<Granularity>(() => (props.granularity === 'second' ? 'second' : 'minute'))
-const nativeValue = computed(() => (fromTime(toTime(model.value), nativeGranularity.value, 'iso') as string | null) ?? '')
-function onNative(event: Event) {
-  load(toTime((event.target as HTMLInputElement).value))
-  commit()
-}
 
 // The input switching moves focus to the same place in the other form.
 watch(
@@ -248,7 +172,8 @@ watch(
 
 function onFocusout(event: FocusEvent) {
   if (!leavesGroup(event)) return
-  typed = ''
+  startParts.blur()
+  endParts.blur()
   f.blur()
   emit('blur', event)
 }
@@ -256,7 +181,7 @@ function onFocusin(event: FocusEvent) {
   const from = event.relatedTarget as Node | null
   if (!from || !group.value?.contains(from)) emit('focus', event)
 }
-const hidden = computed(() => iso(toTime(model.value)) ?? '')
+const hidden = (which: 'start' | 'end') => iso(bound(which)) ?? ''
 </script>
 
 <template>
@@ -264,10 +189,10 @@ const hidden = computed(() => iso(toTime(model.value)) ?? '')
     ref="group"
     class="weft-input weft-input-time"
     v-bind="{ ...box, ...(touch ? {} : own) }"
-    :id="touch ? undefined : f.id.value"
-    :role="touch ? undefined : 'group'"
-    :aria-labelledby="touch ? undefined : f.field?.labelId"
-    :aria-describedby="touch ? undefined : describedBy()"
+    :id="touch && !range ? undefined : f.id.value"
+    :role="touch && !range ? undefined : 'group'"
+    :aria-labelledby="touch && !range ? undefined : f.field?.labelId"
+    :aria-describedby="touch && !range ? undefined : describedBy()"
     :data-form="touch ? 'native' : 'segments'"
     :data-size="f.size.value"
     :data-invalid="invalid ? 'true' : undefined"
@@ -278,49 +203,65 @@ const hidden = computed(() => iso(toTime(model.value)) ?? '')
     <span v-if="$slots.leading || icon" class="weft-input__leading">
       <slot name="leading"><Icon v-if="icon" :name="icon" /></slot>
     </span>
-    <input
-      v-if="touch"
-      class="weft-input__field"
-      type="time"
-      v-bind="own"
-      :id="f.id.value"
-      :value="nativeValue"
-      :min="min ? fromTime(min, nativeGranularity, 'iso') as string : undefined"
-      :max="max ? fromTime(max, nativeGranularity, 'iso') as string : undefined"
-      :step="nativeStep"
-      :disabled="f.disabled.value || undefined"
-      :readonly="readonly || undefined"
-      :required="required || undefined"
-      :aria-labelledby="f.field?.labelId"
-      :aria-describedby="describedBy()"
-      :aria-invalid="invalid ? 'true' : undefined"
-      @input="onNative"
-    />
-    <span v-else class="weft-input-time__segments">
-      <template v-for="s in segments" :key="s.key">
-        <span v-if="s.literal" class="weft-input-time__literal" aria-hidden="true">{{ s.text }}</span>
-        <span
-          v-else
-          role="spinbutton"
-          class="weft-input-time__segment"
-          inputmode="numeric"
-          :data-segment="s.type"
-          :data-placeholder="s.value === null ? 'true' : undefined"
-          :tabindex="f.disabled.value ? -1 : 0"
-          :aria-label="s.label"
-          :aria-valuemin="s.range[0]"
-          :aria-valuemax="s.range[1]"
-          :aria-valuenow="s.value ?? undefined"
-          :aria-valuetext="s.value === null ? t.empty : s.text"
+    <template v-if="touch">
+      <template v-for="(fd, i) in fields" :key="fd.key">
+        <span v-if="i > 0" class="weft-input-time__separator" aria-hidden="true">–</span>
+        <input
+          class="weft-input__field"
+          type="time"
+          v-bind="range ? {} : own"
+          :id="range ? undefined : f.id.value"
+          :value="fd.parts.native.value"
+          :min="min ? fromTime(min, nativeGranularity, 'iso') as string : undefined"
+          :max="max ? fromTime(max, nativeGranularity, 'iso') as string : undefined"
+          :step="nativeStep"
+          :disabled="f.disabled.value || undefined"
+          :readonly="readonly || undefined"
+          :required="required || undefined"
+          :aria-label="fd.label"
+          :aria-labelledby="fd.label ? undefined : f.field?.labelId"
+          :aria-describedby="range ? undefined : describedBy()"
           :aria-invalid="invalid ? 'true' : undefined"
-          :aria-required="required || f.aria.value['aria-required'] ? 'true' : undefined"
-          :aria-disabled="f.disabled.value ? 'true' : undefined"
-          :aria-readonly="readonly ? 'true' : undefined"
-          @keydown="onKeydown($event, s.type)"
-          @focus="onSegmentFocus"
-        >{{ s.text }}</span>
+          @input="fd.parts.input($event)"
+        />
+      </template>
+    </template>
+    <span v-else class="weft-input-time__segments">
+      <template v-for="(fd, i) in fields" :key="fd.key">
+        <span v-if="i > 0" class="weft-input-time__separator" aria-hidden="true">–</span>
+        <span class="weft-input-time__field" :role="fd.label ? 'group' : undefined" :aria-label="fd.label">
+          <template v-for="s in fd.parts.segments.value" :key="s.key">
+            <span v-if="s.literal" class="weft-input-time__literal" aria-hidden="true">{{ s.text }}</span>
+            <span
+              v-else
+              role="spinbutton"
+              class="weft-input-time__segment"
+              inputmode="numeric"
+              :data-segment="s.type"
+              :data-placeholder="s.value === null ? 'true' : undefined"
+              :tabindex="f.disabled.value ? -1 : 0"
+              :aria-label="s.label"
+              :aria-valuemin="s.range[0]"
+              :aria-valuemax="s.range[1]"
+              :aria-valuenow="s.value ?? undefined"
+              :aria-valuetext="s.value === null ? t.empty : s.text"
+              :aria-invalid="invalid ? 'true' : undefined"
+              :aria-required="required || f.aria.value['aria-required'] ? 'true' : undefined"
+              :aria-disabled="f.disabled.value ? 'true' : undefined"
+              :aria-readonly="readonly ? 'true' : undefined"
+              @keydown="fd.parts.keydown($event, s.type)"
+              @focus="fd.parts.focus()"
+            >{{ s.text }}</span>
+          </template>
+        </span>
       </template>
     </span>
-    <input v-if="f.name.value" type="hidden" :name="f.name.value" :value="hidden" :disabled="f.disabled.value || undefined" />
+    <template v-if="f.name.value">
+      <template v-if="range">
+        <input type="hidden" :name="`${f.name.value}[start]`" :value="hidden('start')" :disabled="f.disabled.value || undefined" />
+        <input type="hidden" :name="`${f.name.value}[end]`" :value="hidden('end')" :disabled="f.disabled.value || undefined" />
+      </template>
+      <input v-else type="hidden" :name="f.name.value" :value="hidden('start')" :disabled="f.disabled.value || undefined" />
+    </template>
   </span>
 </template>

@@ -12,9 +12,13 @@
 // be reached but not chosen; dates outside min and max cannot be reached.
 // Names, digits and the first weekday follow the locale (its prop, else
 // the WeftProvider's, else en-US). On touch every date is at least 44 px a
-// side and a swipe changes the month.
+// side and a swipe changes the month. With type="month" or "year" it picks
+// months or years instead, in the same grids. With no value and no focused
+// date to say which month to show, it draws an empty, busy grid until it is
+// mounted, then today's month: the server, at build or at request time,
+// cannot know the day the browser will hydrate on.
 import { computed, nextTick, onMounted, shallowRef, useTemplateRef, watch } from 'vue'
-import { endOfMonth, endOfWeek, getLocalTimeZone, isSameMonth, startOfMonth, startOfWeek, today } from '@internationalized/date'
+import { endOfMonth, endOfWeek, endOfYear, getLocalTimeZone, isSameMonth, startOfMonth, startOfWeek, startOfYear, today } from '@internationalized/date'
 import { useWeft } from '../adaptive/context.ts'
 import { focus, isRtl } from '../headless/dom.ts'
 import { useControllable } from '../headless/useControllable.ts'
@@ -34,7 +38,9 @@ const props = withDefaults(
     modelValue?: CalendarModel
     /** The value it starts with when `v-model` is not bound. */
     defaultValue?: CalendarModel
-    /** Choose a range: a start, then an end. */
+    /** What is chosen: `date` a day; `month` a month (bound as its first day); `year` a year (its 1 January). */
+    type?: 'date' | 'month' | 'year'
+    /** Choose a range: a start, then an end (with `month` or `year`, from the first day of one to the last of another). */
     range?: boolean
     /** Choose several dates: a press toggles one. */
     multiple?: boolean
@@ -84,6 +90,7 @@ const props = withDefaults(
     defaultValue: undefined,
     focusedDate: undefined,
     valueFormat: 'iso',
+    type: 'date',
     weekdayFormat: 'short',
     numberOfMonths: 1,
     fixedWeeks: true,
@@ -146,14 +153,27 @@ const chosenRange = computed(() => {
 
 // Today, marked once mounted: the server and the browser may not agree on the day.
 const now = shallowRef<CalendarDate | null>(null)
-onMounted(() => (now.value = today(getLocalTimeZone())))
+onMounted(() => {
+  now.value = today(getLocalTimeZone())
+  if (ready.value) return
+  focused.value = clamp(now.value, min.value, max.value)
+  ready.value = true
+})
 
 const firstChosen = () => single.value ?? many.value[0] ?? chosenRange.value?.start ?? null
-const focused = shallowRef<CalendarDate>(clamp(toDate(props.focusedDate) ?? firstChosen() ?? today(getLocalTimeZone()), min.value, max.value))
+// A value or a focused date says which month to show; with neither, the
+// month is today's, which only the browser knows: the grid is drawn empty
+// (and busy) until mounted, the same on the server and while hydrating.
+const fixed = toDate(props.focusedDate) ?? firstChosen()
+const ready = shallowRef(fixed !== null)
+/** Never drawn: the focused date until mounted, when there is none. */
+const UNSET = new CalendarDate(2000, 1, 1)
+const focused = shallowRef<CalendarDate>(clamp(fixed ?? UNSET, min.value, max.value))
 watch(
   () => toDate(props.focusedDate),
   (d) => {
     if (d && !sameDay(d, focused.value)) focused.value = clamp(d, min.value, max.value)
+    if (d) ready.value = true
   },
 )
 function setFocused(d: CalendarDate) {
@@ -173,7 +193,10 @@ function reveal() {
 }
 watch([focused, () => props.numberOfMonths], reveal, { flush: 'sync' })
 
-const view = shallowRef<'day' | 'month' | 'year'>('day')
+/** The unit chosen: days, months or years; the views below it are not shown. */
+const unit = computed<'day' | 'month' | 'year'>(() => (props.type === 'month' ? 'month' : props.type === 'year' ? 'year' : 'day'))
+const view = shallowRef<'day' | 'month' | 'year'>(unit.value)
+watch(unit, (u) => (view.value = u))
 const fmt = (d: CalendarDate, o: Intl.DateTimeFormatOptions) => format(d, locale.value, o)
 const months = computed(() =>
   Array.from({ length: Math.max(1, props.numberOfMonths) }, (_, i) => {
@@ -189,6 +212,7 @@ function weekOf(days: CalendarDate[]) {
 }
 const yearStart = computed(() => Math.floor(focused.value.year / 12) * 12)
 const headingText = computed(() => {
+  if (!ready.value) return ''
   if (view.value === 'month') return fmt(focused.value, { year: 'numeric' })
   if (view.value === 'year') {
     const f = formatter(locale.value, { year: 'numeric' })
@@ -200,11 +224,21 @@ const headingText = computed(() => {
 })
 const headingId = `${id}-heading`
 
-// Dates.
+// Dates, and the unit being chosen: a day, or a month or year from its first day.
+const floor = (d: CalendarDate) => (unit.value === 'day' ? d : unit.value === 'month' ? startOfMonth(d) : startOfYear(d))
+const ceil = (d: CalendarDate) => (unit.value === 'day' ? d : unit.value === 'month' ? endOfMonth(d) : endOfYear(d))
+const cmp = (a: CalendarDate, b: CalendarDate) => floor(a).compare(floor(b))
+const same = (a: CalendarDate | null | undefined, b: CalendarDate | null | undefined) => !!a && !!b && cmp(a, b) === 0
 const outside = (d: CalendarDate, month: CalendarDate) => !isSameMonth(d, month)
 const beyond = (d: CalendarDate) => (min.value !== null && d.compare(min.value) < 0) || (max.value !== null && d.compare(max.value) > 0)
 const unavailable = (d: CalendarDate) => !!props.isDateUnavailable?.(d)
 const blocked = (d: CalendarDate) => beyond(d) || !!props.isDateDisabled?.(d) || unavailable(d)
+/** A month or year that cannot be chosen: wholly before min or after max. */
+const blockedSpan = (d: CalendarDate, span: 'month' | 'year') => {
+  const [a, b] = span === 'month' ? [startOfMonth(d), endOfMonth(d)] : [startOfYear(d), endOfYear(d)]
+  return (min.value !== null && b.compare(min.value) < 0) || (max.value !== null && a.compare(max.value) > 0)
+}
+const blockedUnit = (d: CalendarDate) => (unit.value === 'day' ? blocked(d) : blockedSpan(d, unit.value))
 
 // A range being chosen: its start, and the date the pointer or the focus is on.
 const pending = shallowRef<CalendarDate | null>(null)
@@ -217,56 +251,55 @@ watch(
   },
   { immediate: true },
 )
-const ordered = (a: CalendarDate, b: CalendarDate): [CalendarDate, CalendarDate] => (a.compare(b) <= 0 ? [a, b] : [b, a])
+const ordered = (a: CalendarDate, b: CalendarDate): [CalendarDate, CalendarDate] => (cmp(a, b) <= 0 ? [a, b] : [b, a])
 const shownRange = computed(() => {
   if (pending.value) {
     const [s, e] = ordered(pending.value, hovered.value ?? pending.value)
-    return { start: s, end: e, preview: !sameDay(s, e) }
+    return { start: s, end: e, preview: !same(s, e) }
   }
   const r = chosenRange.value
   if (r?.start && r.end) return { start: r.start, end: r.end, preview: false }
   return null
 })
+// What changes as dates are focused, hovered and chosen, read per date by
+// the template; the names and numbers (dayState) are written once per month.
 function rangePart(d: CalendarDate): string | undefined {
   const r = shownRange.value
-  if (!r || d.compare(r.start) < 0 || d.compare(r.end) > 0) return undefined
-  const parts = [sameDay(d, r.start) && 'start', sameDay(d, r.end) && 'end'].filter(Boolean)
+  if (!props.range || !r || cmp(d, r.start) < 0 || cmp(d, r.end) > 0) return undefined
+  const parts = [same(d, r.start) && 'start', same(d, r.end) && 'end'].filter(Boolean)
   return parts.length ? parts.join(' ') : 'middle'
 }
+const previewing = (d: CalendarDate) => !!shownRange.value?.preview && !!rangePart(d)
 function isSelected(d: CalendarDate): boolean {
   if (props.range) {
     const r = shownRange.value
-    if (pending.value) return sameDay(d, pending.value)
-    return !!r && d.compare(r.start) >= 0 && d.compare(r.end) <= 0
+    if (pending.value) return same(d, pending.value)
+    return !!r && cmp(d, r.start) >= 0 && cmp(d, r.end) <= 0
   }
-  if (props.multiple) return many.value.some((m) => sameDay(m, d))
-  return sameDay(single.value, d)
+  if (props.multiple) return many.value.some((m) => same(m, d))
+  return same(single.value, d)
 }
+const isStop = (d: CalendarDate) => sameDay(d, focused.value)
 function dayState(d: CalendarDate, month: CalendarDate) {
   const off = outside(d, month)
   if (off && props.numberOfMonths > 1) return { date: d, iso: d.toString(), off, hidden: true } as const
-  const selected = isSelected(d)
   const isToday = sameDay(now.value, d)
-  const no = blocked(d)
   return {
     date: d,
     hidden: false,
     iso: d.toString(),
     off,
-    selected,
     today: isToday,
-    disabled: no,
+    disabled: blocked(d),
     unavailable: unavailable(d),
-    stop: !off && sameDay(d, focused.value),
-    range: props.range ? rangePart(d) : undefined,
-    preview: props.range && !!shownRange.value?.preview && !!rangePart(d),
     label: fmt(d, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
     text: fmt(d, { day: 'numeric' }),
   }
 }
 
-/** Whether no date between `a` and `b` (exclusive) is blocked. */
+/** Whether no date between `a` and `b` (exclusive) is blocked (months and years always are clear). */
 function clear(a: CalendarDate, b: CalendarDate): boolean {
+  if (unit.value !== 'day') return true
   for (let d = a.add({ days: 1 }); d.compare(b) < 0; d = d.add({ days: 1 })) if (blocked(d)) return false
   return true
 }
@@ -277,8 +310,11 @@ function choose(d: CalendarDate, event?: MouseEvent) {
   // A pointer's click (detail > 0) just after a swipe; a key's click always counts.
   if (event && event.detail > 0 && Date.now() - swipedAt < 500) return
   if (props.disabled) return
+  // A date of another month: its month shows, and focus goes with it.
+  const shown = unit.value !== 'day' || (d.compare(start.value) >= 0 && d.compare(endOfMonth(start.value.add({ months: months.value.length - 1 }))) <= 0)
   setFocused(d)
-  if (props.readonly || blocked(d)) return
+  if (!shown) focusStop()
+  if (props.readonly || blockedUnit(d)) return
   if (props.range) {
     const p = pending.value
     if (!p) {
@@ -294,17 +330,17 @@ function choose(d: CalendarDate, event?: MouseEvent) {
     }
     pending.value = null
     hovered.value = null
-    write({ start: out(s), end: out(e) })
+    write({ start: out(floor(s)), end: out(ceil(e)) })
     return
   }
   if (props.multiple) {
-    const has = many.value.some((m) => sameDay(m, d))
-    const next = has ? many.value.filter((m) => !sameDay(m, d)) : [...many.value, d].sort((a, b) => a.compare(b))
+    const has = many.value.some((m) => same(m, d))
+    const next = has ? many.value.filter((m) => !same(m, d)) : [...many.value, floor(d)].sort((a, b) => a.compare(b))
     write(next.map(out))
     return
   }
-  if (sameDay(single.value, d)) return
-  write(out(d))
+  if (same(single.value, d)) return
+  write(out(floor(d)))
 }
 function hover(d: CalendarDate) {
   if (pending.value) hovered.value = d
@@ -367,7 +403,7 @@ function onFocusin(event: FocusEvent) {
 // Paging with the buttons (and swipes): the months on show move by a month (a
 // year with the year buttons), the focused date with them.
 function page(k: 1 | -1, years = false) {
-  if (props.disabled) return
+  if (props.disabled || !ready.value) return
   if (view.value === 'day') {
     const by = years ? { years: k } : { months: k }
     start.value = start.value.add(by)
@@ -377,7 +413,7 @@ function page(k: 1 | -1, years = false) {
 }
 /** Whether a page back (or forward) of `by` months would show only dates outside min (or max). */
 function stop(k: 1 | -1, by: number): boolean {
-  if (props.disabled) return true
+  if (props.disabled || !ready.value) return true
   if (view.value !== 'day') {
     const years = view.value === 'month' ? 1 : 12
     if (k < 0) return min.value !== null && (view.value === 'month' ? focused.value.year - 1 : yearStart.value - 1) < min.value.year
@@ -390,23 +426,22 @@ function stop(k: 1 | -1, by: number): boolean {
 const prevLabel = computed(() => (view.value === 'day' ? t.value.prevMonth : view.value === 'month' ? t.value.prevYear : t.value.prevYears))
 const nextLabel = computed(() => (view.value === 'day' ? t.value.nextMonth : view.value === 'month' ? t.value.nextYear : t.value.nextYears))
 
+/** The heading's press: up a view, from the year view back down to the unit's. */
 function cycleView() {
-  view.value = view.value === 'day' ? 'month' : view.value === 'month' ? 'year' : 'day'
+  view.value = view.value === 'day' ? 'month' : view.value === 'month' ? 'year' : unit.value
 }
 const monthRows = computed(() =>
   [0, 1, 2, 3].map((r) =>
     [1, 2, 3].map((c) => {
       const m = r * 3 + c
       const date = focused.value.set({ month: m, day: 1 })
-      const last = endOfMonth(date)
-      const chosen = firstChosen()
       return {
         key: m,
+        date,
         text: fmt(date, { month: 'short' }),
         label: fmt(date, { month: 'long', year: 'numeric' }),
         stop: focused.value.month === m,
-        selected: !!chosen && chosen.year === date.year && chosen.month === m,
-        disabled: (min.value !== null && last.compare(min.value) < 0) || (max.value !== null && date.compare(max.value) > 0),
+        disabled: blockedSpan(date, 'month'),
         pick: () => pickMonth(m),
       }
     }),
@@ -419,24 +454,32 @@ const yearRows = computed(() =>
       const date = new CalendarDate(y, 1, 1)
       return {
         key: y,
+        date,
         text: fmt(date, { year: 'numeric' }),
         label: undefined,
         stop: focused.value.year === y,
-        selected: firstChosen()?.year === y,
-        disabled: (min.value !== null && y < min.value.year) || (max.value !== null && y > max.value.year),
+        disabled: blockedSpan(date, 'year'),
         pick: () => pickYear(y),
       }
     }),
   ),
 )
+/** A month or year cell chosen, in a view above the unit it opens the view below; in the unit's own view it is chosen. */
+function cellSelected(d: CalendarDate, span: 'month' | 'year'): boolean {
+  if (view.value === unit.value) return isSelected(d)
+  const chosen = firstChosen()
+  return !!chosen && chosen.year === d.year && (span === 'year' || chosen.month === d.month)
+}
 function pickMonth(m: number) {
   if (props.disabled) return
+  if (unit.value === 'month') return choose(focused.value.set({ month: m, day: 1 }))
   setFocused(focused.value.set({ month: m }))
   view.value = 'day'
   focusStop()
 }
 function pickYear(y: number) {
   if (props.disabled) return
+  if (unit.value === 'year') return choose(focused.value.set({ year: y, month: 1, day: 1 }))
   setFocused(focused.value.set({ year: y }))
   view.value = 'month'
   focusStop()
@@ -481,7 +524,7 @@ defineExpose({
 </script>
 
 <template>
-  <div ref="root" class="weft-calendar" :data-size="size" :data-tone="tone" :data-view="view" :data-disabled="disabled ? 'true' : undefined">
+  <div ref="root" class="weft-calendar" :data-size="size" :data-tone="tone" :data-view="view" :data-type="type" :data-disabled="disabled ? 'true' : undefined">
     <div class="weft-calendar__header">
       <button
         v-if="view === 'day' && yearControls"
@@ -500,7 +543,7 @@ defineExpose({
         @click="page(-1)"
       ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg></button>
       <h2 :id="headingId" class="weft-calendar__heading" aria-live="polite">
-        <button v-if="viewControl" type="button" class="weft-calendar__view" :disabled="disabled || undefined" @click="cycleView">
+        <button v-if="viewControl && unit !== 'year'" type="button" class="weft-calendar__view" :disabled="disabled || !ready || undefined" @click="cycleView">
           <slot name="heading" :value="headingText" :view="view">{{ headingText }}</slot>
         </button>
         <slot v-else name="heading" :value="headingText" :view="view">{{ headingText }}</slot>
@@ -532,7 +575,20 @@ defineExpose({
       @pointercancel="onPointercancel"
       @pointerleave="onPointerleave"
     >
-      <template v-if="view === 'day'">
+      <table v-if="view === 'day' && !ready" class="weft-calendar__grid" role="grid" aria-busy="true" :aria-labelledby="headingId">
+        <thead>
+          <tr>
+            <th v-if="weekNumbers" scope="col" class="weft-calendar__week"><span class="weft-visually-hidden">{{ t.week }}</span></th>
+            <th v-for="w in names" :key="w.long" scope="col" :abbr="w.long" class="weft-calendar__weekday">{{ w[weekdayFormat] }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="r in 6" :key="r">
+            <td v-for="c in weekNumbers ? 8 : 7" :key="c" role="gridcell"><span class="weft-calendar__blank"></span></td>
+          </tr>
+        </tbody>
+      </table>
+      <template v-else-if="view === 'day'">
         <div v-for="m in months" :key="m.key" class="weft-calendar__month">
           <div v-if="months.length > 1" :id="m.labelId" class="weft-calendar__month-label">{{ m.label }}</div>
           <table
@@ -558,23 +614,23 @@ defineExpose({
                   v-for="s in week.days"
                   :key="s.iso"
                   role="gridcell"
-                  :aria-selected="s.hidden ? undefined : s.selected ? 'true' : 'false'"
+                  :aria-selected="s.hidden ? undefined : isSelected(s.date) ? 'true' : 'false'"
                   :aria-disabled="!s.hidden && s.disabled ? 'true' : undefined"
                 >
                   <button
                     v-if="!s.hidden"
                     type="button"
                     class="weft-calendar__day"
-                    :tabindex="s.stop ? 0 : -1"
+                    :tabindex="!s.off && isStop(s.date) ? 0 : -1"
                     :data-date="s.iso"
-                    :data-weft-autofocus="s.stop ? '' : undefined"
+                    :data-weft-autofocus="!s.off && isStop(s.date) ? '' : undefined"
                     :data-outside="s.off ? 'true' : undefined"
-                    :data-selected="s.selected ? 'true' : undefined"
+                    :data-selected="isSelected(s.date) ? 'true' : undefined"
                     :data-today="s.today ? 'true' : undefined"
                     :data-unavailable="s.unavailable ? 'true' : undefined"
                     :data-disabled="s.disabled ? 'true' : undefined"
-                    :data-range="s.range"
-                    :data-preview="s.preview ? 'true' : undefined"
+                    :data-range="rangePart(s.date)"
+                    :data-preview="previewing(s.date) ? 'true' : undefined"
                     :aria-label="s.label"
                     :aria-current="s.today ? 'date' : undefined"
                     :aria-disabled="s.disabled ? 'true' : undefined"
@@ -582,7 +638,7 @@ defineExpose({
                     @click="choose(s.date, $event)"
                     @pointerenter="hover(s.date)"
                   >
-                    <slot name="day" :date="s.date" :selected="s.selected" :disabled="s.disabled" :today="s.today" :outside="s.off">{{ s.text }}</slot>
+                    <slot name="day" :date="s.date" :selected="isSelected(s.date)" :disabled="s.disabled" :today="s.today" :outside="s.off">{{ s.text }}</slot>
                   </button>
                 </td>
               </tr>
@@ -593,18 +649,21 @@ defineExpose({
       <table v-else class="weft-calendar__grid" role="grid" :data-view="view" :aria-labelledby="headingId" :aria-disabled="disabled ? 'true' : undefined">
         <tbody>
           <tr v-for="(row, ri) in view === 'month' ? monthRows : yearRows" :key="ri">
-            <td v-for="c in row" :key="c.key" role="gridcell" :aria-selected="c.selected ? 'true' : 'false'" :aria-disabled="c.disabled ? 'true' : undefined">
+            <td v-for="c in row" :key="c.key" role="gridcell" :aria-selected="cellSelected(c.date, view === 'year' ? 'year' : 'month') ? 'true' : 'false'" :aria-disabled="c.disabled ? 'true' : undefined">
               <button
                 type="button"
                 class="weft-calendar__cell"
                 :tabindex="c.stop ? 0 : -1"
                 :data-weft-autofocus="c.stop ? '' : undefined"
-                :data-selected="c.selected ? 'true' : undefined"
+                :data-selected="cellSelected(c.date, view === 'year' ? 'year' : 'month') ? 'true' : undefined"
+                :data-range="view === unit ? rangePart(c.date) : undefined"
+                :data-preview="view === unit && previewing(c.date) ? 'true' : undefined"
                 :data-disabled="c.disabled ? 'true' : undefined"
                 :aria-label="c.label"
                 :aria-disabled="c.disabled ? 'true' : undefined"
                 :disabled="disabled || undefined"
                 @click="!c.disabled && c.pick()"
+                @pointerenter="view === unit && hover(c.date)"
               >{{ c.text }}</button>
             </td>
           </tr>

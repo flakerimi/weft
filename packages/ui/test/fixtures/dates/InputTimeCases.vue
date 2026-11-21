@@ -1,6 +1,6 @@
 <script setup vapor lang="ts">
 import { ref } from 'vue'
-import type { TimeInput } from '../../../src/dates/time.ts'
+import type { TimeInput, TimeRange } from '../../../src/dates/time.ts'
 import FormField from '../../../src/forms/FormField.vue'
 import InputTime from '../../../src/dates/InputTime.vue'
 import WeftProvider from '../../../src/adaptive/WeftProvider.vue'
@@ -19,13 +19,15 @@ const props = withDefaults(defineProps<{
   valueFormat?: 'iso' | 'object'
   disabled?: boolean
   readonly?: boolean
+  range?: boolean
 }>(), { initial: undefined })
 const input = ref<Input | undefined>(props.input)
-const value = ref(((props.initial ?? null) as TimeInput | null))
+const value = ref(((props.initial ?? null) as TimeInput | TimeRange | null))
 const submitted = ref<string | null>(null)
 function onSubmit(event: Event) {
   event.preventDefault()
-  submitted.value = new FormData(event.target as HTMLFormElement).get('at') as string | null
+  const data = new FormData(event.target as HTMLFormElement)
+  submitted.value = props.range ? `${data.get('at[start]')}–${data.get('at[end]')}` : (data.get('at') as string | null)
 }
 defineExpose({ input, value, submitted })
 </script>
@@ -36,7 +38,7 @@ defineExpose({ input, value, submitted })
       <form @submit="onSubmit">
         <FormField label="Start time" name="at" description="Local time">
           <InputTime
-            v-model="value"
+            v-model="value as never"
             :hour-cycle="hourCycle"
             :granularity="granularity"
             :min="min"
@@ -45,6 +47,7 @@ defineExpose({ input, value, submitted })
             :value-format="valueFormat"
             :disabled="disabled"
             :readonly="readonly"
+            :range="range"
           />
         </FormField>
         <button class="submit" type="submit">Save</button>

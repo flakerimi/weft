@@ -18,6 +18,9 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
   description?: string
   locale?: string
+  layout?: 'list' | 'grid'
+  position?: 'inside' | 'outside'
+  reset?: boolean
 }>(), { initial: undefined })
 const input = ref<Input | undefined>(props.input)
 const value = ref<File[] | File | null>(props.initial ?? (props.multiple ? [] : null))
@@ -47,6 +50,9 @@ defineExpose({ input, value, rejected, uploaded, failed, changes, submitted })
           :upload="upload"
           :disabled="disabled"
           :description="description"
+          :layout="layout"
+          :position="position"
+          :reset="reset"
           @reject="rejected.push(...$event)"
           @uploaded="(file, result) => uploaded.push([file.name, result])"
           @error="(file) => failed.push(file.name)"

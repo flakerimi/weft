@@ -23,7 +23,7 @@ import { pressFocuses } from '../forms/dom.ts'
 import Popover from '../overlays/Popover.vue'
 import Calendar from './Calendar.vue'
 import { format, fromDate, pattern, toDate, type CalendarDate, type DateInput, type ValueFormat } from './dates.ts'
-import { cycleTab, keepFocusOnSwitch, usePicker, useTypedDate, type DatePickerLabels } from './picker.ts'
+import { cycleTab, keepFocusOnSwitch, openingDay, useFormReset, usePicker, useTypedDate, type DatePickerLabels } from './picker.ts'
 import type { Size } from '../types.ts'
 import '../styles/base.css'
 import '../styles/input.css'
@@ -153,7 +153,7 @@ const dialogTitle = computed(() => (open.value ? picker.title(t.value.choose) : 
 let openOn: CalendarDate | null = null
 const startOn = computed(() => (open.value ? openOn?.toString() : undefined))
 function show() {
-  openOn = typed.typed()
+  openOn = typed.typed() ?? openingDay()
   picker.show()
 }
 function toggle() {
@@ -198,6 +198,7 @@ function onFocusin(event: FocusEvent) {
   if (!from || !(boxEl.value?.contains(from) || panel()?.contains(from))) emit('focus', event)
 }
 keepFocusOnSwitch(touch, () => [input.value], () => button.value)
+useFormReset(() => boxEl.value, () => [{ typed, el: input.value }])
 
 defineExpose({
   /** Focus the field (the button on touch). */

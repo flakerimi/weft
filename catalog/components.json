@@ -412,11 +412,18 @@
           "description": "The value it starts with when `v-model` is not bound."
         },
         {
+          "name": "type",
+          "type": "'date' | 'month' | 'year'",
+          "required": false,
+          "default": "'date'",
+          "description": "What is chosen: `date` a day; `month` a month (bound as its first day); `year` a year (its 1 January)."
+        },
+        {
           "name": "range",
           "type": "boolean",
           "required": false,
           "default": null,
-          "description": "Choose a range: a start, then an end."
+          "description": "Choose a range: a start, then an end (with `month` or `year`, from the first day of one to the last of another)."
         },
         {
           "name": "multiple",
@@ -606,13 +613,19 @@
           "dynamic": false
         }
       ],
-      "notes": "Bind the date with `v-model`: an ISO string (`2026-11-21`) by default, or a\n`CalendarDate` of `@internationalized/date` with `value-format=\"object\"`. With\n`multiple` it binds a sorted array, a press toggling a date; with `range` it\nbinds `{ start, end }` once both ends are chosen (a first press starts the\nrange, the pointer or the focus previews it, a second press ends it, in\neither order; a range cannot span a disabled date, so a press past one\nstarts again from it). A single date is chosen as a radio is: pressing it\nagain keeps it. Every computation goes through `@internationalized/date`;\ndates are Gregorian.\n\nIt follows the grid of the WAI-ARIA APG Date Picker Dialog: each month is a\n`table` with `role=\"grid\"`, labelled by the heading (`aria-live=\"polite\"`, so\npaging is announced) or, with several months, by the month's own label;\nweekday headers are `th scope=\"col\"` with the full name in `abbr`; each date\nis a button in a `gridcell` carrying `aria-selected`, named in full\n(\"Saturday, November 21, 2026\"), today marked `aria-current=\"date\"` (once\nmounted: the server and the browser may not agree on the day). One date is\nthe tab stop, the focused date, bound with `v-model:focused-date`; it decides\nthe month shown and is marked `data-weft-autofocus`, so a Popover, Dialog or\nSheet opening around the calendar focuses it first.\n\n**Keyboard.** Left and Right move a day (mirrored right to left), Up and Down\na week, Home and End to the first and last day of the week as the locale\ncounts it, Page Up and Page Down a month (the day kept, or the month's last),\nShift+Page Up and Shift+Page Down a year; Enter and Space (the button's own\npress) choose. Moving past the month shows the next one. The heading is a\nbutton switching to a month view, then a year view (twelve years), keyed the\nsame way (a row is three months or years; Page Up and Page Down a year or\ntwelve); choosing a month or year goes back down. The page buttons move a\nmonth and a year (a year and twelve years in the other views), and keep focus.\n\n`min` and `max` bound what can be reached: the keyboard stops there, the page\nbuttons are disabled past them, and the dates beyond are `aria-disabled`.\n`is-date-disabled` dates can be reached but not chosen; `is-date-unavailable`\nones are drawn struck through and cannot be chosen either. `readonly` lets\nthe dates be focused, not chosen; `disabled` turns every button off. Names,\ndigits and the first day of the week follow `locale` (else the WeftProvider's,\nelse `en-US`, never the browser's, so server and browser agree);\n`week-starts-on` (0 Sunday to 6 Saturday) overrides the first day, and\n`weekday-format` the headers. `number-of-months` shows months side by side\n(the days of the next and previous month left blank); `fixed-weeks` (on by\ndefault) keeps six weeks; `week-numbers` adds ISO 8601 week numbers. `labels`\ntranslates the page buttons' names. Slots: `day`, `heading`, `week-day`.",
+      "notes": "Bind the date with `v-model`: an ISO string (`2026-11-21`) by default, or a\n`CalendarDate` of `@internationalized/date` with `value-format=\"object\"`. With\n`multiple` it binds a sorted array, a press toggling a date; with `range` it\nbinds `{ start, end }` once both ends are chosen (a first press starts the\nrange, the pointer or the focus previews it, a second press ends it, in\neither order; a range cannot span a disabled date, so a press past one\nstarts again from it). A single date is chosen as a radio is: pressing it\nagain keeps it. A press on a day of the next or previous month shows that\nmonth, focus going with it.\n\n`type=\"month\"` chooses a month instead (bound as its first day,\n`2026-03-01`) from a grid of twelve, the heading switching to the years and\nback; `type=\"year\"` chooses a year (its 1 January) from a page of twelve. Both\ntake `multiple` and `range` (a range from the first day of its first month\nor year to the last day of its last: `{ start: '2026-03-01', end:\n'2026-05-31' }`).\n\n**First render.** With no value and no `focused-date`, the month to show is\ntoday's, which only the browser knows (a page built last week, or served\nfrom another time zone, would draw another month and hydrate with a\nmismatch). So until it is mounted it draws an empty grid, `aria-busy=\"true\"`,\nits cells the size of dates and its weekday headers in place, the same on\nthe server and while hydrating; then today's month. Give it a value or a\n`focused-date` to draw dates on the server. Every computation goes through `@internationalized/date`;\ndates are Gregorian.\n\nIt follows the grid of the WAI-ARIA APG Date Picker Dialog: each month is a\n`table` with `role=\"grid\"`, labelled by the heading (`aria-live=\"polite\"`, so\npaging is announced) or, with several months, by the month's own label;\nweekday headers are `th scope=\"col\"` with the full name in `abbr`; each date\nis a button in a `gridcell` carrying `aria-selected`, named in full\n(\"Saturday, November 21, 2026\"), today marked `aria-current=\"date\"` (once\nmounted: the server and the browser may not agree on the day). One date is\nthe tab stop, the focused date, bound with `v-model:focused-date`; it decides\nthe month shown and is marked `data-weft-autofocus`, so a Popover, Dialog or\nSheet opening around the calendar focuses it first.\n\n**Keyboard.** Left and Right move a day (mirrored right to left), Up and Down\na week, Home and End to the first and last day of the week as the locale\ncounts it, Page Up and Page Down a month (the day kept, or the month's last),\nShift+Page Up and Shift+Page Down a year; Enter and Space (the button's own\npress) choose. Moving past the month shows the next one. The heading is a\nbutton switching to a month view, then a year view (twelve years), keyed the\nsame way (a row is three months or years; Page Up and Page Down a year or\ntwelve); choosing a month or year goes back down (with `type`, down to the\nunit chosen, never below it). The page buttons move a\nmonth and a year (a year and twelve years in the other views), and keep focus.\n\n`min` and `max` bound what can be reached: the keyboard stops there, the page\nbuttons are disabled past them, and the dates beyond are `aria-disabled`.\n`is-date-disabled` dates can be reached but not chosen; `is-date-unavailable`\nones are drawn struck through and cannot be chosen either. `readonly` lets\nthe dates be focused, not chosen; `disabled` turns every button off. Names,\ndigits and the first day of the week follow `locale` (else the WeftProvider's,\nelse `en-US`, never the browser's, so server and browser agree);\n`week-starts-on` (0 Sunday to 6 Saturday) overrides the first day, and\n`weekday-format` the headers. `number-of-months` shows months side by side\n(the days of the next and previous month left blank); `fixed-weeks` (on by\ndefault) keeps six weeks; `week-numbers` adds ISO 8601 week numbers. `labels`\ntranslates the page buttons' names. Slots: `day`, `heading`, `week-day`.",
       "examples": [
         {
           "name": "basic",
           "title": "Basic",
           "file": "packages/ui/examples/Calendar/basic.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Calendar } from '@weft/ui'\n\n// An ISO date string; on touch the dates are 44 px and a swipe changes the month.\nconst day = ref('2026-11-21')\n</script>\n\n<template>\n  <Calendar v-model=\"day\" aria-label=\"Delivery day\" />\n</template>\n"
+        },
+        {
+          "name": "month-picker",
+          "title": "Month picker",
+          "file": "packages/ui/examples/Calendar/month-picker.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Calendar, type DateRange } from '@weft/ui'\n\n// A billing period of whole months: from the 1st of the first to the last day of the last.\nconst period = ref<DateRange | null>({ start: '2026-01-01', end: '2026-03-31' })\n</script>\n\n<template>\n  <Calendar v-model=\"period\" type=\"month\" range aria-label=\"Billing period\" />\n</template>\n"
         },
         {
           "name": "multiple-and-locale",
@@ -2150,7 +2163,7 @@
           "dynamic": false
         }
       ],
-      "notes": "Bind the date with `v-model`: an ISO string (`2026-11-21`), or a\n`CalendarDate` with `value-format=\"object\"`, null when empty. With a `name`\n(or its FormField's) the ISO date submits in a hidden input; the text field\nitself submits nothing.\n\n**Typing.** The field shows the date as the locale writes it (`21/11/2026` in\nen-GB, `11/21/2026` in en-US, `21.11.2026` in de; `format` takes other Intl\noptions), with the locale's pattern (`dd/mm/yyyy`) as its placeholder. On\nchange and on Enter it reads the text in the locale: its order of day, month\nand year, any separator, its digits, a month name or abbreviation (\"21 Nov\n2026\"), a two-digit year, no year (this year's), or ISO 8601. A date the\ncalendar allows is bound and written back the locale's way; empty text binds\nnull; anything else (no such date, before `min`, after `max`, disabled)\nbinds null, keeps the text and marks the field invalid (`aria-invalid`,\n`data-invalid`), so it can be corrected.\n\n**Calendar.** It follows the WAI-ARIA APG Date Picker Dialog: the button\n(`aria-haspopup=\"dialog\"`, `aria-expanded`, named \"Choose date, 21 November\n2026\") opens it, as does Alt+ArrowDown in the field, on the date typed, else\nthe bound one, else today; focus goes to that date. It has the Calendar's\nkeys. Choosing a date binds it, closes the calendar (unless\n`close-on-select` is false) and returns focus where it was opened from;\nEscape closes it with focus back on the button; focus leaving it closes it\ntoo. Its dialog is named by the field's label.\n\nInside a FormField the label is `for` the field (on touch, the button,\nnamed by the label and the date), the description and error describe it, and\n`required` marks it. `disabled` and `readonly` block typing and opening.\n`min`, `max`, `is-date-disabled`, `is-date-unavailable`, `week-starts-on`,\n`week-numbers` and `locale` go to the calendar and to reading typed dates;\n`labels` translates the button's and the calendar's words. The `day` slot\ndraws the calendar's dates, `leading` the field's start.",
+      "notes": "Bind the date with `v-model`: an ISO string (`2026-11-21`), or a\n`CalendarDate` with `value-format=\"object\"`, null when empty. With a `name`\n(or its FormField's) the ISO date submits in a hidden input; the text field\nitself submits nothing.\n\n**Typing.** The field shows the date as the locale writes it (`21/11/2026` in\nen-GB, `11/21/2026` in en-US, `21.11.2026` in de; `format` takes other Intl\noptions), with the locale's pattern (`dd/mm/yyyy`) as its placeholder. On\nchange and on Enter it reads the text in the locale: its order of day, month\nand year, any separator, its digits, a month name or abbreviation (\"21 Nov\n2026\"), a two-digit year, no year (this year's), or ISO 8601. A date the\ncalendar allows is bound and written back the locale's way; empty text binds\nnull; anything else (no such date, before `min`, after `max`, disabled)\nbinds null, keeps the text and marks the field invalid (`aria-invalid`,\n`data-invalid`), so it can be corrected. The form's reset clears the text\nback to the bound date, nothing invalid.\n\n**Calendar.** It follows the WAI-ARIA APG Date Picker Dialog: the button\n(`aria-haspopup=\"dialog\"`, `aria-expanded`, named \"Choose date, 21 November\n2026\") opens it, as does Alt+ArrowDown in the field, on the date typed, else\nthe bound one, else today; focus goes to that date. Tab goes round the\ncalendar's buttons. It has the Calendar's\nkeys. Choosing a date binds it, closes the calendar (unless\n`close-on-select` is false) and returns focus where it was opened from;\nEscape closes it with focus back on the button; focus leaving it closes it\ntoo. Its dialog is named by the field's label.\n\nInside a FormField the label is `for` the field (on touch, the button,\nnamed by the label and the date), the description and error describe it, and\n`required` marks it. `disabled` and `readonly` block typing and opening.\n`min`, `max`, `is-date-disabled`, `is-date-unavailable`, `week-starts-on`,\n`week-numbers` and `locale` go to the calendar and to reading typed dates;\n`labels` translates the button's and the calendar's words. The `day` slot\ndraws the calendar's dates, `leading` the field's start.",
       "examples": [
         {
           "name": "basic",
@@ -2950,6 +2963,27 @@
           "description": "A press anywhere on the zone opens the file dialog."
         },
         {
+          "name": "layout",
+          "type": "'list' | 'grid'",
+          "required": false,
+          "default": "'list'",
+          "description": "The files as `list` rows (name, size, actions) or a `grid` of tiles (a large preview, the name under it)."
+        },
+        {
+          "name": "position",
+          "type": "'outside' | 'inside'",
+          "required": false,
+          "default": "'outside'",
+          "description": "The files `outside` the zone, below it, or `inside` it (on pointer), where they take the place of its text once there are some."
+        },
+        {
+          "name": "reset",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "A choice in the file dialog replaces the files instead of adding to them (drops and pastes still add)."
+        },
+        {
           "name": "disabled",
           "type": "boolean",
           "required": false,
@@ -3060,13 +3094,19 @@
           "dynamic": false
         }
       ],
-      "notes": "Bind the files with `v-model`: an array with `multiple` (new files are added\nto it), else one `File` or null (a new file replaces it). With a `name` (or\nits FormField's) a native form submit sends them from the hidden file input,\nwhich holds every file however it came. `accept` (MIME types, `image/*`,\nextensions), `max-size` (bytes) and `max-files` refuse files, which `reject`\nreports with a reason each (`type`, `size`, `count`): the dialog only\nsuggests `accept`, and drops and pastes ignore it, so every file is checked.\n\nEach file is listed with its name and its size in the locale (`1.5 kB`, `2,5\nMB`), an image with a preview: an object URL, revoked when the file is\nremoved, replaced or the component goes. No file is ever read. Its remove\nbutton is a CloseButton named \"Remove photo.png\"; after a removal focus moves\nto the next file's remove button, else the last one's, else Browse.\n\n**Uploading.** With `upload: (file, { signal, onProgress }) => Promise`, each\nfile added is sent at once: its row shows a progress bar (\"Uploading\nphoto.png\", determinate once `onProgress(fraction)` reports 0 to 1), then\n`data-status=\"done\"` and an `uploaded` event with what the promise resolved\nto, or \"Upload failed\", an `error` event and a Retry button. While it\nuploads the remove button is \"Cancel upload of photo.png\": it aborts `signal`\nand removes the file; a late answer changes nothing. Without `upload` it only\ncollects files for v-model and the form.\n\nInside a FormField the label is `for` the Browse button (a press on the label\nopens the dialog), which it names with its text (\"Attachments Browse\"); the\nhint, the field's description and error describe it. What happens (added,\nremoved, uploaded, failed, refused) is said in a polite live region.\n`disabled` ignores drops, pastes and presses. `labels` translates every\nword; slots: `leading` (the zone's icon), `label`, `description`, and `file`\n(a row, given the file, its status, progress and error, `remove` and\n`retry`). `open()` is exposed.",
+      "notes": "Bind the files with `v-model`: an array with `multiple` (new files are added\nto it), else one `File` or null (a new file replaces it). With a `name` (or\nits FormField's) a native form submit sends them from the hidden file input,\nwhich holds every file however it came. `accept` (MIME types, `image/*`,\nextensions), `max-size` (bytes) and `max-files` refuse files, which `reject`\nreports with a reason each (`type`, `size`, `count`): the dialog only\nsuggests `accept`, and drops and pastes ignore it, so every file is checked.\n\n`layout=\"grid\"` lists the files as tiles (a square preview, the name and\nsize under it, the remove button over its corner) in place of rows;\n`position=\"inside\"` puts them inside the zone, where they take the place of\nits icon and text once there are some (Browse stays; a press on a file does\nnot open the dialog). `reset` makes a choice in the file dialog replace the\nfiles instead of adding to them; drops and pastes still add. After every\nchoice in the dialog the hidden input holds exactly the files listed, so a\nrefused file never submits. A file dragged anywhere over the component is\nkept from the browser, which would otherwise open it in place of the page,\neven while it is disabled.\n\nEach file is listed with its name and its size in the locale (`1.5 kB`, `2,5\nMB`), an image with a preview: an object URL, revoked when the file is\nremoved, replaced or the component goes. No file is ever read. Its remove\nbutton is a CloseButton named \"Remove photo.png\"; after a removal focus moves\nto the next file's remove button, else the last one's, else Browse.\n\n**Uploading.** With `upload: (file, { signal, onProgress }) => Promise`, each\nfile added is sent at once: its row shows a progress bar (\"Uploading\nphoto.png\", determinate once `onProgress(fraction)` reports 0 to 1), then\n`data-status=\"done\"` and an `uploaded` event with what the promise resolved\nto, or \"Upload failed\", an `error` event and a Retry button. While it\nuploads the remove button is \"Cancel upload of photo.png\": it aborts `signal`\nand removes the file; a late answer changes nothing. Without `upload` it only\ncollects files for v-model and the form.\n\nInside a FormField the label is `for` the Browse button (a press on the label\nopens the dialog), which it names with its text (\"Attachments Browse\"); the\nhint, the field's description and error describe it. What happens (added,\nremoved, uploaded, failed, refused) is said in a polite live region.\n`disabled` ignores drops, pastes and presses. `labels` translates every\nword; slots: `leading` (the zone's icon), `label`, `description`, and `file`\n(a row, given the file, its status, progress and error, `remove` and\n`retry`). `open()` is exposed.",
       "examples": [
         {
           "name": "basic",
           "title": "Basic",
           "file": "packages/ui/examples/FileUpload/basic.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FileUpload, FormField } from '@weft/ui'\n\n// Drop, paste or browse on pointer; one button for the camera, photos or files on touch.\nconst files = ref<File[]>([])\n</script>\n\n<template>\n  <FormField label=\"Attachments\" name=\"attachments\">\n    <FileUpload v-model=\"files\" multiple accept=\"image/*,.pdf\" :max-size=\"5_000_000\" description=\"Images or PDFs, up to 5 MB each\" />\n  </FormField>\n</template>\n"
+        },
+        {
+          "name": "grid-inside",
+          "title": "Grid inside",
+          "file": "packages/ui/examples/FileUpload/grid-inside.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FileUpload, FormField } from '@weft/ui'\n\n// A gallery: image tiles inside the zone, each new choice in the dialog starting the set again.\nconst photos = ref<File[]>([])\n</script>\n\n<template>\n  <FormField label=\"Photos\" name=\"photos\">\n    <FileUpload v-model=\"photos\" multiple accept=\"image/*\" layout=\"grid\" position=\"inside\" reset />\n  </FormField>\n</template>\n"
         },
         {
           "name": "photo",
@@ -3928,17 +3968,24 @@
       "props": [
         {
           "name": "modelValue",
-          "type": "string | { readonly hour: number; readonly minute: number; readonly second?: number } | null",
+          "type": "string | { readonly hour: number; readonly minute: number; readonly second?: number } | { start: TimeInput | null end: TimeInput | null } | null",
           "required": false,
           "default": "undefined",
-          "description": "The time, bound with `v-model`: `HH:mm` (`HH:mm:ss` with granularity second), or a Time with `value-format=\"object\"`; null while a part is empty."
+          "description": "The time, bound with `v-model`: `HH:mm` (`HH:mm:ss` with granularity second), or a Time with `value-format=\"object\"`; null while a part is empty. With `range`, `{ start, end }`."
         },
         {
           "name": "defaultValue",
-          "type": "string | { readonly hour: number; readonly minute: number; readonly second?: number } | null",
+          "type": "string | { readonly hour: number; readonly minute: number; readonly second?: number } | { start: TimeInput | null end: TimeInput | null } | null",
           "required": false,
           "default": "null",
           "description": "The time it starts with when `v-model` is not bound."
+        },
+        {
+          "name": "range",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Two times, a start and an end, bound as `{ start, end }`; an end before the start is marked invalid."
         },
         {
           "name": "valueFormat",
@@ -4049,12 +4096,12 @@
       "emits": [
         {
           "name": "update:modelValue",
-          "payload": "[value: TimeInput | null]",
-          "description": "The time changed: `HH:mm`, a Time, or null."
+          "payload": "[value: TimeInput | TimeRange | null]",
+          "description": "The time changed: `HH:mm`, a Time, `{ start, end }` with range, or null."
         },
         {
           "name": "change",
-          "payload": "[value: TimeInput | null]",
+          "payload": "[value: TimeInput | TimeRange | null]",
           "description": "The time was changed by a key or by the platform's picker."
         },
         {
@@ -4075,13 +4122,19 @@
           "dynamic": false
         }
       ],
-      "notes": "Bind the time with `v-model`: `HH:mm` (`HH:mm:ss` with `granularity=\"second\"`,\n`HH:00` with `hour`), or a `Time` of `@internationalized/date` with\n`value-format=\"object\"`; it is null until every part is filled. With a `name`\nit submits that string in a hidden input.\n\nOn pointer the parts follow the locale (`1:05 PM` in en-US, `13:05` in en-GB,\n`오후 1:05` in ko-KR); `hour-cycle` (12 or 24) overrides its hour cycle. Each\npart is a `spinbutton` with `aria-valuenow`, `aria-valuemin`,\n`aria-valuemax` and `aria-valuetext`, named \"Hour\", \"Minute\", \"Second\" and\n\"AM/PM\" (`labels` translates them); the group has `role=\"group\"`, named by\nits FormField's label (`aria-labelledby`, the label losing `for`, since a\ngroup is no form control) and described by its hint and error.\n\n**Keyboard.** Up and Down step the part (by `step`, wrapping round), Home and\nEnd go to its ends, digits type into it (in the locale's digits too; the\nnext part takes focus once this one is full, or once no further digit could\nfollow), A and P (or the locale's words' first letters) set AM and PM,\nBackspace clears a digit, then the part, Left and Right move between parts\n(mirrored right to left), and a separator typed moves on.\n\nA time before `min` or after `max` is marked invalid (`aria-invalid`,\n`data-invalid`) but still bound, as a native time field does. `disabled`\ntakes the parts out of the tab order; `readonly` keeps them focusable and\nunchanged. The `leading` slot (or `icon`) draws the box's start.",
+      "notes": "Bind the time with `v-model`: `HH:mm` (`HH:mm:ss` with `granularity=\"second\"`,\n`HH:00` with `hour`), or a `Time` of `@internationalized/date` with\n`value-format=\"object\"`; it is null until every part is filled. With a `name`\nit submits that string in a hidden input.\n\nOn pointer the parts follow the locale (`1:05 PM` in en-US, `13:05` in en-GB,\n`오후 1:05` in ko-KR); `hour-cycle` (12 or 24) overrides its hour cycle. Each\npart is a `spinbutton` with `aria-valuenow`, `aria-valuemin`,\n`aria-valuemax` and `aria-valuetext`, named \"Hour\", \"Minute\", \"Second\" and\n\"AM/PM\" (`labels` translates them); the group has `role=\"group\"`, named by\nits FormField's label (`aria-labelledby`, the label losing `for`, since a\ngroup is no form control) and described by its hint and error.\n\n**Keyboard.** Up and Down step the part (by `step`, wrapping round), Home and\nEnd go to its ends, digits type into it (in the locale's digits too; the\nnext part takes focus once this one is full, or once no further digit could\nfollow), A and P (or the locale's words' first letters) set AM and PM,\nBackspace clears a digit, then the part, Left and Right move between parts\n(mirrored right to left), and a separator typed moves on.\n\nWith `range` it is two times, a start and an end, bound as `{ start, end }`\n(each null while empty; null when both are) and submitted as `name[start]`\nand `name[end]`: on pointer two groups of parts, named \"Start time\" and \"End\ntime\", Left and Right going on from one to the other; on touch two platform\nfields so named. An end before the start is marked invalid.\n\nA time before `min` or after `max` is marked invalid (`aria-invalid`,\n`data-invalid`) but still bound, as a native time field does. `disabled`\ntakes the parts out of the tab order; `readonly` keeps them focusable and\nunchanged. The `leading` slot (or `icon`) draws the box's start.",
       "examples": [
         {
           "name": "basic",
           "title": "Basic",
           "file": "packages/ui/examples/InputTime/basic.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, InputTime } from '@weft/ui'\n\n// HH:mm; 12-hour in en-US. On touch it is the platform's own time picker.\nconst opens = ref<string | null>('09:30')\n</script>\n\n<template>\n  <FormField label=\"Opens at\" name=\"opens\">\n    <InputTime v-model=\"opens\" :step=\"{ minute: 15 }\" min=\"06:00\" max=\"22:00\" />\n  </FormField>\n</template>\n"
+        },
+        {
+          "name": "range",
+          "title": "Range",
+          "file": "packages/ui/examples/InputTime/range.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, InputTime, type TimeRange } from '@weft/ui'\n\n// Opening hours: submits hours[start] and hours[end]; an end before the start is marked invalid.\nconst hours = ref<TimeRange | null>({ start: '09:00', end: '17:30' })\n</script>\n\n<template>\n  <FormField label=\"Opening hours\" name=\"hours\">\n    <InputTime v-model=\"hours\" range :step=\"{ minute: 15 }\" />\n  </FormField>\n</template>\n"
         },
         {
           "name": "seconds-24h",

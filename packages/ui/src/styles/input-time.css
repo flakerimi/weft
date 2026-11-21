@@ -25,3 +25,6 @@
 }
 .weft-input-time__literal { color: var(--weft-color-text-muted, GrayText); white-space: pre; }
 .weft-input-time[data-disabled] .weft-input-time__segment { cursor: not-allowed; }
+.weft-input-time__field { display: inline-flex; align-items: center; }
+.weft-input-time__separator { padding-inline: var(--weft-space-2, 8px); color: var(--weft-color-text-muted, GrayText); }
+.weft-input-time[data-form="native"] > .weft-input__field { min-inline-size: 0; }

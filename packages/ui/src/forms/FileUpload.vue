@@ -12,6 +12,9 @@
 // v-model and for the form, whose submit sends them from the hidden file
 // input. Files of another type, too large or past `max-files` are refused
 // and reported (`reject`). What happens is said in a polite live region.
+// The list is rows or a grid of tiles (`layout`), below the zone or inside
+// it (`position`). A file dragged anywhere over it never makes the browser
+// open the file in place of the page, even while it is disabled.
 import { computed, markRaw, nextTick, onScopeDispose, reactive, ref, toRaw, useTemplateRef, watch } from 'vue'
 import Button from '../basics/Button.vue'
 import Progress from '../basics/Progress.vue'
@@ -59,6 +62,12 @@ const props = withDefaults(
     dropzone?: boolean
     /** A press anywhere on the zone opens the file dialog. */
     interactive?: boolean
+    /** The files as `list` rows (name, size, actions) or a `grid` of tiles (a large preview, the name under it). */
+    layout?: 'list' | 'grid'
+    /** The files `outside` the zone, below it, or `inside` it (on pointer), where they take the place of its text once there are some. */
+    position?: 'outside' | 'inside'
+    /** A choice in the file dialog replaces the files instead of adding to them (drops and pastes still add). */
+    reset?: boolean
     /** Unavailable: nothing can be added or removed. */
     disabled?: boolean
     /** A file is required (the native input's `required`). */
@@ -74,7 +83,7 @@ const props = withDefaults(
     /** The words it says, to translate them. */
     labels?: Partial<FileUploadLabels>
   }>(),
-  { modelValue: undefined, preview: true, dropzone: true, interactive: true },
+  { modelValue: undefined, preview: true, dropzone: true, interactive: true, layout: 'list', position: 'outside' },
 )
 
 const emit = defineEmits<{
@@ -173,21 +182,21 @@ function reconcile(list: File[]) {
 watch(files, reconcile, { immediate: true })
 onScopeDispose(() => entries.forEach(drop))
 
-// The hidden input holds the files too, so a native submit sends them.
-watch(
-  [files, input],
-  ([list, el]) => {
-    if (!el) return
-    try {
-      const dt = new DataTransfer()
-      for (const file of list) dt.items.add(file)
-      el.files = dt.files
-    } catch {
-      // A browser without a DataTransfer constructor keeps what its dialog chose.
-    }
-  },
-  { flush: 'post' },
-)
+// The hidden input holds the files listed, no other, so a native submit
+// sends them: after every change, and after every choice in the dialog
+// (which puts its own choice there, refused files and all).
+function syncInput() {
+  const el = input.value
+  if (!el) return
+  try {
+    const dt = new DataTransfer()
+    for (const file of files.value) dt.items.add(file)
+    el.files = dt.files
+  } catch {
+    // A browser without a DataTransfer constructor keeps what its dialog chose.
+  }
+}
+watch([files, input], syncInput, { flush: 'post' })
 
 // What happens, said politely; the same words again are said again.
 const said = ref('')
@@ -203,11 +212,13 @@ function write(list: File[]) {
   f.input()
 }
 
-function add(incoming: File[]) {
+/** Add files (or, with `replace`, put them in place of those there), refusing what is not allowed. */
+function add(incoming: File[], replace = false) {
   if (f.disabled.value || !incoming.length) return
   const accepted: File[] = []
   const rejected: FileRejection[] = []
-  const room = props.multiple ? (props.maxFiles ?? Infinity) - files.value.length : 1
+  const kept = replace ? [] : files.value
+  const room = props.multiple ? (props.maxFiles ?? Infinity) - kept.length : 1
   for (const file of incoming) {
     if (!accepts(file, props.accept)) rejected.push({ file, reason: 'type' })
     else if (props.maxSize !== undefined && file.size > props.maxSize) rejected.push({ file, reason: 'size' })
@@ -216,7 +227,7 @@ function add(incoming: File[]) {
   }
   const words: string[] = []
   if (accepted.length) {
-    write(props.multiple ? [...files.value, ...accepted] : accepted)
+    write(props.multiple ? [...kept, ...accepted] : accepted)
     words.push(`${listOf(accepted)} ${t.value.added}`)
     for (const file of accepted) {
       const e = entries.find((x) => fileOf(x) === file)
@@ -287,41 +298,51 @@ function open() {
 }
 function onPicked(event: Event) {
   const el = event.target as HTMLInputElement
-  add([...(el.files ?? [])])
+  add([...(el.files ?? [])], !!props.reset)
+  syncInput()
 }
+/** A press on the zone itself (not its button, not a file in it) opens the dialog. */
 function onZoneClick(event: MouseEvent) {
-  if (!props.interactive || (event.target as Element).closest('button')) return
+  const el = event.currentTarget as Element
+  const hit = event.target as Element
+  if (!props.interactive || !el.classList.contains('weft-file-upload__zone') || hit.closest('button, .weft-file-upload__files')) return
   open()
 }
 
-// Dragging over the zone: entering and leaving its children counts in and out.
+// Dragging: files dragged anywhere over it are kept from the browser (which
+// would open them in place of the page); over the zone, while enabled,
+// they are taken, entering and leaving its children counting in and out.
 let depth = 0
 const dragging = ref(false)
 const hasFiles = (event: DragEvent) => {
   const dt = event.dataTransfer
-  return !!dt && ([...(dt.types ?? [])].includes('Files') || [...(dt.items ?? [])].some((item) => item.kind === 'file'))
+  return !!dt && ([...(dt.types ?? [])].includes('Files') || [...(dt.items ?? [])].some((item) => item.kind === 'file') || dt.files?.length > 0)
 }
+const overZone = (event: Event) => !!root.value?.querySelector('.weft-file-upload__zone')?.contains(event.target as Node)
+const takes = (event: DragEvent) => !f.disabled.value && overZone(event)
 function onDragenter(event: DragEvent) {
-  if (f.disabled.value || !hasFiles(event)) return
+  if (!hasFiles(event)) return
   event.preventDefault()
+  if (!takes(event)) return
   depth++
   dragging.value = true
 }
 function onDragover(event: DragEvent) {
-  if (f.disabled.value || !hasFiles(event)) return
+  if (!hasFiles(event)) return
   event.preventDefault()
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+  if (event.dataTransfer) event.dataTransfer.dropEffect = takes(event) ? 'copy' : 'none'
 }
-function onDragleave() {
+function onDragleave(event: DragEvent) {
+  if (!overZone(event)) return
   depth = Math.max(0, depth - 1)
   if (!depth) dragging.value = false
 }
 function onDrop(event: DragEvent) {
   depth = 0
   dragging.value = false
-  if (f.disabled.value || !event.dataTransfer?.files.length) return
+  if (!hasFiles(event)) return
   event.preventDefault()
-  add([...event.dataTransfer.files])
+  if (takes(event) && event.dataTransfer?.files.length) add([...event.dataTransfer.files])
 }
 function onPaste(event: ClipboardEvent) {
   const list = [...(event.clipboardData?.files ?? [])]
@@ -333,6 +354,13 @@ function onPaste(event: ClipboardEvent) {
 const buttonText = computed(() => props.buttonLabel ?? (touch.value ? (props.multiple ? t.value.chooseMany : t.value.chooseOne) : t.value.browse))
 const zoneText = computed(() => props.label ?? (props.multiple ? t.value.dropMany : t.value.dropOne))
 const buttonDescribedBy = computed(() => describedBy(zone.value && props.description ? hintId : undefined))
+const inside = computed(() => zone.value && props.position === 'inside')
+const zoneAttrs = computed(() => ({
+  'data-dragging': dragging.value ? 'true' : undefined,
+  'data-invalid': f.invalid.value ? 'true' : undefined,
+  'data-interactive': props.interactive && !f.disabled.value ? 'true' : undefined,
+}))
+const listed = computed(() => props.preview && entries.length > 0)
 const percent = (e: Entry) => (e.progress === null ? null : Math.round(e.progress * 100))
 
 defineExpose({
@@ -344,25 +372,56 @@ defineExpose({
 </script>
 
 <template>
-  <div ref="root" class="weft-file-upload" v-bind="{ ...box, ...own }" :data-form="zone ? 'zone' : 'button'" :data-size="f.size.value" :data-disabled="f.disabled.value ? 'true' : undefined" @paste="onPaste">
+  <div
+    ref="root"
+    class="weft-file-upload"
+    v-bind="{ ...box, ...own }"
+    :data-form="zone ? 'zone' : 'button'"
+    :data-size="f.size.value"
+    :data-disabled="f.disabled.value ? 'true' : undefined"
+    @paste="onPaste"
+    @dragenter="onDragenter"
+    @dragover="onDragover"
+    @dragleave="onDragleave"
+    @drop="onDrop"
+  >
+    <!-- The zone is the prompt, or (inside) the whole area with the files in it. -->
     <div
-      v-if="zone"
-      class="weft-file-upload__zone"
-      :data-dragging="dragging ? 'true' : undefined"
-      :data-invalid="f.invalid.value ? 'true' : undefined"
-      :data-interactive="interactive && !f.disabled.value ? 'true' : undefined"
+      class="weft-file-upload__area"
+      :class="{ 'weft-file-upload__zone': inside }"
+      :data-position="zone ? position : undefined"
+      v-bind="inside ? zoneAttrs : {}"
       @click="onZoneClick"
-      @dragenter="onDragenter"
-      @dragover="onDragover"
-      @dragleave="onDragleave"
-      @drop="onDrop"
     >
-      <span class="weft-file-upload__icon" aria-hidden="true">
-        <slot name="leading"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12" /><path d="m17 8-5-5-5 5" /><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /></svg></slot>
-      </span>
-      <p class="weft-file-upload__label"><slot name="label">{{ zoneText }}</slot></p>
-      <p v-if="description || $slots.description" :id="hintId" class="weft-file-upload__description"><slot name="description">{{ description }}</slot></p>
+      <div
+        v-if="zone"
+        class="weft-file-upload__prompt"
+        :class="{ 'weft-file-upload__zone': !inside }"
+        v-bind="inside ? {} : zoneAttrs"
+        @click="onZoneClick"
+      >
+        <template v-if="!(inside && listed)">
+          <span class="weft-file-upload__icon" aria-hidden="true">
+            <slot name="leading"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12" /><path d="m17 8-5-5-5 5" /><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /></svg></slot>
+          </span>
+          <p class="weft-file-upload__label"><slot name="label">{{ zoneText }}</slot></p>
+          <p v-if="description || $slots.description" :id="hintId" class="weft-file-upload__description"><slot name="description">{{ description }}</slot></p>
+        </template>
+        <Button
+          class="weft-file-upload__browse"
+          variant="outline"
+          tone="neutral"
+          :size="f.size.value"
+          :label="buttonText"
+          :id="browseId"
+          :aria-labelledby="f.field ? joinIds(f.field.labelId, browseId) : undefined"
+          :aria-describedby="buttonDescribedBy"
+          :disabled="f.disabled.value"
+          @click="open"
+        />
+      </div>
       <Button
+        v-else
         class="weft-file-upload__browse"
         variant="outline"
         tone="neutral"
@@ -373,68 +432,55 @@ defineExpose({
         :aria-describedby="buttonDescribedBy"
         :disabled="f.disabled.value"
         @click="open"
+      >
+        <template #leading><svg class="weft-file-upload__glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12" /><path d="m17 8-5-5-5 5" /><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /></svg></template>
+      </Button>
+      <input
+        ref="input"
+        class="weft-visually-hidden"
+        type="file"
+        tabindex="-1"
+        aria-hidden="true"
+        :name="f.name.value"
+        :accept="accept"
+        :multiple="multiple || undefined"
+        :capture="capture"
+        :required="required || undefined"
+        :disabled="f.disabled.value || undefined"
+        @change="onPicked"
       />
+      <ul v-if="listed" class="weft-file-upload__files" :data-layout="layout" :aria-label="t.files">
+        <li v-for="e in entries" :key="e.id" class="weft-file-upload__file" :data-status="e.status">
+          <slot name="file" :file="fileOf(e)" :status="e.status" :progress="e.progress" :error="e.error" :remove="() => remove(e)" :retry="() => start(e)">
+            <img v-if="e.url" class="weft-file-upload__thumb" :src="e.url" alt="" />
+            <span v-else class="weft-file-upload__thumb" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /></svg></span>
+            <span class="weft-file-upload__meta">
+              <span class="weft-file-upload__name">{{ e.file.name }}</span>
+              <span class="weft-file-upload__size">{{ formatSize(e.file.size, locale) }}</span>
+              <Progress v-if="e.status === 'uploading'" class="weft-file-upload__progress" size="sm" :model-value="percent(e)" :label="`${t.uploading} ${e.file.name}`" />
+              <span v-if="e.status === 'error'" class="weft-file-upload__error">{{ t.failed }}</span>
+            </span>
+            <Button
+              v-if="e.status === 'error'"
+              class="weft-file-upload__retry"
+              variant="ghost"
+              tone="neutral"
+              size="sm"
+              :label="t.retry"
+              :aria-label="`${t.retry} ${e.file.name}`"
+              :disabled="f.disabled.value"
+              @click="start(e)"
+            />
+            <CloseButton
+              class="weft-file-upload__remove"
+              :label="e.status === 'uploading' ? `${t.cancel} ${e.file.name}` : `${t.remove} ${e.file.name}`"
+              :disabled="f.disabled.value || undefined"
+              @click="remove(e)"
+            />
+          </slot>
+        </li>
+      </ul>
     </div>
-    <Button
-      v-else
-      class="weft-file-upload__browse"
-      variant="outline"
-      tone="neutral"
-      :size="f.size.value"
-      :label="buttonText"
-      :id="browseId"
-      :aria-labelledby="f.field ? joinIds(f.field.labelId, browseId) : undefined"
-      :aria-describedby="buttonDescribedBy"
-      :disabled="f.disabled.value"
-      @click="open"
-    >
-      <template #leading><svg class="weft-file-upload__glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12" /><path d="m17 8-5-5-5 5" /><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /></svg></template>
-    </Button>
-    <input
-      ref="input"
-      class="weft-visually-hidden"
-      type="file"
-      tabindex="-1"
-      aria-hidden="true"
-      :name="f.name.value"
-      :accept="accept"
-      :multiple="multiple || undefined"
-      :capture="capture"
-      :required="required || undefined"
-      :disabled="f.disabled.value || undefined"
-      @change="onPicked"
-    />
-    <ul v-if="preview && entries.length" class="weft-file-upload__files" :aria-label="t.files">
-      <li v-for="e in entries" :key="e.id" class="weft-file-upload__file" :data-status="e.status">
-        <slot name="file" :file="fileOf(e)" :status="e.status" :progress="e.progress" :error="e.error" :remove="() => remove(e)" :retry="() => start(e)">
-          <img v-if="e.url" class="weft-file-upload__thumb" :src="e.url" alt="" />
-          <span v-else class="weft-file-upload__thumb" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /></svg></span>
-          <span class="weft-file-upload__meta">
-            <span class="weft-file-upload__name">{{ e.file.name }}</span>
-            <span class="weft-file-upload__size">{{ formatSize(e.file.size, locale) }}</span>
-            <Progress v-if="e.status === 'uploading'" class="weft-file-upload__progress" size="sm" :model-value="percent(e)" :label="`${t.uploading} ${e.file.name}`" />
-            <span v-if="e.status === 'error'" class="weft-file-upload__error">{{ t.failed }}</span>
-          </span>
-          <Button
-            v-if="e.status === 'error'"
-            class="weft-file-upload__retry"
-            variant="ghost"
-            tone="neutral"
-            size="sm"
-            :label="t.retry"
-            :aria-label="`${t.retry} ${e.file.name}`"
-            :disabled="f.disabled.value"
-            @click="start(e)"
-          />
-          <CloseButton
-            class="weft-file-upload__remove"
-            :label="e.status === 'uploading' ? `${t.cancel} ${e.file.name}` : `${t.remove} ${e.file.name}`"
-            :disabled="f.disabled.value || undefined"
-            @click="remove(e)"
-          />
-        </slot>
-      </li>
-    </ul>
     <span class="weft-visually-hidden" aria-live="polite">{{ said }}</span>
   </div>
 </template>

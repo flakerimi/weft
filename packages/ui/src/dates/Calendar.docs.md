@@ -15,7 +15,23 @@ binds `{ start, end }` once both ends are chosen (a first press starts the
 range, the pointer or the focus previews it, a second press ends it, in
 either order; a range cannot span a disabled date, so a press past one
 starts again from it). A single date is chosen as a radio is: pressing it
-again keeps it. Every computation goes through `@internationalized/date`;
+again keeps it. A press on a day of the next or previous month shows that
+month, focus going with it.
+
+`type="month"` chooses a month instead (bound as its first day,
+`2026-03-01`) from a grid of twelve, the heading switching to the years and
+back; `type="year"` chooses a year (its 1 January) from a page of twelve. Both
+take `multiple` and `range` (a range from the first day of its first month
+or year to the last day of its last: `{ start: '2026-03-01', end:
+'2026-05-31' }`).
+
+**First render.** With no value and no `focused-date`, the month to show is
+today's, which only the browser knows (a page built last week, or served
+from another time zone, would draw another month and hydrate with a
+mismatch). So until it is mounted it draws an empty grid, `aria-busy="true"`,
+its cells the size of dates and its weekday headers in place, the same on
+the server and while hydrating; then today's month. Give it a value or a
+`focused-date` to draw dates on the server. Every computation goes through `@internationalized/date`;
 dates are Gregorian.
 
 It follows the grid of the WAI-ARIA APG Date Picker Dialog: each month is a
@@ -36,7 +52,8 @@ Shift+Page Up and Shift+Page Down a year; Enter and Space (the button's own
 press) choose. Moving past the month shows the next one. The heading is a
 button switching to a month view, then a year view (twelve years), keyed the
 same way (a row is three months or years; Page Up and Page Down a year or
-twelve); choosing a month or year goes back down. The page buttons move a
+twelve); choosing a month or year goes back down (with `type`, down to the
+unit chosen, never below it). The page buttons move a
 month and a year (a year and twelve years in the other views), and keep focus.
 
 `min` and `max` bound what can be reached: the keyboard stops there, the page

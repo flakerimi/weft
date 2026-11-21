@@ -22,12 +22,14 @@ and year, any separator, its digits, a month name or abbreviation ("21 Nov
 calendar allows is bound and written back the locale's way; empty text binds
 null; anything else (no such date, before `min`, after `max`, disabled)
 binds null, keeps the text and marks the field invalid (`aria-invalid`,
-`data-invalid`), so it can be corrected.
+`data-invalid`), so it can be corrected. The form's reset clears the text
+back to the bound date, nothing invalid.
 
 **Calendar.** It follows the WAI-ARIA APG Date Picker Dialog: the button
 (`aria-haspopup="dialog"`, `aria-expanded`, named "Choose date, 21 November
 2026") opens it, as does Alt+ArrowDown in the field, on the date typed, else
-the bound one, else today; focus goes to that date. It has the Calendar's
+the bound one, else today; focus goes to that date. Tab goes round the
+calendar's buttons. It has the Calendar's
 keys. Choosing a date binds it, closes the calendar (unless
 `close-on-select` is false) and returns focus where it was opened from;
 Escape closes it with focus back on the button; focus leaving it closes it

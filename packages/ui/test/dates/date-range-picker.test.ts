@@ -70,6 +70,19 @@ describe('DateRangePicker', () => {
       expect(e.value).toBeNull()
     })
 
+    it('refuses a start typed after the end, and moves focus from either field to the button on a switch to touch', async () => {
+      const e = await cases({ locale: 'en-GB', initial: null })
+      const [start, end] = fields()
+      await typeIn(end!, '5/12/2026')
+      await typeIn(start!, '10/12/2026')
+      expect(start!.getAttribute('aria-invalid')).toBe('true')
+      expect(e.value).toEqual({ start: null, end: '2026-12-05' })
+      fields()[1]!.focus()
+      e.input = 'touch'
+      await settle()
+      expect(active()).toBe($('.weft-date-picker__trigger'))
+    })
+
     it('opens two months side by side on the start, and chooses a range in two presses', async () => {
       const e = await cases()
       await openWithButton()

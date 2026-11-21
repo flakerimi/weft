@@ -2,7 +2,9 @@
 // Every date and file component in one island, in en-GB: the server renders
 // the Calendar's grid, the pickers' fields, the time's parts and the file
 // zone (no calendar that opens); the browser hydrates that markup in place
-// (dates-island.test.ts), then they work.
+// (dates-island.test.ts), then they work. The Calendar with no value draws
+// the same first state wherever and whenever it renders, then shows today's
+// month once mounted.
 import { ref } from 'vue'
 import { Calendar, DatePicker, DateRangePicker, FileUpload, FormField, InputTime, WeftProvider, type DateRange } from '@weft/ui'
 
@@ -17,6 +19,7 @@ const files = ref<File[]>([])
   <WeftProvider locale="en-GB" input="pointer">
     <div class="dates">
       <Calendar v-model="day" aria-label="Day" />
+      <Calendar class="loose" aria-label="Any day" />
       <FormField label="Due" name="due"><DatePicker v-model="due" /></FormField>
       <FormField label="Stay" name="stay"><DateRangePicker v-model="stay" /></FormField>
       <FormField label="At" name="at"><InputTime v-model="at" /></FormField>

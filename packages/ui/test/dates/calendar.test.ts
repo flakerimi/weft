@@ -1,5 +1,5 @@
-import { CalendarDate } from '@internationalized/date'
-import { afterEach, describe, expect, it } from 'vitest'
+import { CalendarDate, DateFormatter } from '@internationalized/date'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import CalendarCases from '../fixtures/dates/CalendarCases.vue'
 import { mount } from '../mount.ts'
 import { loadStyles, ruleFor } from '../styles.ts'
@@ -197,6 +197,17 @@ describe('Calendar', () => {
     expect(e.changes).toBe(before)
   })
 
+  it('moves focus to an outside day pressed, in the month it shows', async () => {
+    await cases()
+    const dec = $<HTMLButtonElement>('.weft-calendar__day[data-date="2026-12-02"]')
+    dec.focus()
+    dec.click()
+    await settle()
+    expect(heading()).toBe('December 2026')
+    expect(active()).toBe(day('2026-12-02'))
+    expect((active() as HTMLElement).dataset.outside).toBeUndefined()
+  })
+
   it('binds CalendarDate objects with value-format="object"', async () => {
     const e = await cases({ valueFormat: 'object', initial: new CalendarDate(2026, 11, 21) })
     expect(tabStop()).toEqual([day('2026-11-21')])
@@ -306,6 +317,18 @@ describe('Calendar', () => {
       expect(e.value).toEqual({ start: '2026-11-18', end: '2026-11-20' })
     })
 
+    it('previews without writing every date’s name again', async () => {
+      await cases({ range: true, initial: null, focused: '2026-11-10' })
+      day('2026-11-10').click()
+      await settle()
+      const formats = vi.spyOn(DateFormatter.prototype, 'format')
+      day('2026-11-14').dispatchEvent(new PointerEvent('pointerenter'))
+      await settle()
+      expect(day('2026-11-12').dataset.range).toBe('middle')
+      expect(formats).not.toHaveBeenCalled()
+      formats.mockRestore()
+    })
+
     it('does not span a disabled date: a press past one starts again from it', async () => {
       const e = await cases({ range: true, initial: null, focused: '2026-11-10', isDateDisabled: (d: CalendarDate) => d.day === 12 })
       day('2026-11-10').click()
@@ -368,6 +391,69 @@ describe('Calendar', () => {
     $$<HTMLButtonElement>('.weft-calendar__cell').find((m) => m.textContent!.trim() === 'Jun')!.click()
     await settle()
     expect(heading()).toBe('June 2020')
+  })
+
+  describe('type month and year', () => {
+    it('with type="month" chooses a month: a grid of months, the heading switching to years and back', async () => {
+      const e = await cases({ type: 'month', initial: '2026-03-01' })
+      expect(heading()).toBe('2026')
+      const cells = () => $$<HTMLButtonElement>('.weft-calendar__cell')
+      expect(cells()).toHaveLength(12)
+      expect(cells().find((c) => c.tabIndex === 0)!.textContent!.trim()).toBe('Mar')
+      expect(cells().find((c) => c.textContent!.trim() === 'Mar')!.closest('td')!.getAttribute('aria-selected')).toBe('true')
+      cells().find((c) => c.tabIndex === 0)!.focus()
+      key('ArrowRight')
+      key('ArrowRight')
+      await settle()
+      pressKey(active() as HTMLElement, 'Enter')
+      await settle()
+      expect(e.value).toBe('2026-05-01')
+      expect(heading()).toBe('2026')
+      expect((active() as HTMLElement).textContent!.trim()).toBe('May')
+      // The heading goes to the years, and a year back to its months, never to days.
+      $<HTMLButtonElement>('.weft-calendar__view').click()
+      await settle()
+      expect(heading().replace(/\s*–\s*/, '–')).toBe('2016–2027')
+      cells().find((c) => c.textContent!.trim() === '2020')!.click()
+      await settle()
+      expect(heading()).toBe('2020')
+      $<HTMLButtonElement>('.weft-calendar__view').click()
+      await settle()
+      $<HTMLButtonElement>('.weft-calendar__view').click()
+      await settle()
+      expect(heading()).toBe('2020')
+      expect($('.weft-calendar__day')).toBeNull()
+      expect($('[aria-label="Previous year"]')).not.toBeNull()
+    })
+
+    it('with type="month" and range chooses from the first day of one month to the last of another', async () => {
+      const e = await cases({ type: 'month', range: true, initial: null, focused: '2026-01-15' })
+      const cell = (m: string) => $$<HTMLButtonElement>('.weft-calendar__cell').find((c) => c.textContent!.trim() === m)!
+      cell('Mar').click()
+      await settle()
+      expect(cell('Mar').dataset.range).toBe('start end')
+      cell('May').dispatchEvent(new PointerEvent('pointerenter'))
+      await settle()
+      expect(cell('Apr').dataset.range).toBe('middle')
+      cell('May').click()
+      await settle()
+      expect(e.value).toEqual({ start: '2026-03-01', end: '2026-05-31' })
+    })
+
+    it('with type="year" chooses a year, or several', async () => {
+      const e = await cases({ type: 'year', initial: '2024-01-01' })
+      const cell = (y: string) => $$<HTMLButtonElement>('.weft-calendar__cell').find((c) => c.textContent!.trim() === y)!
+      expect(cell('2024').closest('td')!.getAttribute('aria-selected')).toBe('true')
+      expect($('.weft-calendar__view')).toBeNull()
+      cell('2021').click()
+      await settle()
+      expect(e.value).toBe('2021-01-01')
+      unmount!()
+      const m = await cases({ type: 'year', multiple: true, initial: ['2020-01-01'] })
+      cell('2022').click()
+      await settle()
+      expect(m.value).toEqual(['2020-01-01', '2022-01-01'])
+    })
   })
 
   it('shows several months side by side, each grid labelled, no outside days', async () => {

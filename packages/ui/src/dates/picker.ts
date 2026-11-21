@@ -16,12 +16,14 @@
  *   `typed()` is the date the text says now, for the calendar to open on.
  * - `keepFocusOnSwitch(touch, from, to)`: the field leaving with the
  *   switch to touch, focus moves to the button that stays.
+ * - `useFormReset(box, fields)`: the form's reset clears invalid text.
+ * - `openingDay()`: today, where a calendar opened on nothing starts.
  * - `cycleTab(event, panel)`: Tab inside the floating calendar goes round
  *   its buttons, as the APG's date picker dialog asks (the popover is
  *   teleported to the end of the page, so leaving it would land past
  *   everything); the touch sheet traps Tab itself.
  */
-import { computed, nextTick, ref, watch, type ComputedRef, type Ref } from 'vue'
+import { computed, nextTick, onMounted, onScopeDispose, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { getLocalTimeZone, today } from '@internationalized/date'
 import { useWeft } from '../adaptive/context.ts'
 import { focus, tabbables } from '../headless/dom.ts'
@@ -133,7 +135,38 @@ export function useTypedDate(opts: TypedDateOptions) {
     },
     /** The date the text says now, else the bound one. */
     typed: () => read() ?? opts.value(),
+    /** Show the bound date again, nothing invalid (the form was reset). */
+    reset() {
+      sent = undefined
+      invalid.value = false
+      text.value = show(opts.value())
+    },
   }
+}
+
+/**
+ * useFormReset(box, fields): when the form around `box` resets, each typed
+ * field shows its bound date again, marked valid. A reset puts a form's
+ * inputs back to their default text after its event, so this runs then and
+ * writes the text into each input too. (A parent setting the value it
+ * already has, null again say, is no change Vue can see: the form's reset,
+ * or a value that changes, is what clears a field.)
+ */
+export function useFormReset(box: () => HTMLElement | null | undefined, fields: () => { typed: { reset(): void; text: Ref<string> }; el: HTMLInputElement | null | undefined }[]): void {
+  const onReset = (event: Event) => {
+    const el = box()
+    if (!el || !(event.target as Node).contains(el)) return
+    setTimeout(() => {
+      for (const f of fields()) {
+        f.typed.reset()
+        if (f.el) f.el.value = f.typed.text.value
+      }
+    }, 0)
+  }
+  onMounted(() => document.addEventListener('reset', onReset, true))
+  onScopeDispose(() => {
+    if (typeof document !== 'undefined') document.removeEventListener('reset', onReset, true)
+  })
 }
 
 export function keepFocusOnSwitch(touch: Readonly<Ref<boolean>>, fields: () => (HTMLElement | null | undefined)[], to: () => HTMLElement | null | undefined): void {
@@ -159,6 +192,9 @@ export interface DateRangePickerLabels extends CalendarLabels {
   start: string
   end: string
 }
+
+/** Where the calendar opens when nothing is typed or bound: today (the calendar opens only in the browser). */
+export const openingDay = () => today(getLocalTimeZone())
 
 export function cycleTab(event: KeyboardEvent, panel: HTMLElement | null | undefined): void {
   if (event.key !== 'Tab' || event.defaultPrevented || !panel) return

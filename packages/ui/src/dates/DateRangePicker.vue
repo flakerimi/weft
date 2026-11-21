@@ -22,7 +22,7 @@ import { joinIds, pressFocuses } from '../forms/dom.ts'
 import Popover from '../overlays/Popover.vue'
 import Calendar from './Calendar.vue'
 import { formatter, fromDate, pattern, toDate, utc, type CalendarDate, type DateInput, type DateRange, type ValueFormat } from './dates.ts'
-import { cycleTab, keepFocusOnSwitch, usePicker, useTypedDate, type DateRangePickerLabels } from './picker.ts'
+import { cycleTab, keepFocusOnSwitch, openingDay, useFormReset, usePicker, useTypedDate, type DateRangePickerLabels } from './picker.ts'
 import type { Size } from '../types.ts'
 import '../styles/base.css'
 import '../styles/input.css'
@@ -176,7 +176,7 @@ const nameFor = (word: string) => (f.field ? `${f.field.labelId} ${word}` : unde
 let openOn: CalendarDate | null = null
 const startOn = computed(() => (open.value ? openOn?.toString() : undefined))
 function show() {
-  openOn = startText.typed() ?? endText.typed()
+  openOn = startText.typed() ?? endText.typed() ?? openingDay()
   picker.show()
 }
 function toggle() {
@@ -221,6 +221,10 @@ function onFocusin(event: FocusEvent) {
   if (!from || !(boxEl.value?.contains(from) || panel()?.contains(from))) emit('focus', event)
 }
 keepFocusOnSwitch(touch, () => [startInput.value, endInput.value], () => button.value)
+useFormReset(() => boxEl.value, () => [
+  { typed: startText, el: startInput.value },
+  { typed: endText, el: endInput.value },
+])
 
 defineExpose({
   /** Focus the start field (the button on touch). */

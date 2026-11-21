@@ -90,4 +90,13 @@ export interface InputTimeLabels {
   second: string
   dayPeriod: string
   empty: string
+  /** A range's two times. */
+  start: string
+  end: string
+}
+
+/** Two times, a start and an end, as InputTime with `range` binds them. */
+export interface TimeRange {
+  start: TimeInput | null
+  end: TimeInput | null
 }

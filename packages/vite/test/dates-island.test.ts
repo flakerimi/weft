@@ -17,20 +17,31 @@ const key = (el: Element, k: string, init: KeyboardEventInit = {}) =>
 afterEach(() => {
   document.body.innerHTML = ''
   vi.restoreAllMocks()
+  vi.useRealTimers()
 })
 
 it('hydrates every date and file component inside an island, then each works', async () => {
+  // Hydrated months after the server's build day: the Calendar with no value matches, then shows today.
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2025-01-10T12:00:00'))
   const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
   const error = vi.spyOn(console, 'error').mockImplementation(() => {})
   document.body.innerHTML = `<main>${datesIsland}</main>`
   const island = document.querySelector('weft-island')!
-  const before = Array.from(island.querySelectorAll('*')).filter((e) => e.tagName !== 'SCRIPT')
+  // Every node stays, but the empty grid of the Calendar with no value, which today's month replaces once mounted.
+  const before = Array.from(island.querySelectorAll('*')).filter((e) => e.tagName !== 'SCRIPT' && !e.closest('[aria-busy="true"]'))
+  expect(island.querySelector('.weft-calendar.loose [role="grid"][aria-busy="true"]')).not.toBeNull()
   startIslands({ Dates: () => Promise.resolve(Dates as Component) })
   await settle()
   await settle()
   for (const el of before) expect(el.isConnected, el.outerHTML).toBe(true)
   expect(warn).not.toHaveBeenCalled()
   expect(error).not.toHaveBeenCalled()
+  const loose = island.querySelector('.weft-calendar.loose')!
+  expect(loose.querySelector('.weft-calendar__heading')!.textContent!.trim()).toBe('January 2025')
+  expect(loose.querySelector('[role="grid"]')!.hasAttribute('aria-busy')).toBe(false)
+  expect(loose.querySelector<HTMLElement>('.weft-calendar__day[tabindex="0"]')!.dataset.date).toBe('2025-01-10')
+  expect(loose.querySelector('[aria-current="date"]')!.getAttribute('data-date')).toBe('2025-01-10')
   const out = island.querySelector('output')!
   expect(out.textContent).toBe('2024-02-14|2024-03-01|2024-04-02–2024-04-05|09:30|0')
 

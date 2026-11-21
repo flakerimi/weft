@@ -82,6 +82,17 @@ describe('DatePicker', () => {
       expect(field().value).toBe('24.12.2026')
     })
 
+    it('clears invalid text when its form resets', async () => {
+      await cases({ locale: 'en-GB', initial: null })
+      await typeIn('soon')
+      expect(field().getAttribute('aria-invalid')).toBe('true')
+      field().form!.reset()
+      await settle()
+      expect(field().value).toBe('')
+      expect(field().hasAttribute('aria-invalid')).toBe(false)
+      expect($('.weft-date-picker').dataset.invalid).toBeUndefined()
+    })
+
     it('commits on Enter, before the form hears it', async () => {
       const e = await cases({ locale: 'en-GB' })
       field().focus()
@@ -125,6 +136,15 @@ describe('DatePicker', () => {
       expect(locked()).toBe(false)
       expect(focusedIso()).toBe('2026-11-21')
       expect(heading()).toBe('November 2026')
+    })
+
+    it('opens on today with nothing typed or bound, focus on it', async () => {
+      await cases({ initial: null })
+      await openWithButton()
+      const now = new Date()
+      const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      expect(focusedIso()).toBe(iso)
+      expect($('[aria-busy="true"]', panel())).toBeNull()
     })
 
     it('opens with Alt+ArrowDown in the field, on the date typed', async () => {
@@ -291,6 +311,15 @@ describe('DatePicker', () => {
       }
     })
 
+    it('opens the sheet on today with nothing bound, focus on it', async () => {
+      await cases({ input: 'touch', initial: null })
+      $<HTMLButtonElement>('.weft-date-picker__trigger').click()
+      await settle()
+      const now = new Date()
+      const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      expect(focusedIso()).toBe(iso)
+    })
+
     it('opens a modal bottom sheet titled by the label, with 44 px dates that swipe between months', async () => {
       const unstyle = loadStyles()
       try {
@@ -350,6 +379,14 @@ describe('DatePicker', () => {
       expect(m.open).toBe(false)
       expect(active()).toBe(button())
       expect(m.value).toBe('2026-11-21')
+    })
+
+    it('moves focus from the text field to the button when the field goes with a switch to touch', async () => {
+      const m = await cases()
+      field().focus()
+      m.input = 'touch'
+      await settle()
+      expect(active()).toBe($('.weft-date-picker__trigger'))
     })
 
     it('opened on touch, returns focus to its button after switching to pointer', async () => {

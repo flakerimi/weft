@@ -26,6 +26,7 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
   readonly?: boolean
   focused?: string
+  type?: 'date' | 'month' | 'year'
 }>(), { initial: undefined, fixedWeeks: true })
 const input = ref<Input | undefined>(props.input)
 const value = ref(props.initial as CalendarModel | undefined)
@@ -56,6 +57,7 @@ defineExpose({ input, value, focusedDate, changes, months })
         :value-format="valueFormat"
         :disabled="disabled"
         :readonly="readonly"
+        :type="type"
         @update:model-value="changes++"
       />
       <button class="after">after</button>
