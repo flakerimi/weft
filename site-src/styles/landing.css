@@ -23,7 +23,7 @@
 .site.landing .weft-header { background: transparent; border-block-end-color: transparent; }
 .site.landing .weft-header__inner { max-inline-size: calc(1176px + 64px); padding: 22px 32px; }
 .site.landing .site-nav { gap: 28px; font-size: 15px; }
-.site.landing .weft-footer { max-inline-size: calc(1176px + 64px); padding: 64px 32px; font-size: 15px; }
+.site.landing .weft-footer { max-inline-size: calc(1176px + 64px); margin-block-start: 120px; padding-inline: 32px; font-size: 15px; }
 
 /* A picture of an app: drawn by the server, inert, never moving (no
    transition plays as it first appears), and never wider than its box. */

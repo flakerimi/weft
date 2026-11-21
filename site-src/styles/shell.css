@@ -31,6 +31,8 @@
 }
 .docs-nav .weft-nav__heading { font-size: 0.8125rem; letter-spacing: 0.04em; text-transform: uppercase; }
 
+/* Code on the white page: a shade of the ground, so a block reads as one. */
+.docs-page .shiki { --weft-code-background: color-mix(in srgb, var(--weft-color-bg) 45%, var(--weft-color-surface-raised)); }
 .docs-page.weft-page { max-inline-size: none; margin-block-start: 24px; padding: 40px 48px 64px; gap: 32px; background: var(--weft-color-surface-raised); border: 1px solid var(--weft-color-border); border-radius: 16px; }
 .docs-page .weft-page__heading { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; max-inline-size: 46rem; min-inline-size: 0; }
 /* A long name (NavigationMenu) breaks rather than widen the page on a phone. */

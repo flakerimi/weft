@@ -62,6 +62,16 @@
   .site-nav .site-wide { display: none; }
 }
 
-/* The footer: the wordmark again, the licence. */
-.site .weft-footer { max-inline-size: 1280px; margin-inline: auto; padding: 64px 24px 48px; color: var(--weft-color-text-muted); font-size: 0.9375rem; }
+/* The footer: the wordmark again, the licence, under a saffron thread
+   across the page (an outset border image: drawn past the box, it widens
+   nothing). */
+.site .weft-footer {
+  max-inline-size: 1280px;
+  margin: 96px auto 0;
+  padding: 40px 24px 56px;
+  color: var(--weft-color-text-muted);
+  font-size: 0.9375rem;
+  border-block-start: 4px solid;
+  border-image: linear-gradient(var(--site-saffron) 0 0) 1 / 4px 0 0 / 0 100vw;
+}
 .site .weft-footer .site-mark { --site-mark-height: 22px; }
