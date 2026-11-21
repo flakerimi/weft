@@ -1,26 +1,330 @@
-/* The landing page, after the approved design (docs/design/site-2026-11-21/):
-   the warp behind everything (site.css), the wordmark whose thread pulls
-   across the page, and bands that each hang off a thread. Every colour is
-   the weft theme's; a code panel is a dark-scheme region of it, so it is
-   dark in both schemes, as the design has it. Nothing here may stretch the
-   page: what reaches the edge (the threads) is clipped by <main>. */
+/* The landing page, after the approved design's second pass
+   (docs/design/site-2026-11-21-v2/): a night band for the hero, with the
+   warp in it alone, the app drawn twice beside the copy, and a saffron
+   thread pulled across at the install command; then bands of white tiles on
+   the ground. The night is the theme's dark scheme (a region marked
+   data-weft-scheme="dark"), so it is night in both schemes, while the
+   pictures of the app follow the page's. Every colour is a theme token.
+   Nothing here may stretch the page: what reaches past the column (the
+   thread, the desktop frame) is clipped by the hero. */
 @import './site.css';
 
 .landing {
-  --landing-col: min(1160px, 100% - 48px);
-  font-size: 18px;
-  line-height: 1.55;
+  --landing-col: min(1176px, 100% - 64px);
+  font-size: 17px;
+  line-height: 1.5;
 }
 .landing-main { overflow-x: clip; }
-.landing-wrap { position: relative; inline-size: var(--landing-col); margin-inline: auto; }
+.landing-wrap { inline-size: var(--landing-col); margin-inline: auto; }
 .landing :focus-visible { outline: 3px solid var(--site-saffron); outline-offset: 3px; }
 
-/* The header and footer line up with the page's column, on the warp
-   (above site.css's own rules for them, whatever the order of the two). */
+/* The header lies over the night band, the wordmark and links light. */
+.landing-top { position: absolute; inset: 0 0 auto; z-index: 5; }
 .site.landing .weft-header { background: transparent; border-block-end-color: transparent; }
-.site.landing .weft-header__inner { max-inline-size: calc(1160px + 48px); padding-block: 22px; }
-.site.landing .site-nav { gap: 28px; font-size: 16px; }
-.site.landing .weft-footer { max-inline-size: calc(1160px + 48px); padding-block: 90px 60px; font-size: 15px; border-block-start-color: transparent; }
+.site.landing .weft-header__inner { max-inline-size: calc(1176px + 64px); padding: 22px 32px; }
+.site.landing .site-nav { gap: 28px; font-size: 15px; }
+.site.landing .weft-footer { max-inline-size: calc(1176px + 64px); padding: 64px 32px; font-size: 15px; }
+
+/* A picture of an app: drawn by the server, inert, never moving (no
+   transition plays as it first appears), and never wider than its box. */
+.landing-main [inert] * { transition: none; }
+
+/* The hero: its ground, the night with its warp, behind the copy and the
+   pictures. The thread is in the copy's flow, so it lies at the install
+   command whatever the copy's height, and spans the hero (its containing
+   block; nothing between is positioned). The desktop frame is under it and
+   the phone over it, as a weft thread passes under and over the warp. */
+.landing-hero { position: relative; isolation: isolate; overflow: clip; }
+.landing-hero__ground {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: repeating-linear-gradient(90deg, var(--weft-color-surface-raised) 0 1px, transparent 1px 28px) var(--weft-color-bg);
+}
+.landing-hero__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 48px;
+  padding-block: 136px 64px;
+}
+.landing-hero__copy { color: var(--weft-color-text); }
+.landing-hero h1 {
+  margin: 0 0 24px;
+  font-size: clamp(42px, 4.7vw, 68px);
+  font-weight: 700;
+  line-height: 0.98;
+  text-wrap: balance;
+}
+.landing-lead {
+  max-inline-size: 30ch;
+  margin: 0 0 32px;
+  font-size: 20px;
+  color: color-mix(in srgb, var(--weft-color-text) 78%, var(--weft-color-bg));
+}
+.landing-after { margin: 12px 0 0; font-size: 14px; color: var(--weft-color-text-muted); }
+.landing-after code { font-size: 13.5px; color: var(--weft-color-text); }
+
+/* The install command: CopyCommand, a deep bar with its saffron (warning) button. */
+.landing-install { max-inline-size: 480px; }
+.landing-install .copy-command {
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  background: color-mix(in srgb, var(--weft-color-bg) 70%, black);
+  border: 1px solid var(--weft-color-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.landing-install .copy-command__text {
+  padding: 14px 16px;
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.landing-install .copy-command__text::before { content: "$ "; color: var(--site-saffron); }
+.landing-install .copy-command .copy-button {
+  --weft-tone: var(--weft-color-warning);
+  --weft-tone-hover: var(--weft-color-warning-hover);
+  --weft-tone-active: var(--weft-color-warning-active);
+  --weft-tone-fg: var(--weft-color-warning-fg);
+  block-size: auto;
+  padding-inline: 18px;
+  font-size: 14px;
+  border: 0;
+  border-radius: 0;
+}
+
+.landing-thread {
+  position: absolute;
+  inset-inline: 0;
+  z-index: 4;
+  display: block;
+  block-size: 6px;
+  margin-block-start: 40px;
+  background: var(--site-saffron);
+  /* Over the phone, under the desktop: over everything, and hidden where
+     the desktop is and the phone is not. With the column C (the grid's 5fr
+     and 7fr, 48 px apart) the desktop starts at 50% - C/12 + 28px and is at
+     most 780 px wide, the phone (288 px) ends 28 px past the column. */
+  mask: linear-gradient(90deg, black calc(50% - var(--landing-col) / 12 + 28px), transparent 0 calc(50% + var(--landing-col) / 2 - 260px), black 0 calc(50% + var(--landing-col) / 2 + 28px), transparent 0 min(50% - var(--landing-col) / 12 + 808px, 100% - 24px), black 0);
+  animation: landing-pull 1.4s cubic-bezier(0.2, 0.7, 0.1, 1) 0.3s both;
+}
+@keyframes landing-pull { from { clip-path: inset(0 100% 0 0); } }
+@media (prefers-reduced-motion: reduce) {
+  .landing-thread { animation: none; }
+}
+@media (forced-colors: active) {
+  .landing-thread { background: CanvasText; }
+}
+
+/* The two frames. The desktop reaches past the column towards the page's
+   edge (the hero clips it), the phone overlaps it at the lower end. */
+.landing-frames { position: relative; block-size: 690px; margin: 0; }
+.hero-frame {
+  position: absolute;
+  overflow: hidden;
+  /* Fixed parts inside (the menu's sheet and backdrop) are kept to the frame. */
+  contain: paint;
+  color: var(--weft-color-text);
+  background: var(--weft-color-surface-raised);
+  font-family: var(--weft-font-sans);
+  font-size: var(--weft-text-base);
+  line-height: 1.5;
+  box-shadow: 0 30px 80px -20px color-mix(in srgb, black 60%, transparent), 0 0 0 1px color-mix(in srgb, var(--weft-color-text) 12%, transparent);
+}
+.hero-frame--desk {
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  z-index: 1;
+  inline-size: min(780px, 100% + (100vw - var(--landing-col)) / 2 - 24px);
+  block-size: 540px;
+  border-radius: 14px;
+}
+.hero-frame--phone {
+  inset-block-start: 150px;
+  inset-inline-end: -28px;
+  z-index: 3;
+  inline-size: 288px;
+  block-size: 540px;
+  border: 8px solid color-mix(in srgb, black 85%, var(--weft-color-primary));
+  border-radius: 38px;
+}
+
+/* Northline, the app in the frames. */
+.northline { display: grid; grid-template-columns: 200px minmax(0, 1fr); block-size: 100%; }
+.northline__side {
+  padding: 16px 10px;
+  background: color-mix(in srgb, var(--weft-color-bg) 40%, var(--weft-color-surface-raised));
+  border-inline-end: 1px solid var(--weft-color-border);
+}
+.northline__brand { display: flex; align-items: center; gap: 10px; margin: 4px 8px 18px; font-weight: 700; font-size: 15px; }
+.northline__logo { inline-size: 22px; block-size: 22px; border-radius: 6px; background: var(--weft-color-primary); box-shadow: inset 0 -5px var(--site-saffron); }
+.northline__main { display: grid; align-content: start; gap: 12px; padding: 18px 22px; min-inline-size: 0; }
+.northline__bar { display: flex; align-items: center; gap: 8px; }
+.northline__title { margin: 0 auto 0 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.northline__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-block-end: 4px; }
+.northline code { font-size: 0.95em; }
+/* The open menu sits under its row's button, over the rows below. */
+.hero-frame .weft-table__scroller { overflow: visible; }
+/* The desktop's open menu: its row's button lies under the phone, so the
+   menu is drawn where a menu opened on the row would float, beside it. */
+.hero-frame--desk .weft-menu { position: absolute; inset-block-start: 334px; inset-inline-start: 236px; z-index: 4; inline-size: 12.5rem; }
+
+/* On the phone: its bar, then the cards. */
+.northline--phone { display: flex; flex-direction: column; gap: 0; background: color-mix(in srgb, var(--weft-color-bg) 40%, var(--weft-color-surface-raised)); }
+.northline--phone .northline__bar { padding: 26px 12px 10px; background: var(--weft-color-surface-raised); border-block-end: 1px solid var(--weft-color-border); }
+.northline--phone .northline__title { font-size: 18px; }
+.northline--phone .landing-devices { padding: 10px; }
+
+/* Bands on the ground. */
+.landing-band { padding-block-start: 120px; }
+.landing-intro { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px 48px; align-items: end; margin-block-end: 36px; }
+.landing-intro h2 { margin: 0; font-size: clamp(34px, 3.6vw, 50px); font-weight: 700; line-height: 1.02; text-wrap: balance; }
+.landing-intro p { max-inline-size: 46ch; margin: 0; font-size: 18px; color: var(--weft-color-text-muted); }
+.landing-intro code { font-size: 0.9em; }
+
+/* Screens you'd ship: a bento of tiles, 5 + 7 then 4 + 4 + 4 columns. */
+.landing-bento { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; }
+.landing-tile {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  margin: 0;
+  overflow: hidden;
+  background: var(--weft-color-surface-raised);
+  border: 1px solid var(--weft-color-border);
+  border-radius: 16px;
+}
+.landing-tile--settings { grid-column: span 5; }
+.landing-tile--search { grid-column: span 7; }
+.landing-tile--window, .landing-tile--activity, .landing-tile--restore { grid-column: span 4; }
+.landing-tile__stage {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  padding: 32px 28px;
+  font-family: var(--weft-font-sans);
+  font-size: var(--weft-text-base);
+}
+.landing-tile figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding: 14px 20px;
+  font-size: 14px;
+  border-block-start: 1px solid var(--weft-color-border);
+}
+.landing-tile figcaption strong { margin-inline-end: 4px; font-weight: 600; }
+.landing-tile figcaption a { font: 13px var(--weft-font-mono); text-decoration: none; }
+.landing-tile figcaption a:hover { text-decoration: underline; }
+
+.scene-settings { inline-size: 100%; max-inline-size: 360px; }
+.scene-settings__actions { display: flex; gap: 8px; }
+.landing-tile--search .landing-tile__stage { background: color-mix(in srgb, var(--weft-color-bg) 50%, var(--weft-color-surface-raised)); }
+.scene-search {
+  inline-size: 100%;
+  max-inline-size: 520px;
+  background: var(--weft-color-surface-raised);
+  border: 1px solid var(--weft-color-border);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px -20px color-mix(in srgb, black 40%, transparent);
+  overflow: hidden;
+}
+.scene-window { display: grid; gap: 10px; inline-size: 100%; max-inline-size: 324px; }
+.scene-window__panel {
+  padding: 6px;
+  background: var(--weft-color-surface-raised);
+  border: 1px solid var(--weft-color-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 30px -14px color-mix(in srgb, black 35%, transparent);
+}
+.scene-activity, .scene-restore { inline-size: 100%; }
+.scene-restore { display: grid; gap: 14px; }
+.scene-restore__file { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+.scene-restore__file span:nth-child(2) { color: var(--weft-color-text-muted); }
+.scene-restore__file .weft-progress { grid-column: 1 / -1; }
+
+/* The adaptive demo: the code, the two previews, and the island to try it. */
+.landing-adapt {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.95fr) minmax(0, 0.8fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas: "code pointer touch" "demo pointer touch";
+  gap: 16px;
+  align-items: start;
+}
+.landing-code--source { grid-area: code; }
+.landing-frame--pointer { grid-area: pointer; }
+.landing-frame--touch { grid-area: touch; }
+.landing-demo { grid-area: demo; }
+.landing-frame { display: flex; flex-direction: column; gap: 10px; margin: 0; align-self: stretch; container-type: inline-size; }
+.landing-frame__title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; color: var(--weft-color-text-muted); }
+.landing-tag {
+  padding: 0 8px;
+  font: 12px/1.6 var(--weft-font-mono);
+  font-weight: 400;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+}
+.landing-preview {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 8px;
+  padding: 20px;
+  font-size: 15px;
+  background: var(--weft-color-surface-raised);
+  border: 1px solid var(--weft-color-border);
+  border-radius: 16px;
+}
+.landing-preview .weft-provider { display: contents; }
+.landing-popover {
+  padding: 12px;
+  background: var(--weft-color-surface-raised);
+  border: 1px solid var(--weft-color-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 30px -14px color-mix(in srgb, black 35%, transparent);
+}
+.landing-frame--touch .landing-preview { padding: 14px 12px 0; border-radius: 28px; overflow: hidden; }
+.landing-behind { opacity: 0.45; }
+.landing-sheet {
+  margin: auto -12px 0;
+  padding: 10px 6px 12px;
+  background: var(--weft-color-surface-raised);
+  border-radius: 16px 16px 10px 10px;
+  box-shadow: 0 -10px 24px -16px color-mix(in srgb, black 50%, transparent);
+}
+.landing-sheet__grab { display: block; inline-size: 34px; block-size: 4px; margin: 0 auto 8px; border-radius: 2px; background: var(--weft-color-border); }
+.landing-sheet__title { margin: 0 0 6px; font-weight: 600; text-align: center; }
+/* The touch calendar is 44 px a date, 322 px with the sheet's edges: in a
+   phone narrower than that, the picture is drawn smaller. */
+@container (max-width: 322px) { .landing-frame--touch .landing-preview { zoom: 0.9; } }
+@container (max-width: 290px) { .landing-frame--touch .landing-preview { zoom: 0.8; } }
+@container (max-width: 258px) { .landing-frame--touch .landing-preview { zoom: 0.7; } }
+@container (max-width: 226px) { .landing-frame--touch .landing-preview { zoom: 0.6; } }
+.landing-caption { margin: 0; font-size: 14px; color: var(--weft-color-text-muted); }
+
+/* Its height is the started demo's on pointer, so nothing moves when it starts. */
+.landing-try {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  justify-items: start;
+  min-block-size: 168px;
+  padding: 20px;
+  background: var(--weft-color-surface-raised);
+  border: 1px solid var(--weft-color-border);
+  border-radius: 16px;
+}
+/* On touch its controls are 44 px tall. */
+@media (pointer: coarse) { .landing-try { min-block-size: 176px; } }
+.landing-try > .weft-provider { display: contents; }
+.landing-try .weft-form-field { inline-size: 100%; }
+.landing-try__title { margin: 0; font-size: 15px; font-weight: 600; color: var(--weft-color-text-muted); }
+.landing-try__note { margin: 0; font-size: 15px; color: var(--weft-color-text-muted); }
 
 /* A code panel: dark in both schemes. */
 .landing-code {
@@ -29,7 +333,7 @@
   color: var(--weft-color-text);
   background: var(--weft-color-bg);
   border: 1px solid var(--weft-color-border);
-  border-radius: 10px;
+  border-radius: 16px;
   overflow: hidden;
 }
 .landing-code figcaption {
@@ -52,218 +356,80 @@
   line-height: 1.7;
 }
 
-/* The hero: the wordmark, its letters drawn through the owner's file as a
-   mask (public/weft.svg, its thread masked off), and the thread as an
-   element of its own on the same spot, which pulls across to the page's
-   edge. The thread's box is the file's: x 102.666–166.666, y 110.968–121.968
-   of 266 × 122. */
-.landing-hero { padding-block: 72px 48px; }
-.landing-mark { position: relative; inline-size: min(560px, 78vw); aspect-ratio: 266 / 122; }
-.landing-word {
-  position: absolute;
-  inset: 0;
-  background: var(--weft-color-text);
-  mask-image: url(/weft.svg), linear-gradient(black 86%, transparent 86%);
-  mask-size: 100% 100%;
-  mask-composite: intersect;
-  forced-color-adjust: none;
-}
-.landing-thread {
-  position: absolute;
-  inset-inline-start: 38.596%;
-  inset-block-start: 90.957%;
-  block-size: 9.016%;
-  inline-size: 24.06%;
-  border-radius: 999px;
-  background: var(--site-saffron);
-  animation: landing-pull 1.2s cubic-bezier(0.2, 0.7, 0.1, 1) 0.3s forwards;
-}
-@keyframes landing-pull { to { inline-size: 100vw; } }
-@media (prefers-reduced-motion: reduce) {
-  .landing-thread { animation: none; inline-size: 100vw; }
-}
-@media (forced-colors: active) {
-  .landing-word, .landing-thread { background: CanvasText; }
-}
-.landing-hero h1 {
-  max-inline-size: 15ch;
-  margin: 44px 0 18px;
-  font-size: clamp(34px, 5.4vw, 64px);
-  font-weight: 700;
-  line-height: 1.04;
-  letter-spacing: -0.025em;
-}
-.landing-lead { max-inline-size: 46ch; margin: 0 0 34px; font-size: 21px; color: var(--weft-color-text-muted); }
-.landing-after { margin: 14px 0 0; font-size: 15px; color: var(--weft-color-text-muted); }
-.landing-after code { font-size: 14px; color: var(--weft-color-text); }
-
-/* The install command: CopyCommand, in the design's dark bar with its saffron (warning) button. */
-.landing-install { max-inline-size: 620px; color: var(--weft-color-text); }
-.landing-install .copy-command {
-  align-items: stretch;
-  gap: 0;
-  padding: 0;
-  background: var(--weft-color-bg);
-  border: 1px solid var(--weft-color-border);
-  border-radius: 10px;
-  overflow: hidden;
-}
-.landing-install .copy-command__text {
-  padding: 16px 20px;
-  font-size: 16px;
-  white-space: nowrap;
-  overflow-wrap: normal;
-  overflow-x: auto;
-}
-.landing-install .copy-command__text::before { content: "$ "; font-weight: 600; color: var(--site-saffron); }
-/* Its Button, drawn in the warning tone (saffron) and as tall as the bar. */
-.landing-install .copy-command .copy-button {
-  --weft-tone: var(--weft-color-warning);
-  --weft-tone-hover: var(--weft-color-warning-hover);
-  --weft-tone-active: var(--weft-color-warning-active);
-  --weft-tone-fg: var(--weft-color-warning-fg);
-  block-size: auto;
-  padding-inline: 22px;
-  font-size: 16px;
-  border: 0;
-  border-radius: 0;
-}
-
-/* A band: it starts where a weft thread crosses the warp, edge to edge. */
-.landing-band { padding-block: 96px 40px; }
-.landing-band::before {
-  content: "";
-  position: absolute;
-  inset-block-start: 56px;
-  inset-inline-start: calc(50% - 50vw);
-  inline-size: 100vw;
-  block-size: 3px;
-  background: var(--site-saffron);
-  opacity: 0.9;
-}
-.landing-band > h2 {
-  max-inline-size: 26ch;
-  margin: 0 0 14px;
-  font-size: clamp(28px, 3.6vw, 42px);
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  text-wrap: balance;
-}
-.landing-intro { max-inline-size: 58ch; margin: 0 0 36px; font-size: 19px; color: var(--weft-color-text-muted); }
-
-/* The adaptive demo: the code, the two previews, and the island to try it. */
-.landing-adapt {
+/* The benchmark: bars as threads, on a tile. */
+.landing-bench {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.95fr) minmax(0, 0.8fr);
-  grid-template-rows: auto 1fr;
-  grid-template-areas: "code pointer touch" "demo pointer touch";
-  gap: 28px;
-  align-items: start;
-}
-.landing-code--source { grid-area: code; }
-.landing-frame--pointer { grid-area: pointer; }
-.landing-frame--touch { grid-area: touch; }
-.landing-demo { grid-area: demo; }
-.landing-frame { display: flex; flex-direction: column; gap: 10px; margin: 0; align-self: stretch; container-type: inline-size; }
-.landing-frame__title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; color: var(--weft-color-text-muted); }
-.landing-tag {
-  padding: 0 8px;
-  font: 12px/1.6 var(--weft-font-mono);
-  font-weight: 400;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-}
-.landing-preview {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  gap: 8px;
-  padding: 18px;
-  font-size: 15px;
-  background: var(--weft-color-surface);
+  gap: 18px;
+  padding: 28px 32px;
+  background: var(--weft-color-surface-raised);
   border: 1px solid var(--weft-color-border);
-  border-radius: 12px;
+  border-radius: 16px;
 }
-.landing-preview .weft-provider { display: contents; }
-.landing-popover {
-  padding: 12px;
-  background: var(--weft-color-bg);
-  border: 1px solid var(--weft-color-border);
-  border-radius: 10px;
-  box-shadow: 0 12px 30px -14px color-mix(in srgb, var(--weft-color-text) 35%, transparent);
-}
-.landing-frame--touch .landing-preview { padding: 14px 12px 0; border-radius: 26px; overflow: hidden; }
-.landing-behind { opacity: 0.45; }
-.landing-sheet {
-  margin: auto -12px 0;
-  padding: 10px 6px 12px;
-  background: var(--weft-color-bg);
-  border-radius: 16px 16px 10px 10px;
-  box-shadow: 0 -10px 24px -16px color-mix(in srgb, var(--weft-color-text) 50%, transparent);
-}
-.landing-sheet__grab { display: block; inline-size: 34px; block-size: 4px; margin: 0 auto 8px; border-radius: 2px; background: var(--weft-color-border); }
-.landing-sheet__title { margin: 0 0 6px; font-weight: 600; text-align: center; }
-/* The touch calendar is 44 px a date, 322 px with the sheet's edges: in a
-   phone narrower than that, the picture is drawn smaller. */
-@container (max-width: 322px) { .landing-frame--touch .landing-preview { zoom: 0.9; } }
-@container (max-width: 290px) { .landing-frame--touch .landing-preview { zoom: 0.8; } }
-@container (max-width: 258px) { .landing-frame--touch .landing-preview { zoom: 0.7; } }
-@container (max-width: 226px) { .landing-frame--touch .landing-preview { zoom: 0.6; } }
-.landing-caption { margin: 0; font-size: 14px; color: var(--weft-color-text-muted); }
-
-/* Its height is the started demo's on pointer, so nothing moves when it starts. */
-.landing-try {
-  display: grid;
-  gap: 12px;
-  align-content: start;
-  justify-items: start;
-  min-block-size: 168px;
-  padding: 18px;
-  background: var(--weft-color-surface);
-  border: 1px solid var(--weft-color-border);
-  border-radius: 12px;
-}
-/* On touch its controls are 44 px tall. */
-@media (pointer: coarse) { .landing-try { min-block-size: 176px; } }
-.landing-try > .weft-provider { display: contents; }
-.landing-try .weft-form-field { inline-size: 100%; }
-.landing-try__title { margin: 0; font-size: 15px; font-weight: 600; color: var(--weft-color-text-muted); }
-.landing-try__note { margin: 0; font-size: 15px; color: var(--weft-color-text-muted); }
-
-/* The benchmark: bars as threads. */
-.landing-bench { display: grid; gap: 16px; max-inline-size: 960px; }
-.landing-bench__row { display: grid; grid-template-columns: 220px 1fr 7.5ch; gap: 22px; align-items: center; }
-.landing-bench__who { font-size: 16px; }
-.landing-bench__who small { display: block; font-size: 13.5px; color: var(--weft-color-text-muted); }
-.landing-bench__bar { position: relative; block-size: 9px; border-radius: 5px; background: var(--weft-color-border); }
+.landing-bench__row { display: grid; grid-template-columns: 240px 1fr 7.5ch; gap: 24px; align-items: center; }
+.landing-bench__who { font-size: 16px; font-weight: 600; }
+.landing-bench__who small { display: block; font-size: 13.5px; font-weight: 400; color: var(--weft-color-text-muted); }
+.landing-bench__bar { position: relative; block-size: 10px; border-radius: 5px; background: color-mix(in srgb, var(--weft-color-border) 60%, transparent); }
 .landing-bench__bar i { position: absolute; inset: 0 auto 0 0; border-radius: 5px; background: var(--weft-color-primary); }
 .landing-bench__bar[data-ours] i { background: var(--site-saffron); }
 .landing-bench__n { font: 600 16px var(--weft-font-mono); text-align: end; }
-.landing-bench-note { max-inline-size: 70ch; margin: 26px 0 0; font-size: 15px; color: var(--weft-color-text-muted); }
-.landing-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; max-inline-size: 980px; margin-block-start: 54px; }
-.landing-facts p { margin: 0; font-size: 16.5px; color: var(--weft-color-text-muted); }
+.landing-bench-note { max-inline-size: 80ch; margin: 20px 0 0; font-size: 15px; color: var(--weft-color-text-muted); }
+.landing-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-block-start: 32px; }
+.landing-facts p {
+  margin: 0;
+  padding: 22px 24px;
+  font-size: 16px;
+  color: var(--weft-color-text-muted);
+  background: var(--weft-color-surface-raised);
+  border: 1px solid var(--weft-color-border);
+  border-radius: 16px;
+}
 .landing-facts strong { display: block; margin-block-end: 4px; font-size: 19px; color: var(--weft-color-text); }
 
 /* For agents. */
-.landing-agents { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 36px; align-items: start; }
-.landing-agents ul { margin: 0; padding: 0; list-style: none; }
-.landing-agents li { padding-block: 14px; border-block-start: 1px solid var(--weft-color-border); }
-.landing-agents li strong { display: block; }
+.landing-agents { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.landing-agents ul {
+  margin: 0;
+  padding: 8px 28px;
+  list-style: none;
+  background: var(--weft-color-surface-raised);
+  border: 1px solid var(--weft-color-border);
+  border-radius: 16px;
+}
+.landing-agents li { padding-block: 18px; }
+.landing-agents li + li { border-block-start: 1px solid var(--weft-color-border); }
+.landing-agents li strong { display: block; font-size: 18px; }
 .landing-agents li span { font-size: 16px; color: var(--weft-color-text-muted); }
 .landing-agents .shiki { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 @media (max-width: 1099.98px) {
   .landing-adapt { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "code code" "pointer touch" "demo demo"; }
+  .northline { grid-template-columns: minmax(0, 1fr); }
+  .northline__side { display: none; }
+  .hero-frame--desk .weft-menu { inset-inline-start: 56px; }
 }
-@media (max-width: 879.98px) {
-  .landing-agents, .landing-facts { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+/* Narrow: the copy above, the phone alone under it, centred. */
+@media (max-width: 900px) {
+  .landing-thread { mask: none; }
+  .landing-hero__grid { grid-template-columns: minmax(0, 1fr); gap: 72px; padding-block: 112px 56px; }
+  .landing-frames { display: grid; justify-items: center; block-size: auto; }
+  .hero-frame--desk { display: none; }
+  .hero-frame--phone { position: relative; inset: auto; inline-size: min(300px, 100%); block-size: 580px; }
+  .landing-intro { grid-template-columns: minmax(0, 1fr); }
+  .landing-tile--settings, .landing-tile--search { grid-column: span 12; }
+  .landing-tile--window, .landing-tile--activity, .landing-tile--restore { grid-column: span 6; }
+  .landing-agents, .landing-facts { grid-template-columns: minmax(0, 1fr); }
   .landing-bench__row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; }
   .landing-bench__bar { grid-column: 1 / -1; grid-row: 2; }
 }
+@media (max-width: 759.98px) {
+  .landing-bento > .landing-tile { grid-column: 1 / -1; }
+}
 @media (max-width: 639.98px) {
   .landing { --landing-col: calc(100% - 32px); }
+  .site.landing .weft-header__inner { padding-inline: 16px; }
   .landing-adapt { grid-template-columns: minmax(0, 1fr); grid-template-areas: "code" "pointer" "touch" "demo"; }
-  .landing-hero { padding-block-start: 40px; }
-  .landing-install .copy-command__text { padding: 14px; font-size: 13.5px; }
+  .landing-band { padding-block-start: 88px; }
+  .landing-bench { padding: 20px; }
+  .landing-install .copy-command__text { padding: 12px; font-size: 13px; white-space: normal; overflow-wrap: anywhere; }
+  .landing-tile__stage { padding: 24px 16px; }
 }

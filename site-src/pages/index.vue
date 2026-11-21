@@ -1,9 +1,13 @@
 <script setup vapor lang="ts">
-// weft.base.al's landing page, after the approved design
-// (docs/design/site-2026-11-21/). The hero is the owner's wordmark, whose
-// thread pulls across the page (CSS, the page's one automatic motion), the
-// pitch and the install command with its copy button, an island. Then three
-// bands, each hanging off a thread across the warp:
+// weft.base.al's landing page, after the approved design's second pass
+// (docs/design/site-2026-11-21-v2/). The hero is the night band: the
+// headline, the pitch and the install command with its copy button (an
+// island), and one app, Northline's device list, drawn twice by the real
+// components, on a desktop and on a phone (inert pictures from the server).
+// A saffron thread pulls across it at the install command, under the
+// desktop and over the phone (CSS, the page's one automatic motion). Then:
+//   - screens you'd ship: five scenes on tiles, drawn by the server from the
+//     real components, each caption linking the components it uses;
 //   - the adaptive demo: VisitDay.vue's source, highlighted at build time;
 //     the same file drawn by the server as the DatePicker's pointer and
 //     touch forms, inert previews; and AdaptiveDemo, an island that starts
@@ -12,6 +16,7 @@
 //   - for agents: the DatePicker's catalogue entry, the skills, llms.txt.
 // Everything but the two islands is HTML from the build.
 import { Calendar, Island, Link, WeftProvider, useHead } from '@weft/ui'
+import type { Component } from 'vue'
 import { highlightCode, useCollection } from 'virtual:weft/content'
 import '@weft/vite/code.css'
 import '../styles/fonts.css'
@@ -23,6 +28,14 @@ import CopyCommand from '../components/CopyCommand.vue'
 import SiteFooter from '../components/SiteFooter.vue'
 import SiteHeader from '../components/SiteHeader.vue'
 import VisitDay from '../components/landing/VisitDay.vue'
+import NorthlineDesk from '../components/landing/NorthlineDesk.vue'
+import NorthlinePhone from '../components/landing/NorthlinePhone.vue'
+import Still from '../components/landing/Still.vue'
+import Activity from '../components/landing/scenes/Activity.vue'
+import Restore from '../components/landing/scenes/Restore.vue'
+import Search from '../components/landing/scenes/Search.vue'
+import Settings from '../components/landing/scenes/Settings.vue'
+import Window from '../components/landing/scenes/Window.vue'
 import { slugOf, type Catalog } from '../gallery/model.ts'
 import { benchFacts, benchRows, catalogExcerpt, formatBytes, formatCount, newestResults, type BenchResults } from '../landing/model.ts'
 
@@ -53,34 +66,72 @@ if (!datePicker) throw new Error('landing: catalog/components.json has no DatePi
 const entryPath = `/components/${slugOf(datePicker.name)}.json`
 const excerptHTML = await highlightCode(catalogExcerpt(datePicker), 'json')
 const skills = useCollection('skills')
+
+// Screens you'd ship: each scene, the components its caption names (each a link to its page), and its tile's span.
+const known = new Set(components.map((c) => c.name))
+const scenes: { id: string; title: string; scene: Component; uses: string[] }[] = [
+  { id: 'settings', title: 'Settings', scene: Settings, uses: ['Form', 'FormField', 'Input', 'Select', 'RadioGroup', 'Switch', 'Button'] },
+  { id: 'search', title: 'Search anything', scene: Search, uses: ['CommandPalette', 'Kbd'] },
+  { id: 'window', title: 'Maintenance window', scene: Window, uses: ['DateRangePicker', 'Calendar'] },
+  { id: 'activity', title: 'Activity', scene: Activity, uses: ['Timeline', 'Avatar'] },
+  { id: 'restore', title: 'Restore', scene: Restore, uses: ['FileUpload', 'Progress', 'Toast'] },
+]
+for (const s of scenes) {
+  for (const name of s.uses) if (!known.has(name)) throw new Error(`landing: the ${s.title} scene names ${name}, which catalog/components.json does not have; name a component it has.`)
+}
 </script>
 
 <template>
   <div class="site landing" data-weft-surface="landing">
-    <SiteHeader path="/" :sticky="false" />
+    <div class="landing-top" data-weft-scheme="dark"><SiteHeader path="/" :sticky="false" /></div>
     <main id="main" class="landing-main">
-      <section class="landing-wrap landing-hero" aria-labelledby="landing-title">
-        <div class="landing-mark">
-          <span class="landing-word" role="img" aria-label="weft" />
-          <span class="landing-thread" aria-hidden="true" />
+      <section class="landing-hero" aria-labelledby="landing-title">
+        <div class="landing-hero__ground" data-weft-scheme="dark" />
+        <div class="landing-wrap landing-hero__grid">
+          <div class="landing-hero__copy" data-weft-scheme="dark">
+            <h1 id="landing-title">One component tree, every screen.</h1>
+            <p class="landing-lead">Vue components that know when they’re under a finger or a mouse, served with your Go API from one binary.</p>
+            <div class="landing-install">
+              <Island when="idle" :component="CopyCommand" :props="{ command: install }" />
+            </div>
+            <p class="landing-after">Already installed? <code>weft update</code> moves you to the newest release.</p>
+            <span class="landing-thread" aria-hidden="true" />
+          </div>
+          <figure class="landing-frames">
+            <Still class="hero-frame hero-frame--desk" scope="hd" input="pointer" width="wide"><NorthlineDesk /></Still>
+            <Still class="hero-frame hero-frame--phone" scope="hp" input="touch" width="narrow"><NorthlinePhone /></Still>
+            <figcaption class="landing-frames-note weft-visually-hidden">
+              One app drawn twice by Weft’s components: Northline, a made-up fibre provider’s device list. On a desktop it is a
+              table, a row’s menu open beside it; on a phone the same table is a list of cards and the same menu a bottom sheet.
+            </figcaption>
+          </figure>
         </div>
-        <h1 id="landing-title">One UI system for Go and Vue apps.</h1>
-        <p class="landing-lead">
-          Components that know whether they're under a finger or a mouse, on a landing page or in an app. Your site and
-          your API ship as one Go binary.
-        </p>
-        <div class="landing-install" data-weft-scheme="dark">
-          <Island when="idle" :component="CopyCommand" :props="{ command: install }" />
+      </section>
+
+      <section id="screens" class="landing-wrap landing-band" aria-labelledby="screens-title">
+        <div class="landing-intro">
+          <h2 id="screens-title">Screens you’d ship, made from the parts on this site.</h2>
+          <p>Every tile is drawn by the components themselves, not a picture of them. Each name opens its page, with the props, the code and how it adapts.</p>
         </div>
-        <p class="landing-after">Already installed? <code>weft update</code> moves you to the newest release.</p>
+        <div class="landing-bento">
+          <figure v-for="(s, i) in scenes" :key="s.id" class="landing-tile" :class="`landing-tile--${s.id}`">
+            <Still class="landing-tile__stage" :scope="`s${i}`"><component :is="s.scene" /></Still>
+            <figcaption>
+              <strong>{{ s.title }}</strong>
+              <Link v-for="name in s.uses" :key="name" :to="`/components/${slugOf(name)}`">{{ name }}</Link>
+            </figcaption>
+          </figure>
+        </div>
       </section>
 
       <section id="adapts" class="landing-wrap landing-band" aria-labelledby="adapts-title">
-        <h2 id="adapts-title">Write a component once. It adapts.</h2>
-        <p class="landing-intro">
-          You write <code>&lt;DatePicker&gt;</code>. On a trackpad it opens a calendar beside the field; under a thumb it
-          rises as a sheet with targets big enough to hit. No mobile variant to remember.
-        </p>
+        <div class="landing-intro">
+          <h2 id="adapts-title">Write a component once. It adapts.</h2>
+          <p>
+            You write <code>&lt;DatePicker&gt;</code>. On a trackpad it opens a calendar beside the field; under a thumb it
+            rises as a sheet with targets big enough to hit. No mobile variant to remember.
+          </p>
+        </div>
         <div class="landing-adapt">
           <figure class="landing-code landing-code--source" data-weft-scheme="dark">
             <figcaption>site-src/components/landing/VisitDay.vue</figcaption>
@@ -117,11 +168,13 @@ const skills = useCollection('skills')
       </section>
 
       <section id="speed" class="landing-wrap landing-band" aria-labelledby="speed-title">
-        <h2 id="speed-title">One binary, nothing left to do per request.</h2>
-        <p class="landing-intro">
-          Pages are rendered and compressed when you build. The Go binary keeps every byte in memory and only sends it.
-          The benchmark's landing page, requests per second:
-        </p>
+        <div class="landing-intro">
+          <h2 id="speed-title">One binary, nothing left to do per request.</h2>
+          <p>
+            Pages are rendered and compressed when you build. The Go binary keeps every byte in memory and only sends it.
+            The benchmark’s landing page, requests per second:
+          </p>
+        </div>
         <div class="landing-bench" role="table" aria-label="Requests per second">
           <div v-for="row in rows" :key="row.id" class="landing-bench__row" role="row">
             <div class="landing-bench__who" role="rowheader">{{ row.label }}<small>{{ row.server }}</small></div>
@@ -148,11 +201,13 @@ const skills = useCollection('skills')
       </section>
 
       <section id="agents" class="landing-wrap landing-band" aria-labelledby="agents-title">
-        <h2 id="agents-title">Made to be built with an agent.</h2>
-        <p class="landing-intro">
-          Agents do best with big pieces and one right way. Weft gives them both, and tells them when they're wrong
-          before you see it.
-        </p>
+        <div class="landing-intro">
+          <h2 id="agents-title">Made to be built with an agent.</h2>
+          <p>
+            Agents do best with big pieces and one right way. Weft gives them both, and tells them when they’re wrong
+            before you see it.
+          </p>
+        </div>
         <div class="landing-agents">
           <ul>
             <li>

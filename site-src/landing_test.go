@@ -14,9 +14,11 @@ import (
 )
 
 // The landing page, /, as the build made it from pages/index.vue and the
-// approved design (docs/design/site-2026-11-21/): the wordmark and its
-// thread, the adaptive demo, the benchmark bars from bench/results/, and the
-// agents section from the catalogue.
+// approved design's second pass (docs/design/site-2026-11-21-v2/): the night
+// hero with one app drawn twice by the real components (a desktop and a
+// phone), the bento of screens, a taste of the gallery, the adaptive demo,
+// the benchmark bars from bench/results/, and the agents section from the
+// catalogue.
 
 // benchResults is the parts of bench/results/<date>.json the page shows.
 type benchResults struct {
@@ -113,20 +115,28 @@ func TestLandingPage(t *testing.T) {
 	for _, m := range landingH2.FindAllStringSubmatch(page, -1) {
 		got = append(got, text(m[1]))
 	}
-	want := []string{"Write a component once. It adapts.", "One binary, nothing left to do per request.", "Made to be built with an agent."}
+	want := []string{
+		"Screens you’d ship, made from the parts on this site.",
+		"Write a component once. It adapts.",
+		"One binary, nothing left to do per request.",
+		"Made to be built with an agent.",
+	}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("the sections are %q, want %q", got, want)
 	}
 	h1 := element(page, "<h1")
-	if text(h1) != "One UI system for Go and Vue apps." {
+	if text(h1) != "One component tree, every screen." {
 		t.Errorf("the h1 is %q", text(h1))
 	}
-	// The wordmark is the owner's file, drawn as a mask, named for a screen reader; its thread is CSS.
-	if !strings.Contains(page, `<span class="landing-word" role="img" aria-label="weft">`) || !strings.Contains(page, `<span class="landing-thread" aria-hidden="true">`) {
-		t.Error("the hero has no wordmark with its thread")
+	// The header's wordmark is the owner's file, drawn as a mask; the hero's thread is CSS.
+	if !strings.Contains(page, `<span class="landing-thread" aria-hidden="true">`) {
+		t.Error("the hero has no thread")
 	}
 	if !strings.Contains(page, "url(/weft.svg)") {
-		t.Error("the hero's wordmark is not drawn from /weft.svg")
+		t.Error("the wordmark is not drawn from /weft.svg")
+	}
+	if !strings.Contains(element(page, `class="landing-top"`), `data-weft-scheme="dark"`) {
+		t.Error("the header is not drawn light on the night hero")
 	}
 	if !strings.Contains(text(element(page, `class="landing-install"`)), "curl -fsSL https://weft.base.al/install | sh") {
 		t.Error("the hero has no install command")
@@ -295,7 +305,7 @@ func TestLandingAgents(t *testing.T) {
 	}
 }
 
-// The landing page's budgets, brotli, all bytes. First view at most 12 KB:
+// The landing page's budgets, brotli, all bytes. First view at most 22 KB:
 // what a browser fetches before an idle island starts, which is the HTML
 // with its CSS inlined, any stylesheet it links, the loader (boot-*.js) and
 // every module the page or its Early Hints preload (fonts are cached and
@@ -307,21 +317,27 @@ func TestLandingAgents(t *testing.T) {
 // demand: the date picker's popover and calendar, fetched when the pointer
 // or focus first comes to it.
 //
-// In the polish pass the date picker moved its popover and calendar to a
-// chunk it loads on demand. Before, the page loaded 73,968 B before anyone
-// touched it, the demo's island 28,237 B of it; after, 60,490 B, the demo's
-// island 14,790 B, and 15,172 B on demand. Each limit below is the after
-// figure plus 10 %. All of it together (75,662 B, a little more than before,
-// as two chunks compress less well than one) stays under the 75 KB the
-// controller ruled in the final fix wave, when the real DatePicker and the
-// runtime were first counted. Islands load only what they need: the copy
-// button's chunk imports nothing of the demo's, and the demo loads when it
-// comes into view.
+// The second design pass (docs/design/site-2026-11-21-v2) ruled the first
+// view up from 12 KB to 22 KB and the landing page's total, runtime
+// included, to 82 KB: the hero draws one app twice (a desktop and a phone)
+// and the bento five screens, all with the real components, as HTML and CSS
+// from the server, so the first view grows by their markup and their
+// components' CSS, and nothing else does. The total is what a visitor loads
+// without touching anything: the first view, the runtime and the islands.
+// What the islands load on demand (the date picker's popover and calendar,
+// when the pointer or focus first comes to it) keeps the limit the polish
+// pass set, which moved them to a chunk of their own: 15,172 B then, plus
+// 10 %; and the demo's island likewise 14,790 B plus 10 %. (Counting the
+// chunks loaded on demand as well, as the 75 KB limit of the final fix wave
+// did, could not hold both rulings: the islands and those chunks alone are
+// about 63.6 KB, leaving 20.3 KB, not 22, for the first view.) Islands load
+// only what they need: the copy button's chunk imports nothing of the
+// demo's, and the demo loads when it comes into view.
 const (
-	landingUntouchedLimit = 66539 // 60,490 B plus 10 %
+	landingFirstViewLimit = 22 * 1024
+	landingTotalLimit     = 82 * 1024
 	landingDemoLimit      = 16269 // 14,790 B plus 10 %
 	landingOnDemandLimit  = 16689 // 15,172 B plus 10 %
-	landingAllLimit       = 75 * 1024
 )
 
 func TestLandingBudgets(t *testing.T) {
@@ -373,20 +389,16 @@ func TestLandingBudgets(t *testing.T) {
 		for _, key := range islandChunks(t, d, runtime, []string{"AdaptiveDemo"}) {
 			demo += brotliSize(t, d, m, key)
 		}
-		total := first + rest + onDemand
-		t.Logf("landing, brotli: first view %d B; then the runtime and islands %d B (copy button %d B, demo %d B, runtime %d B); on demand %d B; total %d B",
-			first, rest, copyChunks, demo, brotliSize(t, d, m, runtime), onDemand, total)
-		if first > 12*1024 {
-			t.Errorf("the landing page's first view is %d B brotli, over 12 KB", first)
+		t.Logf("landing, brotli: first view %d B; then the runtime and islands %d B (copy button %d B, demo %d B, runtime %d B); total %d B; then on demand %d B (%d B with it)",
+			first, rest, copyChunks, demo, brotliSize(t, d, m, runtime), first+rest, onDemand, first+rest+onDemand)
+		if first > landingFirstViewLimit {
+			t.Errorf("the landing page's first view is %d B brotli, over %d B", first, landingFirstViewLimit)
 		}
-		if first+rest > landingUntouchedLimit {
-			t.Errorf("the landing page with its runtime and islands is %d B brotli, over %d B", first+rest, landingUntouchedLimit)
+		if first+rest > landingTotalLimit {
+			t.Errorf("the landing page with its runtime and islands is %d B brotli, over %d B", first+rest, landingTotalLimit)
 		}
 		if onDemand > landingOnDemandLimit {
 			t.Errorf("the landing page's islands load %d B brotli on demand, over %d B", onDemand, landingOnDemandLimit)
-		}
-		if total > landingAllLimit {
-			t.Errorf("the landing page with its runtime, islands and what they load on demand is %d B brotli, over %d B", total, landingAllLimit)
 		}
 		if demo > landingDemoLimit {
 			t.Errorf("the adaptive demo's island starts with %d B brotli, over %d B; what it draws only when open belongs in a chunk it loads on demand", demo, landingDemoLimit)
@@ -465,3 +477,94 @@ func keys(m map[string]bool) []string {
 	}
 	return out
 }
+
+// The hero draws one app, Northline's device list, twice with the real
+// components, each frame drawn by the server and inert, with no script and
+// no prefetch: a desktop (pointer) with its sidebar, breadcrumb, actions,
+// three stat cards, a table with badges and a menu drawn open; and a phone
+// (touch) where the same table is its cards and the same menu a bottom
+// sheet over its backdrop. A screen reader is told what the picture shows.
+func TestLandingHeroFrames(t *testing.T) {
+	_, page := landing(t)
+	hero := element(page, `class="landing-hero"`)
+	if hero == "" {
+		t.Fatal("no hero")
+	}
+	for _, f := range []struct {
+		marker, input string
+		must          []string
+	}{
+		{`class="hero-frame hero-frame--desk"`, "pointer", []string{`class="weft-nav`, `class="weft-breadcrumb`, `data-layout="table"`, `class="weft-badge`, `role="menu"`, `data-form="floating"`, "Northline", "Prishtina"}},
+		{`class="hero-frame hero-frame--phone"`, "touch", []string{`data-layout="cards"`, `class="weft-badge`, `role="menu"`, `data-form="sheet"`, "weft-overlay-backdrop"}},
+	} {
+		frame := element(hero, f.marker)
+		if frame == "" {
+			t.Errorf("the hero has no %s frame", f.input)
+			continue
+		}
+		if start := frame[:strings.Index(frame, ">")]; !regexp.MustCompile(`\sinert[\s>=]|\sinert$`).MatchString(start) || !strings.Contains(start, "data-weft-no-prefetch") {
+			t.Errorf("the %s frame is not inert and kept from prefetching", f.input)
+		}
+		if !strings.Contains(frame, `data-weft-input="`+f.input+`"`) {
+			t.Errorf("the %s frame is not drawn for %s", f.input, f.input)
+		}
+		for _, m := range f.must {
+			if !strings.Contains(frame, m) {
+				t.Errorf("the %s frame has no %s", f.input, m)
+			}
+		}
+		if strings.Contains(frame, "<script") || strings.Contains(frame, "<weft-island") {
+			t.Errorf("the %s frame carries a script or an island", f.input)
+		}
+	}
+	if n := strings.Count(element(hero, `class="hero-frame hero-frame--desk"`), `class="weft-stat-card"`); n != 3 {
+		t.Errorf("the desktop frame has %d stat cards, want 3", n)
+	}
+	if text(element(hero, `class="landing-frames-note`)) == "" {
+		t.Error("the frames say nothing to a screen reader")
+	}
+}
+
+// "Screens you'd ship": five scenes on tiles, each drawn by the server from
+// the real components, inert, with a caption that names the scene and links
+// each component it uses to its page.
+func TestLandingScreens(t *testing.T) {
+	_, page := landing(t)
+	screens := element(page, `id="screens"`)
+	if screens == "" {
+		t.Fatal("no screens section")
+	}
+	for _, s := range []struct {
+		scene      string
+		components []string
+		must       string
+	}{
+		{"Settings", []string{"Form", "FormField", "Input", "Select", "RadioGroup", "Switch", "Button"}, `class="weft-switch`},
+		{"Search anything", []string{"CommandPalette", "Kbd"}, "<mark>"},
+		{"Maintenance window", []string{"DateRangePicker", "Calendar"}, `class="weft-calendar`},
+		{"Activity", []string{"Timeline", "Avatar"}, `class="weft-avatar`},
+		{"Restore", []string{"FileUpload", "Progress", "Toast"}, `class="weft-toast`},
+	} {
+		at := strings.Index(screens, `<strong>`+s.scene+`</strong>`)
+		if at == -1 {
+			t.Errorf("no tile is captioned %q", s.scene)
+			continue
+		}
+		tile := screens[strings.LastIndex(screens[:at], `<figure class="landing-tile`):]
+		tile = element(tile, `<figure`)
+		picture := element(tile, `class="landing-tile__stage"`)
+		if start := picture[:strings.Index(picture, ">")]; !regexp.MustCompile(`\sinert[\s>=]|\sinert$`).MatchString(start) || !strings.Contains(start, "data-weft-no-prefetch") {
+			t.Errorf("%s: the picture is not inert and kept from prefetching", s.scene)
+		}
+		if !strings.Contains(picture, s.must) {
+			t.Errorf("%s: the picture has no %s", s.scene, s.must)
+		}
+		caption := element(tile, `<figcaption`)
+		for _, name := range s.components {
+			if !strings.Contains(caption, `href="/components/`+slugOf(name)+`"`) {
+				t.Errorf("%s: the caption does not link %s to /components/%s", s.scene, name, slugOf(name))
+			}
+		}
+	}
+}
+

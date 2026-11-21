@@ -24,7 +24,7 @@
 /* The wordmark: public/weft.svg as a mask, twice. Its letters end above 86 %
    of its height and its thread starts below, so the top part is drawn in the
    text colour and the bottom part, the thread, in saffron. */
-.site-mark {
+.site .site-mark {
   position: relative;
   display: block;
   flex: none;
