@@ -62,7 +62,7 @@ It says `weft X is up to date.` when there is nothing to do, and `Updated weft X
 The page build. It comes with `@weft/vite`; run it from a site's `package.json` script.
 
 ```text
-weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa|weft] [--preload-font <file.woff2>]...
+weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa|weft] [--preload-font <file.woff2>]... [--separate-runtime <section path>]...
 ```
 
 | Flag | What it does |
@@ -73,5 +73,6 @@ weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app b
 | `--app-prefix` | A path prefix, such as `/app`, for a client-rendered app built beside the pages. |
 | `--app-dir` | Where that app's Vite build is. Default `<root>/app-dist`. |
 | `--preload-font` | A font file, such as `lucide.woff2`, to preload on the pages whose CSS names it, besides the Latin faces of the families they use. Give it once per font. |
+| `--separate-runtime` | A section of the site, such as `/components`, whose pages' islands get a runtime of their own, so heavy islands there do not grow the one every other page loads. Give it once per section. |
 
 It prints `weft: built N pages into <dist>`. It needs Node 22.18 or later, which runs TypeScript without a build step. Any error is one sentence, and the folder at `--out` is left as it was.

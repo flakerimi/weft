@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
-import { extname, join, posix, sep } from 'node:path'
+import { extname, join, posix, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import GithubSlugger from 'github-slugger'
 import markdownIt, { type MarkdownIt, type Token } from 'markdown-it'
@@ -15,6 +15,24 @@ export type FieldType = 'string' | 'number' | 'boolean' | 'string[]'
 export interface CollectionConfig {
   /** Where the collection's pages are served, from the site root, e.g. `/docs`. Default `/<name>`. */
   base?: string
+  /**
+   * The collection's folder, from the site root, with `/` between names.
+   * Default `content/<name>`. A folder outside `content/`, such as
+   * `../skills`, keeps files where other tools read them.
+   */
+  dir?: string
+  /**
+   * The name of the file that is its folder's page, as `index.md` is by
+   * default: with `SKILL.md`, `<dir>/weft-site/SKILL.md` is the page
+   * `weft-site`. It need not be a URL segment itself.
+   */
+  index?: string
+  /**
+   * The frontmatter field that is a page's title, `title` by default; it is
+   * a required string, as `title` is. With another field, such as `name`,
+   * a page may not have `title`, and `frontmatter.title` is that field's value.
+   */
+  titleField?: string
   /**
    * Frontmatter fields beyond the ones every collection has (`title` and
    * `description`, both strings, and `order`, an optional number): each
@@ -71,6 +89,8 @@ export interface ContentPage {
   path: string
   /** Its Markdown file, from the site root, e.g. `content/docs/guides/islands.md`. */
   file: string
+  /** The file's text as it is on disk: byte order mark, frontmatter and line endings included. */
+  source: string
   frontmatter: Frontmatter
   /** The rendered page: heading ids set, code highlighted, `.md` links turned into routes. */
   html: string
@@ -104,7 +124,9 @@ export interface ContentAsset {
 
 const BASE_FIELDS: Record<string, string> = { title: 'string', description: 'string', order: 'number?' }
 const FIELD_TYPES = ['string', 'number', 'boolean', 'string[]']
-const COLLECTION_KEYS = ['base', 'schema']
+const COLLECTION_KEYS = ['base', 'dir', 'index', 'titleField', 'schema']
+/** A frontmatter field's name, as titleField gives it. */
+const FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_-]*$/
 /** A folder or file name that is a URL segment as it is. */
 const SEGMENT = /^[a-z0-9][a-z0-9_-]*$/
 /** A link with a scheme (`https:`, `mailto:`) or to another host (`//host`). */
@@ -118,6 +140,12 @@ const IMAGES = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.svg']
 interface Collection {
   name: string
   base: string
+  /** Its folder, from the site root, as files are named in messages: `content/docs`, `../skills`. */
+  dir: string
+  /** The file that is a folder's page: `index.md`, `SKILL.md`. */
+  index: string
+  /** The field that is a page's title. */
+  titleField: string
   schema: Map<string, { type: string; optional: boolean }>
   pages: Page[]
 }
@@ -128,6 +156,7 @@ interface Page {
   slug: string
   path: string
   file: string
+  source: string
   frontmatter: Frontmatter
   tokens: Token[]
   ids: Set<string>
@@ -161,12 +190,13 @@ export async function loadContent(root: string, config: unknown): Promise<Conten
       'content/ has collections but the site has no content.config.ts; add one whose default export declares them, like { docs: {} }.',
     )
   }
+  const dirs = new Set([...collections.values()].map((c) => c.dir))
   for (const e of visible) {
     if (e.isSymbolicLink()) fileRefused(`content/${e.name}`)
     if (!e.isDirectory()) {
       throw new Error(`content/${e.name} is not in a collection; put it in a collection's folder, like content/docs/.`)
     }
-    if (!collections.has(e.name)) {
+    if (!dirs.has(`content/${e.name}`)) {
       throw new Error(`content/${e.name} is not a collection content.config.ts declares; declare it there, or move it out of content/.`)
     }
   }
@@ -176,12 +206,12 @@ export async function loadContent(root: string, config: unknown): Promise<Conten
   const images = new Map<string, ContentAsset>()
   const langs = new Set<string>()
   for (const collection of collections.values()) {
-    const folder = join(dir, collection.name)
+    const folder = join(root, collection.dir)
     if (!existsSync(folder)) {
-      throw new Error(`content.config.ts declares the collection ${collection.name}, but content/${collection.name} does not exist.`)
+      throw new Error(`content.config.ts declares the collection ${collection.name}, but ${collection.dir} does not exist.`)
     }
     const bySlug = new Map<string, string>()
-    const files = await collectionFiles(folder, `content/${collection.name}`)
+    const files = await collectionFiles(folder, collection.dir, collection.index)
     for (const image of files.images) {
       const file = join(root, image)
       const ext = extname(image)
@@ -203,7 +233,7 @@ export async function loadContent(root: string, config: unknown): Promise<Conten
   }
 
   const shown = new Map<string, ContentAsset>()
-  for (const page of byFile.values()) checkLinks(page, byFile, collections, images, shown)
+  for (const page of byFile.values()) checkLinks(root, page, byFile, collections, images, shown)
 
   const shiki = langs.size ? await highlighter([...langs]) : null
   md.renderer.rules.fence = (tokens, i) => highlight(shiki, tokens[i]!.content, fenceLang(tokens[i]!.info)) + '\n'
@@ -219,6 +249,7 @@ export async function loadContent(root: string, config: unknown): Promise<Conten
         slug: page.slug,
         path: page.path,
         file: page.file,
+        source: page.source,
         frontmatter: page.frontmatter,
         html: parts.map((p) => p.html).join(''),
         toc: page.toc,
@@ -239,10 +270,12 @@ export async function loadContent(root: string, config: unknown): Promise<Conten
   }
   return {
     page(name, slug) {
-      of(name)
+      const collection = of(name)
       const page = pages.get(name)!.get(slug)
       if (!page) {
-        throw new Error(`useContent: the ${name} collection has no page ${slug || '(the top)'} (content/${name}/${slug || 'index'}.md).`)
+        const { dir, index } = collection
+        const file = index === 'index.md' ? `${dir}/${slug || 'index'}.md` : `${dir}/${slug ? `${slug}/` : ''}${index}`
+        throw new Error(`useContent: the ${name} collection has no page ${slug || '(the top)'} (${file}).`)
       }
       return page
     },
@@ -276,7 +309,7 @@ function readConfig(config: unknown): Map<string, Collection> {
     const why = `content.config.ts: the ${name} collection`
     if (!plain(value)) throw new Error(`${why} is not an object like { schema: { … } }.`)
     const unknown = Object.keys(value).find((k) => !COLLECTION_KEYS.includes(k))
-    if (unknown) throw new Error(`${why} has ${unknown}, which a collection does not take; it takes base and schema.`)
+    if (unknown) throw new Error(`${why} has ${unknown}, which a collection does not take; it takes base, dir, index, titleField and schema.`)
     const base = value.base ?? `/${name}`
     if (typeof base !== 'string' || !/^(?:\/|(?:\/[^/\s?#]+)+)$/.test(base)) {
       throw new Error(`${why}'s base is ${JSON.stringify(base)}; give a path from the site root with no trailing /, like /docs.`)
@@ -284,12 +317,30 @@ function readConfig(config: unknown): Map<string, Collection> {
     const other = bases.get(base)
     if (other) throw new Error(`content.config.ts: the ${other} and ${name} collections both have the base ${base}; give each its own.`)
     bases.set(base, name)
+    const dir = readDir(value.dir, name, why)
+    for (const c of out.values()) {
+      if (dir === c.dir || dir.startsWith(c.dir + '/') || c.dir.startsWith(dir + '/')) {
+        throw new Error(`content.config.ts: the ${c.name} and ${name} collections' folders, ${c.dir} and ${dir}, overlap; give each a folder of its own.`)
+      }
+    }
+    const index = value.index ?? 'index.md'
+    if (typeof index !== 'string' || !/^[^/\\.\0_][^/\\\0]*\.md$/.test(index)) {
+      throw new Error(`${why}'s index is ${JSON.stringify(index)}; give the name of a .md file, like SKILL.md.`)
+    }
+    const titleField = value.titleField ?? 'title'
+    if (typeof titleField !== 'string' || !FIELD_NAME.test(titleField) || titleField === 'description' || titleField === 'order') {
+      throw new Error(
+        `${why}'s titleField is ${JSON.stringify(titleField)}; give the name of a frontmatter field other than description and order, like name.`,
+      )
+    }
     const schema = new Map<string, { type: string; optional: boolean }>()
-    const fields = { ...BASE_FIELDS }
+    const { title: _, ...rest } = BASE_FIELDS
+    const fields: Record<string, string> = { [titleField]: BASE_FIELDS.title!, ...rest }
     if (value.schema !== undefined) {
       if (!plain(value.schema)) throw new Error(`${why}'s schema is not an object of fields, like { section: 'string' }.`)
       for (const [field, type] of Object.entries(value.schema)) {
-        if (field in BASE_FIELDS) throw new Error(`${why}'s schema names ${field}, which every collection has; leave it out.`)
+        if (field === 'title' && titleField !== 'title') throw new Error(`${why}'s schema names title, which is the page's title; leave it out.`)
+        if (field in fields) throw new Error(`${why}'s schema names ${field}, which every collection has; leave it out.`)
         if (typeof type !== 'string' || !FIELD_TYPES.includes(type.replace(/\?$/, ''))) {
           throw new Error(
             `${why}'s schema gives ${field} the type ${JSON.stringify(type)}; use string, number, boolean or string[], with ? when optional.`,
@@ -301,17 +352,39 @@ function readConfig(config: unknown): Map<string, Collection> {
     for (const [field, type] of Object.entries(fields)) {
       schema.set(field, { type: type.replace(/\?$/, ''), optional: type.endsWith('?') })
     }
-    out.set(name, { name, base, schema, pages: [] })
+    out.set(name, { name, base, dir, index, titleField, schema, pages: [] })
   }
   return out
+}
+
+/** A collection's folder as its config gives it, made plain (`./x/../y` is `y`), or refused in a sentence. */
+function readDir(value: unknown, name: string, why: string): string {
+  if (value === undefined) return `content/${name}`
+  if (typeof value !== 'string' || value === '' || value.startsWith('/') || /^[a-z]:/i.test(value) || /[\\\0]/.test(value)) {
+    throw new Error(`${why}'s dir is ${JSON.stringify(value)}; give a folder from the site root, like ../skills, with / between names.`)
+  }
+  const dir = posix.normalize(value).replace(/\/$/, '')
+  if (dir.split('/').every((s) => s === '..' || s === '.')) {
+    throw new Error(`${why}'s dir ${JSON.stringify(value)} holds the site itself; give a folder beside it or under it.`)
+  }
+  if (dir === 'content' || dir.startsWith('content/')) {
+    if (dir === `content/${name}`) return dir
+    throw new Error(
+      `${why}'s dir is under content/, where each folder is the collection of its name; leave dir out, or give a folder outside content/.`,
+    )
+  }
+  return dir
 }
 
 const fileRefused = (shown: string): never => {
   throw new Error(`${shown} is a symlink, which Weft does not follow; put the file itself there.`)
 }
 
-/** The Markdown files and images under `folder`, as paths from the site root (`shown` is the folder's). */
-async function collectionFiles(folder: string, shown: string, out = { pages: [] as string[], images: [] as string[] }) {
+/**
+ * The Markdown files and images under `folder`, as paths from the site root
+ * (`shown` is the folder's). `index`, a folder's page, need not be a URL segment.
+ */
+async function collectionFiles(folder: string, shown: string, index: string, out = { pages: [] as string[], images: [] as string[] }) {
   const entries = await readdir(folder, { withFileTypes: true })
   for (const e of entries.sort((a, b) => compare(a.name, b.name))) {
     if (e.name.startsWith('.') || e.name.startsWith('_')) continue
@@ -319,9 +392,9 @@ async function collectionFiles(folder: string, shown: string, out = { pages: [] 
     if (e.isSymbolicLink()) fileRefused(path)
     if (e.isDirectory()) {
       if (!SEGMENT.test(e.name)) segmentRefused(path)
-      await collectionFiles(join(folder, e.name), path, out)
+      await collectionFiles(join(folder, e.name), path, index, out)
     } else if (e.name.endsWith('.md') || IMAGES.includes(extname(e.name))) {
-      if (!SEGMENT.test(e.name.slice(0, -extname(e.name).length))) segmentRefused(path)
+      if (e.name !== index && !SEGMENT.test(e.name.slice(0, -extname(e.name).length))) segmentRefused(path)
       ;(e.name.endsWith('.md') ? out.pages : out.images).push(path)
     } else {
       throw new Error(`${path} is neither a .md file nor an image; put other files in public/.`)
@@ -336,11 +409,13 @@ const segmentRefused = (path: string): never => {
 
 /** Read one page: its frontmatter checked, its Markdown parsed, its headings given ids and its code blocks checked. */
 async function readPage(root: string, file: string, collection: Collection, md: MarkdownIt, langs: Set<string>): Promise<Page> {
+  const source = await readFile(join(root, file), 'utf8')
   // A byte order mark, as some editors write, is not part of the frontmatter.
-  const text = (await readFile(join(root, file), 'utf8')).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n')
+  const text = source.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n')
   const { frontmatter, body } = readFrontmatter(text, file, collection)
-  const segments = file.slice(`content/${collection.name}/`.length, -'.md'.length).split('/')
-  if (segments.at(-1) === 'index') segments.pop()
+  const segments = file.slice(`${collection.dir}/`.length).split('/')
+  const last = segments.pop()!
+  if (last !== collection.index) segments.push(last.slice(0, -'.md'.length))
   const slug = segments.join('/')
   const { base } = collection
   const path = base === '/' ? `/${slug}` : slug ? `${base}/${slug}` : base
@@ -378,7 +453,7 @@ async function readPage(root: string, file: string, collection: Collection, md: 
       langs.add('text')
     }
   })
-  return { collection, slug, path, file, frontmatter, tokens, ids, toc }
+  return { collection, slug, path, file, source, frontmatter, tokens, ids, toc }
 }
 
 /** Shiki's language ids and aliases, each to its id. */
@@ -420,6 +495,9 @@ function readFrontmatter(text: string, file: string, collection: Collection): { 
       const key = isScalar(pair.key) ? String(pair.key.value) : String(pair.key)
       const keyLine = lineOf(isScalar(pair.key) ? (pair.key.range?.[0] ?? 0) : 0)
       const field = collection.schema.get(key)
+      if (key === 'title' && collection.titleField !== 'title') {
+        fail(file, keyLine, `the ${name} collection takes a page's title from ${collection.titleField}, so a page has no title field; remove it.`)
+      }
       if (!field) fail(file, keyLine, `${key} is not in the ${name} collection's schema; fix the name, or add it to the schema in content.config.ts.`)
       const value: unknown = (pair.value as { toJSON?: () => unknown } | null)?.toJSON?.() ?? null
       const valueLine = pair.value && typeof pair.value === 'object' && 'range' in pair.value ? lineOf((pair.value.range as number[])[0]!) : keyLine
@@ -432,6 +510,7 @@ function readFrontmatter(text: string, file: string, collection: Collection): { 
   for (const [field, { optional }] of collection.schema) {
     if (!optional && !(field in out)) fail(file, 1, `the frontmatter has no ${field}, which every page of the ${name} collection needs.`)
   }
+  if (collection.titleField !== 'title') out.title = out[collection.titleField]
   return { frontmatter: out as Frontmatter, body }
 }
 
@@ -463,6 +542,7 @@ function* withLines(tokens: Token[]): Generator<[Token, number]> {
  * from the site root); each image shown is added to `shown`.
  */
 function checkLinks(
+  root: string,
   page: Page,
   byFile: Map<string, Page>,
   collections: Map<string, Collection>,
@@ -470,6 +550,12 @@ function checkLinks(
   shown: Map<string, ContentAsset>,
 ) {
   const { file } = page
+  /** A path written relative to the page, from the site root (`content/docs/x.md`, `../skills/a/SKILL.md`). */
+  const fromRoot = (path: string) => relative(root, resolve(root, posix.dirname(file), path)).split(sep).join('/')
+  const dirs = [...collections.values()].map((c) => c.dir)
+  const inCollection = (to: string) => dirs.some((d) => to.startsWith(d + '/'))
+  /** The collections' folders, as a message names them: content/ for every one in it. */
+  const folders = [...new Set(dirs.map((d) => (d.startsWith('content/') ? 'content/' : d + '/')))].join(' and ')
   const decode = (s: string) => {
     try {
       return decodeURIComponent(s)
@@ -491,9 +577,9 @@ function checkLinks(
       if (!IMAGES.includes(posix.extname(path))) {
         fail(file, line, `the image ${written} is not a ${IMAGES.slice(0, -1).join(', ')} or ${IMAGES.at(-1)} file.`)
       }
-      const to = posix.normalize(posix.join(posix.dirname(file), path))
-      if (!to.startsWith('content/')) {
-        fail(file, line, `the image ${written} leads outside content/; put it beside the page, or in public/ with a path from the site root.`)
+      const to = fromRoot(path)
+      if (!inCollection(to)) {
+        fail(file, line, `the image ${written} leads outside ${folders}; put it beside the page, or in public/ with a path from the site root.`)
       }
       const image = images.get(to)
       if (!image) fail(file, line, `the image ${written} leads to no file; ${to} does not exist.`)
@@ -527,8 +613,8 @@ function checkLinks(
       if (!path.endsWith('.md')) {
         fail(file, line, `the link to ${href} is relative but not to a .md file; link to the page's .md file, or give a path from the site root.`)
       }
-      const to = posix.normalize(posix.join(posix.dirname(file), path))
-      if (!to.startsWith('content/')) fail(file, line, `the link to ${href} leads outside content/; link to the .md file of a page in a collection.`)
+      const to = fromRoot(path)
+      if (!inCollection(to)) fail(file, line, `the link to ${href} leads outside ${folders}; link to the .md file of a page in a collection.`)
       const target = byFile.get(to)
       if (!target) fail(file, line, `the link to ${href} leads to no page; ${to} does not exist.`)
       checkHash(line, href, target!, hash)

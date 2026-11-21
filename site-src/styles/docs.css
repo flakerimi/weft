@@ -10,6 +10,9 @@
   column-gap: 48px;
 }
 
+/* A command under a skill's title wraps on a narrow screen rather than widening the page. */
+.weft-page__heading code { font-size: 0.875em; overflow-wrap: anywhere; }
+
 /* On this page. */
 .docs-toc { grid-area: toc; position: sticky; top: 88px; font-size: 0.9375rem; }
 .docs-toc p { font-weight: 600; margin-block-end: 8px; }
@@ -23,6 +26,8 @@
 .docs-prose h2 { font-size: 1.625rem; margin-block-start: 2em; padding-block-start: 0.6em; border-block-start: 2px solid var(--site-saffron); }
 .docs-prose h3 { font-size: 1.25rem; margin-block-start: 1.6em; }
 .docs-prose :is(h2, h3) { scroll-margin-block-start: 88px; }
+/* A Section's heading spans the text, so its rule does (the For agents page). */
+.docs-prose .weft-section__heading { flex: 1; }
 .docs-prose li + li { margin-block-start: 0.35em; }
 .docs-prose :not(pre) > code:not(.copy-command__text) { font-size: 0.875em; padding: 0.1em 0.35em; border-radius: 4px; background: color-mix(in srgb, currentColor 7%, transparent); }
 .docs-prose pre { font-size: 0.875rem; line-height: 1.6; }

@@ -10,6 +10,7 @@
   "include": [
     "pages",
     "components",
+    "agents",
     "gallery",
     "test",
     "content.config.ts",

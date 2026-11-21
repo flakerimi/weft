@@ -37,3 +37,5 @@ The [CLI](reference/cli.md) and [Go package](reference/go.md) references list ev
 ## This site
 
 This site is built with Weft. Its pages, these docs included, are rendered when it is built and served by a Go binary that uses `weft.Serve`. A docs page loads no JavaScript, except a copy button beside a command to copy. Its source is `site-src/` in the repository.
+
+For agents, the site has [`/llms.txt`](/llms.txt), an index of every doc, component and skill, and Claude Code skills such as [weft-site](/skills/weft-site), which teach an agent to build with Weft. The header's For agents link shows how to install them.

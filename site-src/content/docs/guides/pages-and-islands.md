@@ -67,6 +67,18 @@ A page with no island has no script that loads JavaScript.
 
 Files in `public/` are copied to the root of the build as they are: `public/robots.txt` is `/robots.txt`.
 
+### Files a page writes
+
+A page can also write a file of its own into the build, such as data it shows, for agents or other programs to read. Call `useFile(path, text)` from `virtual:weft/files` in the page's setup:
+
+```ts
+import { useFile } from 'virtual:weft/files'
+
+useFile('/catalog.json', catalogText)
+```
+
+The file is compressed and listed in the manifest like any other, and revalidated rather than cached for good. Its path starts with `/` and may not be under `/pages/` or `/assets/`. Two pages may write the same file only with the same bytes. Like `virtual:weft/content`, it exists only on the server. This site writes its component catalogue, `/llms.txt` and its skills' raw files this way.
+
 ## Islands
 
 An island is a component that runs in the browser. The rest of the page is HTML. Write the component, `hello/components/Counter.vue`:

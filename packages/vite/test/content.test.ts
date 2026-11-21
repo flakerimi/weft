@@ -443,7 +443,104 @@ describe('collections', () => {
       'content.config.ts: the docs collection\'s base is "docs/"; give a path from the site root with no trailing /, like /docs.',
     )
     expect(await failure({ 'content/docs/intro.md': page('A') }, { docs: { sheme: {} } })).toBe(
-      'content.config.ts: the docs collection has sheme, which a collection does not take; it takes base and schema.',
+      'content.config.ts: the docs collection has sheme, which a collection does not take; it takes base, dir, index, titleField and schema.',
+    )
+  })
+})
+
+describe('a collection in a folder of its own', () => {
+  // Agent skills, as Claude Code reads them: skills/<name>/SKILL.md, named by `name`.
+  const skills: ContentConfig = { docs: {}, skills: { dir: '../skills', index: 'SKILL.md', titleField: 'name' } }
+  const skill = (name: string, body = '') => `---\nname: ${name}\ndescription: Use when ${name} is the job.\n---\n${body}`
+  /** The site's folder, beside a skills folder, in one temp folder. */
+  const withSkills = (files: Record<string, string>) => join(siteWith(files), 'site')
+
+  it('reads pages from the folder dir names, each folder\'s page the file index names', async () => {
+    const root = withSkills({
+      'site/content/docs/index.md': page('Docs', 'Read [the site skill](/skills/weft-site).\n'),
+      'skills/weft-site/SKILL.md': skill('weft-site', '# Build a site\n\nSee [Go](../weft-go/SKILL.md#serve).\n'),
+      'skills/weft-go/SKILL.md': skill('weft-go', '## Serve\n'),
+    })
+    const content = await loadContent(root, skills)
+    expect(content.list('skills').map((p) => [p.slug, p.path, p.title])).toEqual([
+      ['weft-go', '/skills/weft-go', 'weft-go'],
+      ['weft-site', '/skills/weft-site', 'weft-site'],
+    ])
+    const site = content.page('skills', 'weft-site')
+    expect(site.file).toBe('../skills/weft-site/SKILL.md')
+    // The title is the field titleField names; the frontmatter keeps the file's fields, and title as the page's title.
+    expect(site.frontmatter).toEqual({ name: 'weft-site', description: 'Use when weft-site is the job.', title: 'weft-site' })
+    expect(site.html).toContain('<a href="/skills/weft-go#serve">Go</a>')
+    expect(content.page('docs', '').html).toContain('<a href="/skills/weft-site">the site skill</a>')
+  })
+
+  it('gives each page its file\'s text as it is on disk', async () => {
+    const text = '\uFEFF' + skill('weft-go', 'Line one,\r\nline two.\r\n')
+    const content = await loadContent(withSkills({ 'site/content/docs/index.md': page('Docs'), 'skills/weft-go/SKILL.md': text }), skills)
+    expect(content.page('skills', 'weft-go').source).toBe(text)
+    expect(content.page('docs', '').source).toBe(page('Docs'))
+  })
+
+  it('checks the title field as title is checked, and refuses title beside it', async () => {
+    const files = { 'site/content/docs/index.md': page('Docs') }
+    const fail = async (more: Record<string, string>) => {
+      try {
+        await loadContent(withSkills({ ...files, ...more }), skills)
+      } catch (e) {
+        return (e as Error).message
+      }
+      throw new Error('loadContent did not fail')
+    }
+    expect(await fail({ 'skills/weft-go/SKILL.md': '---\ndescription: Hi.\n---\n' })).toBe(
+      '../skills/weft-go/SKILL.md:1: the frontmatter has no name, which every page of the skills collection needs.',
+    )
+    expect(await fail({ 'skills/weft-go/SKILL.md': skill('weft-go').replace('description', 'title: Go\ndescription') })).toBe(
+      '../skills/weft-go/SKILL.md:3: the skills collection takes a page\'s title from name, so a page has no title field; remove it.',
+    )
+    // Only the file index names is exempt from the rule for names; another is still a URL segment.
+    expect(await fail({ 'skills/weft-go/SKILL.md': skill('weft-go'), 'skills/weft-go/Notes.md': skill('notes') })).toBe(
+      '../skills/weft-go/Notes.md has a name that is not a plain URL segment; use lowercase letters, digits, - and _.',
+    )
+    expect(await fail({ 'skills/weft-go/SKILL.md': skill('weft-go', '[x](../../site/content/docs/index.md) and [y](../../README.md)\n') })).toBe(
+      '../skills/weft-go/SKILL.md:5: the link to ../../README.md leads outside content/ and ../skills/; link to the .md file of a page in a collection.',
+    )
+  })
+
+  it('says where a missing page or folder would be', async () => {
+    const content = await loadContent(withSkills({ 'site/content/docs/index.md': page('Docs'), 'skills/weft-go/SKILL.md': skill('weft-go') }), skills)
+    expect(() => content.page('skills', 'gone')).toThrow(new Error('useContent: the skills collection has no page gone (../skills/gone/SKILL.md).'))
+    expect(await failure({ 'content/docs/index.md': page('Docs') }, skills)).toBe(
+      'content.config.ts declares the collection skills, but ../skills does not exist.',
+    )
+  })
+
+  it('refuses a dir, index or titleField it cannot use, in one sentence', async () => {
+    const one = { 'content/docs/intro.md': page('A') }
+    const why = (skills: unknown) => failure(one, { docs: {}, skills })
+    expect(await why({ dir: '/abs/skills' })).toBe(
+      'content.config.ts: the skills collection\'s dir is "/abs/skills"; give a folder from the site root, like ../skills, with / between names.',
+    )
+    expect(await why({ dir: '..' })).toBe('content.config.ts: the skills collection\'s dir ".." holds the site itself; give a folder beside it or under it.')
+    expect(await why({ dir: 'content/other' })).toBe(
+      'content.config.ts: the skills collection\'s dir is under content/, where each folder is the collection of its name; leave dir out, or give a folder outside content/.',
+    )
+    expect(await why({ dir: 'content/docs/skills' })).toBe(
+      'content.config.ts: the skills collection\'s dir is under content/, where each folder is the collection of its name; leave dir out, or give a folder outside content/.',
+    )
+    expect(await failure(one, { docs: { dir: '../notes' }, skills: { dir: '../notes/skills' } })).toBe(
+      'content.config.ts: the docs and skills collections\' folders, ../notes and ../notes/skills, overlap; give each a folder of its own.',
+    )
+    expect(await why({ index: 'skills/SKILL.md' })).toBe(
+      'content.config.ts: the skills collection\'s index is "skills/SKILL.md"; give the name of a .md file, like SKILL.md.',
+    )
+    expect(await why({ titleField: 'order' })).toBe(
+      'content.config.ts: the skills collection\'s titleField is "order"; give the name of a frontmatter field other than description and order, like name.',
+    )
+    expect(await why({ titleField: 'name', schema: { title: 'string' } })).toBe(
+      'content.config.ts: the skills collection\'s schema names title, which is the page\'s title; leave it out.',
+    )
+    expect(await why({ titleField: 'name', schema: { name: 'string' } })).toBe(
+      'content.config.ts: the skills collection\'s schema names name, which every collection has; leave it out.',
     )
   })
 })

@@ -24,6 +24,21 @@ export default {
 
 Every folder of `content/` must be declared, and every declared collection must have a folder.
 
+### A collection kept elsewhere
+
+Some files have to stay where other tools read them. This site's skills, for example, are `skills/<name>/SKILL.md` at the repository's root, the layout Claude Code expects. Three options read them as they are:
+
+```ts
+export default {
+  docs: {},
+  skills: { dir: '../skills', index: 'SKILL.md', titleField: 'name' },
+} satisfies ContentConfig
+```
+
+- **`dir`** is the collection's folder, from the site root. The default is `content/<name>`; any other folder must be outside `content/`.
+- **`index`** is the file that is its folder's page. The default is `index.md`; with `SKILL.md`, `skills/weft-go/SKILL.md` is the page `weft-go`.
+- **`titleField`** is the frontmatter field that is a page's title. The default is `title`; with `name`, a page needs `name` instead and may not have `title`, and `frontmatter.title` gives the name.
+
 ## Write pages
 
 A page is a `.md` file with frontmatter:
@@ -68,9 +83,10 @@ useHead({ title: page.frontmatter.title, description: page.frontmatter.descripti
 </template>
 ```
 
-- **`useContent(collection, slug)`** returns the page: `html`, `toc` (the h2 and h3 headings), `frontmatter`, `prev` and `next`, and `parts`.
+- **`useContent(collection, slug)`** returns the page: `html`, `toc` (the h2 and h3 headings), `frontmatter`, `prev` and `next`, `parts`, and `source`, the file's text as it is on disk.
 - **`useCollection(collection)`** returns every page, ordered by `order` and then by slug, for a sidebar.
 - **`contentPaths(collection)`** returns the slugs for `getPaths()`.
+- **`highlightCode(code, lang)`** highlights source the page reads itself, such as an example file, as code blocks are highlighted.
 
 For TypeScript to know the module, add its types to the site's `tsconfig.json`:
 
