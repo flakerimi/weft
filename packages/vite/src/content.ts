@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
-import { join, posix, sep } from 'node:path'
+import { extname, join, posix, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import GithubSlugger from 'github-slugger'
 import markdownIt, { type MarkdownIt, type Token } from 'markdown-it'
@@ -90,6 +91,15 @@ export interface Content {
   list(collection: string): ContentLink[]
   /** The collection's slugs as a dynamic page's `getPaths()` returns them, each under `param` (default `slug`). */
   paths(collection: string, param?: string): Record<string, string>[]
+  /** The images the pages show, each once: the URL the pages give it, and the file to serve there. */
+  assets(): ContentAsset[]
+}
+
+/** An image of the content, served under a content-addressed name, `/assets/content/<name>-<hash><ext>`. */
+export interface ContentAsset {
+  path: string
+  /** Its absolute path. */
+  file: string
 }
 
 const BASE_FIELDS: Record<string, string> = { title: 'string', description: 'string', order: 'number?' }
@@ -101,6 +111,8 @@ const SEGMENT = /^[a-z0-9][a-z0-9_-]*$/
 const EXTERNAL = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i
 /** Shiki's languages with no grammar, which it draws as plain text. */
 const PLAIN = new Set(['text', 'txt', 'plain', 'plaintext'])
+/** The images a page may show from beside it; the build serves each under a content-addressed name. */
+const IMAGES = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.svg']
 
 /** A collection as loaded: its config made whole, and its pages. */
 interface Collection {
@@ -135,7 +147,9 @@ const fail = (file: string, line: number, why: string): never => {
  * `@weft/vite/code.css` sets from the theme), and every link inside the
  * content is checked: relative `.md` links become the routes of their pages,
  * and a link to a page or heading that is not there fails, naming the file
- * and line. External links are left as they are and never fetched.
+ * and line. A relative image is one beside the page, which the build copies
+ * to a content-addressed URL (see `assets()`); a missing one fails the same
+ * way. External links are left as they are and never fetched.
  */
 export async function loadContent(root: string, config: unknown): Promise<Content> {
   const collections = readConfig(config)
@@ -159,6 +173,7 @@ export async function loadContent(root: string, config: unknown): Promise<Conten
 
   const md = markdownIt({ html: false, linkify: false, typographer: false })
   const byFile = new Map<string, Page>()
+  const images = new Map<string, ContentAsset>()
   const langs = new Set<string>()
   for (const collection of collections.values()) {
     const folder = join(dir, collection.name)
@@ -166,7 +181,14 @@ export async function loadContent(root: string, config: unknown): Promise<Conten
       throw new Error(`content.config.ts declares the collection ${collection.name}, but content/${collection.name} does not exist.`)
     }
     const bySlug = new Map<string, string>()
-    for (const file of await markdownFiles(folder, `content/${collection.name}`)) {
+    const files = await collectionFiles(folder, `content/${collection.name}`)
+    for (const image of files.images) {
+      const file = join(root, image)
+      const ext = extname(image)
+      const hash = createHash('sha256').update(await readFile(file)).digest('hex').slice(0, 8)
+      images.set(image, { path: `/assets/content/${posix.basename(image, ext)}-${hash}${ext}`, file })
+    }
+    for (const file of files.pages) {
       const page = await readPage(root, file, collection, md, langs)
       const other = bySlug.get(page.slug)
       if (other !== undefined) {
@@ -180,7 +202,8 @@ export async function loadContent(root: string, config: unknown): Promise<Conten
     collection.pages.sort((a, b) => (a.frontmatter.order ?? Infinity) - (b.frontmatter.order ?? Infinity) || compare(a.slug, b.slug))
   }
 
-  for (const page of byFile.values()) checkLinks(page, byFile, collections)
+  const shown = new Map<string, ContentAsset>()
+  for (const page of byFile.values()) checkLinks(page, byFile, collections, images, shown)
 
   const shiki = langs.size ? await highlighter([...langs]) : null
   md.renderer.rules.fence = (tokens, i) => highlight(shiki, tokens[i]!.content, fenceLang(tokens[i]!.info)) + '\n'
@@ -225,6 +248,7 @@ export async function loadContent(root: string, config: unknown): Promise<Conten
     },
     list: (name) => of(name).pages.map(linkTo),
     paths: (name, param = 'slug') => of(name).pages.map((p) => ({ [param]: p.slug })),
+    assets: () => [...shown.values()].sort((a, b) => compare(a.path, b.path)),
   }
 }
 
@@ -286,9 +310,8 @@ const fileRefused = (shown: string): never => {
   throw new Error(`${shown} is a symlink, which Weft does not follow; put the file itself there.`)
 }
 
-/** The Markdown files under `folder`, as paths from the site root (`shown` is the folder's). */
-async function markdownFiles(folder: string, shown: string): Promise<string[]> {
-  const out: string[] = []
+/** The Markdown files and images under `folder`, as paths from the site root (`shown` is the folder's). */
+async function collectionFiles(folder: string, shown: string, out = { pages: [] as string[], images: [] as string[] }) {
   const entries = await readdir(folder, { withFileTypes: true })
   for (const e of entries.sort((a, b) => compare(a.name, b.name))) {
     if (e.name.startsWith('.') || e.name.startsWith('_')) continue
@@ -296,12 +319,12 @@ async function markdownFiles(folder: string, shown: string): Promise<string[]> {
     if (e.isSymbolicLink()) fileRefused(path)
     if (e.isDirectory()) {
       if (!SEGMENT.test(e.name)) segmentRefused(path)
-      out.push(...(await markdownFiles(join(folder, e.name), path)))
-    } else if (!e.name.endsWith('.md')) {
-      throw new Error(`${path} is not a .md file; put images and other files in public/.`)
+      await collectionFiles(join(folder, e.name), path, out)
+    } else if (e.name.endsWith('.md') || IMAGES.includes(extname(e.name))) {
+      if (!SEGMENT.test(e.name.slice(0, -extname(e.name).length))) segmentRefused(path)
+      ;(e.name.endsWith('.md') ? out.pages : out.images).push(path)
     } else {
-      if (!SEGMENT.test(e.name.slice(0, -3))) segmentRefused(path)
-      out.push(path)
+      throw new Error(`${path} is neither a .md file nor an image; put other files in public/.`)
     }
   }
   return out
@@ -313,7 +336,8 @@ const segmentRefused = (path: string): never => {
 
 /** Read one page: its frontmatter checked, its Markdown parsed, its headings given ids and its code blocks checked. */
 async function readPage(root: string, file: string, collection: Collection, md: MarkdownIt, langs: Set<string>): Promise<Page> {
-  const text = (await readFile(join(root, file), 'utf8')).replace(/\r\n?/g, '\n')
+  // A byte order mark, as some editors write, is not part of the frontmatter.
+  const text = (await readFile(join(root, file), 'utf8')).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n')
   const { frontmatter, body } = readFrontmatter(text, file, collection)
   const segments = file.slice(`content/${collection.name}/`.length, -'.md'.length).split('/')
   if (segments.at(-1) === 'index') segments.pop()
@@ -343,6 +367,9 @@ async function readPage(root: string, file: string, collection: Collection, md: 
         fail(file, line, 'a copy code block must be at the top level of the page, not inside a list or a quote.')
       }
       const known = fenceLang(token.info)
+      if (known === 'ansi') {
+        fail(file, line, "the code block's language ansi draws terminal colours, which Weft's code colours do not cover; use text.")
+      }
       if (!PLAIN.has(known) && !LANGS.has(known)) {
         fail(file, line, `the code block's language ${lang} is not one Shiki knows; use one of its language ids, or text.`)
       }
@@ -357,8 +384,8 @@ async function readPage(root: string, file: string, collection: Collection, md: 
 /** Shiki's language ids and aliases, each to its id. */
 const LANGS = new Map(bundledLanguagesInfo.flatMap((l) => [l.id, ...(l.aliases ?? [])].map((name) => [name, l.id] as const)))
 
-/** The language a fence's info string names, `text` when it names none. */
-const fenceLang = (info: string) => info.trim().split(/\s+/)[0] || 'text'
+/** The language a fence's info string names, in lowercase (`JSON` is `json`), `text` when it names none. */
+const fenceLang = (info: string) => (info.trim().split(/\s+/)[0] || 'text').toLowerCase()
 
 /** A heading's text as GitHub reads it for its slug: its text and code, without the markup. */
 function plainText(inline: Token): string {
@@ -430,8 +457,18 @@ function* withLines(tokens: Token[]): Generator<[Token, number]> {
   }
 }
 
-/** Check every link and image of `page`; relative `.md` links are rewritten to their pages' routes. */
-function checkLinks(page: Page, byFile: Map<string, Page>, collections: Map<string, Collection>) {
+/**
+ * Check every link and image of `page`. Relative `.md` links are rewritten to
+ * their pages' routes, and relative images to the URLs of `images` (by path
+ * from the site root); each image shown is added to `shown`.
+ */
+function checkLinks(
+  page: Page,
+  byFile: Map<string, Page>,
+  collections: Map<string, Collection>,
+  images: Map<string, ContentAsset>,
+  shown: Map<string, ContentAsset>,
+) {
   const { file } = page
   const decode = (s: string) => {
     try {
@@ -448,10 +485,20 @@ function checkLinks(page: Page, byFile: Map<string, Page>, collections: Map<stri
   for (const [token, line] of withLines(page.tokens)) {
     if (token.type === 'image') {
       const src = String(token.attrGet('src') ?? '')
-      if (src && !EXTERNAL.test(src) && !src.startsWith('/')) {
-        const shown = decode(src)
-        fail(file, line, `the image ${shown} is relative; put it in public/ and give its path from the site root, like /${posix.basename(shown)}.`)
+      if (!src || EXTERNAL.test(src) || src.startsWith('/')) continue
+      const written = decode(src)
+      const path = written.replace(/[?#].*$/, '')
+      if (!IMAGES.includes(posix.extname(path))) {
+        fail(file, line, `the image ${written} is not a ${IMAGES.slice(0, -1).join(', ')} or ${IMAGES.at(-1)} file.`)
       }
+      const to = posix.normalize(posix.join(posix.dirname(file), path))
+      if (!to.startsWith('content/')) {
+        fail(file, line, `the image ${written} leads outside content/; put it beside the page, or in public/ with a path from the site root.`)
+      }
+      const image = images.get(to)
+      if (!image) fail(file, line, `the image ${written} leads to no file; ${to} does not exist.`)
+      token.attrSet('src', image!.path)
+      shown.set(image!.path, image!)
       continue
     }
     if (token.type !== 'link_open') continue
@@ -460,8 +507,10 @@ function checkLinks(page: Page, byFile: Map<string, Page>, collections: Map<stri
     const href = decode(raw)
     const hashAt = raw.indexOf('#')
     const hash = hashAt === -1 ? '' : decode(raw.slice(hashAt + 1))
-    const rawPath = (hashAt === -1 ? raw : raw.slice(0, hashAt)).replace(/\?.*$/, '')
-    const path = decode(rawPath)
+    const beforeHash = hashAt === -1 ? raw : raw.slice(0, hashAt)
+    const queryAt = beforeHash.indexOf('?')
+    const query = queryAt === -1 ? '' : beforeHash.slice(queryAt)
+    const path = decode(queryAt === -1 ? beforeHash : beforeHash.slice(0, queryAt))
     if (path === '') {
       checkHash(line, href, page, hash)
     } else if (path.startsWith('/')) {
@@ -483,7 +532,7 @@ function checkLinks(page: Page, byFile: Map<string, Page>, collections: Map<stri
       const target = byFile.get(to)
       if (!target) fail(file, line, `the link to ${href} leads to no page; ${to} does not exist.`)
       checkHash(line, href, target!, hash)
-      token.attrSet('href', target!.path + (hashAt === -1 ? '' : raw.slice(hashAt)))
+      token.attrSet('href', target!.path + query + (hashAt === -1 ? '' : raw.slice(hashAt)))
     }
   }
 }
@@ -510,12 +559,12 @@ function render(md: MarkdownIt, tokens: Token[]): ContentPart[] {
  * so that one rendering reads in light and dark: `code.css` sets them from the
  * theme's colours.
  */
-const THEME = createCssVariablesTheme({ name: 'weft', variablePrefix: '--weft-code-', variableDefaults: {}, fontStyle: true })
+export const CODE_THEME = createCssVariablesTheme({ name: 'weft', variablePrefix: '--weft-code-', variableDefaults: {}, fontStyle: true })
 
 let shared: Promise<Highlighter> | undefined
 /** The one Shiki highlighter of the process, with `langs` loaded. */
 async function highlighter(langs: string[]): Promise<Highlighter> {
-  shared ??= createHighlighter({ themes: [THEME], langs: [] })
+  shared ??= createHighlighter({ themes: [CODE_THEME], langs: [] })
   const shiki = await shared
   const missing = langs.filter((l) => !PLAIN.has(l) && !shiki.getLoadedLanguages().includes(l))
   if (missing.length) await shiki.loadLanguage(...(missing as Parameters<Highlighter['loadLanguage']>))
@@ -564,6 +613,8 @@ export function weftContent(): Plugin {
         'export const useContent = (collection, slug) => content.page(collection, slug)',
         'export const useCollection = (collection) => content.list(collection)',
         'export const contentPaths = (collection, param) => content.paths(collection, param)',
+        // For buildSite, which copies the images the pages show into the build.
+        'export const contentAssets = () => content.assets()',
         '',
       ].join('\n')
     },

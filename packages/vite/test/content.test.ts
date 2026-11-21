@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -100,6 +101,11 @@ describe('frontmatter', () => {
     expect(await failure({ 'content/docs/intro.md': '---\n- a\n- b\n---\n' })).toBe(
       'content/docs/intro.md:2: the frontmatter is not a set of fields (name: value).',
     )
+  })
+
+  it('reads a file that starts with a byte order mark', async () => {
+    const content = await loadContent(siteWith({ 'content/docs/intro.md': '\uFEFF' + page('Intro', 'Hi.\n') }), docs)
+    expect(content.page('docs', 'intro').frontmatter.title).toBe('Intro')
   })
 
   it('fails on frontmatter that is never closed', async () => {
@@ -224,9 +230,46 @@ describe('links', () => {
     )
   })
 
-  it('fails on a relative image', async () => {
-    expect(await failure({ ...files, 'content/docs/index.md': page('Docs', '![A](./a.png)\n') })).toBe(
-      'content/docs/index.md:5: the image ./a.png is relative; put it in public/ and give its path from the site root, like /a.png.',
+  it('keeps the query and the anchor of a relative .md link, and checks the anchor', async () => {
+    const withQuery = { ...files, 'content/docs/index.md': page('Docs', '[x](guides/serving.md?tab=go#etags)\n') }
+    const content = await loadContent(siteWith(withQuery), docs)
+    expect(content.page('docs', '').html).toContain('<a href="/docs/guides/serving?tab=go#etags">x</a>')
+    expect(await failure({ ...files, 'content/docs/index.md': page('Docs', '[x](guides/serving.md?tab=go#nope)\n') })).toBe(
+      'content/docs/index.md:5: the link to guides/serving.md?tab=go#nope leads to no heading; content/docs/guides/serving.md has no heading with the id nope.',
+    )
+  })
+})
+
+describe('images', () => {
+  const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex')
+  const hashOf = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex').slice(0, 8)
+
+  it('serve an image beside the page under a content-addressed name', async () => {
+    const root = siteWith({
+      'content/docs/index.md': page('Docs', '![Shot](./shot.png) and ![Again](guides/../shot.png \'t\')\n'),
+      'content/docs/guides/islands.md': page('Islands', '![Shot](../shot.png)\n'),
+    })
+    writeFileSync(join(root, 'content/docs/shot.png'), png)
+    const content = await loadContent(root, docs)
+    const src = `/assets/content/shot-${hashOf(png)}.png`
+    expect(content.page('docs', '').html).toContain(`<img src="${src}" alt="Shot"> and <img src="${src}" alt="Again" title="t">`)
+    expect(content.page('docs', 'guides/islands').html).toContain(`<img src="${src}" alt="Shot">`)
+    // One file, however many pages show it.
+    expect(content.assets()).toEqual([{ path: src, file: join(root, 'content/docs/shot.png') }])
+  })
+
+  it('fail on an image that is not there, naming the file and line', async () => {
+    expect(await failure({ 'content/docs/index.md': page('Docs', '\n![A](./a.png)\n') })).toBe(
+      'content/docs/index.md:6: the image ./a.png leads to no file; content/docs/a.png does not exist.',
+    )
+    expect(await failure({ 'content/docs/index.md': page('Docs', '![A](../../a.png)\n') })).toBe(
+      'content/docs/index.md:5: the image ../../a.png leads outside content/; put it beside the page, or in public/ with a path from the site root.',
+    )
+  })
+
+  it('fail on a relative image that is not an image file', async () => {
+    expect(await failure({ 'content/docs/index.md': page('Docs', '![A](./notes.md)\n') })).toBe(
+      'content/docs/index.md:5: the image ./notes.md is not a .png, .jpg, .jpeg, .gif, .webp, .avif or .svg file.',
     )
   })
 })
@@ -262,6 +305,21 @@ describe('code blocks', () => {
     expect(parts[1]!.html).toMatch(/^<pre class="shiki weft"[^]*>weft<\/span>[^]*> serve<\/span>[^]*<\/pre>\n$/)
     expect(parts[2]).toEqual({ html: '<p>After.</p>\n' })
     expect(html).toBe(parts.map((p) => p.html).join(''))
+  })
+
+  it('read the language in any case', async () => {
+    const body = '```JSON\n{ "a": 1 }\n```\n\n```Ts copy\nconst a = 1\n```\n'
+    const content = await loadContent(siteWith({ 'content/docs/code.md': page('Code', body) }), docs)
+    const { html, parts } = content.page('docs', 'code')
+    expect(html).toContain('var(--weft-code-token-keyword)">const</span>')
+    expect(html).toMatch(/var\(--weft-code-token-[\w-]+\)">"a"<\/span>/)
+    expect(parts[1]).toMatchObject({ lang: 'ts' })
+  })
+
+  it('fail on ansi, whose terminal colours Weft does not draw', async () => {
+    expect(await failure({ 'content/docs/code.md': page('Code', '```ansi\nx\n```\n') })).toBe(
+      'content/docs/code.md:5: the code block\'s language ansi draws terminal colours, which Weft\'s code colours do not cover; use text.',
+    )
   })
 
   it('fail on a language Shiki does not know', async () => {
@@ -341,8 +399,8 @@ describe('collections', () => {
     expect(await failure({ 'content/docs/My Guide.md': page('A') })).toBe(
       'content/docs/My Guide.md has a name that is not a plain URL segment; use lowercase letters, digits, - and _.',
     )
-    expect(await failure({ 'content/docs/intro.md': page('A'), 'content/docs/shot.png': 'x' })).toBe(
-      'content/docs/shot.png is not a .md file; put images and other files in public/.',
+    expect(await failure({ 'content/docs/intro.md': page('A'), 'content/docs/shot.txt': 'x' })).toBe(
+      'content/docs/shot.txt is neither a .md file nor an image; put other files in public/.',
     )
   })
 

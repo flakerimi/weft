@@ -9,6 +9,7 @@ import { transform as transformCSS, type Targets } from 'lightningcss'
 import { build, isCSSRequest, mergeConfig, type Plugin, type ResolvedConfig, type Rolldown } from 'vite'
 import { siteConfig } from './config.ts'
 import { weft } from './plugin.ts'
+import type { ContentAsset } from './content.ts'
 import { createRenderServer, renderPage, type PageHead, type RenderResult } from './render.ts'
 import { discoverRoutes, expandRoutes, type ExpandedRoute, type PageModule, type RoutesJson } from './routes.ts'
 
@@ -148,6 +149,7 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
   const pages: (ExpandedRoute & RenderResult)[] = []
   const server = await createRenderServer(root, 'production')
   const vueFiles: string[] = []
+  let contentAssets: ContentAsset[] = []
   let cssTarget: Targets | undefined
   try {
     // The pages' CSS is minified for the browsers the site's Vite config targets.
@@ -160,6 +162,11 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
     }
     for (const mod of server.environments.ssr.moduleGraph.idToModuleMap.values()) {
       if (mod.file?.endsWith('.vue')) vueFiles.push(mod.file)
+    }
+    // The images the site's Markdown shows, when a page read it.
+    if (server.environments.ssr.moduleGraph.getModuleById('\0virtual:weft/content')) {
+      const content = (await server.ssrLoadModule('virtual:weft/content')) as { contentAssets: () => ContentAsset[] }
+      contentAssets = content.contentAssets()
     }
   } finally {
     await server.close()
@@ -175,7 +182,16 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
   // It becomes outDir: a folder anyone may read, not mkdtemp's owner-only one.
   await chmod(staging, 0o755)
   try {
-    const manifest = await writeBuild(staging, { root, app, appDir, pages, baseCSS, cssTarget, cssInlineLimit: opts.cssInlineLimit })
+    const manifest = await writeBuild(staging, {
+      root,
+      app,
+      appDir,
+      pages,
+      contentAssets,
+      baseCSS,
+      cssTarget,
+      cssInlineLimit: opts.cssInlineLimit,
+    })
     await swap(staging, outDir)
     return manifest
   } catch (e) {
@@ -191,6 +207,8 @@ interface BuildInput {
   app: RoutesJson['app']
   appDir: string | null
   pages: (ExpandedRoute & RenderResult)[]
+  /** The images the content shows, each under its content-addressed URL. */
+  contentAssets: ContentAsset[]
   baseCSS: string
   cssTarget: Targets | undefined
   cssInlineLimit: number | undefined
@@ -253,7 +271,10 @@ function minifier(targets: Targets | undefined): (css: string, page: string) => 
 }
 
 /** Write the whole build into `dir`, a fresh folder of its own, and mark it. */
-async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssTarget, cssInlineLimit }: BuildInput): Promise<Manifest> {
+async function writeBuild(
+  dir: string,
+  { root, app, appDir, pages, contentAssets, baseCSS, cssTarget, cssInlineLimit }: BuildInput,
+): Promise<Manifest> {
   // Every file in the build; none is ever written twice, nor under two names the file system takes for one.
   const taken: Taken = new Map()
   take(taken, 'manifest.json')
@@ -299,6 +320,12 @@ async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssT
     if (links.length) hints[notFound ? '404' : page.path] = links
     if (notFound) routesJson.notFound = file
     else routesJson.pages.push({ path: page.path, html: file, islands: page.islands })
+  }
+  // Named by a hash of their bytes, so cached forever.
+  for (const asset of contentAssets) {
+    const file = asset.path.slice(1)
+    await write(file, await readFile(asset.file))
+    immutable.add(file)
   }
   await write('routes.json', JSON.stringify(routesJson, null, 2) + '\n')
   // The app's own .br/.gz would be stale beside the ones made here; public/ is copied as it is.

@@ -12,4 +12,10 @@ Install it:
 pnpm add @weft/ui
 ```
 
+Embed it:
+
+```html copy
+<script>alert(1)</script><!-- note -->
+```
+
 See [ETags](serving.md#etags).

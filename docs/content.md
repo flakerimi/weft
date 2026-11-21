@@ -18,7 +18,7 @@ export default {
 - **`schema`** lists the frontmatter fields the collection adds, each with a type: `string`, `number`, `boolean` or `string[]`. A `?` after the type makes the field optional.
 - **Fields every collection has:** `title` (a string, required), `description` (a string, required) and `order` (a number, optional).
 
-A page's slug is its path in the collection without `.md`. `index.md` takes its folder's slug, so `content/docs/index.md` is `''` (served at `/docs`) and `content/docs/guides/islands.md` is `guides/islands`. File and folder names must be plain URL segments: lowercase letters, digits, `-` and `_`. Names that start with `.` or `_` are skipped.
+A collection's folder holds `.md` pages and the images they show (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.avif`, `.svg`); any other file is refused. A page's slug is its path in the collection without `.md`. `index.md` takes its folder's slug, so `content/docs/index.md` is `''` (served at `/docs`) and `content/docs/guides/islands.md` is `guides/islands`. File and folder names must be plain URL segments: lowercase letters, digits, `-` and `_`. Names that start with `.` or `_` are skipped.
 
 ## Checks
 
@@ -29,20 +29,25 @@ The build fails with one sentence naming the file and line when:
   - a relative `.md` link names a file that does not exist;
   - a link names a heading the target page does not have, on another page or with `#id` on the same page;
   - a link from the site root into a collection (`/docs/...`) names a page or heading that is not there.
-- **A link or image is relative but cannot be served:**
+- **A relative link or image cannot be served:**
   - a relative link that is not to a `.md` file;
   - a relative link that leads outside `content/`;
-  - a relative image. Put images in `public/` and give their path from the site root.
-- **A code block cannot be highlighted:** its language is one Shiki does not know, or its fence has a word after the language other than `copy`.
-- **The files are wrong:** a file in a collection is not `.md`, two files make one page, a folder of `content/` is not declared, or a declared collection has no folder.
+  - a relative image that is missing, is not one of the image types above, or leads outside `content/`.
+- **A code block cannot be highlighted:**
+  - its language is one Shiki does not know;
+  - its language is `ansi`, whose terminal colours Weft's code colours do not cover (use `text`);
+  - its fence has a word after the language other than `copy`.
+- **The files are wrong:** a file in a collection is neither `.md` nor an image, two files make one page, a folder of `content/` is not declared, or a declared collection has no folder.
 
-Relative `.md` links become the routes of their pages: `[islands](../guides/islands.md#when)` becomes `/docs/guides/islands#when`. External links are left as they are and never fetched. A path from the site root outside every collection (such as `/components/Button`) is not checked.
+Relative `.md` links become the routes of their pages, keeping any query and anchor: `[islands](../guides/islands.md?tab=go#when)` becomes `/docs/guides/islands?tab=go#when`, and the anchor is checked. External links are left as they are and never fetched. A path from the site root outside every collection (such as `/components/Button`) is not checked.
 
 ## Rendering
 
+- **Files** may start with a UTF-8 byte order mark, which is ignored.
 - **Markdown** is rendered with markdown-it (CommonMark plus tables and strikethrough). Raw HTML is not rendered, so it shows as text.
 - **Headings** get ids by GitHub's slug rules, unique on the page: a second "Install" gets `install-1`. The h2 and h3 headings make the table of contents.
-- **Code blocks** are highlighted at build time with Shiki. The colours are CSS variables (`--weft-code-token-keyword` and the rest). `@weft/vite/code.css` sets them from the theme's colours, so one rendering reads in light and dark, and every token colour meets AA contrast on the code's ground. A block with no language is plain text.
+- **Images** beside a page (`![Flow](./flow.png)`) are copied into the build at a content-addressed URL, `/assets/content/flow-<hash>.png`, where `<hash>` is the first 8 hex digits of the file's SHA-256. The build lists each one in the manifest as immutable, so it is cached forever. An image shown by several pages is copied once, and an image no page shows is not copied. An image in `public/` is given by its path from the site root, as usual.
+- **Code blocks** are highlighted at build time with Shiki. The language is read in any case, so `JSON` is `json`. The colours are CSS variables (`--weft-code-token-keyword` and the rest). `@weft/vite/code.css` sets them from the theme's colours, so one rendering reads in light and dark, and every token colour meets AA contrast on the code's ground. A block with no language is plain text.
 
 ## Pages
 
@@ -77,6 +82,16 @@ useHead({ title: page.frontmatter.title, description: page.frontmatter.descripti
 `pages/docs/[...slug].vue` is a catch-all route. It takes the rest of the path, slashes included, and a slug of `''` makes `/docs` itself.
 
 An island runs in the browser and cannot import `virtual:weft/content`; the build refuses it. Pass the island what it needs as props.
+
+### Types
+
+The module's types come from `@weft/vite/virtual`. Add it to the site's `tsconfig.json`:
+
+```json
+{ "compilerOptions": { "types": ["vite/client", "@weft/vite/virtual"] } }
+```
+
+Or add a reference in a `.d.ts` file the site includes: `/// <reference types="@weft/vite/virtual" />`. `content.config.ts` takes `ContentConfig` from `@weft/vite` with `import type`.
 
 ### Copy buttons
 

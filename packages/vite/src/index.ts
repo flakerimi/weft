@@ -7,6 +7,7 @@ export {
   weftContent,
   type CollectionConfig,
   type Content,
+  type ContentAsset,
   type ContentConfig,
   type ContentLink,
   type ContentPage,

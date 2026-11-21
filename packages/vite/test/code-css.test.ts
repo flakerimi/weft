@@ -2,6 +2,7 @@
 // token reaches WCAG AA (4.5:1) on the code's ground, in both themes, light and dark.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { CODE_THEME } from '../src/content.ts'
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 const code = read('../src/code.css')
@@ -26,6 +27,14 @@ const contrast = (a: string, b: string) => {
 }
 
 const vars = block(code, '.shiki')
+
+it('sets every variable the code theme can draw with', () => {
+  const emitted = [...new Set(JSON.stringify(CODE_THEME).match(/--weft-code-[\w-]+/g))].map((v) => v.slice(2))
+  // ansi is refused (its terminal colours have no AA pair on every ground), so its variables are never drawn.
+  const drawn = emitted.filter((v) => !v.startsWith('weft-code-ansi-'))
+  expect(drawn).toContain('weft-code-token-keyword')
+  for (const v of drawn) expect(Object.keys(vars), v).toContain(v)
+})
 
 describe.each(['neutral', 'lisa'])('code.css on the %s theme', (theme) => {
   const css = read(`../../themes/dist/${theme}.css`)

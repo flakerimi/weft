@@ -9,7 +9,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./island-runtime": "./src/island-runtime.ts",
-    "./code.css": "./src/code.css"
+    "./code.css": "./src/code.css",
+    "./virtual": { "types": "./src/virtual.d.ts" }
   },
   "scripts": {
     "test": "vitest run",

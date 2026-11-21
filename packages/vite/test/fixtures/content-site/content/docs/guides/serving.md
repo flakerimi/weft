@@ -11,6 +11,8 @@ section: Guides
 func main() { weft.Serve(dist) }
 ```
 
+![The flow](./flow.png)
+
 ### Compression
 
 Back to [the docs](../index.md).
