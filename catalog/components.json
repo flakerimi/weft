@@ -3409,6 +3409,13 @@
           "required": false,
           "default": null,
           "description": "Float against this element or point instead of the trigger (ContextMenu gives the pointer's)."
+        },
+        {
+          "name": "portal",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Draw it in the overlay layer at the end of the body; false draws it in place, and an open one on the server too."
         }
       ],
       "emits": [
@@ -3434,7 +3441,7 @@
           "dynamic": false
         }
       ],
-      "notes": "`items` is a list of `MenuItem`s, or a list of groups (an array of arrays),\ndrawn with separators between. An item has `label`, `icon` (a Lucide name),\n`tone` (`danger`), `disabled`, `to` and `target` (a link), `children` (a\nsubmenu) and `onSelect(event)`; `type: 'label'` is a group's heading,\n`'separator'` a line, `'checkbox'` and `'radio'` items with `checked` and\n`onUpdateChecked(checked)`. An item's `description` shows under its label\n(and describes it), `kbds` shows its shortcut with Kbd (shown, not bound),\n`loading` turns a spinner and keeps it from being chosen (a link loses its\naddress meanwhile, so no Ctrl-click or middle click follows it), and `color` is\n`tone` under Nuxt UI's name. The `item` slot replaces an item's label.\n\nIt follows the WAI-ARIA APG Menu Button and Menu patterns. The trigger, the\ndefault slot (one element), gets `aria-haspopup=\"menu\"`, `aria-expanded`\nand `aria-controls`, and the menu is labelled by it.\n\n**Keyboard.** On the trigger: Enter, Space and ArrowDown open the menu on\nits first item, ArrowUp on its last. In the menu: ArrowDown and ArrowUp move\n(looping), Home and End go to the ends, typing jumps to the item whose label\nstarts so, Enter and Space choose. ArrowRight opens a submenu on its first\nitem, ArrowLeft closes it back to its item (mirrored right to left). Escape\ncloses one level; Tab closes the menu, as a sheet on touch too. Disabled items are reached but cannot\nbe chosen.\n\n**Choosing** an item calls `onSelect`, closes every level and puts focus back\non the trigger, unless `onSelect` calls `event.preventDefault()`. A checkbox\nitem calls `onUpdateChecked(!checked)`, a radio item `onUpdateChecked(true)`.\nA press outside closes it, returning no focus, from any level; while it is\nopen the page does not scroll. As a touch sheet it is modal: `aria-modal`,\nfocus trapped, the page behind inert. It fades out when it closes, unless\nmotion is reduced.\n\nThe menu renders into `#weft-overlays` once mounted; attributes go to it.\n`anchor` positions it against another element or a point (ContextMenu).",
+      "notes": "`items` is a list of `MenuItem`s, or a list of groups (an array of arrays),\ndrawn with separators between. An item has `label`, `icon` (a Lucide name),\n`tone` (`danger`), `disabled`, `to` and `target` (a link), `children` (a\nsubmenu) and `onSelect(event)`; `type: 'label'` is a group's heading,\n`'separator'` a line, `'checkbox'` and `'radio'` items with `checked` and\n`onUpdateChecked(checked)`. An item's `description` shows under its label\n(and describes it), `kbds` shows its shortcut with Kbd (shown, not bound),\n`loading` turns a spinner and keeps it from being chosen (a link loses its\naddress meanwhile, so no Ctrl-click or middle click follows it), and `color` is\n`tone` under Nuxt UI's name. The `item` slot replaces an item's label.\n\nIt follows the WAI-ARIA APG Menu Button and Menu patterns. The trigger, the\ndefault slot (one element), gets `aria-haspopup=\"menu\"`, `aria-expanded`\nand `aria-controls`, and the menu is labelled by it.\n\n**Keyboard.** On the trigger: Enter, Space and ArrowDown open the menu on\nits first item, ArrowUp on its last. In the menu: ArrowDown and ArrowUp move\n(looping), Home and End go to the ends, typing jumps to the item whose label\nstarts so, Enter and Space choose. ArrowRight opens a submenu on its first\nitem, ArrowLeft closes it back to its item (mirrored right to left). Escape\ncloses one level; Tab closes the menu, as a sheet on touch too. Disabled items are reached but cannot\nbe chosen.\n\n**Choosing** an item calls `onSelect`, closes every level and puts focus back\non the trigger, unless `onSelect` calls `event.preventDefault()`. A checkbox\nitem calls `onUpdateChecked(!checked)`, a radio item `onUpdateChecked(true)`.\nA press outside closes it, returning no focus, from any level; while it is\nopen the page does not scroll. As a touch sheet it is modal: `aria-modal`,\nfocus trapped, the page behind inert. It fades out when it closes, unless\nmotion is reduced.\n\nThe menu renders into `#weft-overlays` once mounted; attributes go to it.\n`anchor` positions it against another element or a point (ContextMenu).\n\n`:portal=\"false\"` renders it where it stands instead, and an open one\n(`default-open`) on the server too, so a page can show the menu open with no\nscript: until mounted it is drawn unpositioned (no floating coordinates), for\nthe page's CSS to place, and as a touch sheet over its backdrop, both\n`position: fixed`, so an ancestor with `contain: paint` or a transform keeps\nthem inside it (a picture of a phone). Its submenus render in place too.",
       "examples": [
         {
           "name": "basic",
@@ -9083,7 +9090,7 @@
       "adapts": {
         "input": "Left unset, it passes on the browser's detected input, pointer or touch, live (pointer until mounted, so a phone hydrates what the server drew); set, it overrides it for everything inside.",
         "surface": "Left unset, it passes on the outer one (app by default); set, it switches density, type scale and spacing for everything inside.",
-        "width": "Nothing changes; width comes from each component's own container."
+        "width": "Nothing changes once mounted, since width comes from each component's own container; set, it is the width class drawn before anything is measured, on the server and while hydrating."
       },
       "props": [
         {
@@ -9120,6 +9127,13 @@
           "required": false,
           "default": null,
           "description": "Everything inside is a preview of a page, drawn inside another (a gallery's stage or thumbnail): a Page or an AppShell in it draws no `<main>` landmark, a Page's title is an h2, and an AppShell keeps no collapsed state. An outer inset provider makes every one inside it inset too."
+        },
+        {
+          "name": "width",
+          "type": "'narrow' | 'regular' | 'wide'",
+          "required": false,
+          "default": null,
+          "description": "The width class to draw everything inside with before it can be measured: on the server and while hydrating (`narrow`, `regular` or `wide`); unset passes on the outer one, else `wide`. Once mounted, each component measures its own box. For a part of the page drawn at a known width, such as a picture of a phone."
         }
       ],
       "emits": [],
@@ -9130,7 +9144,7 @@
           "dynamic": false
         }
       ],
-      "notes": "Its element carries `data-weft-surface`, and `data-weft-input` when its\n`input` is set, which the theme's CSS reads to switch control heights, hit\nsizes and density. With no input set the theme follows `(pointer: coarse)`\nat the root, so a page that is never hydrated still has 44 px targets on a\nphone. Components read the detected input as `pointer` until they have\nmounted, then switch live: the server cannot know it, and a phone hydrates\nthe pointer markup first. It renders\nwith `display: contents`, so it does not affect layout. Nested providers\noverride one axis and inherit the other.\n\n`locale` (a BCP 47 tag, `de-DE`) sets the language of dates, times and sizes\nfor every component inside that has no `locale` of its own (Calendar,\nDatePicker, DateRangePicker, InputTime, FileUpload): names, digits, the order\nof day, month and year, the first day of the week. Unset, it passes on the\nouter one; with none at all they use `en-US`, never the browser's language,\nso the server renders what the browser hydrates.\n\n`inset` says everything inside is a preview of a page, drawn inside another\n(a gallery's stage or thumbnail, a screenshot frame): a Page or an AppShell\nin it renders no `<main>` landmark, and a Page's title is an `h2`, so the\npage around keeps one main and one h1. An AppShell in it keeps no collapsed\nstate in localStorage. An inset provider makes every one inside it inset too.",
+      "notes": "Its element carries `data-weft-surface`, and `data-weft-input` when its\n`input` is set, which the theme's CSS reads to switch control heights, hit\nsizes and density. With no input set the theme follows `(pointer: coarse)`\nat the root, so a page that is never hydrated still has 44 px targets on a\nphone. Components read the detected input as `pointer` until they have\nmounted, then switch live: the server cannot know it, and a phone hydrates\nthe pointer markup first. It renders\nwith `display: contents`, so it does not affect layout. Nested providers\noverride one axis and inherit the other.\n\n`locale` (a BCP 47 tag, `de-DE`) sets the language of dates, times and sizes\nfor every component inside that has no `locale` of its own (Calendar,\nDatePicker, DateRangePicker, InputTime, FileUpload): names, digits, the order\nof day, month and year, the first day of the week. Unset, it passes on the\nouter one; with none at all they use `en-US`, never the browser's language,\nso the server renders what the browser hydrates.\n\n`inset` says everything inside is a preview of a page, drawn inside another\n(a gallery's stage or thumbnail, a screenshot frame): a Page or an AppShell\nin it renders no `<main>` landmark, and a Page's title is an `h2`, so the\npage around keeps one main and one h1. An AppShell in it keeps no collapsed\nstate in localStorage. An inset provider makes every one inside it inset too.\n\n`width` (`narrow`, `regular` or `wide`) is the width class everything\ninside is drawn with before it can be measured: on the server, and while\nhydrating. Unset, it passes on the outer one, and with none at all\ncomponents start `wide`. Once mounted, each measures its own box and\nfollows it. Give it to a part drawn at a known width that is never\nhydrated, such as a picture of a phone, so a Table in it is drawn as its\ncards.",
       "examples": [
         {
           "name": "basic",

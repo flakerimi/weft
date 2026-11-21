@@ -41,3 +41,10 @@ motion is reduced.
 
 The menu renders into `#weft-overlays` once mounted; attributes go to it.
 `anchor` positions it against another element or a point (ContextMenu).
+
+`:portal="false"` renders it where it stands instead, and an open one
+(`default-open`) on the server too, so a page can show the menu open with no
+script: until mounted it is drawn unpositioned (no floating coordinates), for
+the page's CSS to place, and as a touch sheet over its backdrop, both
+`position: fixed`, so an ancestor with `contain: paint` or a transform keeps
+them inside it (a picture of a phone). Its submenus render in place too.

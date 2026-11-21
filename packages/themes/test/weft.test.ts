@@ -19,6 +19,13 @@ it("uses the design's ground, ink and indigo, light and dark", () => {
   expect(weft.dark).toMatchObject({ bg: '#0F1530' })
 })
 
+// The second pass (docs/design/site-2026-11-21-v2): components, tiles and
+// stages are white on the ground in light, the raised surface in dark.
+it('draws surfaces white on the ground in light', () => {
+  expect(weft.light).toMatchObject({ surface: '#FFFFFF', 'surface-raised': '#FFFFFF' })
+  expect(weft.dark).toMatchObject({ 'surface-raised': '#1C2448' })
+})
+
 it('sets Bricolage Grotesque for text and JetBrains Mono for code', () => {
   expect(weft.font.sans).toMatch(/^'Bricolage Grotesque Variable', /)
   expect(weft.font.mono).toMatch(/^'JetBrains Mono Variable', /)

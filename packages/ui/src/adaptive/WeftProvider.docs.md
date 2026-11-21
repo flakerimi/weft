@@ -6,7 +6,7 @@ avoid: For choosing a component's look, use its own props; never use it to make 
 adapts:
   input: Left unset, it passes on the browser's detected input, pointer or touch, live (pointer until mounted, so a phone hydrates what the server drew); set, it overrides it for everything inside.
   surface: Left unset, it passes on the outer one (app by default); set, it switches density, type scale and spacing for everything inside.
-  width: Nothing changes; width comes from each component's own container.
+  width: Nothing changes once mounted, since width comes from each component's own container; set, it is the width class drawn before anything is measured, on the server and while hydrating.
 ---
 Its element carries `data-weft-surface`, and `data-weft-input` when its
 `input` is set, which the theme's CSS reads to switch control heights, hit
@@ -30,3 +30,11 @@ so the server renders what the browser hydrates.
 in it renders no `<main>` landmark, and a Page's title is an `h2`, so the
 page around keeps one main and one h1. An AppShell in it keeps no collapsed
 state in localStorage. An inset provider makes every one inside it inset too.
+
+`width` (`narrow`, `regular` or `wide`) is the width class everything
+inside is drawn with before it can be measured: on the server, and while
+hydrating. Unset, it passes on the outer one, and with none at all
+components start `wide`. Once mounted, each measures its own box and
+follows it. Give it to a part drawn at a known width that is never
+hydrated, such as a picture of a phone, so a Table in it is drawn as its
+cards.
