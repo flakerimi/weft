@@ -22,16 +22,23 @@ values against one anywhere.
 
 **When it checks.** On submit every field is checked. With errors, `error`
 fires with them, each FormField with a matching `name` shows its error, and
-focus moves to the first invalid control; without, `submit` fires with a
-copy of the values, typed as `state` is. After the first submit, a field is
-checked again when it is left, and a field showing an error is checked as it
-changes, so the error goes the moment it is fixed - but no new error appears
-while typing.
+focus moves to the first invalid control; without, the `@submit` handler
+runs with a deep copy of the values (lists and objects too), typed as
+`state` is. After the first submit, a field is checked again when it is
+left, and a field showing an error is checked as it changes, so the error
+goes the moment it is fixed - but no new error appears while typing.
 
 **Server errors.** A template ref's `setErrors({ email: 'That address is
-taken.' })` shows errors from elsewhere until each field is checked again;
-`validate()` checks without submitting, and `clear()` clears every error.
+taken.' })` shows errors from elsewhere. Leaving such a field keeps its error
+(the server said so, and nothing changed); changing the field checks it
+again. `validate()` checks without submitting, and `clear()` clears every
+error.
 
-While `disabled`, its fields are disabled and a submit does nothing. A
-Button with `type="submit"` and `loading` blocks a second submit. The native
-form has `novalidate`: Weft shows the errors, not the browser.
+**Disabled and busy.** The content sits in a `<fieldset>` with no frame, so
+`disabled` disables every control in the form at once - Weft's and native
+ones, Buttons included - and a submit does nothing. `loading` does the same
+and sets `aria-busy`. With `loading-auto` (on by default), a `@submit`
+handler that returns a promise keeps the form busy until it settles, so a
+second press or Enter submits nothing. (`@submit` is a handler prop, as in
+Nuxt UI, so the form can wait for it.) The native form has `novalidate`:
+Weft shows the errors, not the browser.

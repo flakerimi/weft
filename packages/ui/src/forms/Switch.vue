@@ -57,7 +57,7 @@ defineSlots<{
 }>()
 
 const f = useField(props)
-const { own, describedBy } = useControlAttrs(f)
+const { own, box, describedBy } = useControlAttrs(f)
 const model = useControllable(props, 'modelValue', emit, () => props.defaultValue)
 const id = f.id.value ?? props.id ?? useId('switch')
 const descriptionId = `${id}-description`
@@ -86,8 +86,7 @@ defineExpose({
 <template>
   <div
     class="weft-switch"
-    :class="$attrs.class"
-    :style="$attrs.style"
+    v-bind="box"
     :data-size="f.size.value"
     :data-tone="tone"
     :data-state="on ? 'checked' : 'unchecked'"

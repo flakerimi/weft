@@ -15,6 +15,18 @@
  *   `type="email"`.
  * - `message`: one sentence to show in place of any of the sentences below.
  *
+ * By the value's type at run time:
+ *
+ * | value          | required | min, max          | pattern, email      |
+ * |----------------|----------|-------------------|---------------------|
+ * | text           | yes      | length, in chars  | the text            |
+ * | number         | yes      | the number itself | the number written  |
+ * |                |          |                   | out (`String(n)`)   |
+ * | list (array)   | yes      | how many          | not checked         |
+ * | anything else  | yes      | not checked       | not checked         |
+ *
+ * (A boolean, a date, a file: only `required` applies.)
+ *
  * An empty value that is not required passes every other rule. A field's
  * first failing rule, in the order above, gives its error.
  */
@@ -69,6 +81,7 @@ export function validateField(value: unknown, rule: FieldRule): string | undefin
   if (typeof value === 'number') {
     if (rule.min !== undefined && value < rule.min) return fail(`Enter ${rule.min} or more.`)
     if (rule.max !== undefined && value > rule.max) return fail(`Enter ${rule.max} or less.`)
+    return textRules(String(value), rule, fail)
   } else if (Array.isArray(value)) {
     if (rule.min !== undefined && value.length < rule.min) return fail(`Choose at least ${rule.min}.`)
     if (rule.max !== undefined && value.length > rule.max) return fail(`Choose at most ${rule.max}.`)
@@ -76,9 +89,15 @@ export function validateField(value: unknown, rule: FieldRule): string | undefin
     const length = Array.from(value).length
     if (rule.min !== undefined && length < rule.min) return fail(`Use at least ${plural(rule.min, 'character', 'characters')}.`)
     if (rule.max !== undefined && length > rule.max) return fail(`Use at most ${plural(rule.max, 'character', 'characters')}.`)
-    if (rule.pattern !== undefined && !compiled(rule.pattern).test(value)) return fail('Use the format asked for.')
-    if (rule.email && !EMAIL.test(value)) return fail('Enter an email address.')
+    return textRules(value, rule, fail)
   }
+  return undefined
+}
+
+/** `pattern` and `email`, for text and numbers written out. */
+function textRules(text: string, rule: FieldRule, fail: (sentence: string) => string): string | undefined {
+  if (rule.pattern !== undefined && !compiled(rule.pattern).test(text)) return fail('Use the format asked for.')
+  if (rule.email && !EMAIL.test(text)) return fail('Enter an email address.')
   return undefined
 }
 

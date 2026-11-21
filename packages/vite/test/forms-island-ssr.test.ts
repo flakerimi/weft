@@ -11,4 +11,6 @@ it('renders an island of every form component', async () => {
   const root = fileURLToPath(new URL('./fixtures/forms-island', import.meta.url))
   const { html } = await renderPage({ root, page: 'pages/index.vue' })
   expect(html).toContain(formsIsland)
+  // A control given no style renders no empty style attribute.
+  expect(formsIsland).not.toContain('style=""')
 })

@@ -8,10 +8,10 @@ const username = ref('ada')
 
 <template>
   <Stack :gap="4">
-    <FormField label="Email" hint="We never share it." required>
+    <FormField label="Email" description="We never share it." required>
       <Input v-model="email" type="email" autocomplete="email" />
     </FormField>
-    <FormField label="Username" error="That name is taken.">
+    <FormField label="Username" hint="Optional" error="That name is taken.">
       <Input v-model="username" />
     </FormField>
   </Stack>

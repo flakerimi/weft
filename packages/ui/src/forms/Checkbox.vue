@@ -56,7 +56,7 @@ defineSlots<{
 
 const group = useCheckboxGroup()
 const f = useField(props)
-const { own, describedBy } = useControlAttrs(f)
+const { own, box, describedBy } = useControlAttrs(f)
 const model = useControllable(props, 'modelValue', emit, () => props.defaultValue)
 const id = f.id.value ?? props.id ?? useId('checkbox')
 const descriptionId = `${id}-description`
@@ -89,8 +89,7 @@ defineExpose({
 <template>
   <div
     class="weft-checkbox"
-    :class="$attrs.class"
-    :style="$attrs.style"
+    v-bind="box"
     :data-size="size"
     :data-tone="tone"
     :data-state="state === 'indeterminate' ? 'indeterminate' : state ? 'checked' : 'unchecked'"

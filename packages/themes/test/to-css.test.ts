@@ -23,6 +23,10 @@ describe('themeToCss', () => {
   it('emits the hit area for input: 44 px on touch, 24 px on pointer', () => {
     expect(css).toMatch(/\[data-weft-input="touch"\]\s*\{[^}]*--weft-hit-min: 44px;/)
     expect(css).toMatch(/\[data-weft-input="pointer"\]\s*\{[^}]*--weft-hit-min: 24px;/)
+    // A drawn thumb or handle is at least 24 px on touch, and as drawn on pointer.
+    expect(css).toMatch(/\[data-weft-input="touch"\]\s*\{[^}]*--weft-thumb-min: 24px;/)
+    expect(css).toMatch(/\[data-weft-input="pointer"\]\s*\{[^}]*--weft-thumb-min: 0px;/)
+    expect(css).toMatch(/@media \(pointer: coarse\) \{\s*:root:not\(\[data-weft-input\]\) \{[^}]*--weft-thumb-min: 24px;/)
     // Heights come from --weft-control-sm/md/lg alone; there is no second height token to drift from them.
     expect(css).not.toContain('--weft-control-height')
   })

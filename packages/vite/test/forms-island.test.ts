@@ -29,6 +29,13 @@ it('hydrates every form component inside an island', async () => {
   expect(warn).not.toHaveBeenCalled()
   expect(error).not.toHaveBeenCalled()
 
+  // Labels of controls that name themselves by the label's id (a group, a
+  // slider) drop `for` once hydrated; the server could not know yet.
+  const forOf = (text: string) =>
+    [...island.querySelectorAll('label.weft-form-field__label')].find((l) => l.textContent!.includes(text))!.getAttribute('for')
+  expect([forOf('Fruit'), forOf('Plan'), forOf('Volume')]).toEqual([null, null, null])
+  expect(forOf('Email')).toBe(island.querySelector('input[type="email"]')!.id)
+
   const out = island.querySelector('output')!
   // Typing reaches the Form's state.
   const email = island.querySelector<HTMLInputElement>('input[type="email"]')!

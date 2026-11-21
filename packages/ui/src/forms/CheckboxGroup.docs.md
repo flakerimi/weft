@@ -13,6 +13,6 @@ Bind the list with `v-model`. Give the options as `items` - values, or
 in the default slot. A ticked value is added at the end of the list.
 
 It is a `<fieldset>`: `legend` names it, or, inside a FormField, the field's
-label does through `aria-labelledby`; the field's hint and error describe the
+label does through `aria-labelledby`; the field's description, hint and error describe the
 group, and an error marks it `aria-invalid`. The boxes keep ids of their own.
 `disabled` disables every box. Tab visits each box, as native checkboxes do.

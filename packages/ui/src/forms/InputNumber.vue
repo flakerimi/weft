@@ -62,7 +62,7 @@ const emit = defineEmits<{
 }>()
 
 const f = useField(props)
-const { own, describedBy } = useControlAttrs(f)
+const { own, box, describedBy } = useControlAttrs(f)
 const model = useControllable(props, 'modelValue', emit, () => props.defaultValue)
 const input = useTemplateRef<HTMLInputElement>('input')
 
@@ -87,6 +87,8 @@ function set(n: number | null) {
 /** Move by `count` steps; from empty, start at min (or 0). */
 function stepBy(count: number) {
   if (locked.value) return
+  // Text typed and not yet committed is the value to step from.
+  if (text.value !== show(model.value)) commit()
   const from = model.value
   set(from === null ? (props.min ?? 0) : tidy(from + count * props.step, from, props.step))
 }
@@ -138,8 +140,7 @@ defineExpose({
 <template>
   <span
     class="weft-input weft-input-number"
-    :class="$attrs.class"
-    :style="$attrs.style"
+    v-bind="box"
     :data-size="f.size.value"
     :data-invalid="f.invalid.value ? 'true' : undefined"
     :data-disabled="f.disabled.value ? 'true' : undefined"

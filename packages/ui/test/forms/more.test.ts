@@ -124,6 +124,18 @@ describe('InputNumber', () => {
     expect(input.getAttribute('aria-valuenow')).toBe('0')
   })
 
+  it('reads text typed but not yet committed before it steps from it', () => {
+    const m = cases({ case: 'number' })
+    const input = field(m.el, '.qty')
+    input.focus()
+    type(input, '7')
+    key(input, 'ArrowUp')
+    expect(m.exposed.qty).toBe(8)
+    type(input, '4')
+    m.el.querySelectorAll<HTMLButtonElement>('.qty button')[0]!.click()
+    expect(m.exposed.qty).toBe(3)
+  })
+
   it('steps by decimals without floating-point dust', () => {
     const m = cases({ case: 'number' })
     const input = field(m.el, '.price')
@@ -299,6 +311,18 @@ describe('Slider', () => {
     expect(m.exposed.changes).toEqual([[20, 50]])
   })
 
+  it('names each thumb of a range in a FormField by the field\'s label and its own end', () => {
+    const f = cases({ case: 'slider' }).el.querySelector('.range-field')!
+    const label = f.querySelector('label')!
+    const [low, high] = [...f.querySelectorAll<HTMLElement>('[role="slider"]')]
+    expect(low!.id).not.toBe('')
+    expect(low!.id).not.toBe(high!.id)
+    expect(low!.getAttribute('aria-labelledby')).toBe(`${label.id} ${low!.id}`)
+    expect(low!.getAttribute('aria-label')).toBe('Minimum')
+    expect(high!.getAttribute('aria-labelledby')).toBe(`${label.id} ${high!.id}`)
+    expect(high!.getAttribute('aria-label')).toBe('Maximum')
+  })
+
   it('reads a press from the right in a right-to-left document', () => {
     const m = cases({ case: 'slider', dir: 'rtl' })
     const root = m.el.querySelector('.single')!
@@ -337,11 +361,13 @@ describe('Slider', () => {
     expect(thumb!.getAttribute('aria-valuenow')).toBe('5')
   })
 
-  it('in a FormField is labelled by the field and posts its value under its name', () => {
+  it('in a FormField is labelled by the field and posts its value under its name', async () => {
     const f = cases({ case: 'slider' }).el.querySelector('.in-field')!
+    await nextTick()
     const thumb = f.querySelector('[role="slider"]')!
     expect(thumb.getAttribute('aria-labelledby')).toBe(f.querySelector('label')!.id)
-    expect(thumb.id).toBe(f.querySelector('label')!.htmlFor)
+    // A thumb is not a labelable element, so the label points at nothing.
+    expect(f.querySelector('label')!.hasAttribute('for')).toBe(false)
     const hidden = f.querySelector<HTMLInputElement>('input[type="hidden"]')!
     expect([hidden.name, hidden.value]).toEqual(['brightness', '0'])
   })
@@ -489,7 +515,57 @@ describe('touch', () => {
       expect(ruleFor(sel)!.style.getPropertyValue('block-size')).toBe('max(100%, var(--weft-hit-min, 24px))')
     }
     expect(ruleFor('.weft-slider__thumb::before')!.style.getPropertyValue('inline-size')).toBe('max(100%, var(--weft-hit-min, 24px))')
-    expect(ruleFor('.weft-slider__thumb')!.style.getPropertyValue('inline-size')).toBe('var(--weft-slider-thumb, 16px)')
+    expect(ruleFor('.weft-slider__thumb')!.style.getPropertyValue('inline-size')).toBe('var(--weft-slider-drawn, 16px)')
+  })
+
+  it('draws the slider thumb 24 px on touch (16 px on pointer), keeping the 44 px hit area', () => {
+    const thumb = (input: string, sel: string) => {
+      const el = cases({ case: 'small', input }).el
+      return px(getComputedStyle(el.querySelector(`${sel} .weft-slider__thumb`)!).inlineSize)
+    }
+    expect(thumb('touch', '.s')).toBe(24)
+    expect(thumb('pointer', '.s')).toBe(12)
+    expect(thumb('touch', '.l')).toBe(24)
+    expect(thumb('pointer', '.l')).toBe(20)
+    const el = cases({ case: 'adaptive', input: 'touch' }).el
+    expect(px(getComputedStyle(el.querySelector('.s .weft-slider__thumb')!).inlineSize)).toBe(24)
+    expect(px(getComputedStyle(cases({ case: 'adaptive', input: 'pointer' }).el.querySelector('.s .weft-slider__thumb')!).inlineSize)).toBe(16)
+  })
+
+  describe('sm controls on touch', () => {
+    const small = (input: string) => {
+      const el = cases({ case: 'small', input }).el
+      const style = (sel: string) => getComputedStyle(el.querySelector(sel)!)
+      return {
+        input: px(style('.i').blockSize),
+        number: px(style('.n').blockSize),
+        pin: px(style('.p .weft-pin-input__box').blockSize),
+        pinWide: px(style('.p .weft-pin-input__box').inlineSize),
+        slider: px(style('.s').blockSize),
+      }
+    }
+
+    it('keeps the drawn box of an sm Input and InputNumber, and makes sm PinInput boxes and Sliders 44 px', () => {
+      expect(small('touch')).toEqual({ input: 28, number: 28, pin: 44, pinWide: 44, slider: 44 })
+      expect(small('pointer')).toEqual({ input: 28, number: 28, pin: 28, pinWide: 28, slider: 24 })
+    })
+
+    it('isolates the input box, so its hit area behind the field is painted above any ancestor background', () => {
+      const el = cases({ case: 'small', input: 'touch' }).el
+      expect(getComputedStyle(el.querySelector('.i')!).isolation).toBe('isolate')
+      expect(getComputedStyle(el.querySelector('.n')!).isolation).toBe('isolate')
+      expect(ruleFor('.weft-input::before')!.style.getPropertyValue('z-index')).toBe('-1')
+    })
+
+    it('gives sm InputNumber steppers a 44 px hit area on touch', () => {
+      const el = cases({ case: 'small', input: 'touch' }).el
+      expect(px(getComputedStyle(el.querySelector('.n .weft-input-number__step')!).inlineSize)).toBe(44)
+    })
+
+    it('needs no hit area for an sm Textarea, which is taller than 44 px at three rows', () => {
+      const t = cases({ case: 'small', input: 'touch' }).el.querySelector<HTMLTextAreaElement>('.t')!
+      expect(t.getAttribute('rows')).toBe('3')
+    })
   })
 
   it('makes PinInput boxes 44 px on touch', () => {

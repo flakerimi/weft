@@ -20,5 +20,5 @@ the focused radio.
 
 The radios are native, sharing `name` (one is generated when not given), so
 they post with a plain form. The group is `role="radiogroup"`, named by
-`legend` or by its FormField's label, described by the field's hint and
+`legend` or by its FormField's label, described by the field's description, hint and
 error, and `aria-required` when the field (or `required`) asks.

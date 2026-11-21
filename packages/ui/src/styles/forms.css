@@ -7,9 +7,11 @@
 
 /* Input: the box holds the field and anything before and after it. Its
    ::before is the hit area, behind the field so a press on the text still
-   places the caret. */
+   places the caret; the box isolates, so the hit area stays above whatever
+   background is behind the box. */
 .weft-input {
   position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   gap: var(--weft-space-2, 8px);
@@ -76,24 +78,31 @@
 .weft-input[data-disabled] { opacity: 0.5; cursor: not-allowed; }
 .weft-input[data-disabled] .weft-input__field { cursor: not-allowed; }
 
-/* FormField: the label over the control, a hint under the label, the error
-   under the control. */
+/* FormField: the label over the control with a hint beside it, a
+   description under the label, the error under the control. */
 .weft-form-field {
   display: flex;
   flex-direction: column;
   gap: var(--weft-space-1, 4px);
   min-inline-size: 0;
 }
+.weft-form-field__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--weft-space-2, 8px);
+}
 .weft-form-field__label {
-  align-self: flex-start;
   color: var(--weft-color-text, CanvasText);
   font-weight: var(--weft-weight-heading, 600);
 }
 .weft-form-field__required { margin-inline-start: 0.25em; color: var(--weft-color-danger-text, #AB2323); }
-.weft-form-field__hint { color: var(--weft-color-text-muted, GrayText); font-size: 0.875em; }
+.weft-form-field__hint,
+.weft-form-field__description { color: var(--weft-color-text-muted, GrayText); font-size: 0.875em; }
+.weft-form-field__hint { margin-inline-start: auto; }
 .weft-form-field__error { color: var(--weft-color-danger-text, #AB2323); font-size: 0.875em; }
-.weft-form-field[data-size="sm"] > .weft-form-field__label { font-size: 0.875em; }
-.weft-form-field[data-size="lg"] > .weft-form-field__label { font-size: 1.0625em; }
+.weft-form-field[data-size="sm"] .weft-form-field__label { font-size: 0.875em; }
+.weft-form-field[data-size="lg"] .weft-form-field__label { font-size: 1.0625em; }
 
 /* Checkbox, radio and switch: a row of the drawn control and its text, at
    least --weft-hit-min tall so neighbouring rows' hit areas do not overlap.
@@ -320,8 +329,9 @@
 
 /* Slider: a track, its filled part, and thumbs placed along it by inline
    start (so a right-to-left page fills from the right) or, vertical, from the
-   bottom. The thumb is drawn 16 px (12 sm, 20 lg); its ::before, and the
-   track's, are the hit area, at least --weft-hit-min. */
+   bottom. The thumb is drawn 16 px (12 sm, 20 lg), and at least
+   --weft-thumb-min (24 px on touch); its ::before, and the track's, are the
+   hit area, at least --weft-hit-min. */
 .weft-slider {
   --weft-slider-thumb: 16px;
   --weft-slider-track: 6px;
@@ -372,10 +382,11 @@
 .weft-slider__thumb {
   position: absolute;
   top: 50%;
-  inline-size: var(--weft-slider-thumb, 16px);
-  block-size: var(--weft-slider-thumb, 16px);
-  margin-inline-start: calc(var(--weft-slider-thumb, 16px) / -2);
-  margin-block-start: calc(var(--weft-slider-thumb, 16px) / -2);
+  --weft-slider-drawn: max(var(--weft-slider-thumb, 16px), var(--weft-thumb-min, 0px));
+  inline-size: var(--weft-slider-drawn, 16px);
+  block-size: var(--weft-slider-drawn, 16px);
+  margin-inline-start: calc(var(--weft-slider-drawn, 16px) / -2);
+  margin-block-start: calc(var(--weft-slider-drawn, 16px) / -2);
   border: 2px solid var(--weft-tone, LinkText);
   border-radius: 50%;
   background: var(--weft-color-bg, Canvas);
@@ -385,8 +396,8 @@
 .weft-slider[data-orientation="vertical"] .weft-slider__thumb {
   top: auto;
   left: 50%;
-  margin-inline-start: calc(var(--weft-slider-thumb, 16px) / -2);
-  margin-block: 0 calc(var(--weft-slider-thumb, 16px) / -2);
+  margin-inline-start: calc(var(--weft-slider-drawn, 16px) / -2);
+  margin-block: 0 calc(var(--weft-slider-drawn, 16px) / -2);
 }
 .weft-slider__thumb::before {
   content: '';
@@ -401,7 +412,8 @@
 .weft-slider[data-disabled] { opacity: 0.5; cursor: not-allowed; }
 .weft-slider[data-disabled] .weft-slider__thumb { cursor: not-allowed; }
 
-/* PinInput: square boxes in a row, each a control height. */
+/* PinInput: square boxes in a row, each a control height; every box is its
+   own target, so on touch an sm box grows to --weft-hit-min too. */
 .weft-pin-input { display: inline-flex; gap: var(--weft-space-2, 8px); }
 .weft-pin-input__box {
   inline-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
@@ -415,7 +427,11 @@
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
-.weft-pin-input[data-size="sm"] .weft-pin-input__box { inline-size: var(--weft-control-sm, 28px); block-size: var(--weft-control-sm, 28px); font-size: 0.875em; }
+.weft-pin-input[data-size="sm"] .weft-pin-input__box {
+  inline-size: max(var(--weft-control-sm, 28px), var(--weft-hit-min, 24px));
+  block-size: max(var(--weft-control-sm, 28px), var(--weft-hit-min, 24px));
+  font-size: 0.875em;
+}
 .weft-pin-input[data-size="lg"] .weft-pin-input__box { inline-size: var(--weft-control-lg, 44px); block-size: var(--weft-control-lg, 44px); font-size: 1.0625em; }
 .weft-pin-input__box:focus-visible {
   outline: 2px solid var(--weft-color-focus, Highlight);
@@ -441,5 +457,14 @@
 .weft-field-group[data-orientation="vertical"] > :not(:last-child) { border-end-start-radius: 0; border-end-end-radius: 0; }
 .weft-field-group[data-orientation="vertical"] > :not(:first-child) { border-start-start-radius: 0; border-start-end-radius: 0; }
 
-/* Form: its fields in a column. */
-.weft-form { display: flex; flex-direction: column; gap: var(--weft-space-4, 16px); }
+/* Form: its fields in a column, inside a fieldset with no frame of its own
+   (it disables everything at once). */
+.weft-form__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-4, 16px);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}

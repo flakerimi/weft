@@ -42,6 +42,19 @@ describe('validateField', () => {
     expect(validateField('b', { pattern: 'a1|b' })).toBeUndefined()
   })
 
+  it('matches pattern against a number written out, and checks a number as an email address the same way', () => {
+    expect(validateField(123, { pattern: '[0-9]{3}' })).toBeUndefined()
+    expect(validateField(12, { pattern: '[0-9]{3}' })).toBe('Use the format asked for.')
+    expect(validateField(-1.5, { pattern: '-?[0-9]+' })).toBe('Use the format asked for.')
+    expect(validateField(42, { email: true })).toBe('Enter an email address.')
+  })
+
+  it('applies only required to a value that is neither text, number nor list', () => {
+    expect(validateField(true, { min: 3, max: 0, pattern: 'x', email: true })).toBeUndefined()
+    expect(validateField({ a: 1 }, { min: 3, pattern: 'x', email: true })).toBeUndefined()
+    expect(validateField(['a'], { pattern: 'x', email: true })).toBeUndefined()
+  })
+
   it('checks an email address as a browser does for type="email"', () => {
     expect(validateField('ada@example.com', { email: true })).toBeUndefined()
     expect(validateField('ada@localhost', { email: true })).toBeUndefined()

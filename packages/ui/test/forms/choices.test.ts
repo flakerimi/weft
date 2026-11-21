@@ -117,8 +117,9 @@ describe('CheckboxGroup', () => {
     expect(m.exposed.fruits).toEqual(['pear', 'apple'])
   })
 
-  it('in a FormField is labelled by the field, described by its hint and error, and invalid', () => {
+  it('in a FormField is labelled by the field, described by its hint and error, and invalid', async () => {
     const el = cases({ case: 'group' }).el
+    await nextTick()
     const field = el.querySelector('.in-field')!
     const group = field.querySelector('fieldset')!
     expect(group.getAttribute('aria-labelledby')).toBe(field.querySelector('label.weft-form-field__label')!.id)
@@ -126,6 +127,8 @@ describe('CheckboxGroup', () => {
       `${field.querySelector('.weft-form-field__hint')!.id} ${field.querySelector('.weft-form-field__error')!.id}`,
     )
     expect(group.getAttribute('aria-invalid')).toBe('true')
+    // The group names itself through the label's id; the label points at no control.
+    expect(field.querySelector('label.weft-form-field__label')!.hasAttribute('for')).toBe(false)
     // The boxes keep ids of their own, not the field's.
     const ids = [...el.querySelectorAll('input')].map((i) => i.id)
     expect(new Set(ids).size).toBe(ids.length)
@@ -208,10 +211,12 @@ describe('RadioGroup', () => {
     expect(m.el.querySelector('.echo')!.textContent).toBe('free')
   })
 
-  it('in a FormField is labelled by the field, invalid, required and described by the error', () => {
+  it('in a FormField is labelled by the field, invalid, required and described by the error', async () => {
     const field = cases({ case: 'radio' }).el.querySelector('.in-field')!
+    await nextTick()
     const group = field.querySelector('[role="radiogroup"]')!
     expect(group.getAttribute('aria-labelledby')).toBe(field.querySelector('.weft-form-field__label')!.id)
+    expect(field.querySelector('.weft-form-field__label')!.hasAttribute('for')).toBe(false)
     expect(group.getAttribute('aria-invalid')).toBe('true')
     expect(group.getAttribute('aria-required')).toBe('true')
     expect(group.getAttribute('aria-describedby')).toBe(field.querySelector('.weft-form-field__error')!.id)

@@ -4,7 +4,7 @@ purpose: A short code typed one character per box.
 use: For a one-time code, a verification code or a PIN.
 avoid: For a password or anything longer than about eight characters, use Input.
 adapts:
-  input: md boxes are 44 px square on touch (36 px on pointer); with type number a number pad comes up.
+  input: Every box is its own target, so md and sm boxes are 44 px square on touch (36 and 28 px on pointer); with type number a number pad comes up.
   surface: Nothing changes.
   width: The boxes stay in one row.
 ---

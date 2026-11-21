@@ -6,7 +6,7 @@ const seats = ref<number | null>(3)
 </script>
 
 <template>
-  <FormField label="Seats" hint="Between 1 and 50.">
+  <FormField label="Seats" description="Between 1 and 50.">
     <InputNumber v-model="seats" :min="1" :max="50" />
   </FormField>
 </template>

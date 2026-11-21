@@ -25,12 +25,19 @@ export interface FieldContext {
   blur(): void
   /** The control's value changed. */
   input(): void
+  /**
+   * For a control that is not a labelable element (a group, a slider
+   * thumb), during setup: it names itself through `labelId`, so the label
+   * drops `for`, which would point at no form control.
+   */
+  namedByLabel(): void
 }
 
 /** What a Form gives each FormField in it. */
 export interface FormContext {
   error(name: string): string | undefined
   required(name: string): boolean
+  /** Disabled, or busy submitting: every control in the form is disabled. */
   disabled: () => boolean
   blur(name: string): void
   input(name: string): void
@@ -86,12 +93,14 @@ export interface Field {
 export function useField(props: ControlProps): Field {
   const field = inject(fieldKey, null)
   const group = inject(fieldGroupKey, null)
+  const form = useForm()
   return {
     field,
     id: computed(() => (field ? field.id : props.id)),
     name: computed(() => props.name ?? field?.name()),
     size: computed(() => props.size ?? group?.size() ?? field?.size() ?? 'md'),
-    disabled: computed(() => !!props.disabled || !!field?.disabled()),
+    // A disabled Form disables every control in it, in a FormField or not.
+    disabled: computed(() => !!props.disabled || !!field?.disabled() || !!form?.disabled()),
     invalid: computed(() => !!field?.invalid()),
     aria: computed(() => ({
       'aria-describedby': field?.describedBy(),
@@ -111,6 +120,8 @@ export function useField(props: ControlProps): Field {
  */
 export function useControlAttrs(f: Field): {
   own: ComputedRef<Record<string, unknown>>
+  /** `class` and `style` for the box, each only when given (so no empty style attribute). */
+  box: ComputedRef<Record<string, unknown>>
   describedBy: (...more: unknown[]) => string | undefined
 } {
   const attrs = useAttrs()
@@ -119,6 +130,10 @@ export function useControlAttrs(f: Field): {
       const { class: _class, style: _style, 'aria-describedby': _describedBy, ...rest } = attrs
       return rest
     }),
+    box: computed(() => ({
+      ...(attrs.class !== undefined && { class: attrs.class }),
+      ...(attrs.style !== undefined && attrs.style !== '' && { style: attrs.style }),
+    })),
     describedBy: (...more) => joinIds(attrs['aria-describedby'], f.aria.value['aria-describedby'], ...more),
   }
 }

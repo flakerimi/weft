@@ -7,7 +7,7 @@ const done = ref(false)
 </script>
 
 <template>
-  <FormField label="Verification code" :hint="done ? 'Checking…' : 'We sent it to your phone.'">
+  <FormField label="Verification code" :description="done ? 'Checking…' : 'We sent it to your phone.'">
     <PinInput v-model="code" :length="6" type="number" otp @complete="done = true" />
   </FormField>
 </template>

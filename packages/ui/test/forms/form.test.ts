@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import FormCases from '../fixtures/forms/FormCases.vue'
-import { press } from '../keyboard.ts'
+import { actuallyDisabled, press } from '../keyboard.ts'
 import { mount } from '../mount.ts'
 import { settle, type } from './helpers.ts'
 
@@ -71,15 +71,43 @@ describe('Form', () => {
     await settle()
     await f.submit()
     expect(f.exposed.failed).toEqual([])
-    expect(f.exposed.submitted).toEqual([{ email: 'ada@example.com', age: 36, terms: true, plan: 'free', nick: '' }])
+    expect(f.exposed.submitted).toEqual([{ email: 'ada@example.com', age: 36, terms: true, plan: 'free', nick: '', fruit: ['apple'], loose: '' }])
     expect(typeof (f.exposed.submitted as { age: unknown }[])[0]!.age).toBe('number')
   })
 
-  it('submits with Enter in a field, as a form does', async () => {
+  it('submits when its submit button is pressed with Enter', async () => {
     const f = render()
     expect(press(f.q('button[type="submit"]'), 'Enter')).toBe(true)
     await settle()
     expect(f.exposed.failed).toHaveLength(1)
+  })
+
+  it('submits when Enter is pressed in a text field, with the number typed there committed first', async () => {
+    const f = render()
+    type(f.q('.email input'), 'ada@example.com')
+    f.q('.terms input').click()
+    f.q('.plan input').click()
+    await settle()
+    const age = f.q('.age input')
+    age.focus()
+    type(age, '40')
+    expect(press(age, 'Enter')).toBe(true)
+    await settle()
+    expect(f.exposed.failed).toEqual([])
+    expect((f.exposed.submitted as { age: unknown }[]).map((v) => v.age)).toEqual([40])
+  })
+
+  it('submits a copy of the values, lists and objects included, that later edits do not change', async () => {
+    const f = render()
+    type(f.q('.email input'), 'ada@example.com')
+    f.q('.terms input').click()
+    f.q('.plan input').click()
+    await settle()
+    await f.submit()
+    const [sent] = f.exposed.submitted as { fruit: string[] }[]
+    expect(sent!.fruit).toEqual(['apple'])
+    ;(f.state.fruit as string[]).push('fig')
+    expect(sent!.fruit).toEqual(['apple'])
   })
 
   it('after the first submit checks a field again when it is left', async () => {
@@ -114,6 +142,26 @@ describe('Form', () => {
     expect(f.error('email')).toBeUndefined()
   })
 
+  it('keeps a server error through the blur that follows, and checks that field again only as it changes', async () => {
+    const f = render()
+    ;(f.exposed.setErrors as (e: Record<string, string>) => void)({ email: 'That address is taken.' })
+    await settle()
+    const email = f.q('.email input')
+    expect(document.activeElement).toBe(email)
+    email.blur()
+    await settle()
+    expect(f.error('email')).toBe('That address is taken.')
+    email.focus()
+    type(email, 'other@example.com')
+    await settle()
+    expect(f.error('email')).toBeUndefined()
+    // From then on it is an ordinary field again: leaving it checks it.
+    type(email, 'nope')
+    email.blur()
+    await settle()
+    expect(f.error('email')).toBe('Enter an email address.')
+  })
+
   it('shows errors from a server with setErrors, until the field is checked again', async () => {
     const f = render()
     ;(f.exposed.setErrors as (e: Record<string, string>) => void)({ email: 'That address is taken.', nick: 'Taken too.' })
@@ -137,14 +185,54 @@ describe('Form', () => {
     expect(f.error('email')).toBe('This field is required.')
   })
 
-  it('while disabled disables its fields and ignores a submit', async () => {
+  it('while disabled disables every control in it, in a FormField or not, buttons too, and ignores a submit', async () => {
     const f = render({ disabled: true })
     expect(f.q('.email input').disabled).toBe(true)
     expect(f.q('.age input').disabled).toBe(true)
+    expect(f.q('.bare input').disabled).toBe(true)
+    expect(f.q('.bare').getAttribute('data-disabled')).toBe('true')
+    expect(f.q('.joined input').disabled).toBe(true)
+    const check = f.q<HTMLButtonElement>('.joined button')
+    // Buttons are disabled by the form's disabled fieldset, as a browser has it.
+    expect(check.closest('fieldset')!.disabled).toBe(true)
+    expect(actuallyDisabled(check)).toBe(true)
+    expect(press(check, 'Enter')).toBe(false)
+    expect(actuallyDisabled(f.q<HTMLButtonElement>('button[type="submit"]'))).toBe(true)
+    expect(press(f.q('.email input'), 'Enter')).toBe(false)
     f.q<HTMLFormElement>('form').requestSubmit()
     await settle()
     expect(f.exposed.failed).toEqual([])
     expect(f.exposed.submitted).toEqual([])
     expect(f.error('email')).toBeUndefined()
+  })
+
+  it('while loading ignores a submit and is busy', async () => {
+    const f = render({ loading: true })
+    expect(f.q('form').getAttribute('aria-busy')).toBe('true')
+    f.q<HTMLFormElement>('form').requestSubmit()
+    await settle()
+    expect(f.exposed.failed).toEqual([])
+    expect(f.error('email')).toBeUndefined()
+  })
+
+  it('stays loading while an async submit handler runs, so a second submit does nothing', async () => {
+    const f = render({ slow: true })
+    type(f.q('.email input'), 'ada@example.com')
+    f.q('.terms input').click()
+    f.q('.plan input').click()
+    await settle()
+    await f.submit()
+    expect(f.exposed.submitted).toHaveLength(1)
+    expect(f.q('form').getAttribute('aria-busy')).toBe('true')
+    expect(f.q('.email input').disabled).toBe(true)
+    f.q<HTMLFormElement>('form').requestSubmit()
+    await settle()
+    expect(f.exposed.submitted).toHaveLength(1)
+    ;(f.exposed.finish as () => void)()
+    await settle()
+    expect(f.q('form').hasAttribute('aria-busy')).toBe(false)
+    expect(f.q('.email input').disabled).toBe(false)
+    await f.submit()
+    expect(f.exposed.submitted).toHaveLength(2)
   })
 })

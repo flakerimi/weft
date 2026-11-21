@@ -175,7 +175,7 @@ describe('Input', () => {
 })
 
 describe('FormField', () => {
-  it('labels its control, and describes it with its hint', () => {
+  it('labels its control, with a description under the label and a hint beside it, both describing it', () => {
     const el = cases({ case: 'field' }).el
     const field = el.querySelector('.weft-form-field')!
     const label = field.querySelector('label')!
@@ -183,10 +183,15 @@ describe('FormField', () => {
     expect(label.textContent).toContain('Email')
     expect(input.id).not.toBe('')
     expect(label.htmlFor).toBe(input.id)
+    const head = field.querySelector('.weft-form-field__head')!
+    expect([...head.children].map((c) => c.className)).toEqual(['weft-form-field__label', 'weft-form-field__hint'])
     const hint = field.querySelector('.weft-form-field__hint')!
-    expect(hint.textContent).toBe('We never share it.')
-    // Its own aria-describedby is kept, then the field's.
-    expect(input.getAttribute('aria-describedby')).toBe(`extra ${hint.id}`)
+    expect(hint.textContent).toBe('Optional')
+    const description = field.querySelector('.weft-form-field__description')!
+    expect(description.textContent).toBe('We never share it.')
+    expect(description.previousElementSibling).toBe(head)
+    // Its own aria-describedby is kept, then the field's: description, hint.
+    expect(input.getAttribute('aria-describedby')).toBe(`extra ${description.id} ${hint.id}`)
     expect(input.hasAttribute('aria-invalid')).toBe(false)
     expect(field.querySelector('.weft-form-field__error')).toBeNull()
   })
@@ -205,7 +210,12 @@ describe('FormField', () => {
     const error = el.querySelector('.weft-form-field__error')!
     expect(error.textContent!.trim()).toBe('Enter an email address.')
     expect(input.getAttribute('aria-invalid')).toBe('true')
-    expect(input.getAttribute('aria-describedby')!.split(' ')).toEqual(['extra', el.querySelector('.weft-form-field__hint')!.id, error.id])
+    expect(input.getAttribute('aria-describedby')!.split(' ')).toEqual([
+      'extra',
+      el.querySelector('.weft-form-field__description')!.id,
+      el.querySelector('.weft-form-field__hint')!.id,
+      error.id,
+    ])
     expect(el.querySelector('.weft-form-field')!.getAttribute('data-invalid')).toBe('true')
     expect(el.querySelector('.weft-input')!.getAttribute('data-invalid')).toBe('true')
   })
@@ -219,10 +229,19 @@ describe('FormField', () => {
     expect(slotted.querySelector('input')!.getAttribute('aria-describedby')).toBe(slotted.querySelector('.weft-form-field__error')!.id)
   })
 
-  it('describes nothing when it has neither hint nor error, and gives the control its name', () => {
+  it('gives its default slot the error', () => {
+    expect(cases({ case: 'slot-error' }).el.querySelector('input')!.getAttribute('placeholder')).toBe('Too short.')
+  })
+
+  it('describes nothing when it has neither description, hint nor error, and gives the control its name', () => {
     const el = cases({ case: 'bare-field' }).el
     expect(el.querySelector('input')!.hasAttribute('aria-describedby')).toBe(false)
     expect(cases({ case: 'field' }).el.querySelector('input')!.getAttribute('name')).toBe('email')
+  })
+
+  it('renders no empty style attribute on the box when none is given', () => {
+    expect(render().hasAttribute('style')).toBe(false)
+    expect(render({ style: 'color: red' }).getAttribute('style')).toContain('color: red')
   })
 })
 

@@ -65,7 +65,7 @@ defineSlots<{
 }>()
 
 const f = useField(props)
-const { own, describedBy } = useControlAttrs(f)
+const { own, box, describedBy } = useControlAttrs(f)
 
 const input = useTemplateRef<HTMLInputElement>('input')
 
@@ -109,8 +109,7 @@ defineExpose({
 <template>
   <span
     class="weft-input"
-    :class="$attrs.class"
-    :style="$attrs.style"
+    v-bind="box"
     :data-size="f.size.value"
     :data-invalid="f.invalid.value ? 'true' : undefined"
     :data-disabled="f.disabled.value ? 'true' : undefined"

@@ -22,7 +22,7 @@ focuses the text; a button in the box keeps its own press.
 stays editable (a lookup runs as it is typed).
 
 **In a FormField** the input takes the field's id (so the label points to
-it), its name, `aria-describedby` (the hint and the error; an
+it), its name, `aria-describedby` (the description, the hint and the error; an
 `aria-describedby` of its own comes first), `aria-invalid` and
 `aria-required`. In a FieldGroup it takes the group's size.
 

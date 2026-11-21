@@ -33,6 +33,7 @@ void props
     <Slider class="off" disabled :default-value="5" aria-label="Off" />
     <Slider class="tall" orientation="vertical" :default-value="25" aria-label="Level" />
     <FormField label="Brightness" class="in-field"><Slider name="brightness" /></FormField>
+    <FormField label="Price" class="range-field"><Slider :default-value="[10, 90]" /></FormField>
   </div>
   <div v-else-if="$props.case === 'pin'" :dir="dir">
     <PinInput v-model="code" class="code" :length="4" type="number" otp @complete="completed.push($event)" />
@@ -53,5 +54,13 @@ void props
     <InputNumber class="n" aria-label="N" />
     <Slider class="s" aria-label="S" />
     <PinInput class="p" :length="2" />
+  </WeftProvider>
+  <WeftProvider v-else-if="$props.case === 'small'" :input="input">
+    <Input class="i" size="sm" aria-label="I" />
+    <InputNumber class="n" size="sm" aria-label="N" />
+    <PinInput class="p" size="sm" :length="2" />
+    <Slider class="s" size="sm" aria-label="S" />
+    <Slider class="l" size="lg" aria-label="L" />
+    <Textarea class="t" size="sm" aria-label="T" />
   </WeftProvider>
 </template>

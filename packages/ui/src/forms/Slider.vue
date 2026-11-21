@@ -11,6 +11,7 @@
 import { computed, ref, useAttrs, useTemplateRef } from 'vue'
 import { useControllable } from '../headless/useControllable.ts'
 import { isRtl } from '../headless/dom.ts'
+import { useId } from '../headless/useId.ts'
 import { useField } from './field.ts'
 import { clamp, snap } from './numbers.ts'
 import type { Size, Tone } from '../types.ts'
@@ -55,6 +56,9 @@ const emit = defineEmits<{
 }>()
 
 const f = useField(props)
+// Its thumbs are not labelable elements: they take the field's label by id.
+f.field?.namedByLabel()
+const base = useId('slider')
 // A name given to the Slider (aria-label, aria-labelledby) names its thumb;
 // the rest of the attributes go to the root.
 const attrs = useAttrs()
@@ -80,9 +84,18 @@ function label(i: number): string | undefined {
   if (range.value) return i === 0 ? 'Minimum' : i === values.value.length - 1 ? 'Maximum' : undefined
   return attrs['aria-label'] as string | undefined
 }
+/** Thumb `i`'s id: the field's for the first, so the field's id names a control. */
+const thumbId = (i: number) => (i === 0 && f.id.value ? f.id.value : `${base}-${i}`)
+/**
+ * A single thumb: the Slider's aria-labelledby, else its field's label. A
+ * range thumb in a field: the field's label and then its own end
+ * ("Price Minimum"), by pointing at itself after the label.
+ */
 function labelledBy(i: number): string | undefined {
+  const own = attrs['aria-labelledby'] as string | undefined
+  if (range.value) return f.field ? `${own ?? f.field.labelId} ${thumbId(i)}` : own && `${own} ${thumbId(i)}`
   if (label(i)) return undefined
-  return (attrs['aria-labelledby'] as string | undefined) ?? f.field?.labelId
+  return own ?? f.field?.labelId
 }
 
 /** Move thumb `i` toward `to`, kept on a step and between its neighbours; true when it moved. */
@@ -206,7 +219,7 @@ defineExpose({
       :ref="(el) => { if (el) thumbs[i] = el as HTMLElement }"
       class="weft-slider__thumb"
       role="slider"
-      :id="i === 0 ? f.id.value : undefined"
+      :id="thumbId(i)"
       :tabindex="disabled ? undefined : 0"
       :style="at(v)"
       :aria-valuenow="v"

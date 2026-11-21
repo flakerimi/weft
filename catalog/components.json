@@ -667,7 +667,7 @@
           "dynamic": false
         }
       ],
-      "notes": "Bind the list with `v-model`. Give the options as `items` - values, or\n`{ value, label, description, disabled }` - or put Checkboxes with a `value`\nin the default slot. A ticked value is added at the end of the list.\n\nIt is a `<fieldset>`: `legend` names it, or, inside a FormField, the field's\nlabel does through `aria-labelledby`; the field's hint and error describe the\ngroup, and an error marks it `aria-invalid`. The boxes keep ids of their own.\n`disabled` disables every box. Tab visits each box, as native checkboxes do.",
+      "notes": "Bind the list with `v-model`. Give the options as `items` - values, or\n`{ value, label, description, disabled }` - or put Checkboxes with a `value`\nin the default slot. A ticked value is added at the end of the list.\n\nIt is a `<fieldset>`: `legend` names it, or, inside a FormField, the field's\nlabel does through `aria-labelledby`; the field's description, hint and error describe the\ngroup, and an error marks it `aria-invalid`. The boxes keep ids of their own.\n`disabled` disables every box. Tab visits each box, as native checkboxes do.",
       "examples": [
         {
           "name": "basic",
@@ -908,15 +908,31 @@
           "type": "boolean",
           "required": false,
           "default": null,
-          "description": "Disables every field, and a submit does nothing."
+          "description": "Disables every control in it, buttons too, and a submit does nothing."
+        },
+        {
+          "name": "loading",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Busy: as disabled, and `aria-busy`, so a second submit does nothing."
+        },
+        {
+          "name": "loadingAuto",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Busy on its own while the submit handler's promise is pending."
+        },
+        {
+          "name": "onSubmit",
+          "type": "(values: T) => unknown",
+          "required": false,
+          "default": null,
+          "description": "Bound with `@submit`: runs once every field is valid, with a copy of the values; a promise it returns keeps the form busy."
         }
       ],
       "emits": [
-        {
-          "name": "submit",
-          "payload": "[values: T]",
-          "description": "Submitted with every field valid: a copy of the values."
-        },
         {
           "name": "error",
           "payload": "[errors: Record<string, string>]",
@@ -930,7 +946,7 @@
           "dynamic": false
         }
       ],
-      "notes": "`state` is the values, an object the fields bind into with `v-model`;\n`schema` is a Weft field schema - plain JSON a server can send, the same\nshape the Go contract will generate - keyed by field name:\n\n    { email: { required: true, email: true }, age: { min: 18, message: 'You must be 18 or over.' } }\n\nEach rule is optional: `required`, `min` and `max` (a length for text and\nlists, bounds for numbers), `pattern` (matched against the whole text, as the\nHTML attribute does), `email`, and `message` in place of the default\nsentences. Its TypeScript type is `FieldSchema`, and `validateFields` checks\nvalues against one anywhere.\n\n**When it checks.** On submit every field is checked. With errors, `error`\nfires with them, each FormField with a matching `name` shows its error, and\nfocus moves to the first invalid control; without, `submit` fires with a\ncopy of the values, typed as `state` is. After the first submit, a field is\nchecked again when it is left, and a field showing an error is checked as it\nchanges, so the error goes the moment it is fixed - but no new error appears\nwhile typing.\n\n**Server errors.** A template ref's `setErrors({ email: 'That address is\ntaken.' })` shows errors from elsewhere until each field is checked again;\n`validate()` checks without submitting, and `clear()` clears every error.\n\nWhile `disabled`, its fields are disabled and a submit does nothing. A\nButton with `type=\"submit\"` and `loading` blocks a second submit. The native\nform has `novalidate`: Weft shows the errors, not the browser.",
+      "notes": "`state` is the values, an object the fields bind into with `v-model`;\n`schema` is a Weft field schema - plain JSON a server can send, the same\nshape the Go contract will generate - keyed by field name:\n\n    { email: { required: true, email: true }, age: { min: 18, message: 'You must be 18 or over.' } }\n\nEach rule is optional: `required`, `min` and `max` (a length for text and\nlists, bounds for numbers), `pattern` (matched against the whole text, as the\nHTML attribute does), `email`, and `message` in place of the default\nsentences. Its TypeScript type is `FieldSchema`, and `validateFields` checks\nvalues against one anywhere.\n\n**When it checks.** On submit every field is checked. With errors, `error`\nfires with them, each FormField with a matching `name` shows its error, and\nfocus moves to the first invalid control; without, the `@submit` handler\nruns with a deep copy of the values (lists and objects too), typed as\n`state` is. After the first submit, a field is checked again when it is\nleft, and a field showing an error is checked as it changes, so the error\ngoes the moment it is fixed - but no new error appears while typing.\n\n**Server errors.** A template ref's `setErrors({ email: 'That address is\ntaken.' })` shows errors from elsewhere. Leaving such a field keeps its error\n(the server said so, and nothing changed); changing the field checks it\nagain. `validate()` checks without submitting, and `clear()` clears every\nerror.\n\n**Disabled and busy.** The content sits in a `<fieldset>` with no frame, so\n`disabled` disables every control in the form at once - Weft's and native\nones, Buttons included - and a submit does nothing. `loading` does the same\nand sets `aria-busy`. With `loading-auto` (on by default), a `@submit`\nhandler that returns a promise keeps the form busy until it settles, so a\nsecond press or Enter submits nothing. (`@submit` is a handler prop, as in\nNuxt UI, so the form can wait for it.) The native form has `novalidate`:\nWeft shows the errors, not the browser.",
       "examples": [
         {
           "name": "basic",
@@ -950,7 +966,7 @@
       "name": "FormField",
       "group": "forms",
       "file": "packages/ui/src/forms/FormField.vue",
-      "purpose": "The label, hint, error and required marker around one form control.",
+      "purpose": "The label, description, hint, error and required marker around one form control.",
       "use": "Around every form control that needs a visible label, inside a Form or not.",
       "avoid": "For a Checkbox or Switch whose own label says everything, the control alone is enough.",
       "adapts": {
@@ -967,11 +983,18 @@
           "description": "What the control is for. The label slot replaces it."
         },
         {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Help in a sentence, under the label (\"We never share it.\"). The description slot replaces it."
+        },
+        {
           "name": "hint",
           "type": "string",
           "required": false,
           "default": null,
-          "description": "Help in a sentence, under the label (\"We never share it.\"). The hint slot replaces it."
+          "description": "A short note beside the label (\"Optional\", \"3 of 10\"). The hint slot replaces it."
         },
         {
           "name": "error",
@@ -1020,11 +1043,18 @@
       "slots": [
         {
           "name": "default",
-          "props": [],
+          "props": [
+            "error"
+          ],
           "dynamic": false
         },
         {
           "name": "label",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "description",
           "props": [],
           "dynamic": false
         },
@@ -1041,13 +1071,13 @@
           "dynamic": false
         }
       ],
-      "notes": "The label sits over the control and is `for` it: the control takes the\nfield's id (set `id` to choose it). A group control (RadioGroup,\nCheckboxGroup, PinInput, a range Slider) is named through `aria-labelledby`\ninstead. `hint` sits under the label; `error` sits under the control. Both\ndescribe the control through `aria-describedby`, and an error marks it\n`aria-invalid`. `error: true` marks it invalid without a sentence (or with\nthe `error` slot). `required` draws an asterisk, hidden from assistive\ntechnology, and sets `aria-required` on the control.\n\n**In a Form,** `name` links the field to the Form: it shows the Form's error\nfor that name, it is required when the schema says so, and leaving or\nchanging the control lets the Form check it again. An `error` given to the\nfield wins over the Form's.",
+      "notes": "The label sits over the control and is `for` it: the control takes the\nfield's id (set `id` to choose it). A control that is not a labelable element\n- a RadioGroup, a CheckboxGroup, a Slider - is named through\n`aria-labelledby` instead, and the label then has no `for` (on the server\nthe label keeps it until the island hydrates, as the control's setup runs\nafter the label is written). A range Slider names each thumb by the label and\nits own end: \"Price Minimum\".\n\n`description` is a sentence under the label; `hint` is a short note beside\nit (\"Optional\", \"3 of 10\"); `error` sits under the control. All three\ndescribe the control through `aria-describedby`, in that order, and an\nerror marks it `aria-invalid`. `error: true` marks it invalid without a\nsentence (or with the `error` slot). `required` draws an asterisk, hidden\nfrom assistive technology, and sets `aria-required` on the control. The\ndefault slot receives `{ error }`, for a control drawn by hand.\n\n**In a Form,** `name` links the field to the Form: it shows the Form's error\nfor that name, it is required when the schema says so, and leaving or\nchanging the control lets the Form check it again. An `error` given to the\nfield wins over the Form's.",
       "examples": [
         {
           "name": "basic",
           "title": "Basic",
           "file": "packages/ui/examples/FormField/basic.vue",
-          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, Input, Stack } from '@weft/ui'\n\nconst email = ref('')\nconst username = ref('ada')\n</script>\n\n<template>\n  <Stack :gap=\"4\">\n    <FormField label=\"Email\" hint=\"We never share it.\" required>\n      <Input v-model=\"email\" type=\"email\" autocomplete=\"email\" />\n    </FormField>\n    <FormField label=\"Username\" error=\"That name is taken.\">\n      <Input v-model=\"username\" />\n    </FormField>\n  </Stack>\n</template>\n"
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, Input, Stack } from '@weft/ui'\n\nconst email = ref('')\nconst username = ref('ada')\n</script>\n\n<template>\n  <Stack :gap=\"4\">\n    <FormField label=\"Email\" description=\"We never share it.\" required>\n      <Input v-model=\"email\" type=\"email\" autocomplete=\"email\" />\n    </FormField>\n    <FormField label=\"Username\" hint=\"Optional\" error=\"That name is taken.\">\n      <Input v-model=\"username\" />\n    </FormField>\n  </Stack>\n</template>\n"
         }
       ]
     },
@@ -1288,7 +1318,7 @@
           "dynamic": false
         }
       ],
-      "notes": "Bind the text with `v-model`; `v-model.trim`, `.number` and `.lazy` work as\non a native input (`type=\"number\"` also gives a number, or `null` when it is\nempty). Attributes such as `placeholder`, `autocomplete`, `inputmode` and\n`aria-label` go to the `<input>`; `class` and `style` go to the box.\n\n**Leading and trailing.** `icon` and `trailing-icon` draw Lucide icons, hidden\nfrom assistive technology; the `leading` and `trailing` slots replace them\nwith anything (a unit, a clear button). A press on the box outside the text\nfocuses the text; a button in the box keeps its own press.\n\n**Loading** puts a spinner after the text and sets `aria-busy`; the field\nstays editable (a lookup runs as it is typed).\n\n**In a FormField** the input takes the field's id (so the label points to\nit), its name, `aria-describedby` (the hint and the error; an\n`aria-describedby` of its own comes first), `aria-invalid` and\n`aria-required`. In a FieldGroup it takes the group's size.\n\n**For other components:** a template ref's `focus()` focuses the text, and\n`input` is the element; Select, Combobox and DatePicker build on this box.",
+      "notes": "Bind the text with `v-model`; `v-model.trim`, `.number` and `.lazy` work as\non a native input (`type=\"number\"` also gives a number, or `null` when it is\nempty). Attributes such as `placeholder`, `autocomplete`, `inputmode` and\n`aria-label` go to the `<input>`; `class` and `style` go to the box.\n\n**Leading and trailing.** `icon` and `trailing-icon` draw Lucide icons, hidden\nfrom assistive technology; the `leading` and `trailing` slots replace them\nwith anything (a unit, a clear button). A press on the box outside the text\nfocuses the text; a button in the box keeps its own press.\n\n**Loading** puts a spinner after the text and sets `aria-busy`; the field\nstays editable (a lookup runs as it is typed).\n\n**In a FormField** the input takes the field's id (so the label points to\nit), its name, `aria-describedby` (the description, the hint and the error; an\n`aria-describedby` of its own comes first), `aria-invalid` and\n`aria-required`. In a FieldGroup it takes the group's size.\n\n**For other components:** a template ref's `focus()` focuses the text, and\n`input` is the element; Select, Combobox and DatePicker build on this box.",
       "examples": [
         {
           "name": "basic",
@@ -1453,7 +1483,7 @@
           "name": "basic",
           "title": "Basic",
           "file": "packages/ui/examples/InputNumber/basic.vue",
-          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, InputNumber } from '@weft/ui'\n\nconst seats = ref<number | null>(3)\n</script>\n\n<template>\n  <FormField label=\"Seats\" hint=\"Between 1 and 50.\">\n    <InputNumber v-model=\"seats\" :min=\"1\" :max=\"50\" />\n  </FormField>\n</template>\n"
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, InputNumber } from '@weft/ui'\n\nconst seats = ref<number | null>(3)\n</script>\n\n<template>\n  <FormField label=\"Seats\" description=\"Between 1 and 50.\">\n    <InputNumber v-model=\"seats\" :min=\"1\" :max=\"50\" />\n  </FormField>\n</template>\n"
         },
         {
           "name": "decimal-steps",
@@ -1727,7 +1757,7 @@
       "use": "For a one-time code, a verification code or a PIN.",
       "avoid": "For a password or anything longer than about eight characters, use Input.",
       "adapts": {
-        "input": "md boxes are 44 px square on touch (36 px on pointer); with type number a number pad comes up.",
+        "input": "Every box is its own target, so md and sm boxes are 44 px square on touch (36 and 28 px on pointer); with type number a number pad comes up.",
         "surface": "Nothing changes.",
         "width": "The boxes stay in one row."
       },
@@ -1836,7 +1866,7 @@
           "name": "basic",
           "title": "Basic",
           "file": "packages/ui/examples/PinInput/basic.vue",
-          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, PinInput } from '@weft/ui'\n\nconst code = ref('')\nconst done = ref(false)\n</script>\n\n<template>\n  <FormField label=\"Verification code\" :hint=\"done ? 'Checking…' : 'We sent it to your phone.'\">\n    <PinInput v-model=\"code\" :length=\"6\" type=\"number\" otp @complete=\"done = true\" />\n  </FormField>\n</template>\n"
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, PinInput } from '@weft/ui'\n\nconst code = ref('')\nconst done = ref(false)\n</script>\n\n<template>\n  <FormField label=\"Verification code\" :description=\"done ? 'Checking…' : 'We sent it to your phone.'\">\n    <PinInput v-model=\"code\" :length=\"6\" type=\"number\" otp @complete=\"done = true\" />\n  </FormField>\n</template>\n"
         }
       ]
     },
@@ -2006,7 +2036,7 @@
           "dynamic": false
         }
       ],
-      "notes": "Bind the chosen value with `v-model`; give the options as `items` - values,\nor `{ value, label, description, disabled }`.\n\n**Keyboard** (the WAI-ARIA radio group pattern): the group is one tab stop,\non the chosen radio or else the first. Down and Right move to the next radio\nand choose it, Up and Left to the previous, wrapping at the ends and\nskipping disabled radios; in a right-to-left document Left and Right swap.\nFocus arriving by Tab or a click chooses nothing by itself; Space chooses\nthe focused radio.\n\nThe radios are native, sharing `name` (one is generated when not given), so\nthey post with a plain form. The group is `role=\"radiogroup\"`, named by\n`legend` or by its FormField's label, described by the field's hint and\nerror, and `aria-required` when the field (or `required`) asks.",
+      "notes": "Bind the chosen value with `v-model`; give the options as `items` - values,\nor `{ value, label, description, disabled }`.\n\n**Keyboard** (the WAI-ARIA radio group pattern): the group is one tab stop,\non the chosen radio or else the first. Down and Right move to the next radio\nand choose it, Up and Left to the previous, wrapping at the ends and\nskipping disabled radios; in a right-to-left document Left and Right swap.\nFocus arriving by Tab or a click chooses nothing by itself; Space chooses\nthe focused radio.\n\nThe radios are native, sharing `name` (one is generated when not given), so\nthey post with a plain form. The group is `role=\"radiogroup\"`, named by\n`legend` or by its FormField's label, described by the field's description, hint and\nerror, and `aria-required` when the field (or `required`) asks.",
       "examples": [
         {
           "name": "basic",
@@ -2194,7 +2224,7 @@
       "use": "For a value where the position matters more than the exact number (volume, a price range).",
       "avoid": "For an exact number, use InputNumber; for a few named steps, use RadioGroup.",
       "adapts": {
-        "input": "The thumb is drawn 16 px (12 sm, 20 lg); on touch its hit area and the track's grow to 44 px through pseudo-elements, and the slider is 44 px tall.",
+        "input": "The thumb is drawn 16 px (12 sm, 20 lg) on pointer and 24 px on touch (--weft-thumb-min), where a finger covers it; on touch its hit area and the track's grow to 44 px through pseudo-elements, and the slider is 44 px tall.",
         "surface": "Nothing changes.",
         "width": "It fills the width of its container; vertical sliders are 160 px tall."
       },
@@ -2297,7 +2327,7 @@
         }
       ],
       "slots": [],
-      "notes": "Bind a number with `v-model`, or an array for a range: a thumb is drawn per\nvalue, thumbs never pass each other (`min-steps-between-thumbs` keeps a gap),\nand the track between them fills.\n\n**Keyboard** (the WAI-ARIA slider pattern): each thumb is a `role=\"slider\"`\nin the tab order. Right and Up raise it by `step`, Left and Down lower it,\nPage Up and Page Down move ten steps, Home and End go to the ends. In a\nright-to-left document Left and Right swap, and the track fills from the\nright. Each thumb's `aria-valuemin` and `aria-valuemax` are its neighbours.\n\n**Pointer:** a press on the track moves the nearest thumb there, on a step,\nand drags it until let go. `update:modelValue` fires as it moves; `change`\nfires once a move ends (a key press, or a drag let go).\n\nThumbs are named by `thumb-labels`, or for a range \"Minimum\" and \"Maximum\";\ninside a FormField a single thumb is named by the field's label. With `name`\neach value posts from a hidden input.",
+      "notes": "Bind a number with `v-model`, or an array for a range: a thumb is drawn per\nvalue, thumbs never pass each other (`min-steps-between-thumbs` keeps a gap),\nand the track between them fills.\n\n**Keyboard** (the WAI-ARIA slider pattern): each thumb is a `role=\"slider\"`\nin the tab order. Right and Up raise it by `step`, Left and Down lower it,\nPage Up and Page Down move ten steps, Home and End go to the ends. In a\nright-to-left document Left and Right swap, and the track fills from the\nright. Each thumb's `aria-valuemin` and `aria-valuemax` are its neighbours.\n\n**Pointer:** a press on the track moves the nearest thumb there, on a step,\nand drags it until let go. `update:modelValue` fires as it moves; `change`\nfires once a move ends (a key press, or a drag let go).\n\nThumbs are named by `thumb-labels`, or for a range \"Minimum\" and \"Maximum\";\na single thumb takes the Slider's own `aria-label`, or its FormField's label.\nIn a FormField a range's thumbs are named by the label and their own end\n(\"Price Minimum\"). With `name`\neach value posts from a hidden input.",
       "examples": [
         {
           "name": "basic",
@@ -2680,7 +2710,7 @@
           "name": "basic",
           "title": "Basic",
           "file": "packages/ui/examples/Textarea/basic.vue",
-          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, Textarea } from '@weft/ui'\n\nconst message = ref('')\n</script>\n\n<template>\n  <FormField label=\"Message\" hint=\"It grows as you write, up to eight lines.\">\n    <Textarea v-model=\"message\" autoresize :rows=\"2\" :maxrows=\"8\" placeholder=\"How can we help?\" />\n  </FormField>\n</template>\n"
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, Textarea } from '@weft/ui'\n\nconst message = ref('')\n</script>\n\n<template>\n  <FormField label=\"Message\" description=\"It grows as you write, up to eight lines.\">\n    <Textarea v-model=\"message\" autoresize :rows=\"2\" :maxrows=\"8\" placeholder=\"How can we help?\" />\n  </FormField>\n</template>\n"
         }
       ]
     },

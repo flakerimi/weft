@@ -71,11 +71,13 @@ function toneColors(theme: Theme, scheme: 'light' | 'dark'): string[] {
   return lines
 }
 
-// Input changes only the hit area: a control's drawn height is
-// --weft-control-sm/md/lg on pointer and touch alike, and an md control is
-// max(--weft-control-md, --weft-hit-min) tall where it is used.
-const pointerSizes = ['  --weft-hit-min: 24px;']
-const touchSizes = ['  --weft-hit-min: 44px;']
+// Input changes the hit area and the smallest drawn thumb: a control's drawn
+// height is --weft-control-sm/md/lg on pointer and touch alike, and an md
+// control is max(--weft-control-md, --weft-hit-min) tall where it is used. A
+// thumb or handle (a slider's) is drawn at least --weft-thumb-min: as its
+// size says on pointer, 24 px on touch, where a finger covers it.
+const pointerSizes = ['  --weft-hit-min: 24px;', '  --weft-thumb-min: 0px;']
+const touchSizes = ['  --weft-hit-min: 44px;', '  --weft-thumb-min: 24px;']
 const appDensity = ['  --weft-text-base: 0.875rem;', '  --weft-page-max: none;', '  --weft-section-gap: var(--weft-space-6);']
 const landingDensity = ['  --weft-text-base: 1.125rem;', '  --weft-page-max: 1200px;', '  --weft-section-gap: var(--weft-space-8);']
 

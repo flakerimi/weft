@@ -32,7 +32,8 @@ defineExpose({ text, trimmed, amount, lazy, focusField: () => field.value?.focus
   <FormField
     v-else-if="$props.case === 'field'"
     label="Email"
-    hint="We never share it."
+    description="We never share it."
+    hint="Optional"
     :error="error"
     required
     name="email"
@@ -45,6 +46,9 @@ defineExpose({ text, trimmed, amount, lazy, focusField: () => field.value?.focus
   <FormField v-else-if="$props.case === 'error-slot'" label="Code" :error="true">
     <Input />
     <template #error><b class="why">Ask your admin.</b></template>
+  </FormField>
+  <FormField v-else-if="$props.case === 'slot-error'" label="Code" error="Too short.">
+    <template #default="{ error: why }"><Input :placeholder="why ?? 'fine'" /></template>
   </FormField>
   <WeftProvider v-else-if="$props.case === 'adaptive'" :input="input">
     <Input class="plain" :size="size" />

@@ -3,7 +3,7 @@
 // `rows` lines up to `maxrows` (then scrolls), and shrinks back when text is
 // removed. Inside a FormField it takes the field's id, description and error
 // state. Attributes go to the <textarea>.
-import { nextTick, onMounted, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
 import { useControlAttrs, useField } from './field.ts'
 import type { Size } from '../types.ts'
 
@@ -51,7 +51,9 @@ const emit = defineEmits<{
 }>()
 
 const f = useField(props)
-const { own, describedBy } = useControlAttrs(f)
+const { own, box, describedBy } = useControlAttrs(f)
+// One element takes both: the textarea is its own box.
+const attrs = computed(() => ({ ...own.value, ...box.value }))
 const area = useTemplateRef<HTMLTextAreaElement>('area')
 
 /** Fit the height to the text, between `rows` and `maxrows` lines. */
@@ -110,9 +112,7 @@ defineExpose({
   <textarea
     ref="area"
     class="weft-textarea"
-    :class="$attrs.class"
-    :style="$attrs.style"
-    v-bind="own"
+    v-bind="attrs"
     :id="f.id.value"
     :name="f.name.value"
     :rows="rows"
