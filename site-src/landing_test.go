@@ -300,15 +300,30 @@ func TestLandingAgents(t *testing.T) {
 // with its CSS inlined, any stylesheet it links, the loader (boot-*.js) and
 // every module the page or its Early Hints preload (fonts are cached and
 // preloaded, so not counted). Neither island starts on load, so nothing of
-// the runtime is in it. Total at most 75 KB: that, the runtime (client-*.js,
-// Vue and the hydration, fetched once when the copy button starts at idle),
-// and each island's chunk with the chunks it imports. The plan's 30 KB was
-// set while the demo was to be a mock date picker and the runtime was not
-// counted; the real DatePicker costs about 25 KB of JavaScript on its own
-// (docs/sizes.md) and the runtime about 33 KB, so the controller ruled 75 KB
-// with the runtime counted (final fix wave). Islands load only what they
-// need: the copy button's chunk imports nothing of the demo's, and the demo
-// loads when it comes into view.
+// the runtime is in it. Then the runtime (client-*.js, Vue and the
+// hydration, fetched once when the copy button starts at idle) and each
+// island's chunk with the chunks it imports: with the first view, what the
+// page loads before anyone touches it. Then what the islands load on
+// demand: the date picker's popover and calendar, fetched when the pointer
+// or focus first comes to it.
+//
+// In the polish pass the date picker moved its popover and calendar to a
+// chunk it loads on demand. Before, the page loaded 73,968 B before anyone
+// touched it, the demo's island 28,237 B of it; after, 60,490 B, the demo's
+// island 14,790 B, and 15,172 B on demand. Each limit below is the after
+// figure plus 10 %. All of it together (75,662 B, a little more than before,
+// as two chunks compress less well than one) stays under the 75 KB the
+// controller ruled in the final fix wave, when the real DatePicker and the
+// runtime were first counted. Islands load only what they need: the copy
+// button's chunk imports nothing of the demo's, and the demo loads when it
+// comes into view.
+const (
+	landingUntouchedLimit = 66539 // 60,490 B plus 10 %
+	landingDemoLimit      = 16269 // 14,790 B plus 10 %
+	landingOnDemandLimit  = 16689 // 15,172 B plus 10 %
+	landingAllLimit       = 75 * 1024
+)
+
 func TestLandingBudgets(t *testing.T) {
 	d := dist(t)
 	var m builtFiles
@@ -343,17 +358,41 @@ func TestLandingBudgets(t *testing.T) {
 				rest += brotliSize(t, d, m, key)
 			}
 		}
+		// What the islands load on demand, and what that imports, not fetched before.
+		onDemand := 0
+		for key := range dynamicImports(t, d, keys(later)) {
+			if !later[key] && !seen[key] {
+				onDemand += brotliSize(t, d, m, key)
+			}
+		}
 		copyChunks := 0
 		for _, key := range islandChunks(t, d, runtime, []string{"CopyCommand"}) {
 			copyChunks += brotliSize(t, d, m, key)
 		}
-		t.Logf("landing, brotli: first view %d B; then the runtime and islands %d B (copy button %d B, runtime %d B); total %d B",
-			first, rest, copyChunks, brotliSize(t, d, m, runtime), first+rest)
+		demo := 0
+		for _, key := range islandChunks(t, d, runtime, []string{"AdaptiveDemo"}) {
+			demo += brotliSize(t, d, m, key)
+		}
+		total := first + rest + onDemand
+		t.Logf("landing, brotli: first view %d B; then the runtime and islands %d B (copy button %d B, demo %d B, runtime %d B); on demand %d B; total %d B",
+			first, rest, copyChunks, demo, brotliSize(t, d, m, runtime), onDemand, total)
 		if first > 12*1024 {
 			t.Errorf("the landing page's first view is %d B brotli, over 12 KB", first)
 		}
-		if first+rest > 75*1024 {
-			t.Errorf("the landing page with its runtime and islands is %d B brotli, over 75 KB", first+rest)
+		if first+rest > landingUntouchedLimit {
+			t.Errorf("the landing page with its runtime and islands is %d B brotli, over %d B", first+rest, landingUntouchedLimit)
+		}
+		if onDemand > landingOnDemandLimit {
+			t.Errorf("the landing page's islands load %d B brotli on demand, over %d B", onDemand, landingOnDemandLimit)
+		}
+		if total > landingAllLimit {
+			t.Errorf("the landing page with its runtime, islands and what they load on demand is %d B brotli, over %d B", total, landingAllLimit)
+		}
+		if demo > landingDemoLimit {
+			t.Errorf("the adaptive demo's island starts with %d B brotli, over %d B; what it draws only when open belongs in a chunk it loads on demand", demo, landingDemoLimit)
+		}
+		if onDemand == 0 {
+			t.Error("the islands load nothing on demand; the date picker's popover and calendar are in the demo's chunks")
 		}
 		if copyChunks > 2*1024 {
 			t.Errorf("the copy button loads %d B brotli; it imports more than it needs", copyChunks)
@@ -380,4 +419,49 @@ func TestLandingBudgets(t *testing.T) {
 		return
 	}
 	t.Fatal("routes.json has no page at /")
+}
+
+var dynamicImport = regexp.MustCompile("import\\(\\s*[`\"']\\./([\\w.-]+\\.js)[`\"']")
+
+// dynamicImports is every chunk the given chunks import on demand
+// (`import("./x.js")`), with what those import, statically or on demand,
+// the runtime and the loader aside.
+func dynamicImports(t *testing.T, d fs.FS, from []string) map[string]bool {
+	t.Helper()
+	out := map[string]bool{}
+	var walk func(key string)
+	walk = func(key string) {
+		b, err := fs.ReadFile(d, strings.TrimPrefix(key, "/"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, imp := range dynamicImport.FindAllStringSubmatch(string(b), -1) {
+			lazy := "/assets/" + imp[1]
+			if out[lazy] || strings.HasPrefix(lazy, "/assets/client-") || strings.HasPrefix(lazy, "/assets/boot-") {
+				continue
+			}
+			static := map[string]bool{}
+			staticImports(t, d, lazy, static)
+			for k := range static {
+				if !strings.HasPrefix(k, "/assets/client-") && !strings.HasPrefix(k, "/assets/boot-") && !out[k] {
+					out[k] = true
+					walk(k)
+				}
+			}
+		}
+	}
+	for _, key := range from {
+		if !strings.HasPrefix(key, "/assets/client-") && !strings.HasPrefix(key, "/assets/boot-") {
+			walk(key)
+		}
+	}
+	return out
+}
+
+func keys(m map[string]bool) []string {
+	var out []string
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }

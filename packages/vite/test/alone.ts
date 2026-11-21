@@ -17,8 +17,12 @@ export const brotli = (text: string) =>
   brotliCompressSync(text, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }).length
 
 export interface AloneBuild {
-  /** Each JavaScript chunk: its file name and code. `vue` is Vue's runtime. */
-  chunks: { name: string; code: string; vue: boolean }[]
+  /**
+   * Each JavaScript chunk: its file name and code. `vue` is Vue's runtime;
+   * `lazy`, a chunk only a dynamic `import()` reaches, loaded on demand
+   * rather than with the page.
+   */
+  chunks: { name: string; code: string; vue: boolean; lazy: boolean }[]
   /** The CSS, base.css left out. */
   css: string
   /** The modules the output holds code of, by id, tree-shaken ones left out. */
@@ -66,7 +70,21 @@ export async function buildAlone(entry: string): Promise<AloneBuild> {
   })) as Rolldown.RolldownOutput | Rolldown.RolldownOutput[]
   const output = (Array.isArray(result) ? result : [result]).flatMap((r) => r.output)
   const built = output.filter((o): o is Rolldown.OutputChunk => o.type === 'chunk')
-  const chunks = built.map((c) => ({ name: c.fileName, code: c.code, vue: c.moduleIds.length > 0 && c.moduleIds.every((m) => VUE.test(m)) }))
+  // What loads with the page: the entry and what it imports statically.
+  const byName = new Map(built.map((c) => [c.fileName, c]))
+  const eager = new Set<string>()
+  const walk = (name: string) => {
+    if (eager.has(name)) return
+    eager.add(name)
+    for (const i of byName.get(name)?.imports ?? []) walk(i)
+  }
+  for (const c of built) if (c.isEntry) walk(c.fileName)
+  const chunks = built.map((c) => ({
+    name: c.fileName,
+    code: c.code,
+    vue: c.moduleIds.length > 0 && c.moduleIds.every((m) => VUE.test(m)),
+    lazy: !eager.has(c.fileName),
+  }))
   const modules = built.flatMap((c) => c.moduleIds.filter((m) => (c.modules[m]?.renderedLength ?? 0) > 0))
   const css = output
     .filter((o): o is Rolldown.OutputAsset => o.type === 'asset' && o.fileName.endsWith('.css'))

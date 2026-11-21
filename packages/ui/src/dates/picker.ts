@@ -17,13 +17,21 @@
  * - `keepFocusOnSwitch(touch, from, to)`: the field leaving with the
  *   switch to touch, focus moves to the button that stays.
  * - `useFormReset(box, fields)`: the form's reset clears invalid text.
+ * - `useLazyPanel(open)`: what the picker draws only while open, its
+ *   Popover and its Calendar (picker-panel.ts, a chunk of its own), loaded
+ *   on demand: `load()` when the picker is about to open (the pointer or
+ *   focus comes to it), and at the latest when it opens. `view` holds both
+ *   once they are in; until then nothing is drawn for them, on the server
+ *   as in the browser. `ready` turns true a tick after `view`: the popover
+ *   is drawn closed first and then opened, as it would be had it been there
+ *   all along, so it moves focus in as ever.
  * - `openingDay()`: today, where a calendar opened on nothing starts.
  * - `cycleTab(event, panel)`: Tab inside the floating calendar goes round
  *   its buttons, as the APG's date picker dialog asks (the popover is
  *   teleported to the end of the page, so leaving it would land past
  *   everything); the touch sheet traps Tab itself.
  */
-import { computed, nextTick, onMounted, onScopeDispose, ref, watch, type ComputedRef, type Ref } from 'vue'
+import { computed, nextTick, onMounted, onScopeDispose, ref, shallowRef, watch, type ComputedRef, type Ref, type ShallowRef } from 'vue'
 import { getLocalTimeZone, today } from '@internationalized/date'
 import { useWeft } from '../adaptive/context.ts'
 import { focus, tabbables } from '../headless/dom.ts'
@@ -195,6 +203,33 @@ export interface DateRangePickerLabels extends CalendarLabels {
   choose: string
   start: string
   end: string
+}
+
+type Panel = typeof import('./picker-panel.ts')
+let panelModule: Promise<Panel> | undefined
+
+export function useLazyPanel(open: Readonly<Ref<boolean>>): { view: ShallowRef<Panel | undefined>; ready: Readonly<Ref<boolean>>; load: () => void } {
+  const view = shallowRef<Panel>()
+  const ready = ref(false)
+  let asked = false
+  const load = () => {
+    if (asked || typeof document === 'undefined') return
+    asked = true
+    panelModule ??= import('./picker-panel.ts')
+    panelModule.then(
+      (m) => {
+        view.value = m
+        void nextTick(() => (ready.value = true))
+      },
+      () => {
+        // Not fetched (offline, say): the next time the pointer or focus comes, it tries again.
+        asked = false
+        panelModule = undefined
+      },
+    )
+  }
+  watch(open, (on) => on && load(), { immediate: true })
+  return { view, ready, load }
 }
 
 /** Where the calendar opens when nothing is typed or bound: today (the calendar opens only in the browser). */

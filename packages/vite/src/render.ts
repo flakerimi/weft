@@ -106,6 +106,7 @@ export async function renderPage(opts: RenderOptions): Promise<RenderResult> {
     const islands = [...new Set(ctx.islands ?? [])]
     const modules = await pageModules(vite, file)
     const islandFiles = findIslandFiles(modules, root, file, islands)
+    await transformOnDemand(vite, Object.values(islandFiles))
     // Vite's module files are posix paths, on Windows too.
     const rendered = new Set([...(ctx.modules ?? [])].map((m) => normalizePath(resolve(root, m))))
     const used = await pageModules(vite, file, { rendered, islands: new Set(Object.values(islandFiles).map(normalizePath)) })
@@ -122,6 +123,25 @@ export async function renderPage(opts: RenderOptions): Promise<RenderResult> {
   } finally {
     if (!opts.server) await vite.close()
   }
+}
+
+/**
+ * What an island loads on demand (an `import()` it makes only in the
+ * browser) the server render never loaded, so the module graph knows the
+ * module but not what it imports, and its CSS would be missed. Transform
+ * (never run) each module of the islands' graphs that has no transform yet,
+ * so pageModules reaches its stylesheets as it does a static import's.
+ */
+async function transformOnDemand(vite: ViteDevServer, islandFiles: string[]): Promise<void> {
+  const env = vite.environments.ssr
+  const seen = new Set<EnvironmentModuleNode>()
+  const walk = async (mod: EnvironmentModuleNode | undefined): Promise<void> => {
+    if (!mod || seen.has(mod)) return
+    seen.add(mod)
+    if (!mod.transformResult && isScript(mod)) await env.transformRequest(mod.url)
+    for (const dep of mod.importedModules) await walk(dep)
+  }
+  for (const file of islandFiles) for (const mod of env.moduleGraph.getModulesByFile(normalizePath(file)) ?? []) await walk(mod)
 }
 
 /** A component's own module: a `.vue` file, not one of its blocks (`?vue&type=style…`). */

@@ -499,3 +499,37 @@ func TestCopyButtonsCopy(t *testing.T) {
 		}
 	}
 }
+
+// The landing page's date picker loads its popover and calendar on demand
+// (a chunk of their own): pressed, it fetches them, opens the calendar on
+// the bound date with focus on it, drawn with its styles.
+func TestLandingDatePickerOpensOnDemand(t *testing.T) {
+	dist(t)
+	b := startBrowser(t)
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
+	defer srv.Close()
+	b.doing, b.deadline = "emulating 1280 px", time.Now().Add(pageTimeout)
+	b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 1280, "height": 900, "deviceScaleFactor": 1, "mobile": false, "hasTouch": false})
+	b.open(srv.URL + "/")
+	b.doing, b.deadline = "opening the landing page's date picker", time.Now().Add(pageTimeout)
+	b.eval(`(document.querySelector('.landing-try').scrollIntoView({ block: 'center' }), true)`, new(bool))
+	b.until(`document.querySelector('.landing-try .weft-date-picker__button, .landing-try .weft-date-picker__trigger')`)
+	var before bool
+	b.eval(`performance.getEntriesByType('resource').some((e) => /\/picker-panel-/.test(e.name))`, &before)
+	if before {
+		t.Error("the popover and calendar were fetched before anyone reached for the date picker")
+	}
+	b.click(`.landing-try .weft-date-picker button`)
+	b.until(`document.querySelector('#weft-overlays [role="grid"]') && document.activeElement && document.activeElement.dataset.date`)
+	var got struct {
+		Focused string
+		Styled  bool
+	}
+	b.eval(`({ focused: document.activeElement.dataset.date, styled: getComputedStyle(document.querySelector('#weft-overlays .weft-popover')).boxShadow !== 'none' && getComputedStyle(document.querySelector('#weft-overlays .weft-calendar')).display !== 'inline' })`, &got)
+	if got.Focused != "2026-12-03" {
+		t.Errorf("the calendar opened with focus on %q, want the bound 2026-12-03", got.Focused)
+	}
+	if !got.Styled {
+		t.Error("the popover or its calendar is drawn without its styles")
+	}
+}

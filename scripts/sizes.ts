@@ -32,6 +32,8 @@ const load = async <T>(spec: string) => (await import(pathToFileURL(fromVite.res
 interface Row {
   name: string
   js: number
+  /** JavaScript loaded on demand (a dynamic import), not with the page. */
+  later: number
   css: number
   vue: number
 }
@@ -44,11 +46,13 @@ async function measure(): Promise<{ rows: Row[]; base: number }> {
   const rows: Row[] = []
   for (const name of names) {
     const { chunks, css } = await buildAlone(mountEntry(join(ui, 'examples', name, 'basic.vue')))
-    const own = chunks.filter((c) => !c.vue)
+    const own = chunks.filter((c) => !c.vue && !c.lazy)
+    const later = chunks.filter((c) => !c.vue && c.lazy)
     const runtime = chunks.filter((c) => c.vue)
     rows.push({
       name,
       js: own.reduce((n, c) => n + brotli(c.code), 0),
+      later: later.reduce((n, c) => n + brotli(c.code), 0),
       css: css.trim() ? brotli(css) : 0,
       vue: runtime.reduce((n, c) => n + brotli(c.code), 0),
     })
@@ -82,6 +86,11 @@ An example may draw more than its component: a Dialog example has a Button
 to open it, a Form example its fields. The numbers are what that example
 costs, which is what a page using the component in that way pays.
 
+JS is what loads with the page; Later, what a component loads on demand
+(a dynamic \`import()\`), such as the DatePicker's popover and calendar, fetched
+when the pointer or focus first comes to it. Total is JS and CSS: what the
+page pays before anyone touches it.
+
 ## Shared by every page
 
 | What | Brotli |
@@ -96,9 +105,9 @@ component uses. Neither is counted in the rows below.
 
 ${rows.length} components. Median: JS ${kb(median(rows.map((r) => r.js)))} KB, CSS ${kb(median(rows.map((r) => r.css)))} KB.
 
-| Component | JS | CSS | Total |
-| --- | ---: | ---: | ---: |
-${rows.map((r) => `| ${r.name} | ${kb(r.js)} | ${kb(r.css)} | ${kb(r.js + r.css)} |`).join('\n')}
+| Component | JS | Later | CSS | Total |
+| --- | ---: | ---: | ---: | ---: |
+${rows.map((r) => `| ${r.name} | ${kb(r.js)} | ${r.later ? kb(r.later) : '—'} | ${kb(r.css)} | ${kb(r.js + r.css)} |`).join('\n')}
 
 The five heaviest: ${byTotal
     .slice(0, 5)

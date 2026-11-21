@@ -36,6 +36,12 @@ keys. Choosing a date binds it, closes the calendar (unless
 Escape closes it with focus back on the button; focus leaving it closes it
 too. Its dialog is named by the field's label.
 
+**Loading.** The calendar and the popover it opens in are a chunk of their
+own, fetched when the pointer or focus first comes to the picker (or, at the
+latest, when it opens), so a page with a date picker does not load them
+before anyone reaches for it. The calendar opens once they are in, focus on
+its date as ever.
+
 Inside a FormField the label is `for` the field (on touch, the button,
 named by the label and the date), the description and error describe it, and
 `required` marks it. `disabled` and `readonly` block typing and opening.

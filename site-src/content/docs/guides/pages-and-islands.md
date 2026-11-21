@@ -125,7 +125,7 @@ The server renders the button, so it shows before any script runs. The island ru
 
 - **A `<script setup>` component.** Its file name is the island's id, so two islands may not share a file name.
 - **Props that JSON can carry:** strings, finite numbers, booleans, `null`, arrays and plain objects. The build refuses anything else and names the prop.
-- **Its own CSS.** The page inlines the CSS of everything the island's file uses, not only what the server drew, since the browser may draw the rest later.
+- **Its own CSS.** The page inlines the CSS of everything the island's file uses, not only what the server drew, since the browser may draw the rest later. That includes what it loads on demand with `import()`, such as a DatePicker's popover and calendar.
 
 A page with islands loads one small module script, the loader (about 0.5 KB), which sets each island's trigger. The first island that starts fetches the runtime, Vue and the hydration, once for the page; every island then shares it and loads its own code. A page with an island that starts on `load` preloads the runtime with the loader; one whose islands wait (`idle`, `visible`, `media`) fetches nothing more until one starts.
 
