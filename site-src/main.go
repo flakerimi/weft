@@ -15,7 +15,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 
 	"github.com/flakerimi/weft"
 )
@@ -34,21 +33,31 @@ func releasesDir() string {
 
 // releaseFiles opens dir, the folder scripts/stage-releases.sh stages: the
 // installer as install and the releases under releases/. Its files are served
-// at their own paths, so it may hold nothing else.
+// at their own paths, so it may hold nothing else. It is opened as an
+// os.Root, so nothing put in it later, a symlink say, leads out of it.
 func releaseFiles(dir string) (fs.FS, error) {
-	entries, err := os.ReadDir(dir)
+	root, err := os.OpenRoot(dir)
 	if err != nil {
+		return nil, fmt.Errorf("the releases folder %s cannot be read (%w)", dir, err)
+	}
+	files := root.FS()
+	entries, err := fs.ReadDir(files, ".")
+	if err != nil {
+		root.Close()
 		return nil, fmt.Errorf("the releases folder %s cannot be read (%w)", dir, err)
 	}
 	for _, e := range entries {
 		if name := e.Name(); name != "install" && name != "releases" {
+			root.Close()
 			return nil, fmt.Errorf("the releases folder %s holds %s; it holds only install and releases/, as scripts/stage-releases.sh stages them", dir, name)
 		}
 	}
-	if fi, err := os.Stat(filepath.Join(dir, "install")); errors.Is(err, fs.ErrNotExist) || (err == nil && !fi.Mode().IsRegular()) {
+	if fi, err := fs.Stat(files, "install"); errors.Is(err, fs.ErrNotExist) || (err == nil && !fi.Mode().IsRegular()) {
+		root.Close()
 		return nil, fmt.Errorf("the releases folder %s has no install; stage it with scripts/stage-releases.sh, or set WEFT_RELEASES_DIR", dir)
 	}
-	return os.DirFS(dir), nil
+	// The root stays open as long as the server serves from it.
+	return files, nil
 }
 
 // handler serves the embedded pages, and /install and /releases/ from releases.

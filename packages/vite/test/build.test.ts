@@ -695,6 +695,19 @@ describe('buildSite with an app build', { timeout: 30_000 }, () => {
     expect(manifest.files['/admin/index.html']).toMatchObject({ immutable: false })
   })
 
+  it("neither copies nor serves the app's .vite folder: its build manifest is for the page build only", async () => {
+    const app = tempDir()
+    appFiles(app)
+    mkdirSync(join(app, '.vite'))
+    writeFileSync(join(app, '.vite/manifest.json'), JSON.stringify({ 'index.html': { file: 'assets/main.js' } }))
+    writeFileSync(join(app, '.vite/ssr-manifest.json'), '{}')
+    const out = tempDir()
+    const manifest = await buildSite({ root: fixture('static-site'), outDir: out, appPrefix: '/admin', appDir: app })
+    expect(existsSync(join(out, 'admin/.vite'))).toBe(false)
+    expect(Object.keys(manifest.files).filter((f) => f.includes('.vite'))).toEqual([])
+    expect(manifest.files['/admin/assets/main.js']).toBeDefined()
+  })
+
   it("marks nothing of the app immutable without its Vite build manifest: a hashed-looking name may be hand-placed", async () => {
     const app = tempDir()
     appFiles(app)
@@ -1011,7 +1024,7 @@ describe('buildSite with a plugin that changes the client build late', { timeout
     expect(snapshot(owner)).toEqual({ 'keep.txt': Buffer.from('owner').toString('base64') })
   })
 
-  it('checks the environment Vite builds: ssr, when build.ssr is set', async () => {
+  it('checks the environment Vite builds: ssr, when build.ssr is set, and names it', async () => {
     const root = linkedSite('site')
     const parent = tempDir()
     const owner = join(parent, 'owner')
@@ -1027,7 +1040,9 @@ export default defineConfig({
 `,
     )
     const failed = expectFailureLogs()
-    await expect(buildSite({ root, outDir: join(parent, 'dist') })).rejects.toThrow(new Error(sentence('build.outDir')))
+    await expect(buildSite({ root, outDir: join(parent, 'dist') })).rejects.toThrow(
+      new Error(sentence('build.outDir').replace('for the client build', 'for the ssr build')),
+    )
     failed()
     expect(snapshot(owner)).toEqual({ 'keep.txt': Buffer.from('owner').toString('base64') })
     expect(readdirSync(parent)).toEqual(['owner'])

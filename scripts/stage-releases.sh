@@ -12,16 +12,34 @@
 # KEPT holds with other contents than SITE is refused. A release is never
 # linked to SITE/releases itself: rebuilding one there would change it in
 # every tree.
-# Usage: scripts/stage-releases.sh [--link-from KEPT] SITE_DIR OUT_DIR [LATEST_VERSION]
+# A release holding a dot-named file (Finder's .DS_Store) is refused: the
+# site's server refuses to start with one.
+# With --check, only check, and stage nothing; OUT_DIR is then not given.
+# Usage: scripts/stage-releases.sh [--link-from KEPT] [--check] SITE_DIR [OUT_DIR] [LATEST_VERSION]
 set -eu
 kept=
-if [ "${1:-}" = --link-from ]; then
-	kept="$2"
-	shift 2
-fi
+check=
+while :; do
+	case "${1:-}" in
+	--link-from)
+		kept="$2"
+		shift 2
+		;;
+	--check)
+		check=1
+		shift
+		;;
+	*) break ;;
+	esac
+done
 site="$1"
-out="$2"
-latest="${3:-}"
+if [ -n "$check" ]; then
+	out=
+	latest="${2:-}"
+else
+	out="$2"
+	latest="${3:-}"
+fi
 fail() {
 	echo "stage-releases: $1" >&2
 	exit 1
@@ -33,7 +51,15 @@ real() {
 if [ -n "$latest" ]; then
 	real "$latest" || fail "$site/releases/$latest does not exist or is a test build"
 fi
-for dir in "$out"/releases/*/; do
+for dir in "$site"/releases/*/; do
+	[ -d "$dir" ] || continue
+	v=$(basename "$dir")
+	real "$v" || continue
+	dot=$(cd "$dir" && find . -name '.?*' | head -n 1)
+	[ -z "$dot" ] ||
+		fail "$site/releases/$v holds ${dot#./}, named with a leading dot, which the site does not serve; move it out"
+done
+for dir in ${out:+"$out"/releases/*/}; do
 	[ -d "$dir" ] || continue
 	v=$(basename "$dir")
 	real "$v" || fail "$out/releases/$v is not a release in $site/releases; remove it by hand"
@@ -49,16 +75,7 @@ if [ -n "$kept" ]; then
 			fail "$site/releases/$v differs from $kept/$v, the release $v a verified push served, whose users have its checksums; put $kept/$v back in $site/releases/$v"
 	done
 fi
-
-# Each file of release folder $1 as a hard link in the new folder $2, or a
-# copy where the file system cannot link.
-link() {
-	mkdir "$2"
-	for f in "$1"/* "$1"/.[!.]* "$1"/..?*; do
-		[ -e "$f" ] || continue
-		ln "$f" "$2/" 2>/dev/null || cp -R "$f" "$2/"
-	done
-}
+[ -z "$check" ] || exit 0
 
 mkdir -p "$out"
 cp "$site/install" "$out/install"
@@ -70,7 +87,7 @@ for dir in "$site"/releases/*/; do
 	[ ! -d "$out/releases/$v" ] || continue
 	mkdir -p "$out/releases"
 	if [ -n "$kept" ] && [ -d "$kept/$v" ]; then
-		link "$kept/$v" "$out/releases/$v"
+		sh "$(dirname "$0")/link-release.sh" "$kept/$v" "$out/releases/$v"
 	else
 		cp -R "$site/releases/$v" "$out/releases/"
 	fi

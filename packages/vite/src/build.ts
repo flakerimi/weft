@@ -303,7 +303,8 @@ async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssT
   await write('routes.json', JSON.stringify(routesJson, null, 2) + '\n')
   // The app's own .br/.gz would be stale beside the ones made here; public/ is copied as it is.
   if (app && appDir) {
-    await copyTree(appDir, appDir, dir, app.prefix.slice(1), taken, { variants: false })
+    // Its .vite/ folder (the build manifest) describes the build for this one; it is not the app's to serve.
+    await copyTree(appDir, appDir, dir, app.prefix.slice(1), taken, { variants: false, skip: '.vite' })
     // What the app's Vite build emitted with a content hash in its name is cached forever, as an SPA's
     // assets are; a file of its public/ folder is copied as it is, so a name that looks hashed proves nothing.
     for (const file of await emittedFiles(appDir)) {
@@ -365,12 +366,19 @@ async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssT
  * under `label`. A symlink is copied as the file it leads to only when that is
  * a file inside `src`; anything else that is not a file or folder is refused.
  * Unless `variants`, a `.br`/`.gz` beside a text file is left out: the build
- * makes its own.
+ * makes its own. The top-level folder `skip` names, if any, is left out.
  */
-async function copyTree(src: string, label: string, dir: string, prefix: string, taken: Taken, { variants = true }) {
+async function copyTree(
+  src: string,
+  label: string,
+  dir: string,
+  prefix: string,
+  taken: Taken,
+  { variants = true, skip }: { variants?: boolean; skip?: string },
+) {
   if (!existsSync(src)) return
   const base = canonical(src)
-  const entries = await walk(src)
+  const entries = (await walk(src)).filter((e) => skip === undefined || e.path.split('/')[0] !== skip)
   const paths = new Set(entries.map((e) => e.path))
   for (const entry of entries) {
     if (entry.kind === 'dir') continue
@@ -818,8 +826,10 @@ interface OutputLock {
  */
 function lockOutput(dir: string): OutputLock {
   const refusals = new Set<string>()
+  /** The environment Vite builds, named in the sentence: client, or ssr when build.ssr is set. */
+  let built = 'client'
   const refuse = (setting: string, then = 'the page build alone decides where that goes'): never => {
-    const sentence = `buildSite: the site's Vite config or a plugin sets ${setting} for the client build; ${then}, so remove it.`
+    const sentence = `buildSite: the site's Vite config or a plugin sets ${setting} for the ${built} build; ${then}, so remove it.`
     refusals.add(sentence)
     throw new Error(sentence)
   }
@@ -853,7 +863,8 @@ function lockOutput(dir: string): OutputLock {
     enforce: 'post',
     configResolved(config) {
       // build() builds one environment, as Vite's legacy builder picks it.
-      check(config.root, config.environments[config.build.ssr ? 'ssr' : 'client']!.build)
+      built = config.build.ssr ? 'ssr' : 'client'
+      check(config.root, config.environments[built]!.build)
       // The top-level options and every environment's. An environment reads
       // publicDir from the top level unless it has its own, and setting it on
       // the environment's config gives it one: each gets its own, frozen.

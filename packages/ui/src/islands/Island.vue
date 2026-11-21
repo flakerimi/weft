@@ -44,7 +44,13 @@ function unserialisable(value: unknown, path: string, parents: object[] = []): {
   const obj = value as object
   if (parents.includes(obj)) return { path, what: 'an object that contains itself' }
   const inner = [...parents, obj]
+  // JSON leaves a symbol-keyed member out, of an array or an object.
+  const symbol = Object.getOwnPropertySymbols(obj).find((k) => Object.prototype.propertyIsEnumerable.call(obj, k))
   if (Array.isArray(obj)) {
+    if (symbol) return { path, what: `an array with the symbol key ${String(symbol)}` }
+    // And an array's members other than its items.
+    const extra = Object.keys(obj).find((k) => !/^(0|[1-9]\d*)$/.test(k) || Number(k) >= obj.length)
+    if (extra !== undefined) return { path, what: `an array with the member ${extra}` }
     for (let i = 0; i < obj.length; i++) {
       if (!(i in obj)) return { path: `${path}[${i}]`, what: 'an empty array slot' }
       const bad = unserialisable(obj[i], `${path}[${i}]`, inner)
@@ -57,8 +63,6 @@ function unserialisable(value: unknown, path: string, parents: object[] = []): {
     const name = (proto as { constructor?: { name?: string } }).constructor?.name || 'class instance'
     return { path, what: `${/^[aeiou]/i.test(name) ? 'an' : 'a'} ${name}` }
   }
-  // JSON leaves a symbol-keyed member out.
-  const symbol = Object.getOwnPropertySymbols(obj).find((k) => Object.prototype.propertyIsEnumerable.call(obj, k))
   if (symbol) return { path, what: `an object with the symbol key ${String(symbol)}` }
   for (const [key, v] of Object.entries(obj)) {
     const bad = unserialisable(v, path ? `${path}.${key}` : key, inner)

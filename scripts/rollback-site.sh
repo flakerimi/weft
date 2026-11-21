@@ -36,7 +36,8 @@ served="$tree/site-src/releases/releases"
 [ -d "$tree/site-src/releases" ] || served="$tree/site-src/dist/releases"
 while IFS= read -r v || [ -n "$v" ]; do
 	[ -n "$v" ] || continue
-	cmp -s "site/releases/$v/SHA256SUMS" "$served/$v/SHA256SUMS" ||
+	# Every file, not only the checksums: a tarball changed in place through a link keeps them.
+	diff -r "site/releases/$v" "$served/$v" >/dev/null 2>&1 ||
 		fail "the tree kept for $version does not serve the published release $v as site/releases has it, so pushing it would drop or change that release; publish a new version with scripts/publish-site.sh instead."
 done <site/releases.txt
 

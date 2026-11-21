@@ -41,7 +41,8 @@ type folder struct {
 // disk since the start is refused with a 500 rather than sent with a stale
 // ETag, and one added since is not served. Serve panics, naming the file, if
 // dir holds a symlink, or if a file's path is also a page or a file of dist,
-// another folder's file, or under /api/.
+// another folder's file, or under /api/. A dot-named entry (.DS_Store, .git)
+// is refused the same way: it is never meant to be published.
 func WithFiles(prefix string, dir fs.FS) Option {
 	return func(o *options) { o.folders = append(o.folders, folder{prefix, dir}) }
 }
@@ -73,6 +74,8 @@ func loadFolders(folders []folder, taken func(p string) string) diskFiles {
 				return err
 			}
 			switch {
+			case name != "." && strings.HasPrefix(d.Name(), "."):
+				panic(fmt.Sprintf("weft.WithFiles: %s in the folder served at %s is named with a leading dot; move it out.", name, f.prefix))
 			case d.Type()&fs.ModeSymlink != 0:
 				panic(fmt.Sprintf("weft.WithFiles: %s in the folder served at %s is a symlink; put the file itself there.", name, f.prefix))
 			case d.IsDir():

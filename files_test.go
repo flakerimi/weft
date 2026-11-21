@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 )
 
 // releaseDir writes a folder like the one the site serves its releases from,
@@ -186,6 +187,61 @@ func TestWithFilesConflictsPanic(t *testing.T) {
 	for _, prefix := range []string{"", "releases/", "/releases", "/a/../b/", "/a//b/"} {
 		wantPanic(t, `weft.WithFiles: the prefix "`+prefix+`" is not a path that starts and ends with "/", like "/releases/".`, func() {
 			Serve(pageBuild(t), nil, WithFiles(prefix, files))
+		})
+	}
+}
+
+// Range and If-Range work as net/http's ServeContent has them, against the
+// ETag computed at start.
+func TestWithFilesRange(t *testing.T) {
+	dir := releaseDir(t)
+	h := Serve(pageBuild(t), nil, WithFiles("/", os.DirFS(dir)))
+	const etag = `"a5dd346546a38436"`
+	r := do(t, h, "GET", "/releases/latest", "Range", "bytes=0-2")
+	if r.StatusCode != http.StatusPartialContent || r.body != "0.0" || r.Header.Get("Content-Range") != "bytes 0-2/6" || r.Header.Get("ETag") != etag {
+		t.Fatalf("Range: status %d body %q Content-Range %q ETag %q", r.StatusCode, r.body, r.Header.Get("Content-Range"), r.Header.Get("ETag"))
+	}
+	if r := do(t, h, "GET", "/releases/latest", "Range", "bytes=2-", "If-Range", etag); r.StatusCode != http.StatusPartialContent || r.body != "0.2\n" {
+		t.Fatalf("If-Range with the ETag: status %d body %q", r.StatusCode, r.body)
+	}
+	// Another tag, or a weak one, means the client's copy is not this file: it gets all of it.
+	for _, tag := range []string{`"a5dd346546a38437"`, "W/" + etag} {
+		if r := do(t, h, "GET", "/releases/latest", "Range", "bytes=2-", "If-Range", tag); r.StatusCode != 200 || r.body != "0.0.2\n" {
+			t.Errorf("If-Range %s: status %d body %q, want the whole file", tag, r.StatusCode, r.body)
+		}
+	}
+	if r := do(t, h, "GET", "/releases/latest", "Range", "bytes=9-"); r.StatusCode != http.StatusRequestedRangeNotSatisfiable {
+		t.Fatalf("a range past the end: status %d", r.StatusCode)
+	}
+}
+
+// A change that keeps the size is caught by the modification time alone.
+func TestWithFilesSameSizeChange(t *testing.T) {
+	dir := releaseDir(t)
+	name := filepath.Join(dir, "releases/latest")
+	h := Serve(pageBuild(t), nil, WithFiles("/", os.DirFS(dir)))
+	fi, _ := os.Stat(name)
+	os.WriteFile(name, []byte("0.0.3\n"), 0o644)
+	later := fi.ModTime().Add(time.Second)
+	os.Chtimes(name, later, later)
+	if r := do(t, h, "GET", "/releases/latest"); r.StatusCode != http.StatusInternalServerError || strings.Contains(r.body, "0.0.") {
+		t.Fatalf("same size, new mtime: status %d body %q", r.StatusCode, r.body)
+	}
+}
+
+// A dot-named entry (Finder's .DS_Store, an editor's swap file, .git) is
+// never something to publish, so the server does not start.
+func TestWithFilesRefusesDotNames(t *testing.T) {
+	for _, name := range []string{"releases/.DS_Store", ".hidden/x", "releases/0.0.2/.swp"} {
+		files := fstest.MapFS{"releases/latest": {Data: []byte("0.0.2\n")}, name: {Data: []byte("x")}}
+		hidden := name
+		if i := strings.Index(name, "/."); i >= 0 {
+			hidden = name[:i+1] + strings.SplitN(name[i+1:], "/", 2)[0]
+		} else {
+			hidden = strings.SplitN(name, "/", 2)[0]
+		}
+		wantPanic(t, "weft.WithFiles: "+hidden+" in the folder served at / is named with a leading dot; move it out.", func() {
+			Serve(pageBuild(t), nil, WithFiles("/", files))
 		})
 	}
 }

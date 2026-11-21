@@ -302,3 +302,28 @@ func TestBinaryHoldsNoReleases(t *testing.T) {
 		t.Fatalf("the site binary is %.1f MB, not under 15 MB", float64(fi.Size())/(1<<20))
 	}
 }
+
+// The folder is opened as an os.Root: a file swapped for a symlink that
+// leads out of it after the start is not followed, even one whose target
+// has the size and time the file had.
+func TestSiteDoesNotFollowASymlinkOut(t *testing.T) {
+	dir := stagedReleases(t)
+	srv := httptest.NewServer(siteHandler(t, dir))
+	defer srv.Close()
+	latest := filepath.Join(dir, "releases/latest")
+	fi, err := os.Stat(latest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := filepath.Join(t.TempDir(), "secret")
+	os.WriteFile(secret, []byte("SECRET"), 0o644)
+	os.Chtimes(secret, fi.ModTime(), fi.ModTime())
+	os.Rename(latest, filepath.Join(t.TempDir(), "latest"))
+	if err := os.Symlink(secret, latest); err != nil {
+		t.Skip(err)
+	}
+	res, body := get(t, srv, "/releases/latest")
+	if res.StatusCode == 200 || strings.Contains(body, "SECRET") {
+		t.Fatalf("GET /releases/latest through a symlink out: %d %q", res.StatusCode, body)
+	}
+}

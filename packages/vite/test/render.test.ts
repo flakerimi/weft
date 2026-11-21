@@ -75,7 +75,7 @@ describe('renderPage', () => {
     class Thing {}
     const loop: Record<string, unknown> = {}
     loop.self = loop
-    // One server for the fifteen renders, rather than one each.
+    // One server for the eighteen renders, rather than one each.
     const server = await createRenderServer(bad)
     onTestFinished(() => server.close())
     const warned = expectVueErrorWarnings()
@@ -96,6 +96,9 @@ describe('renderPage', () => {
       [-0, 'extra', '-0'],
       [{ deep: [-0] }, 'extra.deep[0]', '-0'],
       [{ a: 1, [Symbol('k')]: 2 }, 'extra', 'an object with the symbol key Symbol(k)'],
+      [Object.assign([1, 2], { [Symbol('k')]: 3 }), 'extra', 'an array with the symbol key Symbol(k)'],
+      [Object.assign([1, 2], { note: 'x' }), 'extra', 'an array with the member note'],
+      [{ deep: Object.assign([], { '-1': 0 }) }, 'extra.deep', 'an array with the member -1'],
     ] as const) {
       await expect(renderPage({ root: bad, page: 'pages/props.vue', props: { value }, server }), String(path)).rejects.toThrow(
         new Error(sentence(path, what)),

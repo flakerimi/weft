@@ -43,6 +43,9 @@ grep -qxF "$version" site/releases.txt 2>/dev/null &&
 
 # A push replaces the whole site: every release it has published must be staged again.
 scripts/published-releases.sh check site || exit 1
+# And as a verified push served it: checked now, before anything is built or a tree made.
+store=site/pushed/releases
+scripts/stage-releases.sh --link-from "$store" --check site || exit 1
 
 # The release the site serves now must be staged too, even if the list missed it.
 live=$(curl -fsSL "$url/releases/latest" 2>/dev/null | tr -d ' \r\n') || live=
@@ -62,7 +65,6 @@ scripts/site.sh build
 # installer and every real release, and a Dockerfile that compiles the binary
 # on an empty image beside the releases. It is made where it will be kept, so
 # a release kept before is a hard link to it there; a dry run's goes to TMPDIR.
-store=site/pushed/releases
 if [ -n "$dry" ]; then
 	tmp=${TMPDIR:-/tmp}
 	tree=$(mktemp -d "${tmp%/}/weft-site-push.XXXXXX")
@@ -86,10 +88,13 @@ COPY go.mod *.go ./
 COPY site-src/main.go site-src/
 COPY site-src/dist site-src/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/flakerimi/weft.Version=$version" -o /out/weft-site ./site-src
+# Readable by the server's user whatever the umask the tree was staged under.
+COPY site-src/releases /data/releases
+RUN chmod -R u=rwX,go=rX /data/releases
 
 FROM scratch
 COPY --from=build /out/weft-site /weft-site
-COPY site-src/releases /data/releases
+COPY --from=build /data/releases /data/releases
 USER 65534:65534
 EXPOSE 8080
 ENTRYPOINT ["/weft-site"]
@@ -114,8 +119,9 @@ mv "$tree" "$kept" ||
 	fail "$version is live, but its tree $tree could not be kept as $kept, so $version is not listed as published; move the tree there, then run scripts/published-releases.sh add site $version."
 
 # Each release the tree holds is kept once, beside the trees, for the next
-# push to link: a hard link to the tree's file, made in a folder of its own
-# that takes its name only when it is whole.
+# push to link: hard links to the tree's files, read-only so that a write
+# through any link fails, made in a folder of its own that takes its name
+# only when it is whole.
 keep_releases() {
 	for dir in "$kept"/site-src/releases/releases/*/; do
 		[ -d "$dir" ] || continue
@@ -123,11 +129,9 @@ keep_releases() {
 		[ ! -e "$store/$v" ] || continue
 		mkdir -p "$store" || return 1
 		part=$(mktemp -d "$store/.$v.XXXXXX") && chmod 755 "$part" || return 1
-		for f in "$dir"* "$dir".[!.]* "$dir"..?*; do
-			[ -e "$f" ] || continue
-			ln "$f" "$part/" 2>/dev/null || cp -R "$f" "$part/" || return 1
-		done
+		scripts/link-release.sh "$dir" "$part" || return 1
 		diff -r "$dir" "$part" >/dev/null || return 1
+		chmod a-w "$part"/* || return 1
 		mv "$part" "$store/$v" || return 1
 	done
 }

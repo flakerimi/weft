@@ -181,6 +181,22 @@ func TestStageReleasesLinksKeptReleases(t *testing.T) {
 	}
 }
 
+// A dot-named file in a release (Finder's .DS_Store) is refused, not staged:
+// the server would refuse to start with it.
+func TestStageReleasesRefusesDotNames(t *testing.T) {
+	skipWindows(t)
+	site := fakeSite(t, "0.0.2", "0.0.1", "0.0.2")
+	os.WriteFile(filepath.Join(site, "releases/0.0.1/.DS_Store"), []byte("finder"), 0o644)
+	out := filepath.Join(t.TempDir(), "releases")
+	msg, err := stageReleases(site, out)
+	if err == nil || strings.TrimSpace(msg) != "stage-releases: "+site+"/releases/0.0.1 holds .DS_Store, named with a leading dot, which the site does not serve; move it out" {
+		t.Fatalf("err %v, output %q", err, msg)
+	}
+	if _, err := os.Stat(out); err == nil {
+		t.Fatal("staged something after refusing")
+	}
+}
+
 func publishedReleases(args ...string) (string, error) {
 	b, err := exec.Command("sh", append([]string{"../../scripts/published-releases.sh"}, args...)...).CombinedOutput()
 	return string(b), err
@@ -306,7 +322,7 @@ func newFakeRepo(t *testing.T) *fakeRepo {
 			t.Fatal(err)
 		}
 	}
-	for _, s := range []string{"publish-site.sh", "rollback-site.sh", "publish-site-static.sh", "version.sh", "published-releases.sh", "wait-live.sh", "stage-releases.sh"} {
+	for _, s := range []string{"publish-site.sh", "rollback-site.sh", "publish-site-static.sh", "version.sh", "published-releases.sh", "wait-live.sh", "stage-releases.sh", "link-release.sh"} {
 		b, err := os.ReadFile(filepath.Join("../../scripts", s))
 		if err != nil {
 			t.Fatal(err)
@@ -318,6 +334,7 @@ func newFakeRepo(t *testing.T) *fakeRepo {
 set -eu
 mkdir -p "site/releases/$1"
 echo "sums of $1" >"site/releases/$1/SHA256SUMS"
+echo "tarball of $1" >"site/releases/$1/weft_linux_amd64.tar.gz"
 echo "$1" >site/releases/latest
 echo "$1" >>"$FAKE/built"
 `, 0o755)
@@ -334,6 +351,7 @@ echo "<p>home</p>" >site-src/dist/index.html
 	write(r.root, "site/install", "#!/bin/sh\n", 0o644)
 	for _, v := range []string{"0.0.1", "0.0.2"} {
 		write(r.root, "site/releases/"+v+"/SHA256SUMS", "sums of "+v+"\n", 0o644)
+		write(r.root, "site/releases/"+v+"/weft_linux_amd64.tar.gz", "tarball of "+v+"\n", 0o644)
 	}
 	// curl answers from the fake's state; lisa logs its arguments and serves
 	// the version the pushed Dockerfile builds.
@@ -406,7 +424,8 @@ func TestPublishSiteKeepsOneTreePerVersion(t *testing.T) {
 			t.Fatalf("publish %s kept\n%s\nbut pushed\n%s", v, got, pushedFiles)
 		}
 		df := r.read("site/pushed/" + v + "/Dockerfile")
-		if !strings.Contains(df, "weft.Version="+v+`"`) || !strings.Contains(df, "COPY site-src/releases /data/releases\n") ||
+		if !strings.Contains(df, "weft.Version="+v+`"`) || !strings.Contains(df, "COPY site-src/releases /data/releases\nRUN chmod -R u=rwX,go=rX /data/releases\n") ||
+			!strings.Contains(df, "COPY --from=build /data/releases /data/releases\n") ||
 			strings.Contains(df, "COPY . .") {
 			t.Fatalf("site/pushed/%s/Dockerfile:\n%s", v, df)
 		}
@@ -466,8 +485,18 @@ func TestPublishSiteKeepsEachReleaseOnce(t *testing.T) {
 		}
 	}
 	pushed := filepath.Join(r.root, "site", "pushed")
-	if got := files(t, filepath.Join(pushed, "releases")); got != "0.0.1/SHA256SUMS,0.0.2/SHA256SUMS,0.0.3/SHA256SUMS,0.0.4/SHA256SUMS" {
+	var want []string
+	for _, v := range []string{"0.0.1", "0.0.2", "0.0.3", "0.0.4"} {
+		want = append(want, v+"/SHA256SUMS", v+"/weft_linux_amd64.tar.gz")
+	}
+	if got := files(t, filepath.Join(pushed, "releases")); got != strings.Join(want, ",") {
 		t.Fatalf("site/pushed/releases holds %s", got)
+	}
+	// Kept read-only, so a write through any of its links fails.
+	for _, f := range want {
+		if fi, _ := os.Stat(filepath.Join(pushed, "releases", f)); fi.Mode().Perm()&0o222 != 0 {
+			t.Errorf("site/pushed/releases/%s is %v, writable", f, fi.Mode().Perm())
+		}
 	}
 	for _, v := range []string{"0.0.1", "0.0.2", "0.0.3", "0.0.4"} {
 		kept := filepath.Join(pushed, "releases", v, "SHA256SUMS")
@@ -500,6 +529,39 @@ func TestPublishSiteKeepsEachReleaseOnce(t *testing.T) {
 	out, err := r.run("publish-site.sh", "0.0.5")
 	if err == nil || !strings.Contains(lastLine(out), "stage-releases: site/releases/0.0.3 differs from site/pushed/releases/0.0.3") {
 		t.Fatalf("publish after a kept release changed: err %v\n%s", err, out)
+	}
+	if r.lisa() != pushes {
+		t.Fatalf("lisa ran: %s", r.lisa())
+	}
+	// Refused before anything is built or a tree is made.
+	if b, _ := os.ReadFile(filepath.Join(r.fake, "built")); strings.Contains(string(b), "0.0.5") {
+		t.Fatalf("release.sh built 0.0.5 before the refusal")
+	}
+	if left, _ := filepath.Glob(filepath.Join(pushed, ".weft-site-push.*")); len(left) != 0 {
+		t.Fatalf("a refused publish left %v", left)
+	}
+}
+
+// A tarball changed in place through a kept tree's link (the checksums file
+// left as it was) is not pushed again: rollback compares whole releases.
+func TestRollbackSiteRefusesAChangedTarball(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	if out, err := r.run("publish-site.sh", "0.0.3"); err != nil {
+		t.Fatalf("publish: %v\n%s", err, out)
+	}
+	pushes := r.lisa()
+	tarball := filepath.Join(r.root, "site/pushed/0.0.3/site-src/releases/releases/0.0.1/weft_linux_amd64.tar.gz")
+	os.Chmod(tarball, 0o644)
+	f, err := os.OpenFile(tarball, os.O_WRONLY|os.O_TRUNC, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString("corrupt\n")
+	f.Close()
+	out, err := r.run("rollback-site.sh", "0.0.3")
+	if err == nil || out != "rollback: the tree kept for 0.0.3 does not serve the published release 0.0.1 as site/releases has it, so pushing it would drop or change that release; publish a new version with scripts/publish-site.sh instead." {
+		t.Fatalf("err %v, output %q", err, out)
 	}
 	if r.lisa() != pushes {
 		t.Fatalf("lisa ran: %s", r.lisa())
@@ -562,7 +624,7 @@ func TestPublishSiteDryRunPushesNothing(t *testing.T) {
 	if len(trees) != 1 || !strings.Contains(out, "the tree is "+trees[0]) {
 		t.Fatalf("dry run trees %v, output\n%s", trees, out)
 	}
-	if got := files(t, filepath.Join(trees[0], "site-src/releases")); got != "install,releases/0.0.1/SHA256SUMS,releases/0.0.2/SHA256SUMS,releases/0.0.3/SHA256SUMS,releases/latest" {
+	if got := files(t, filepath.Join(trees[0], "site-src/releases")); got != "install,releases/0.0.1/SHA256SUMS,releases/0.0.1/weft_linux_amd64.tar.gz,releases/0.0.2/SHA256SUMS,releases/0.0.2/weft_linux_amd64.tar.gz,releases/0.0.3/SHA256SUMS,releases/0.0.3/weft_linux_amd64.tar.gz,releases/latest" {
 		t.Fatalf("the dry run's tree stages %s", got)
 	}
 }
@@ -640,8 +702,10 @@ func TestRollbackSiteToATreeThatEmbedsItsReleases(t *testing.T) {
 	tree := filepath.Join(r.root, "site/pushed/0.0.2")
 	for name, data := range map[string]string{
 		"Dockerfile": "RUN go build -ldflags \"-X github.com/flakerimi/weft.Version=0.0.2\" ./site-src\n",
-		"site-src/dist/releases/0.0.1/SHA256SUMS": "sums of 0.0.1\n",
-		"site-src/dist/releases/0.0.2/SHA256SUMS": "sums of 0.0.2\n",
+		"site-src/dist/releases/0.0.1/SHA256SUMS":              "sums of 0.0.1\n",
+		"site-src/dist/releases/0.0.1/weft_linux_amd64.tar.gz": "tarball of 0.0.1\n",
+		"site-src/dist/releases/0.0.2/SHA256SUMS":              "sums of 0.0.2\n",
+		"site-src/dist/releases/0.0.2/weft_linux_amd64.tar.gz": "tarball of 0.0.2\n",
 	} {
 		os.MkdirAll(filepath.Dir(filepath.Join(tree, name)), 0o755)
 		os.WriteFile(filepath.Join(tree, name), []byte(data), 0o644)
