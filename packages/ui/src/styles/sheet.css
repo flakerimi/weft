@@ -48,3 +48,10 @@
   [dir="rtl"] .weft-sheet[data-side="end"] { translate: -100% 0; }
   [dir="rtl"] .weft-sheet[data-side="start"] { translate: 100% 0; }
 }
+/* Leaving, it slides back out the way it came. */
+.weft-overlay[data-state="closed"] .weft-sheet[data-side="bottom"] { translate: 0 100%; }
+.weft-overlay[data-state="closed"] .weft-sheet[data-side="top"] { translate: 0 -100%; }
+.weft-overlay[data-state="closed"] .weft-sheet[data-side="end"] { translate: 100% 0; }
+.weft-overlay[data-state="closed"] .weft-sheet[data-side="start"] { translate: -100% 0; }
+.weft-overlay[data-state="closed"][dir="rtl"] .weft-sheet[data-side="end"] { translate: -100% 0; }
+.weft-overlay[data-state="closed"][dir="rtl"] .weft-sheet[data-side="start"] { translate: 100% 0; }

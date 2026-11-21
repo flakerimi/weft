@@ -6,7 +6,7 @@
   min-inline-size: 8rem;
   max-inline-size: min(24rem, var(--weft-floating-available-width, 100vw));
   max-block-size: var(--weft-floating-available-height, 70vh);
-  overflow: auto;
+  overflow-y: auto;
   padding: var(--weft-space-3, 12px);
   border: 1px solid var(--weft-color-border, GrayText);
   border-radius: var(--weft-radius-card, 12px);
@@ -17,6 +17,22 @@
   transition: opacity var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease);
   @starting-style { opacity: 0; }
 }
-.weft-popover[data-form="floating"]:not([data-positioned]) { opacity: 0; }
+.weft-popover[data-form="floating"]:not([data-positioned]),
+.weft-overlay[data-state="closed"] .weft-popover[data-form="floating"] { opacity: 0; }
+.weft-overlay[data-state="closed"] .weft-popover[data-form="sheet"] { translate: 0 100%; }
 .weft-popover[data-form="sheet"] { gap: var(--weft-space-3, 12px); padding: var(--weft-space-4, 16px); }
-.weft-popover__title { font-size: 1.05em; }
+.weft-popover__title { font-size: 1.05em; font-weight: var(--weft-weight-heading, 600); }
+/* The arrow: a square turned 45°, half under the popover's edge on the trigger's side. */
+.weft-popover__arrow {
+  position: absolute;
+  inline-size: 10px;
+  block-size: 10px;
+  rotate: 45deg;
+  background: inherit;
+  border: inherit;
+  pointer-events: none;
+}
+.weft-popover[data-side="bottom"] .weft-popover__arrow { inset-block-start: -6px; border-inline-end: 0; border-block-end: 0; }
+.weft-popover[data-side="top"] .weft-popover__arrow { inset-block-end: -6px; border-inline-start: 0; border-block-start: 0; }
+.weft-popover[data-side="right"] .weft-popover__arrow { left: -6px; border-top: 0; border-right: 0; }
+.weft-popover[data-side="left"] .weft-popover__arrow { right: -6px; border-bottom: 0; border-left: 0; }

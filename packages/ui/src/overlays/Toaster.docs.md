@@ -16,13 +16,17 @@ adapts:
 `remove(id)`; `clear()` empties the queue and `toasts` reads it. A toast
 leaves after its `duration`, by default the theme's `--weft-duration-toast`.
 
-The Toaster is a region named "Notifications" (`label`) whose list is a
-polite live region, so a new toast is announced without moving focus. While
-the pointer is over it or focus is inside it, no toast's time runs. F8 moves
-focus to it, to reach a toast's actions; when the focused toast goes, focus
-stays in the region. `position` is a corner or the middle of the top or
-bottom edge (`bottom-end` by default; start and end follow the text
-direction), and `max` (5) toasts show at once, the newest.
+The Toaster is a region named "Notifications" (`label`). A new toast is
+announced without moving focus, by type, as in Nuxt UI: `background`
+politely, `foreground` at once (assertively); a `danger` toast is
+foreground unless it says otherwise. While the pointer is over it or focus
+is inside it, no toast's time runs. F8 moves focus to it, to reach a toast's
+actions, even while a modal is open (the region is exempt from its focus
+trap and is never made inert); when the focused toast goes, focus stays in
+the region. `position` is a corner or the middle of the top or bottom edge
+(`bottom-end` by default; start and end follow the text direction); toasts
+swipe away towards that side on touch. At most `max` (5) stay: a new toast
+beyond that drops the oldest.
 
 It renders into the overlay root only once mounted. The queue is one per
 page; on the server `add` does nothing.

@@ -10,7 +10,8 @@ import { overlayStack } from '../../src/headless/overlayStack.ts'
 import StackedCases from '../fixtures/overlays/StackedCases.vue'
 import { fakeMedia } from '../fake-media.ts'
 import { mount } from '../mount.ts'
-import { $, $$, active, key, locked, reset, settle } from './helpers.ts'
+import { useToast } from '../../src/overlays/toast.ts'
+import { $, $$, active, key, locked, press, reset, settle } from './helpers.ts'
 
 let unmount: (() => void) | undefined
 let media: ReturnType<typeof fakeMedia>
@@ -107,6 +108,77 @@ describe('three overlays stacked: Dialog, DropdownMenu, Tooltip', () => {
     key('Escape')
     await settle()
     expect(active()).toBe($('.open-menu'))
+  })
+})
+
+describe('a tooltip over a menu passes presses on', () => {
+  it('one press outside closes the tooltip and the menu; Escape still closes the tooltip first', async () => {
+    await cases()
+    $('.open-dialog').focus()
+    $('.open-dialog').click()
+    await settle()
+    $('.open-menu').click()
+    await settle()
+    const exportItem = $$('[role="menuitem"]')[1]!
+    exportItem.focus()
+    hover($('.tip-trigger').parentElement!)
+    await settle()
+    key('Escape')
+    await settle()
+    expect($('[role="tooltip"]')).toBeNull()
+    expect($('[role="menu"]')).not.toBeNull()
+    hover($('.tip-trigger').parentElement!)
+    await settle()
+    expect($('[role="tooltip"]')).not.toBeNull()
+    press($('.weft-overlay__title')) // in the dialog, outside the menu and the tooltip
+    await settle()
+    expect($('[role="tooltip"]')).toBeNull()
+    expect($('[role="menu"]')).toBeNull()
+    expect($('[role="dialog"]')).not.toBeNull() // the press was inside it
+  })
+})
+
+describe('the page behind a modal', () => {
+  it('is inert while a modal is open, the toaster aside, and reachable again after', async () => {
+    const m = await cases()
+    const app = m.el
+    const region = $('.weft-toaster')
+    $('.open-dialog').focus()
+    $('.open-dialog').click()
+    await settle()
+    expect(app.inert).toBe(true)
+    expect(document.getElementById('weft-overlays')!.inert).toBe(false)
+    expect(region.closest('[inert]')).toBeNull()
+    // F8 reaches the toasts through the dialog's trap.
+    useToast().add({ title: 'Saved', duration: 0, actions: [{ label: 'Undo' }] })
+    await settle()
+    key('F8')
+    expect(active()).toBe(region)
+    $('.weft-toast button').focus()
+    expect(active()).toBe($('.weft-toast button'))
+    useToast().clear()
+    await settle()
+    $('[role="dialog"] .weft-close-button').click()
+    await settle()
+    expect(app.inert).toBe(false)
+    expect(active()).toBe($('.open-dialog'))
+  })
+
+  it('is inert behind the touch sheet of a menu, which is modal and traps focus', async () => {
+    const m = await cases()
+    await touch(true)
+    $('.open-actions').focus()
+    $('.open-actions').click()
+    await settle()
+    const menu = $('[role="menu"]')
+    expect(menu.getAttribute('aria-modal')).toBe('true')
+    expect(m.el.inert).toBe(true)
+    $('.elsewhere').focus()
+    expect(menu.contains(active())).toBe(true)
+    key('Escape')
+    await settle()
+    expect(m.el.inert).toBe(false)
+    expect(active()).toBe($('.open-actions'))
   })
 })
 

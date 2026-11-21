@@ -4,12 +4,12 @@ import Popover from '../../../src/overlays/Popover.vue'
 import WeftProvider from '../../../src/adaptive/WeftProvider.vue'
 import type { Input } from '../../../src/adaptive/detect.ts'
 
-const props = withDefaults(defineProps<{ input?: Input; dir?: 'ltr' | 'rtl'; modal?: boolean; dismissible?: boolean; autoFocus?: boolean }>(), {
+const props = withDefaults(defineProps<{ input?: Input; dir?: 'ltr' | 'rtl'; modal?: boolean; dismissible?: boolean; autoFocus?: boolean; mode?: 'click' | 'hover'; arrow?: boolean; defaultOpen?: boolean }>(), {
   dismissible: true,
   autoFocus: true,
 })
 const input = ref<Input | undefined>(props.input)
-const open = ref(false)
+const open = ref(props.defaultOpen ?? false)
 defineExpose({ input, open })
 </script>
 
@@ -24,6 +24,10 @@ defineExpose({ input, open })
         :modal="modal"
         :dismissible="dismissible"
         :auto-focus="autoFocus"
+        :mode="mode"
+        :arrow="arrow"
+        :open-delay="0"
+        :close-delay="0"
       >
         <button class="trigger">Filters</button>
         <template #content="{ close }">

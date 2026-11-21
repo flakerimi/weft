@@ -17,6 +17,8 @@
  *   above this one on the `overlayStack` (a menu or tooltip opened from
  *   inside the trap). An overlay below, such as the popover the dialog was
  *   opened from, does not count.
+ * - Focus may also go into an element marked `data-weft-trap-exempt` (the
+ *   toaster, reached with F8 while a dialog is open), and stays there.
  * - Traps nest: only the most recently activated active trap acts; the one
  *   below resumes when it ends.
  * - Returning focus: when `el` is a stacked overlay (the same element has
@@ -93,7 +95,7 @@ export function useFocusTrap(el: Readonly<Ref<HTMLElement | null | undefined>>, 
       lastInside = target
       return
     }
-    if (overlayStack.isAbove(target, container)) return
+    if (overlayStack.isAbove(target, container) || target?.closest?.('[data-weft-trap-exempt]')) return
     focus(lastInside?.isConnected && container.contains(lastInside) ? lastInside : (tabbables(container)[0] ?? container))
   }
 

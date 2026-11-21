@@ -1,0 +1,36 @@
+/* CloseButton: 28 px drawn (24 px small), muted until hovered; its hit area
+   (::before) is at least --weft-hit-min. Focus shows base.css's ring. */
+.weft-close-button {
+  position: relative;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--weft-control-sm, 28px);
+  block-size: var(--weft-control-sm, 28px);
+  padding: 0;
+  border: 0;
+  border-radius: var(--weft-radius-control, 8px);
+  background: transparent;
+  color: var(--weft-color-text-muted, GrayText);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.weft-close-button[data-size="sm"] { inline-size: 24px; block-size: 24px; }
+.weft-close-button::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  inline-size: max(100%, var(--weft-hit-min, 24px));
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  translate: -50% -50%;
+}
+.weft-close-button svg { inline-size: 18px; block-size: 18px; }
+.weft-close-button[data-size="sm"] svg { inline-size: 16px; block-size: 16px; }
+@media (hover: hover) {
+  .weft-close-button:hover {
+    background: color-mix(in srgb, var(--weft-color-text, CanvasText) 10%, transparent);
+    color: var(--weft-color-text, CanvasText);
+  }
+}

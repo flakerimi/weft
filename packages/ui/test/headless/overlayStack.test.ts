@@ -210,6 +210,37 @@ describe('overlayStack', () => {
     expect(overlayStack.contains($('.out', root))).toBe(false)
   })
 
+  it('passes presses on from a pass-through entry (a tooltip) to the one below, but not Escape', () => {
+    const root = html('<div class="menu"><button class="item">i</button></div><div class="tip">t</div><p class="out">o</p>')
+    const menu = { onOutside: vi.fn(), onEscape: vi.fn() }
+    const tip = { onOutside: vi.fn(), onEscape: vi.fn() }
+    overlayStack.push('menu', { el: () => $('.menu', root), ...menu })
+    overlayStack.push('tip', { el: () => $('.tip', root), passThrough: true, ...tip })
+    press($('.out', root)) // outside both: each takes it
+    expect(tip.onOutside).toHaveBeenCalledOnce()
+    expect(menu.onOutside).toHaveBeenCalledOnce()
+    press($('.item', root)) // inside the menu: only the tooltip is left behind
+    expect(tip.onOutside).toHaveBeenCalledTimes(2)
+    expect(menu.onOutside).toHaveBeenCalledOnce()
+    press($('.tip', root)) // on the tooltip: no one's outside
+    expect(tip.onOutside).toHaveBeenCalledTimes(2)
+    expect(menu.onOutside).toHaveBeenCalledOnce()
+    press($('.out', root), 'touch') // on touch, at the click
+    expect(menu.onOutside).toHaveBeenCalledTimes(2)
+    key('Escape')
+    expect(tip.onEscape).toHaveBeenCalledOnce()
+    expect(menu.onEscape).not.toHaveBeenCalled()
+  })
+
+  it('does not pass presses on from an entry that declines them (a modal)', () => {
+    const root = html('<div class="menu">m</div><div class="modal">d</div><p class="out">o</p>')
+    const menu = vi.fn()
+    overlayStack.push('menu', { el: () => $('.menu', root), onOutside: menu })
+    overlayStack.push('modal', { el: () => $('.modal', root), onOutside: () => false })
+    press($('.out', root))
+    expect(menu).not.toHaveBeenCalled()
+  })
+
   it('stops listening to the document once the stack is empty', () => {
     const remove = vi.spyOn(document, 'removeEventListener')
     overlayStack.push('a', { onEscape: () => {} })

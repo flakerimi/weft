@@ -31,6 +31,8 @@ it('hydrates every overlay component inside an island, then opens them into the 
   expect(warn).not.toHaveBeenCalled()
   expect(error).not.toHaveBeenCalled()
 
+  // The popover that starts open took no focus from the page.
+  expect(document.activeElement).toBe(document.body)
   const root = document.getElementById('weft-overlays')!
   expect(root.parentElement).toBe(document.body)
   // Opened at once in the browser: the popover that starts open, and the Toaster's region.

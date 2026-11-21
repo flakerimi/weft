@@ -22,6 +22,16 @@
   transition-timing-function: var(--weft-ease-emphasized, ease-out);
   @starting-style { opacity: 0; scale: 0.96; }
 }
+.weft-overlay[data-state="closed"] .weft-dialog { opacity: 0; scale: 0.96; }
+/* Scrollable: the layer scrolls and the dialog sits in it at its full height. */
+.weft-overlay[data-scrollable] .weft-dialog:not([data-fullscreen]) {
+  position: relative;
+  inset: auto;
+  block-size: auto;
+  max-block-size: none;
+  margin: 4rem auto;
+}
+.weft-overlay[data-scrollable] .weft-dialog .weft-overlay__body { overflow: visible; }
 .weft-dialog[data-fullscreen] {
   inline-size: 100%;
   block-size: 100%;

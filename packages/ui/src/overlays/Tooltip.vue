@@ -4,16 +4,18 @@
 // Tooltip). While shown, the trigger is described by it (aria-describedby,
 // after any description it has). It hides on Escape (as the top overlay
 // only), a press, blur, or the pointer leaving both the trigger and the
-// tooltip, which it can be moved onto. A trigger with no name of its own (an
-// icon alone) is named by the text, as aria-label. On touch, where nothing
-// hovers, it renders nothing: that name is what remains.
+// tooltip, which it can be moved onto. A press outside it also goes on to
+// the overlay below (a menu it shows over). A trigger with no name of its
+// own (an icon alone) is named by the text, as aria-label, and then not
+// described by it too. On touch, where nothing hovers, it renders nothing:
+// that name is what remains.
 import { computed, onScopeDispose, useTemplateRef, watch } from 'vue'
 import { useWeft } from '../adaptive/context.ts'
 import { useControllable } from '../headless/useControllable.ts'
 import { useDismiss } from '../headless/useDismiss.ts'
 import { useFloating, type Placement } from '../headless/useFloating.ts'
 import { useId } from '../headless/useId.ts'
-import { isTouch, overlayRoot, useMounted, useOverlayContext, useTrigger } from './overlay.ts'
+import { isTouch, overlayRoot, useMounted, useOverlayContext, usePresence, useTrigger } from './overlay.ts'
 import '../styles/base.css'
 import '../styles/overlay.css'
 import '../styles/tooltip.css'
@@ -69,12 +71,13 @@ const trigger = useTrigger(wrap, () => {
   const el = trigger.el.value
   return { 'aria-label': el && props.text && !named(el) ? props.text : undefined }
 })
-// Added to the trigger's own description, never replacing it.
+// Added to the trigger's own description, never replacing it, and not when
+// the text names the trigger already (it would be read twice).
 watch(
   [trigger.el, shown],
   ([el, on], [was]) => {
     if (was && was !== el) describe(was, false)
-    if (el) describe(el, on)
+    if (el) describe(el, on && !trigger.owns('aria-label'))
   },
   { flush: 'post' },
 )
@@ -86,6 +89,8 @@ function describe(el: HTMLElement, on: boolean) {
 }
 
 const context = useOverlayContext(() => trigger.el.value ?? wrap.value)
+const presence = usePresence(shown, () => tip.value)
+const live = computed(() => (presence.closing.value ? null : tip.value))
 const floating = useFloating(trigger.el, tip, { placement: () => props.placement, offset: 6, flip: true, shift: true })
 
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -129,7 +134,7 @@ function onLeave(event: PointerEvent) {
   if (!isTouch(event)) hide(GRACE)
 }
 
-useDismiss(tip, { onDismiss: () => hide(), ignore: () => [wrap.value], returnFocus: false })
+useDismiss(live, { onDismiss: () => hide(), ignore: () => [wrap.value], returnFocus: false, passThrough: true })
 </script>
 
 <script lang="ts">
@@ -150,14 +155,8 @@ let lastClosed = 0
     @focusin="onFocusin"
     @focusout="hide()"
   ><slot /></span>
-  <Teleport v-if="mounted && shown" :to="overlayRoot()">
-    <div
-      class="weft-overlay"
-      :dir="context.attrs.value.dir"
-      :data-weft-input="context.attrs.value['data-weft-input']"
-      :data-weft-surface="context.attrs.value['data-weft-surface']"
-      :data-weft-scheme="context.attrs.value['data-weft-scheme']"
-    >
+  <Teleport v-if="mounted && presence.present.value" :to="overlayRoot()">
+    <div class="weft-overlay" v-bind="context.attrs.value" :data-state="presence.closing.value ? 'closed' : 'open'">
       <div
         ref="tip"
         v-bind="$attrs"

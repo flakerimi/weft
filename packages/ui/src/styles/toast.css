@@ -1,5 +1,7 @@
 /* Toast: a raised card, its tone a bar at the inline start. */
 .weft-toast {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: flex-start;
   gap: var(--weft-space-3, 12px);
@@ -11,6 +13,7 @@
   color: var(--weft-color-text, CanvasText);
   box-shadow: 0 8px 24px color-mix(in srgb, CanvasText 16%, transparent);
   pointer-events: auto;
+  touch-action: pan-y;
   transition-property: opacity, translate;
   transition-duration: var(--weft-duration-layout, 220ms);
   transition-timing-function: var(--weft-ease-emphasized, ease-out);
@@ -22,27 +25,25 @@
 .weft-toast__title { font-weight: var(--weft-weight-heading, 600); }
 .weft-toast__description { color: var(--weft-color-text-muted, GrayText); }
 .weft-toast__actions { display: flex; gap: var(--weft-space-2, 8px); }
-.weft-toast__close {
-  position: relative;
-  flex: none;
-  display: inline-grid;
-  place-items: center;
-  inline-size: 24px;
-  block-size: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--weft-radius-control, 8px);
-  background: transparent;
-  color: var(--weft-color-text-muted, GrayText);
-  cursor: pointer;
-}
-.weft-toast__close::before {
-  content: '';
+.weft-toast__close { margin-block: -2px; margin-inline-end: -4px; }
+/* Leaving: it fades and slides towards its edge. Swiped, it follows the finger. */
+.weft-toast[data-swipe="end"] { translate: var(--weft-toast-swipe, 0px) 0; }
+.weft-toast[data-swipe="start"] { translate: calc(-1 * var(--weft-toast-swipe, 0px)) 0; }
+[dir="rtl"] .weft-toast[data-swipe="end"] { translate: calc(-1 * var(--weft-toast-swipe, 0px)) 0; }
+[dir="rtl"] .weft-toast[data-swipe="start"] { translate: var(--weft-toast-swipe, 0px) 0; }
+.weft-toast[data-state="closed"] { opacity: 0; }
+/* The time left: a bar along the bottom edge that empties over --weft-toast-time and stops while paused. */
+.weft-toast__progress {
   position: absolute;
-  inset-block-start: 50%;
-  inset-inline-start: 50%;
-  inline-size: max(100%, var(--weft-hit-min, 24px));
-  block-size: max(100%, var(--weft-hit-min, 24px));
-  translate: -50% -50%;
+  inset-inline: 0;
+  inset-block-end: 0;
+  block-size: 2px;
+  background: var(--weft-tone, CanvasText);
+  transform-origin: left;
+  animation: weft-toast-progress var(--weft-toast-time, 4000ms) linear forwards;
 }
-.weft-toast__close svg { inline-size: 16px; block-size: 16px; }
+[dir="rtl"] .weft-toast__progress { transform-origin: right; }
+.weft-toast[data-paused] .weft-toast__progress { animation-play-state: paused; }
+.weft-toast[data-tone="neutral"] .weft-toast__progress { background: var(--weft-color-text-muted, GrayText); }
+@keyframes weft-toast-progress { to { scale: 0 1; } }
+@media (prefers-reduced-motion: reduce) { .weft-toast__progress { display: none; } }

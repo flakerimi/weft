@@ -49,7 +49,9 @@ describe('Tooltip', () => {
     await vi.advanceTimersByTimeAsync(60)
     expect(tip()).not.toBeNull()
     expect(m.exposed.open).toBe(true)
-    expect(trigger.getAttribute('aria-describedby')).toBe(`hint ${tip().id}`)
+    // It names this trigger already (aria-label): describing it too would say it twice.
+    expect(trigger.getAttribute('aria-label')).toBe('Delete file')
+    expect(trigger.getAttribute('aria-describedby')).toBe('hint')
     hover(trigger.parentElement!, 'pointerleave')
     await vi.advanceTimersByTimeAsync(300)
     expect(tip()).toBeNull()

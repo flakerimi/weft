@@ -16,7 +16,11 @@
  *   `onOutside`. Outside means not inside its `el` and not inside any of its
  *   `ignore` elements (its trigger, so a press on the trigger toggles instead
  *   of closing and reopening). A touch press counts on the click that follows
- *   it, so a scroll that starts outside does not close anything.
+ *   it, so a scroll that starts outside does not close anything. A
+ *   `passThrough` entry (a tooltip) takes a press outside it and passes it
+ *   on to the entry below, so one press closes a tooltip and the menu it
+ *   shows over; Escape still stops at it. An entry that declines a press
+ *   (`onOutside` returning false, as a modal does) passes nothing on.
  * - Restoring focus: the stack is the one owner of returning focus when an
  *   overlay closes. `pop` returns focus to the entry's `returnTo` (an element,
  *   ref or getter, read at pop), by default the element that had focus when
@@ -50,6 +54,8 @@ export interface OverlayEntry {
   ignore?: () => (Element | null | undefined)[]
   /** Where focus returns on pop, read then; defaults to the element focused at push, when it was outside the overlay. */
   returnTo?: MaybeRefOrGetter<HTMLElement | null | undefined>
+  /** Presses go on to the entry below as well (a tooltip); Escape does not. */
+  passThrough?: boolean
   /** False: this overlay returns no focus (it never takes any, as a tooltip). Read at pop. */
   returnFocus?: MaybeRefOrGetter<boolean | undefined>
 }
@@ -66,8 +72,8 @@ interface Entry extends OverlayEntry {
 const entries: Entry[] = []
 const order = shallowRef<readonly string[]>([])
 let listening = false
-/** The touch press waiting for its click: the entry it was outside of. */
-let pendingTouch: Entry | null = null
+/** The touch press waiting for its click: the entries it was outside of. */
+let pendingTouch: Entry[] = []
 
 const elOf = (e: Entry) => {
   const el = e.el?.() ?? null
@@ -110,22 +116,37 @@ function returnFocusFor(e: Entry, at: number) {
   restoreFocus(toValue(e.returnTo) ?? e.opener, within)
 }
 
-function onPointerdown(event: PointerEvent) {
-  pendingTouch = null
-  const top = topEntry()
-  if (!top?.onOutside) return
-  if (!isOutside(top, event.target)) {
-    top.closedOutside = false
-    return
+/** The entries a press goes to, top first: the pass-through ones on top, then the first that is not. */
+function reached(): Entry[] {
+  const out: Entry[] = []
+  for (let i = entries.length - 1; i >= 0; i--) {
+    out.push(entries[i]!)
+    if (!entries[i]!.passThrough) break
   }
-  if (event.pointerType === 'touch') pendingTouch = top
-  else outside(top, event)
+  return out
+}
+
+function onPointerdown(event: PointerEvent) {
+  pendingTouch = []
+  for (const e of reached()) {
+    if (!e.onOutside) {
+      if (e.passThrough) continue
+      return
+    }
+    if (!isOutside(e, event.target)) {
+      // A press inside this overlay is outside none below it that it covers.
+      e.closedOutside = false
+      return
+    }
+    if (event.pointerType === 'touch') pendingTouch.push(e)
+    else outside(e, event)
+  }
 }
 
 function onClick(event: MouseEvent) {
   const waiting = pendingTouch
-  pendingTouch = null
-  if (waiting && waiting === topEntry() && isOutside(waiting, event.target)) outside(waiting, event)
+  pendingTouch = []
+  for (const e of waiting) if (entries.includes(e) && isOutside(e, event.target)) outside(e, event)
 }
 
 function listen(on: boolean) {
@@ -168,7 +189,7 @@ export const overlayStack = {
     // Focus may be in this overlay or in one stacked above it, which closes with it.
     returnFocusFor(e, at)
     entries.splice(at, 1)
-    if (pendingTouch === e) pendingTouch = null
+    pendingTouch = pendingTouch.filter((p) => p !== e)
     publish()
     if (!entries.length && typeof document !== 'undefined') listen(false)
   },

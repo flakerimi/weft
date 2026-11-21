@@ -7,6 +7,8 @@
 [dir="rtl"] .weft-drawer[data-side="end"] { translate: calc(-1 * var(--weft-drawer-drag, 0px)) 0; }
 [dir="rtl"] .weft-drawer[data-side="start"] { translate: var(--weft-drawer-drag, 0px) 0; }
 .weft-drawer[data-dragging] { transition: none; user-select: none; }
+/* Leaving, sheet.css slides it out; the drag it was let go at stays added. */
+.weft-overlay[data-state="closed"] .weft-drawer[data-side="bottom"] { translate: 0 calc(100% + var(--weft-drawer-drag, 0px)); }
 /* The handle: a 36 × 4 px bar, its grip area the full width and --weft-hit-min tall. */
 .weft-drawer__handle {
   flex: none;
@@ -25,3 +27,4 @@
 }
 .weft-drawer[data-side="bottom"] .weft-drawer__handle + .weft-overlay__header { padding-block-start: 0; }
 .weft-drawer .weft-overlay__header { touch-action: none; }
+.weft-drawer[data-side="bottom"] .weft-drawer__handle { cursor: grab; }

@@ -759,6 +759,52 @@
       ]
     },
     {
+      "name": "CloseButton",
+      "group": "overlays",
+      "file": "packages/ui/src/overlays/CloseButton.vue",
+      "purpose": "The × button that closes an overlay, with a touch-sized hit area.",
+      "use": "In the header of a panel of your own, or a dismissible banner; Dialog, Sheet, Drawer and Toast draw it already.",
+      "avoid": "For an action with a label (Cancel, Done), use Button.",
+      "adapts": {
+        "input": "It keeps its drawn size (28 px, 24 px small); its hit area is at least --weft-hit-min, so 44 px on touch.",
+        "surface": "Nothing changes.",
+        "width": "Nothing changes."
+      },
+      "props": [
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "default": "'Close'",
+          "description": "Its name for assistive technology."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md'",
+          "required": false,
+          "default": "'md'",
+          "description": "`sm` 24 px (a toast's), `md` 28 px."
+        }
+      ],
+      "emits": [
+        {
+          "name": "click",
+          "payload": "[event: MouseEvent]",
+          "description": "Pressed."
+        }
+      ],
+      "slots": [],
+      "notes": "A native `<button type=\"button\">` named by `label` (`Close`), drawn as a\ncross inline, so a page with no CloseButton ships no icon for it. It emits\n`click`. Focus shows the theme's ring.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/CloseButton/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Card, CloseButton } from '@weft/ui'\n\nconst shown = ref(true)\n</script>\n\n<template>\n  <Card v-if=\"shown\">\n    <template #actions><CloseButton label=\"Dismiss\" @click=\"shown = false\" /></template>\n    A note you can dismiss.\n  </Card>\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "ConfirmDialog",
       "group": "overlays",
       "file": "packages/ui/src/overlays/ConfirmDialog.vue",
@@ -826,6 +872,13 @@
           "required": false,
           "default": null,
           "description": "Run on confirm; a promise it returns keeps the dialog open, loading, until it settles. Given by `@confirm`."
+        },
+        {
+          "name": "onError",
+          "type": "(error: unknown) => void",
+          "required": false,
+          "default": null,
+          "description": "Called with the error a confirm handler's work failed with. Given by `@error`."
         }
       ],
       "emits": [
@@ -854,7 +907,7 @@
           "dynamic": false
         }
       ],
-      "notes": "It has no stylesheet of its own: it is a Dialog with `role=\"alertdialog\"`\n(WAI-ARIA APG, Alert and Message Dialogs) and two Buttons.\n\n`title` is the question, `description` what happens; `confirm-label` names\nthe action (`Delete`) and `tone=\"danger\"` colours it for one that destroys.\nFocus starts on Cancel, the safe answer.\n\n`@confirm` runs on confirm and the dialog closes. When the handler returns a\npromise, the confirm button loads and nothing closes the dialog until the\npromise settles: it closes when the work succeeds and stays, ready again,\nwhen it fails, so the person can retry or cancel. Cancel, Escape and the\nbackdrop emit `cancel` and close it. The default slot is the trigger, or bind\n`v-model:open`; the `body` slot adds content under the description.",
+      "notes": "It has no stylesheet of its own: it is a Dialog with `role=\"alertdialog\"`\n(WAI-ARIA APG, Alert and Message Dialogs) and two Buttons.\n\n`title` is the question, `description` what happens; `confirm-label` names\nthe action (`Delete`) and `tone=\"danger\"` colours it for one that destroys.\nFocus starts on Cancel, the safe answer.\n\n`@confirm` runs on confirm and the dialog closes. When the handler returns a\npromise, the confirm button loads and nothing closes the dialog until the\npromise settles: it closes when the work succeeds and stays, ready again,\nwhen it fails, so the person can retry or cancel, and emits `error` with\nwhat the work failed with (with no `@error` listener it rethrows it, so it\nis never swallowed). Cancel, Escape and the\nbackdrop emit `cancel` and close it. The default slot is the trigger, or bind\n`v-model:open`; the `body` slot adds content under the description.",
       "examples": [
         {
           "name": "basic",
@@ -994,7 +1047,7 @@
           "type": "string",
           "required": false,
           "default": null,
-          "description": "The heading, which names the dialog. Without one, give the dialog an `aria-label`."
+          "description": "The heading, which names the dialog. Without one or a header slot, give the dialog an `aria-label`."
         },
         {
           "name": "description",
@@ -1030,6 +1083,20 @@
           "required": false,
           "default": null,
           "description": "Full-screen at every width; it is full-screen when narrow anyway."
+        },
+        {
+          "name": "overlay",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Dim the page with a backdrop; without one it is still modal."
+        },
+        {
+          "name": "scrollable",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "The dialog scrolls with its layer, as one long page, instead of within the viewport's height."
         },
         {
           "name": "role",
@@ -1079,7 +1146,7 @@
           "dynamic": false
         }
       ],
-      "notes": "The default slot is the trigger, one element (a Button), which opens it and\ncarries `aria-haspopup=\"dialog\"`, `aria-expanded` and `aria-controls`; or\nbind `v-model:open`. `title` names it and `description` describes it\n(`aria-labelledby`, `aria-describedby`). The `body` and `footer` slots get\n`close()`; `header` replaces the title and description, and `actions` adds\ncontrols before the close button (×, drawn inline; `close=\"false\"` hides it).\n\nIt follows the WAI-ARIA APG Dialog (Modal) pattern: `aria-modal=\"true\"`,\nfocus trapped inside, starting on the first tabbable element that is not the\nclose button, and the page does not scroll while it is open.\n\n**Closing.** Escape, a press on the backdrop and the close button close it;\n`dismissible=\"false\"` keeps it open on Escape and the backdrop. Focus returns\nto its trigger, after a press on the backdrop too (the backdrop is the\ndialog's own), or, with no trigger, to the element that had focus when it\nopened.\n\nIts content renders into `#weft-overlays` only once mounted, so the server\nrenders none of it; attributes go to the dialog element.",
+      "notes": "The default slot is the trigger, one element (a Button), which opens it and\ncarries `aria-haspopup=\"dialog\"`, `aria-expanded` and `aria-controls`; or\nbind `v-model:open`. `title` names it and `description` describes it\n(`aria-labelledby`, `aria-describedby`). The `body` and `footer` slots get\n`close()`; `header` replaces the title and description, and `actions` adds\ncontrols before the close button (×, drawn inline; `close=\"false\"` hides it).\n\nIt follows the WAI-ARIA APG Dialog (Modal) pattern: `aria-modal=\"true\"`,\nfocus trapped inside, starting on the first tabbable element that is not the\nclose button, and the page does not scroll while it is open.\n\n`overlay=\"false\"` draws no backdrop (it is still modal); `scrollable` lets\na tall dialog scroll with its layer, as one long page. While it is open the\npage behind is inert (the toaster aside, which F8 still reaches), and it\nfades out when it closes, unless motion is reduced. Its header, body and\nfooter are an OverlayPanel; the `header` slot still names the dialog.\n\n**Closing.** Escape, a press on the backdrop and the close button close it;\n`dismissible=\"false\"` keeps it open on Escape and the backdrop. Focus returns\nto its trigger, after a press on the backdrop too (the backdrop is the\ndialog's own), or, with no trigger, to the element that had focus when it\nopened.\n\nIts content renders into `#weft-overlays` only once mounted, so the server\nrenders none of it; attributes go to the dialog element.",
       "examples": [
         {
           "name": "basic",
@@ -1160,7 +1227,7 @@
           "type": "string",
           "required": false,
           "default": null,
-          "description": "The heading, which names the drawer. Without one, give the drawer an `aria-label`."
+          "description": "The heading, which names the drawer. Without one or a header slot, give the drawer an `aria-label`."
         },
         {
           "name": "description",
@@ -1189,6 +1256,13 @@
           "required": false,
           "default": "true",
           "description": "Escape and a press on the backdrop close it."
+        },
+        {
+          "name": "overlay",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Dim the page with a backdrop; without one it is still modal."
         },
         {
           "name": "side",
@@ -1245,7 +1319,7 @@
           "dynamic": false
         }
       ],
-      "notes": "`side` is `bottom` (default), `top`, `start` or `end` (mirrored right to\nleft); `handle` shows the drag handle (default true); the close button is\noff by default (`close` shows it). Otherwise it is a Sheet, with the same\nslots, `v-model:open`, focus trap, scroll lock and closing by Escape and\nthe backdrop, focus back on the trigger. `dismissible=\"false\"` turns off\ndragging as well.\n\nA press on a control in the header is that control's, never the start of a\ndrag.",
+      "notes": "`side` is `bottom` (default), `top`, `start` or `end` (mirrored right to\nleft); `handle` shows the drag handle (default true); the close button is\noff by default (`close` shows it). Otherwise it is a Sheet, with the same\nslots, `v-model:open`, focus trap, scroll lock and closing by Escape and\nthe backdrop, focus back on the trigger. `dismissible=\"false\"` turns off\ndragging as well.\n\nA press on a control in the header is that control's, never the start of a\ndrag. A flick is read from the speed of the last moves (over 0.5 px per ms\nin the last 100 ms), so a drag that ends fast closes it however slowly it\nbegan; the drag helper is the headless `createSwipe`, which Toast shares.",
       "examples": [
         {
           "name": "basic",
@@ -1263,7 +1337,7 @@
       "use": "For the actions on one thing (a row's More button), a user menu, view options.",
       "avoid": "To choose a value for a form, use a select; for navigation between pages, links or navigation components.",
       "adapts": {
-        "input": "On pointer it floats beside its trigger and a submenu opens beside its item, on hover too. On touch it is a bottom sheet with large items, 48 px tall with larger text, and a submenu is a sheet above it, with a back item. The input can change while it is open; the focused item stays focused.",
+        "input": "On pointer it floats beside its trigger and a submenu opens beside its item, on hover too. On touch it is a bottom sheet with large items, 48 px tall with larger text, modal, and a submenu is a sheet above it, with a back item. The input can change while it is open; the focused item stays focused.",
         "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
         "width": "Floating, it is at least 10rem wide and stays within the room left; as a sheet, the viewport's width."
       },
@@ -1327,7 +1401,7 @@
           "dynamic": false
         }
       ],
-      "notes": "`items` is a list of `MenuItem`s, or a list of groups (an array of arrays),\ndrawn with separators between. An item has `label`, `icon` (a Lucide name),\n`tone` (`danger`), `disabled`, `to` and `target` (a link), `children` (a\nsubmenu) and `onSelect(event)`; `type: 'label'` is a group's heading,\n`'separator'` a line, `'checkbox'` and `'radio'` items with `checked` and\n`onUpdateChecked(checked)`. The `item` slot replaces an item's label.\n\nIt follows the WAI-ARIA APG Menu Button and Menu patterns. The trigger, the\ndefault slot (one element), gets `aria-haspopup=\"menu\"`, `aria-expanded`\nand `aria-controls`, and the menu is labelled by it.\n\n**Keyboard.** On the trigger: Enter, Space and ArrowDown open the menu on\nits first item, ArrowUp on its last. In the menu: ArrowDown and ArrowUp move\n(looping), Home and End go to the ends, typing jumps to the item whose label\nstarts so, Enter and Space choose. ArrowRight opens a submenu on its first\nitem, ArrowLeft closes it back to its item (mirrored right to left). Escape\ncloses one level; Tab closes the menu. Disabled items are reached but cannot\nbe chosen.\n\n**Choosing** an item calls `onSelect`, closes every level and puts focus back\non the trigger, unless `onSelect` calls `event.preventDefault()`. A checkbox\nitem calls `onUpdateChecked(!checked)`, a radio item `onUpdateChecked(true)`.\nA press outside closes it; while it is open the page does not scroll.\n\nThe menu renders into `#weft-overlays` once mounted; attributes go to it.\n`anchor` positions it against another element or a point (ContextMenu).",
+      "notes": "`items` is a list of `MenuItem`s, or a list of groups (an array of arrays),\ndrawn with separators between. An item has `label`, `icon` (a Lucide name),\n`tone` (`danger`), `disabled`, `to` and `target` (a link), `children` (a\nsubmenu) and `onSelect(event)`; `type: 'label'` is a group's heading,\n`'separator'` a line, `'checkbox'` and `'radio'` items with `checked` and\n`onUpdateChecked(checked)`. An item's `description` shows under its label\n(and describes it), `kbds` shows its shortcut with Kbd (shown, not bound),\n`loading` turns a spinner and keeps it from being chosen, and `color` is\n`tone` under Nuxt UI's name. The `item` slot replaces an item's label.\n\nIt follows the WAI-ARIA APG Menu Button and Menu patterns. The trigger, the\ndefault slot (one element), gets `aria-haspopup=\"menu\"`, `aria-expanded`\nand `aria-controls`, and the menu is labelled by it.\n\n**Keyboard.** On the trigger: Enter, Space and ArrowDown open the menu on\nits first item, ArrowUp on its last. In the menu: ArrowDown and ArrowUp move\n(looping), Home and End go to the ends, typing jumps to the item whose label\nstarts so, Enter and Space choose. ArrowRight opens a submenu on its first\nitem, ArrowLeft closes it back to its item (mirrored right to left). Escape\ncloses one level; Tab closes the menu. Disabled items are reached but cannot\nbe chosen.\n\n**Choosing** an item calls `onSelect`, closes every level and puts focus back\non the trigger, unless `onSelect` calls `event.preventDefault()`. A checkbox\nitem calls `onUpdateChecked(!checked)`, a radio item `onUpdateChecked(true)`.\nA press outside closes it, returning no focus, from any level; while it is\nopen the page does not scroll. As a touch sheet it is modal: `aria-modal`,\nfocus trapped, the page behind inert. It fades out when it closes, unless\nmotion is reduced.\n\nThe menu renders into `#weft-overlays` once mounted; attributes go to it.\n`anchor` positions it against another element or a point (ContextMenu).",
       "examples": [
         {
           "name": "basic",
@@ -2201,6 +2275,105 @@
       ]
     },
     {
+      "name": "OverlayPanel",
+      "group": "overlays",
+      "file": "packages/ui/src/overlays/OverlayPanel.vue",
+      "purpose": "The inside of a modal panel: a header with the heading, actions and close button, a body that scrolls, and a footer.",
+      "use": "Inside a modal surface of your own that should look like Dialog, Sheet and Drawer, which render it themselves.",
+      "avoid": "To open a dialog, use Dialog, Sheet or Drawer; for a card on the page, Card.",
+      "adapts": {
+        "input": "Its close button's hit area is at least 44 px on touch.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "Nothing changes; the body scrolls when the panel is short."
+      },
+      "props": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The heading."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A sentence under the title."
+        },
+        {
+          "name": "titleId",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The id the heading carries, for the overlay's aria-labelledby."
+        },
+        {
+          "name": "descriptionId",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The id the description carries, for the overlay's aria-describedby."
+        },
+        {
+          "name": "close",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Show the close button."
+        },
+        {
+          "name": "closeLabel",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The close button's name for assistive technology."
+        }
+      ],
+      "emits": [
+        {
+          "name": "close",
+          "payload": "[]",
+          "description": "The close button was pressed, or a slot called `close()`."
+        }
+      ],
+      "slots": [
+        {
+          "name": "header",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "actions",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "body",
+          "props": [
+            "close"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "footer",
+          "props": [
+            "close"
+          ],
+          "dynamic": false
+        }
+      ],
+      "notes": "`title` and `description` are the heading; the `header` slot replaces both.\n`title-id` goes on whatever heading renders (the `<h2>`, or the element\naround the header slot), and `description-id` on the description, so the\noverlay's `aria-labelledby` and `aria-describedby` always name something.\n`close` shows a CloseButton; it, and `close()` in the `body` and `footer`\nslots, emit `close`. The `actions` slot sits before the close button.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/OverlayPanel/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Button, OverlayPanel } from '@weft/ui'\n</script>\n\n<template>\n  <!-- The inside of Dialog, Sheet and Drawer, here on the page. -->\n  <div style=\"display: flex; flex-direction: column; max-inline-size: 24rem; border: 1px solid; border-radius: 16px\">\n    <OverlayPanel title=\"Invite\" description=\"They get an email with a link.\" title-id=\"invite-title\" close>\n      <template #body><p>Who should join?</p></template>\n      <template #footer=\"{ close }\"><Button label=\"Send\" @click=\"close()\" /></template>\n    </OverlayPanel>\n  </div>\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "Page",
       "group": "layout",
       "file": "packages/ui/src/layout/Page.vue",
@@ -2452,6 +2625,34 @@
           "required": false,
           "default": null,
           "description": "Float against this element or point instead of the trigger."
+        },
+        {
+          "name": "mode",
+          "type": "'click' | 'hover'",
+          "required": false,
+          "default": "'click'",
+          "description": "`click`: a press on the trigger toggles it. `hover`: the pointer over the trigger or the content opens it too, without moving focus."
+        },
+        {
+          "name": "openDelay",
+          "type": "number",
+          "required": false,
+          "default": "100",
+          "description": "In hover mode, ms of hover before it opens."
+        },
+        {
+          "name": "closeDelay",
+          "type": "number",
+          "required": false,
+          "default": "200",
+          "description": "In hover mode, ms after the pointer leaves before it closes."
+        },
+        {
+          "name": "arrow",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Draw an arrow pointing at the trigger (floating form only)."
         }
       ],
       "emits": [
@@ -2477,7 +2678,7 @@
           "dynamic": false
         }
       ],
-      "notes": "The default slot is the trigger, one element (a Button); a press on it\ntoggles the popover, and it carries `aria-haspopup=\"dialog\"`,\n`aria-expanded` and `aria-controls`. The `content` slot is what it shows,\nand gets `close()`. Bind `v-model:open` to open it from code; `anchor`\npositions it against another element or a point.\n\nThe content renders into `#weft-overlays` at the end of the body (created\nwhen first needed), only once mounted, so the server renders none of it. It\nis a `role=\"dialog\"` named by `title` (or an `aria-label`); attributes go to\nit.\n\n**Focus.** On open, focus moves to the first tabbable element inside, or to\nthe content itself (`auto-focus=\"false\"` keeps it where it is, as a combobox\ndoes). On pointer it is not modal: Tab can leave, and focus leaving closes it\n(unless it went to an overlay opened from inside). With `modal`, or on touch,\nfocus is trapped and the page does not scroll.\n\n**Closing.** Escape and a press outside close it (`dismissible=\"false\"`\nturns both off); a press on its trigger toggles it shut. Focus returns to\nthe trigger, except after a press outside, which put the user's attention\nelsewhere. On touch a press on the backdrop closes it and does return focus.\n\n`placement` is a floating-ui placement (`bottom`, `top-start`, …); `start`\nand `end` follow the text direction.",
+      "notes": "The default slot is the trigger, one element (a Button); a press on it\ntoggles the popover, and it carries `aria-haspopup=\"dialog\"`,\n`aria-expanded` and `aria-controls`. The `content` slot is what it shows,\nand gets `close()`. Bind `v-model:open` to open it from code; `anchor`\npositions it against another element or a point.\n\nThe content renders into `#weft-overlays` at the end of the body (created\nwhen first needed), only once mounted, so the server renders none of it. It\nis a `role=\"dialog\"` named by `title` (or an `aria-label`); attributes go to\nit.\n\n**Focus.** On open, focus moves to the first tabbable element inside, or to\nthe content itself (`auto-focus=\"false\"` keeps it where it is, as a combobox\ndoes). On pointer it is not modal: Tab can leave, and focus leaving closes it\n(unless it went to an overlay opened from inside). With `modal`, or on touch,\nfocus is trapped and the page does not scroll.\n\n**Closing.** Escape and a press outside close it (`dismissible=\"false\"`\nturns both off); a press on its trigger toggles it shut. Focus returns to\nthe trigger, except after a press outside, which put the user's attention\nelsewhere. On touch a press on the backdrop closes it and does return focus.\n\n**Hover mode.** `mode=\"hover\"` opens it too while the pointer is over the\ntrigger or the content (after `open-delay`, 100 ms) and closes it when the\npointer has left both (after `close-delay`, 200 ms), without moving focus;\na press still toggles it, and on touch it is pressed as ever. `arrow` draws\nan arrow pointing at the trigger. When it starts open (`default-open`) it\ndoes not take focus, so a page that hydrates keeps its own. Modal, the page\nbehind is inert. It fades out when it closes, unless motion is reduced.\n\n`placement` is a floating-ui placement (`bottom`, `top-start`, …); `start`\nand `end` follow the text direction.",
       "examples": [
         {
           "name": "basic",
@@ -2818,7 +3019,7 @@
           "type": "string",
           "required": false,
           "default": null,
-          "description": "The heading, which names the sheet. Without one, give the sheet an `aria-label`."
+          "description": "The heading, which names the sheet. Without one or a header slot, give the sheet an `aria-label`."
         },
         {
           "name": "description",
@@ -2847,6 +3048,13 @@
           "required": false,
           "default": "true",
           "description": "Escape and a press on the backdrop close it."
+        },
+        {
+          "name": "overlay",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Dim the page with a backdrop; without one it is still modal."
         },
         {
           "name": "side",
@@ -2896,7 +3104,7 @@
           "dynamic": false
         }
       ],
-      "notes": "`side` is `start` or `end` (the inline sides, so mirrored in a right-to-left\ndocument), `top` or `bottom`; the default is `end`. Otherwise it is used as\nDialog is: the default slot is the trigger, or bind `v-model:open`; `title`\nand `description` name and describe it; `header`, `actions`, `body` and\n`footer` slots, the last two with `close()`.\n\nIt is a modal dialog (WAI-ARIA APG, Dialog (Modal)): focus is trapped inside,\nthe page does not scroll, and Escape, the backdrop and the close button\nclose it (`dismissible=\"false\"` keeps Escape and the backdrop from it), with\nfocus back on the trigger. The body scrolls when long.",
+      "notes": "`side` is `start` or `end` (the inline sides, so mirrored in a right-to-left\ndocument), `top` or `bottom`; the default is `end`. Otherwise it is used as\nDialog is: the default slot is the trigger, or bind `v-model:open`; `title`\nand `description` name and describe it; `header`, `actions`, `body` and\n`footer` slots, the last two with `close()`.\n\nIt is a modal dialog (WAI-ARIA APG, Dialog (Modal)): focus is trapped inside,\nthe page does not scroll, and Escape, the backdrop and the close button\nclose it (`dismissible=\"false\"` keeps Escape and the backdrop from it), with\nfocus back on the trigger. The page behind is inert while it is open, and\nit slides back out when it closes, unless motion is reduced; `overlay=\"false\"`\ndraws no backdrop. The body scrolls when long.",
       "examples": [
         {
           "name": "basic",
@@ -3503,7 +3711,7 @@
           "type": "number",
           "required": false,
           "default": null,
-          "description": "ms before it leaves on its own; default `--weft-duration-toast`; 0 stays until closed."
+          "description": "ms before it leaves on its own; default `--weft-duration-toast`; 0 stays until closed. Changing it starts the time again."
         },
         {
           "name": "paused",
@@ -3532,13 +3740,27 @@
           "required": false,
           "default": null,
           "description": "Buttons after the text; each closes the toast after it runs."
+        },
+        {
+          "name": "progress",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Show the time left as a bar."
+        },
+        {
+          "name": "swipe",
+          "type": "'start' | 'end'",
+          "required": false,
+          "default": "'end'",
+          "description": "The edge a swipe on touch throws it towards: its Toaster's side."
         }
       ],
       "emits": [
         {
           "name": "close",
           "payload": "[]",
-          "description": "It should go: its time ran out, or it was closed or acted on."
+          "description": "It has gone: its time ran out, or it was closed, acted on or swiped away."
         }
       ],
       "slots": [
@@ -3558,7 +3780,7 @@
           "dynamic": false
         }
       ],
-      "notes": "`title`, `description`, `icon` (a Lucide name), `tone` (a bar at the inline\nstart), `actions` (buttons, each closing the toast after it runs) and a\nclose button (× drawn inline; `close=\"false\"` hides it). The default,\n`leading` and `actions` slots replace the text, icon and actions.\n\nIt emits `close` when it should go: after `duration` ms (by default the\ntheme's `--weft-duration-toast`, 4000 ms in the neutral theme; 0 stays until\nclosed), when closed, acted on, or on Escape while focus is in it. Its time\nstands still while `paused`, and resumes with what it had left.",
+      "notes": "`title`, `description`, `icon` (a Lucide name), `tone` (a bar at the inline\nstart), `actions` (buttons, each closing the toast after it runs) and a\nclose button (× drawn inline; `close=\"false\"` hides it). The default,\n`leading` and `actions` slots replace the text, icon and actions.\n\nIt emits `close` when it should go: after `duration` ms (by default the\ntheme's `--weft-duration-toast`, 4000 ms in the neutral theme; 0 stays until\nclosed), when closed, acted on, swiped away, or on Escape while focus is in\nit, once its leave transition has played. Its time stands still while\n`paused`, resumes with what it had left, and starts again when `duration`\nchanges. A bar along its bottom edge shows the time left (`progress=\"false\"`\nhides it; it is hidden under reduced motion). On touch, a swipe towards\n`swipe` (its Toaster's side) past a third of its width, or a flick, throws it\naway; short of that it springs back.",
       "examples": [
         {
           "name": "basic",
@@ -3593,7 +3815,7 @@
           "type": "number",
           "required": false,
           "default": "5",
-          "description": "How many show at once, the newest; the rest wait their turn."
+          "description": "How many stay at once; a new toast beyond that drops the oldest."
         },
         {
           "name": "label",
@@ -3605,7 +3827,7 @@
       ],
       "emits": [],
       "slots": [],
-      "notes": "const toast = useToast()\n    toast.add({ title: 'Saved', description: 'Your draft is safe.', tone: 'success' })\n    toast.add({ title: 'Deleted', actions: [{ label: 'Undo', onClick: restore }] })\n\n`add` returns the toast with its `id`, for `update(id, patch)` and\n`remove(id)`; `clear()` empties the queue and `toasts` reads it. A toast\nleaves after its `duration`, by default the theme's `--weft-duration-toast`.\n\nThe Toaster is a region named \"Notifications\" (`label`) whose list is a\npolite live region, so a new toast is announced without moving focus. While\nthe pointer is over it or focus is inside it, no toast's time runs. F8 moves\nfocus to it, to reach a toast's actions; when the focused toast goes, focus\nstays in the region. `position` is a corner or the middle of the top or\nbottom edge (`bottom-end` by default; start and end follow the text\ndirection), and `max` (5) toasts show at once, the newest.\n\nIt renders into the overlay root only once mounted. The queue is one per\npage; on the server `add` does nothing.",
+      "notes": "const toast = useToast()\n    toast.add({ title: 'Saved', description: 'Your draft is safe.', tone: 'success' })\n    toast.add({ title: 'Deleted', actions: [{ label: 'Undo', onClick: restore }] })\n\n`add` returns the toast with its `id`, for `update(id, patch)` and\n`remove(id)`; `clear()` empties the queue and `toasts` reads it. A toast\nleaves after its `duration`, by default the theme's `--weft-duration-toast`.\n\nThe Toaster is a region named \"Notifications\" (`label`). A new toast is\nannounced without moving focus, by type, as in Nuxt UI: `background`\npolitely, `foreground` at once (assertively); a `danger` toast is\nforeground unless it says otherwise. While the pointer is over it or focus\nis inside it, no toast's time runs. F8 moves focus to it, to reach a toast's\nactions, even while a modal is open (the region is exempt from its focus\ntrap and is never made inert); when the focused toast goes, focus stays in\nthe region. `position` is a corner or the middle of the top or bottom edge\n(`bottom-end` by default; start and end follow the text direction); toasts\nswipe away towards that side on touch. At most `max` (5) stay: a new toast\nbeyond that drops the oldest.\n\nIt renders into the overlay root only once mounted. The queue is one per\npage; on the server `add` does nothing.",
       "examples": [
         {
           "name": "basic",
@@ -3690,7 +3912,7 @@
           "dynamic": false
         }
       ],
-      "notes": "The default slot is the trigger, one element; `text` is what it says (the\n`content` slot replaces it). It follows the WAI-ARIA APG Tooltip pattern:\nit never takes focus, and while shown the trigger is described by it\n(`aria-describedby`, added after any description the trigger has).\n\nIt hides on Escape (only it, when it is the top overlay), on a press, when\nthe trigger loses focus, and when the pointer leaves both the trigger and the\ntooltip, so the pointer can move onto it to read it. Once one tooltip has\nhidden, the next shows without a delay for a moment, as when running the\npointer along a toolbar.\n\n**Naming.** An icon-only trigger needs a name. When the trigger has none (no\n`aria-label`, `aria-labelledby`, `title` or text), the tooltip's text becomes\nits `aria-label`, on pointer and touch alike. A trigger that has a name keeps\nit; on touch the tooltip's extra hint is then not shown, so do not put what a\nperson must know in a tooltip.\n\n`v-model:open` shows it from code; `disabled` never shows it.",
+      "notes": "The default slot is the trigger, one element; `text` is what it says (the\n`content` slot replaces it). It follows the WAI-ARIA APG Tooltip pattern:\nit never takes focus, and while shown the trigger is described by it\n(`aria-describedby`, added after any description the trigger has).\n\nIt hides on Escape (only it, when it is the top overlay), on a press, when\nthe trigger loses focus, and when the pointer leaves both the trigger and the\ntooltip, so the pointer can move onto it to read it. A press outside it\nalso goes on to the overlay below (a menu it shows over), so one press\ncloses both, while Escape closes only the tooltip. Once one tooltip has\nhidden, the next shows without a delay for a moment, as when running the\npointer along a toolbar.\n\n**Naming.** An icon-only trigger needs a name. When the trigger has none (no\n`aria-label`, `aria-labelledby`, `title` or text), the tooltip's text becomes\nits `aria-label`, on pointer and touch alike, and the trigger is then not\ndescribed by it as well (it would be read twice). A trigger that has a name keeps\nit; on touch the tooltip's extra hint is then not shown, so do not put what a\nperson must know in a tooltip.\n\n`v-model:open` shows it from code; `disabled` never shows it.",
       "examples": [
         {
           "name": "basic",

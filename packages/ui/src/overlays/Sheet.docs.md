@@ -17,4 +17,6 @@ and `description` name and describe it; `header`, `actions`, `body` and
 It is a modal dialog (WAI-ARIA APG, Dialog (Modal)): focus is trapped inside,
 the page does not scroll, and Escape, the backdrop and the close button
 close it (`dismissible="false"` keeps Escape and the backdrop from it), with
-focus back on the trigger. The body scrolls when long.
+focus back on the trigger. The page behind is inert while it is open, and
+it slides back out when it closes, unless motion is reduced; `overlay="false"`
+draws no backdrop. The body scrolls when long.

@@ -19,6 +19,12 @@ It follows the WAI-ARIA APG Dialog (Modal) pattern: `aria-modal="true"`,
 focus trapped inside, starting on the first tabbable element that is not the
 close button, and the page does not scroll while it is open.
 
+`overlay="false"` draws no backdrop (it is still modal); `scrollable` lets
+a tall dialog scroll with its layer, as one long page. While it is open the
+page behind is inert (the toaster aside, which F8 still reaches), and it
+fades out when it closes, unless motion is reduced. Its header, body and
+footer are an OverlayPanel; the `header` slot still names the dialog.
+
 **Closing.** Escape, a press on the backdrop and the close button close it;
 `dismissible="false"` keeps it open on Escape and the backdrop. Focus returns
 to its trigger, after a press on the backdrop too (the backdrop is the

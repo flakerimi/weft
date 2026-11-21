@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import ModalCases from '../fixtures/overlays/ModalCases.vue'
 import { mount } from '../mount.ts'
 import { installResizeObserver } from '../resize-observer.ts'
+import { px } from '../forms/helpers.ts'
+import { press as pressKey } from '../keyboard.ts'
+import { loadStyles, ruleFor } from '../styles.ts'
 import { $, $$, active, key, locked, overlays, press, reset, settle } from './helpers.ts'
 
 let unmount: (() => void) | undefined
@@ -42,13 +45,85 @@ describe('Dialog', () => {
     expect(active()).toBe($('.field'))
   })
 
+  it('opens from its trigger by Enter and by Space', async () => {
+    const m = await cases({ case: 'dialog' })
+    expect(pressKey($('.trigger'), 'Enter')).toBe(true)
+    await settle()
+    expect(m.exposed.open).toBe(true)
+    key('Escape')
+    await settle()
+    expect(pressKey($('.trigger'), ' ')).toBe(true)
+    await settle()
+    expect(m.exposed.open).toBe(true)
+  })
+
+  it('stays named when the header slot replaces the title', async () => {
+    await cases({ case: 'dialog', header: true })
+    await openFromTrigger()
+    const dialog = $('[role="dialog"]')
+    expect(document.getElementById(dialog.getAttribute('aria-labelledby')!)!.textContent).toBe('My heading')
+  })
+
+  it('draws no backdrop with overlay off, still modal; scrollable lets the layer scroll', async () => {
+    await cases({ case: 'dialog', overlay: false, scrollable: true })
+    await openFromTrigger()
+    expect($('.weft-overlay-backdrop')).toBeNull()
+    expect($('[role="dialog"]').getAttribute('aria-modal')).toBe('true')
+    expect(locked()).toBe(true)
+    expect($('[role="dialog"]').parentElement!.dataset.scrollable).toBe('true')
+  })
+
+  it('plays its leave transition before it goes, and goes at once without one', async () => {
+    const unstyle = loadStyles()
+    try {
+      const m = await cases({ case: 'dialog' })
+      await openFromTrigger()
+      const dialog = $('[role="dialog"]')
+      dialog.style.transitionDuration = '40ms'
+      key('Escape')
+      await settle()
+      expect(m.exposed.open).toBe(false)
+      expect(dialog.isConnected).toBe(true)
+      expect(dialog.parentElement!.dataset.state).toBe('closed')
+      expect(active()).toBe($('.trigger')) // focus is home already
+      await new Promise((r) => setTimeout(r, 120))
+      expect(dialog.isConnected).toBe(false)
+      await openFromTrigger()
+      const again = $('[role="dialog"]')
+      again.style.transitionDuration = '0s' // as under reduced motion
+      key('Escape')
+      await settle()
+      expect(again.isConnected).toBe(false)
+    } finally {
+      unstyle()
+    }
+  })
+
+  it('gives its close button a touch hit area and a visible focus ring', async () => {
+    const unstyle = loadStyles()
+    try {
+      await cases({ case: 'dialog' })
+      await openFromTrigger()
+      const before = ruleFor('.weft-close-button::before')!
+      expect(before.style.getPropertyValue('inline-size')).toBe('max(100%, var(--weft-hit-min, 24px))')
+      expect(before.style.getPropertyValue('block-size')).toBe('max(100%, var(--weft-hit-min, 24px))')
+      expect(ruleFor('.weft-close-button')!.style.getPropertyValue('outline')).toBe('')
+      // The theme's focus ring (happy-dom keeps only part of the outline shorthand).
+      const ring = ruleFor(':focus-visible')!.style
+      expect(ring.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+      expect(ring.getPropertyValue('outline-offset')).toBe('2px')
+    } finally {
+      unstyle()
+    }
+  })
+
   it('traps focus: Tab wraps and focus elsewhere comes back', async () => {
     await cases({ case: 'dialog' })
     await openFromTrigger()
     $('.save').focus()
     const tab = key('Tab')
     expect(tab.defaultPrevented).toBe(true)
-    expect(active()).toBe($('.weft-overlay__close'))
+    expect(active()).toBe($('.weft-close-button'))
     $('.after').focus()
     expect(overlays()!.contains(active())).toBe(true)
   })
@@ -76,7 +151,7 @@ describe('Dialog', () => {
   it('closes from its close button and from close() in a slot', async () => {
     const m = await cases({ case: 'dialog' })
     await openFromTrigger()
-    const close = $('.weft-overlay__close')
+    const close = $('.weft-close-button')
     expect(close.getAttribute('aria-label')).toBe('Close')
     expect(close.getAttribute('type')).toBe('button')
     close.click()
@@ -116,10 +191,10 @@ describe('Dialog', () => {
       await openFromTrigger()
       const dialog = $('[role="dialog"]')
       expect(dialog.hasAttribute('data-fullscreen')).toBe(false)
-      ro.report($('.weft-overlay-backdrop'), 500)
+      ro.report(document.documentElement, 500) // the viewport's width
       await settle()
       expect(dialog.dataset.fullscreen).toBe('true')
-      ro.report($('.weft-overlay-backdrop'), 900)
+      ro.report(document.documentElement, 900)
       await settle()
       expect(dialog.hasAttribute('data-fullscreen')).toBe(false)
     } finally {
@@ -141,6 +216,8 @@ describe('Sheet', () => {
     expect(sheet.classList.contains('weft-sheet')).toBe(true)
     expect(sheet.dataset.side).toBe('end')
     expect(sheet.getAttribute('aria-modal')).toBe('true')
+    // The shared close button, with its touch hit area (CloseButton's rule, checked under Dialog).
+    expect($('.weft-close-button', sheet).getAttribute('aria-label')).toBe('Close')
     expect(active()).toBe($('.field'))
     expect(locked()).toBe(true)
     press($('.weft-overlay-backdrop'))
@@ -160,6 +237,21 @@ describe('Sheet', () => {
 describe('Drawer', () => {
   const drag = (el: Element, type: string, y: number) =>
     el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerType: 'touch', pointerId: 1, clientX: 10, clientY: y }))
+
+  it('gives its handle a touch-sized grip and its sheet close button the same hit area as Dialog', async () => {
+    const unstyle = loadStyles()
+    try {
+      await cases({ case: 'drawer' })
+      $('.trigger').closest('div')
+      document.querySelector('.trigger')!.closest('[data-weft-input]')
+      await openFromTrigger()
+      const layer = $('[role="dialog"]').parentElement!
+      layer.dataset.weftInput = 'touch'
+      expect(px(getComputedStyle($('.weft-drawer__handle')).blockSize)).toBe(44)
+    } finally {
+      unstyle()
+    }
+  })
 
   it('is a bottom sheet with a handle, closed by Escape', async () => {
     const m = await cases({ case: 'drawer' })
@@ -227,7 +319,7 @@ describe('ConfirmDialog', () => {
     expect(buttons.map((b) => b.textContent!.trim())).toEqual(['Cancel', 'Delete'])
     expect(active()).toBe(buttons[0])
     expect(buttons[1]!.dataset.tone).toBe('danger')
-    expect($('.weft-overlay__close', dialog)).toBeNull()
+    expect($('.weft-close-button', dialog)).toBeNull()
   })
 
   it('emits confirm and closes on its confirm button', async () => {
@@ -282,5 +374,7 @@ describe('ConfirmDialog', () => {
     await settle()
     expect(m.exposed.open).toBe(true)
     expect(confirm.hasAttribute('aria-busy')).toBe(false)
+    // Not swallowed: the error reaches the page.
+    expect((m.exposed.errors as unknown[]).map((e) => (e as Error).message)).toEqual(['no'])
   })
 })

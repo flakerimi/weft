@@ -1,0 +1,22 @@
+/* OverlayPanel: the header (heading, actions, close button), the body,
+   which scrolls, and the footer of Dialog, Sheet and Drawer. */
+.weft-overlay__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--weft-space-3, 12px);
+  padding: var(--weft-space-4, 16px) var(--weft-space-4, 16px) 0;
+}
+.weft-overlay__heading { flex: 1; min-inline-size: 0; display: grid; gap: var(--weft-space-1, 4px); }
+.weft-overlay__title { font-size: 1.15em; font-weight: var(--weft-weight-heading, 600); }
+.weft-overlay__description { color: var(--weft-color-text-muted, GrayText); }
+.weft-overlay__actions { display: flex; gap: var(--weft-space-2, 8px); }
+.weft-overlay__close { margin-block: -4px; margin-inline-end: -4px; }
+.weft-overlay__body { padding: var(--weft-space-4, 16px); overflow: auto; flex: 1; min-block-size: 0; }
+.weft-overlay__header + .weft-overlay__footer { padding-block-start: var(--weft-space-4, 16px); }
+.weft-overlay__footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--weft-space-2, 8px);
+  padding: 0 var(--weft-space-4, 16px) var(--weft-space-4, 16px);
+}

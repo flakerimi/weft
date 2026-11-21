@@ -18,6 +18,14 @@ export interface MenuItem {
   icon?: string
   /** `danger` for an item that destroys. */
   tone?: Tone
+  /** The same as `tone`, under Nuxt UI's name; it wins when both are given. */
+  color?: Tone
+  /** A sentence under the label, which describes the item. */
+  description?: string
+  /** Keys of its shortcut, shown at the end with Kbd (`['meta', 'k']`); shown only, not bound. */
+  kbds?: string[]
+  /** Work in progress: a spinner, aria-busy, and it cannot be chosen. */
+  loading?: boolean
   /** Shown and reachable, but cannot be chosen. */
   disabled?: boolean
   /** A checkbox or radio item's state. */

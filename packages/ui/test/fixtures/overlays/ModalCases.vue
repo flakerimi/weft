@@ -13,12 +13,16 @@ const props = withDefaults(
     fullscreen?: boolean
     side?: 'start' | 'end' | 'top' | 'bottom'
     work?: 'none' | 'resolve' | 'reject'
+    overlay?: boolean
+    scrollable?: boolean
+    header?: boolean
   }>(),
-  { dismissible: true, work: 'none' },
+  { dismissible: true, work: 'none', overlay: true },
 )
 const open = ref(false)
 const confirms = ref(0)
 const cancels = ref(0)
+const errors = ref<unknown[]>([])
 let settleWork: (() => void) | undefined
 function onConfirm() {
   confirms.value++
@@ -27,7 +31,7 @@ function onConfirm() {
     settleWork = props.work === 'resolve' ? resolve : () => reject(new Error('no'))
   })
 }
-defineExpose({ open, confirms, cancels, finish: () => settleWork?.() })
+defineExpose({ open, confirms, cancels, errors, finish: () => settleWork?.() })
 </script>
 
 <template>
@@ -39,8 +43,11 @@ defineExpose({ open, confirms, cancels, finish: () => settleWork?.() })
     description="Pick a new name."
     :dismissible="dismissible"
     :fullscreen="fullscreen"
+    :overlay="overlay"
+    :scrollable="scrollable"
   >
     <Button class="trigger" label="Rename" />
+    <template v-if="header" #header><h2 class="mine">My heading</h2></template>
     <template #body><input class="field" /></template>
     <template #footer="{ close }"><button class="cancel" @click="close()">Cancel</button><button class="save">Save</button></template>
   </Dialog>
@@ -61,6 +68,7 @@ defineExpose({ open, confirms, cancels, finish: () => settleWork?.() })
     tone="danger"
     @confirm="onConfirm"
     @cancel="cancels++"
+    @error="(e: unknown) => errors.push(e)"
   >
     <button class="trigger">Delete</button>
   </ConfirmDialog>

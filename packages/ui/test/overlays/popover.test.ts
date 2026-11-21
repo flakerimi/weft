@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import PopoverCases from '../fixtures/overlays/PopoverCases.vue'
 import { mount } from '../mount.ts'
+import { press as pressKey } from '../keyboard.ts'
 import { $, active, key, locked, moveFocus, overlays, press, reset, settle } from './helpers.ts'
 
 let unmount: (() => void) | undefined
@@ -47,6 +48,51 @@ describe('Popover', () => {
     expect(active()).toBe($('.field'))
     expect(locked()).toBe(false)
     expect($('.weft-overlay-backdrop')).toBeNull()
+  })
+
+  it('opens from its trigger by Enter and by Space', async () => {
+    const m = await cases()
+    expect(pressKey($('.trigger'), 'Enter')).toBe(true)
+    await settle()
+    expect(m.exposed.open).toBe(true)
+    key('Escape')
+    await settle()
+    expect(pressKey($('.trigger'), ' ')).toBe(true)
+    await settle()
+    expect(m.exposed.open).toBe(true)
+  })
+
+  it('opens on hover in hover mode, leaving focus alone, and closes when the pointer leaves both', async () => {
+    const m = await cases({ mode: 'hover' })
+    const wrap = $('.trigger').parentElement!
+    $('.before').focus()
+    wrap.dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse' }))
+    await settle()
+    expect(m.exposed.open).toBe(true)
+    expect(active()).toBe($('.before'))
+    wrap.dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse' }))
+    panel().dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse' }))
+    await settle()
+    expect(m.exposed.open).toBe(true)
+    panel().dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse' }))
+    await settle()
+    expect(m.exposed.open).toBe(false)
+  })
+
+  it('draws an arrow towards its trigger when asked', async () => {
+    await cases({ arrow: true })
+    $('.trigger').click()
+    await settle()
+    const arrow = $('.weft-popover__arrow', panel())
+    expect(arrow.getAttribute('aria-hidden')).toBe('true')
+    expect(arrow.style.left).toMatch(/px$/)
+  })
+
+  it('does not take focus when it starts open (default-open, a page that hydrates)', async () => {
+    $('body').focus()
+    await cases({ defaultOpen: true })
+    expect(panel()).not.toBeNull()
+    expect(active()).toBe(document.body)
   })
 
   it('closes on Escape and returns focus to the trigger', async () => {

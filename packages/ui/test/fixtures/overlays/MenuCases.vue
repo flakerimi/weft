@@ -14,7 +14,7 @@ const sort = ref('name')
 const items = computed<MenuItem[][]>(() => [
   [
     { type: 'label', label: 'File' },
-    { label: 'New', icon: 'plus', onSelect: () => log.value.push('new') },
+    { label: 'New', icon: 'plus', kbds: ['meta', 'n'], description: 'An empty file', onSelect: () => log.value.push('new') },
     { label: 'Open', disabled: true, onSelect: () => log.value.push('open') },
     { label: 'Rename', onSelect: () => log.value.push('rename') },
     { label: 'Pin', onSelect: (e) => { e.preventDefault(); log.value.push('pin') } },
@@ -33,6 +33,7 @@ const items = computed<MenuItem[][]>(() => [
       ],
     },
     { label: 'Delete', tone: 'danger', onSelect: () => log.value.push('delete') },
+    { label: 'Sync', loading: true, color: 'warning', onSelect: () => log.value.push('sync') },
   ],
 ])
 defineExpose({ input, open, log, grid, sort })

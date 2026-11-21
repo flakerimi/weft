@@ -18,6 +18,8 @@ Focus starts on Cancel, the safe answer.
 `@confirm` runs on confirm and the dialog closes. When the handler returns a
 promise, the confirm button loads and nothing closes the dialog until the
 promise settles: it closes when the work succeeds and stays, ready again,
-when it fails, so the person can retry or cancel. Cancel, Escape and the
+when it fails, so the person can retry or cancel, and emits `error` with
+what the work failed with (with no `@error` listener it rethrows it, so it
+is never swallowed). Cancel, Escape and the
 backdrop emit `cancel` and close it. The default slot is the trigger, or bind
 `v-model:open`; the `body` slot adds content under the description.

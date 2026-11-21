@@ -11,7 +11,8 @@
  * - `toasts` is the queue, reactive, oldest first.
  *
  * A toast leaves on its own after `duration` ms, by default the theme's
- * `--weft-duration-toast`; 0 keeps it until it is closed. The queue is one
+ * `--weft-duration-toast`; 0 keeps it until it is closed. Changing its
+ * duration (update, or add with its id) starts its time again. The queue is one
  * per page, so add toasts from the browser (event handlers): on the server
  * `add` does nothing, as a module shared by every request must not keep one
  * request's toasts for the next.
@@ -38,6 +39,10 @@ export interface ToastMessage {
   duration?: number
   /** Show the close button (default true). */
   close?: boolean
+  /** How it is announced: `foreground` at once (assertive), `background` politely; default foreground for `danger`, background otherwise. */
+  type?: 'foreground' | 'background'
+  /** Show its remaining time as a bar (default true). */
+  progress?: boolean
   /** Buttons after the text. */
   actions?: ToastAction[]
   /** Called when it leaves, however it leaves. */

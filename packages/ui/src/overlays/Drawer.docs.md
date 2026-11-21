@@ -16,4 +16,6 @@ the backdrop, focus back on the trigger. `dismissible="false"` turns off
 dragging as well.
 
 A press on a control in the header is that control's, never the start of a
-drag.
+drag. A flick is read from the speed of the last moves (over 0.5 px per ms
+in the last 100 ms), so a drag that ends fast closes it however slowly it
+began; the drag helper is the headless `createSwipe`, which Toast shares.

@@ -1,14 +1,17 @@
 <script setup vapor lang="ts">
 // Where useToast()'s toasts appear: a labelled region in a corner (or the
-// middle of an edge), its list a polite live region, so each new toast is
-// announced without moving focus. While the pointer is over it or focus is
-// inside, every toast's time stands still. F8 moves focus to it, to reach a
-// toast's actions; closing the focused toast leaves focus in the region.
+// middle of an edge). Each new toast is announced without moving focus:
+// background toasts politely, foreground ones (danger by default) at once.
+// At most `max` stay; a new one beyond that drops the oldest. While the
+// pointer is over it or focus is inside, every toast's time stands still.
+// F8 moves focus to it, to reach a toast's actions, even past a modal's
+// focus trap; closing the focused toast leaves focus in the region. On
+// touch, a toast swipes away towards the region's side.
 // Put one Toaster in the app's layout; it renders into the overlay root
 // once mounted, so the server renders none.
-import { computed, onScopeDispose, ref, useTemplateRef } from 'vue'
+import { computed, onScopeDispose, ref, useTemplateRef, watch } from 'vue'
 import { overlayRoot, useMounted } from './overlay.ts'
-import { useToast } from './toast.ts'
+import { useToast, type ToastMessage } from './toast.ts'
 import Toast from './Toast.vue'
 import '../styles/base.css'
 import '../styles/toaster.css'
@@ -17,7 +20,7 @@ const props = withDefaults(
   defineProps<{
     /** Where toasts stack: a corner, or the middle of the top or bottom edge. */
     position?: 'top-start' | 'top-center' | 'top-end' | 'bottom-start' | 'bottom-center' | 'bottom-end'
-    /** How many show at once, the newest; the rest wait their turn. */
+    /** How many stay at once; a new toast beyond that drops the oldest. */
     max?: number
     /** The region's name for assistive technology. */
     label?: string
@@ -27,6 +30,34 @@ const props = withDefaults(
 
 const queue = useToast()
 const shown = computed(() => queue.toasts.value.slice(-Math.max(1, props.max)))
+// Drop the oldest beyond max, as Nuxt UI does, rather than keep them waiting.
+watch(
+  [queue.toasts, () => props.max],
+  ([list, max]) => {
+    for (const t of list.slice(0, Math.max(0, list.length - Math.max(1, max)))) queue.remove(t.id)
+  },
+  { immediate: true },
+)
+// What the announcers say: each toast's text once, at its own politeness.
+const polite = ref('')
+const assertive = ref('')
+const said = new Set<string>()
+const textOf = (t: ToastMessage) => [t.title, t.description].filter(Boolean).join(' ')
+watch(
+  queue.toasts,
+  (list) => {
+    for (const t of list) {
+      if (said.has(t.id)) continue
+      said.add(t.id)
+      const loud = (t.type ?? (t.tone === 'danger' ? 'foreground' : 'background')) === 'foreground'
+      if (loud) assertive.value = textOf(t)
+      else polite.value = textOf(t)
+    }
+    for (const id of said) if (!list.some((t) => t.id === id)) said.delete(id)
+  },
+  { immediate: true },
+)
+const swipe = computed(() => (props.position.endsWith('start') ? 'start' : 'end'))
 const mounted = useMounted()
 const region = useTemplateRef<HTMLElement>('region')
 const hovered = ref(false)
@@ -65,13 +96,16 @@ if (typeof document !== 'undefined') {
       role="region"
       :aria-label="label"
       tabindex="-1"
+      data-weft-trap-exempt
       :data-position="position"
       @pointerenter="hovered = true"
       @pointerleave="hovered = false"
       @focusin="focusInside = true"
       @focusout="onFocusout"
     >
-      <ol class="weft-toaster__list" aria-live="polite" aria-relevant="additions text">
+      <div class="weft-visually-hidden" aria-live="polite" aria-atomic="true">{{ polite }}</div>
+      <div class="weft-visually-hidden" aria-live="assertive" aria-atomic="true">{{ assertive }}</div>
+      <ol class="weft-toaster__list">
         <li v-for="t in shown" :key="t.id" class="weft-toaster__item" :data-toast="t.id">
           <Toast
             :title="t.title"
@@ -81,6 +115,8 @@ if (typeof document !== 'undefined') {
             :duration="t.duration"
             :close="t.close ?? true"
             :actions="t.actions"
+            :progress="t.progress ?? true"
+            :swipe="swipe"
             :paused="paused"
             @close="remove(t.id)"
           />

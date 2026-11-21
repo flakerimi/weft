@@ -20,7 +20,9 @@
   transition: opacity var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease);
   @starting-style { opacity: 0; }
 }
-.weft-menu[data-form="floating"]:not([data-positioned]) { opacity: 0; }
+.weft-menu[data-form="floating"]:not([data-positioned]),
+.weft-overlay[data-state="closed"] .weft-menu[data-form="floating"] { opacity: 0; }
+.weft-overlay[data-state="closed"] .weft-menu[data-form="sheet"] { translate: 0 100%; }
 .weft-menu[data-form="sheet"] { padding: var(--weft-space-2, 8px); font-size: 1.0625rem; }
 
 .weft-menu__heading {
@@ -57,7 +59,11 @@
 .weft-menu__item[aria-expanded="true"] { background: color-mix(in srgb, var(--weft-color-text, CanvasText) 8%, transparent); }
 .weft-menu__item[aria-disabled="true"] { opacity: 0.5; cursor: default; }
 .weft-menu__item[data-tone] { color: var(--weft-tone-text, CanvasText); }
-.weft-menu__text { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weft-menu__label { flex: 1; min-inline-size: 0; display: grid; }
+.weft-menu__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weft-menu__description { color: var(--weft-color-text-muted, GrayText); font-size: 0.85em; }
+.weft-menu__kbds { flex: none; display: inline-flex; gap: 2px; margin-inline-start: var(--weft-space-3, 12px); }
+.weft-menu__item[aria-busy="true"] { cursor: progress; }
 .weft-menu__glyph { flex: none; display: inline-grid; place-items: center; inline-size: 16px; block-size: 16px; }
 .weft-menu__glyph svg { inline-size: 100%; block-size: 100%; }
 .weft-menu__chevron { color: var(--weft-color-text-muted, GrayText); }

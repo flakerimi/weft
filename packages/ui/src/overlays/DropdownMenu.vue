@@ -8,22 +8,28 @@
 // focus to the trigger; Escape closes one level; Tab closes the menu. A
 // submenu opens with ArrowRight (ArrowLeft right to left), Enter, a press or
 // a hover, and closes with the opposite arrow. Disabled items are reached
-// but not chosen. While open, the page does not scroll. On pointer it floats
-// beside the trigger; on touch the same menu is a bottom sheet with large
-// items, and a submenu is a sheet above it with a back item.
+// but not chosen, and so are loading ones. While open, the page does not
+// scroll. On pointer it floats beside the trigger; on touch the same menu
+// is a bottom sheet with large items, modal (focus trapped, the page behind
+// inert), and a submenu is a sheet above it with a back item. It fades out
+// when it closes, unless motion is reduced.
 import { computed, inject, onScopeDispose, provide, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { useWeft } from '../adaptive/context.ts'
 import Icon from '../basics/Icon.vue'
+import Kbd from '../basics/Kbd.vue'
+import Spinner from '../basics/Spinner.vue'
 import { focus, isRtl } from '../headless/dom.ts'
 import { useControllable } from '../headless/useControllable.ts'
 import { useDismiss } from '../headless/useDismiss.ts'
 import { useFloating, type Placement } from '../headless/useFloating.ts'
+import { useFocusTrap } from '../headless/useFocusTrap.ts'
 import { useId } from '../headless/useId.ts'
 import { useRovingFocus } from '../headless/useRovingFocus.ts'
+import { useInert } from '../headless/useInert.ts'
 import { useScrollLock } from '../headless/useScrollLock.ts'
 import { useTypeahead } from '../headless/useTypeahead.ts'
 import { groupsOf, isChoice, menuLevel, roleOf, type MenuItem } from './menu.ts'
-import { elementOf, isTouch, overlayRoot, useMounted, useOverlayContext, useTrigger, type Anchor } from './overlay.ts'
+import { elementOf, isTouch, overlayRoot, useMounted, useOverlayContext, usePresence, useTrigger, type Anchor } from './overlay.ts'
 import DropdownMenu from './DropdownMenu.vue'
 import '../styles/base.css'
 import '../styles/tone.css'
@@ -72,6 +78,11 @@ const wrap = useTemplateRef<HTMLElement>('wrap')
 const panel = useTemplateRef<HTMLElement>('panel')
 const backdrop = useTemplateRef<HTMLElement>('backdrop')
 const groups = computed(() => groupsOf(props.items))
+const presence = usePresence(open, () => panel.value)
+/** The panel while it is open, not while it leaves. */
+const live = computed(() => (presence.closing.value ? null : panel.value))
+/** As a sheet it is modal. */
+const modal = computed(() => open.value && sheet.value)
 
 const trigger = useTrigger(wrap, () => {
   const el = trigger.el.value
@@ -94,10 +105,14 @@ const floating = useFloating(reference, computed(() => (sheet.value ? null : pan
 })
 
 /** Which item to focus when the menu appears. */
-let start: 'first' | 'last' | 'none' = 'first'
+let start: 'first' | 'last' = 'first'
+/** Closed by a press outside a level above: return no focus, as after any press outside. */
+let pressedAway = false
 const close = () => (open.value = false)
+watch(open, (on) => on && (pressedAway = false), { flush: 'sync' })
 function closeAll(returnFocus: boolean) {
   if (parent) return parent.closeAll(returnFocus)
+  if (!returnFocus) pressedAway = true
   close()
   // At once, before an item's onSelect has its effect: a dialog it opens
   // then finds focus on the trigger, its opener to return to.
@@ -118,7 +133,7 @@ function onTriggerKey(event: KeyboardEvent) {
   show(event.key === 'ArrowDown' ? 'first' : 'last')
 }
 
-useDismiss(panel, {
+useDismiss(live, {
   onDismiss(reason, event) {
     if (!parent || reason === 'escape' || sheet.value) return close()
     // A press in a level above closes this one; a press outside them all, every level.
@@ -128,8 +143,17 @@ useDismiss(panel, {
   },
   ignore: () => [wrap.value, backdrop.value, anchorEl()],
   returnTo: () => trigger.el.value ?? anchorEl(),
+  returnFocus: () => !pressedAway,
+})
+useFocusTrap(live, {
+  active: modal,
+  // A sheet that becomes a floating menu (touch to pointer) keeps its focus.
+  returnFocus: () => !open.value,
+  returnTo: () => trigger.el.value ?? anchorEl(),
+  initial: () => edge(start),
 })
 useScrollLock(computed(() => open.value && !parent))
+useInert(computed(() => modal.value && !parent))
 watch(open, (on) => on && context.refresh(), { immediate: true, flush: 'sync' })
 
 const roving = useRovingFocus(panel, { orientation: 'vertical' })
@@ -139,17 +163,18 @@ const typeahead = useTypeahead(
   () => itemEls().map((el) => (enabled(el) ? (el.querySelector('.weft-menu__text')?.textContent ?? '') : '')),
   (i) => roving.focus(i),
 )
-function focusEdge(at: 'first' | 'last') {
+function edge(at: 'first' | 'last') {
   const list = itemEls().filter(enabled)
-  focus(at === 'first' ? list[0] : list[list.length - 1])
+  return (at === 'first' ? list[0] : list[list.length - 1]) ?? null
 }
+const focusEdge = (at: 'first' | 'last') => focus(edge(at))
 watch(
   panel,
   (el) => {
     if (!el) return
     if (parent) {
       if (parent.focusFirst()) focusEdge('first')
-    } else if (start !== 'none') focusEdge(start)
+    } else focusEdge(start)
   },
   { flush: 'post' },
 )
@@ -190,7 +215,7 @@ const itemOf = (event: Event) => (event.target as Element).closest<HTMLElement>(
 
 function choose(item: MenuItem, key: string, event: MouseEvent) {
   const el = itemOf(event)
-  if (item.disabled) {
+  if (item.disabled || item.loading) {
     event.preventDefault()
     return
   }
@@ -263,14 +288,8 @@ const CLOSE_DELAY = 150
 
 <template>
   <span v-if="!parent && $slots.default" ref="wrap" class="weft-overlay-trigger" @click="onTriggerClick" @keydown="onTriggerKey"><slot :open="open" /></span>
-  <Teleport v-if="mounted && open" :to="overlayRoot()">
-    <div
-      class="weft-overlay"
-      :dir="context.attrs.value.dir"
-      :data-weft-input="context.attrs.value['data-weft-input']"
-      :data-weft-surface="context.attrs.value['data-weft-surface']"
-      :data-weft-scheme="context.attrs.value['data-weft-scheme']"
-    >
+  <Teleport v-if="mounted && presence.present.value" :to="overlayRoot()">
+    <div class="weft-overlay" v-bind="context.attrs.value" :data-state="presence.closing.value ? 'closed' : 'open'">
       <div v-if="sheet" ref="backdrop" class="weft-overlay-backdrop" @click="onBackdrop"></div>
       <div
         ref="panel"
@@ -282,6 +301,7 @@ const CLOSE_DELAY = 150
         tabindex="-1"
         :aria-labelledby="!parent && trigger.el.value?.id ? trigger.el.value.id : undefined"
         :aria-label="parent ? parent.item()?.label : ($attrs['aria-label'] as string | undefined)"
+        :aria-modal="sheet ? 'true' : undefined"
         :data-form="sheet ? 'sheet' : 'floating'"
         :data-side="side"
         :data-positioned="sheet || floating.isPositioned.value ? 'true' : undefined"
@@ -307,20 +327,27 @@ const CLOSE_DELAY = 150
                 :role="roleOf(item)"
                 :href="item.to && !item.disabled ? item.to : undefined"
                 :target="item.to && !item.disabled ? item.target : undefined"
-                :aria-disabled="item.disabled ? 'true' : undefined"
+                :aria-disabled="item.disabled || item.loading ? 'true' : undefined"
+                :aria-busy="item.loading ? 'true' : undefined"
+                :aria-describedby="item.description ? `${id}-d${g}-${i}` : undefined"
                 :aria-checked="isChoice(item) ? (item.checked ? 'true' : 'false') : undefined"
                 :aria-haspopup="item.children ? 'menu' : undefined"
                 :aria-expanded="item.children ? (sub?.key === `${g}-${i}` ? 'true' : 'false') : undefined"
-                :data-tone="item.tone"
+                :data-tone="item.color ?? item.tone"
                 @click="choose(item, `${g}-${i}`, $event)"
                 @pointermove="onHover(item, `${g}-${i}`, $event)"
               >
-                <span v-if="isChoice(item)" class="weft-menu__glyph weft-menu__indicator" aria-hidden="true">
+                <span v-if="item.loading" class="weft-menu__glyph"><Spinner /></span>
+                <span v-else-if="isChoice(item)" class="weft-menu__glyph weft-menu__indicator" aria-hidden="true">
                   <svg v-if="item.checked && item.type === 'checkbox'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
                   <svg v-else-if="item.checked" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4.5" /></svg>
                 </span>
                 <span v-else-if="item.icon" class="weft-menu__glyph"><Icon :name="item.icon" /></span>
-                <span class="weft-menu__text"><slot name="item" :item="item">{{ item.label }}</slot></span>
+                <span class="weft-menu__label">
+                  <span class="weft-menu__text"><slot name="item" :item="item">{{ item.label }}</slot></span>
+                  <span v-if="item.description" :id="`${id}-d${g}-${i}`" class="weft-menu__description">{{ item.description }}</span>
+                </span>
+                <span v-if="item.kbds?.length" class="weft-menu__kbds"><Kbd v-for="k in item.kbds" :key="k" :value="k" size="sm" /></span>
                 <svg v-if="item.children" class="weft-menu__glyph weft-menu__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
               </component>
             </template>

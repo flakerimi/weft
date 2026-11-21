@@ -147,3 +147,71 @@ export const elementOf = (anchor: Anchor | undefined): HTMLElement | null =>
 
 /** Whether a pointer event came from a finger: hover behaviour (menus, tooltips) ignores those. */
 export const isTouch = (event: PointerEvent) => event.pointerType === 'touch'
+
+/** ms of the longest transition `el` runs now (duration plus delay), 0 when none (reduced motion sets them to 0). */
+export function leaveTime(el: Element): number {
+  const style = getComputedStyle(el)
+  const times = (list: string) => list.split(',').map((t) => {
+    const v = t.trim()
+    return v.endsWith('ms') ? parseFloat(v) : v.endsWith('s') ? parseFloat(v) * 1000 : 0
+  })
+  const durations = times(style.transitionDuration || '0s')
+  const delays = times(style.transitionDelay || '0s')
+  return Math.max(0, ...durations.map((d, i) => (d > 0 ? d + (delays[i] ?? delays[0] ?? 0) : 0)))
+}
+
+export interface Presence {
+  /** Whether the overlay's content is rendered: while open, and while its leave transition runs. */
+  present: Readonly<Ref<boolean>>
+  /** Whether it is leaving: closed, still on screen. Draw it with `data-state="closed"`. */
+  closing: Readonly<Ref<boolean>>
+}
+
+/**
+ * usePresence(open, el): keep an overlay's content rendered while it plays
+ * its leave transition. When `open` turns false, `closing` turns true (the
+ * component draws `data-state="closed"`, whose CSS transitions it out) and
+ * the content stays until `el`'s transition ends, or its duration and a
+ * little more have passed if no transitionend arrives. With no transition
+ * (none drawn, or reduced motion, which sets durations to 0) it goes at
+ * once. Opening again while it leaves keeps it. Everything else about
+ * closing (the overlay stack, focus, the scroll lock) happens at once, as
+ * the component gives its leaving element to none of them.
+ */
+export function usePresence(open: Readonly<Ref<boolean>>, el: () => HTMLElement | null | undefined): Presence {
+  const present = ref(open.value)
+  const closing = ref(false)
+  let stop: (() => void) | undefined
+  const finish = () => {
+    stop?.()
+    stop = undefined
+    closing.value = false
+    present.value = open.value
+  }
+  watch(
+    open,
+    (on) => {
+      stop?.()
+      stop = undefined
+      if (on) {
+        closing.value = false
+        present.value = true
+        return
+      }
+      const node = el()
+      const ms = node && typeof document !== 'undefined' ? leaveTime(node) : 0
+      if (!node || ms <= 0) return finish()
+      closing.value = true
+      const onEnd = (event: Event) => event.target === node && finish()
+      node.addEventListener('transitionend', onEnd)
+      const timer = setTimeout(finish, ms + 50)
+      stop = () => {
+        node.removeEventListener('transitionend', onEnd)
+        clearTimeout(timer)
+      }
+    },
+    { flush: 'sync' },
+  )
+  onScopeDispose(() => stop?.())
+  return { present, closing }
+}

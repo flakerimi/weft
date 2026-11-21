@@ -33,8 +33,10 @@ export {
   useControllable,
   useDismiss,
   useFloating,
+  createSwipe,
   useFocusTrap,
   useId,
+  useInert,
   useRovingFocus,
   useScrollLock,
   useTypeahead,
@@ -50,6 +52,8 @@ export {
   type Placement,
   type RovingFocus,
   type RovingFocusOptions,
+  type Swipe,
+  type SwipeDirection,
   type Typeahead,
 } from './headless/index.ts'
 export { default as Input } from './forms/Input.vue'
@@ -67,6 +71,8 @@ export { default as Slider } from './forms/Slider.vue'
 export { default as PinInput } from './forms/PinInput.vue'
 export { default as FieldGroup } from './forms/FieldGroup.vue'
 export { default as Form } from './forms/Form.vue'
+export { default as CloseButton } from './overlays/CloseButton.vue'
+export { default as OverlayPanel } from './overlays/OverlayPanel.vue'
 export { default as Popover } from './overlays/Popover.vue'
 export { default as Tooltip } from './overlays/Tooltip.vue'
 export { default as Dialog } from './overlays/Dialog.vue'

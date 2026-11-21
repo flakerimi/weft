@@ -14,18 +14,23 @@
  *   element focused when it opened if it has none, after a press on the
  *   backdrop too: the backdrop is the modal's own, so the overlay stack's
  *   rule of no focus return after a press outside does not apply.
+ * - While open, the page behind is inert (useInert), the toaster aside.
+ * - Closing plays the leave transition (`present` stays true while
+ *   `closing`); the stack, the trap, the lock and the inert page let go at
+ *   once, so focus is home before the panel has gone.
  * - `context` carries the direction, scheme, input and surface of where it
  *   opened into the overlay root; `ids` names the panel, title and
  *   description for `aria-controls`, `aria-labelledby`, `aria-describedby`.
  */
-import { useTemplateRef, watch, type Ref } from 'vue'
+import { computed, useTemplateRef, watch, type Ref } from 'vue'
 import { tabbables } from '../headless/dom.ts'
 import { useControllable } from '../headless/useControllable.ts'
 import { useDismiss } from '../headless/useDismiss.ts'
 import { useFocusTrap } from '../headless/useFocusTrap.ts'
 import { useId } from '../headless/useId.ts'
+import { useInert } from '../headless/useInert.ts'
 import { useScrollLock } from '../headless/useScrollLock.ts'
-import { useMounted, useOverlayContext, useTrigger } from './overlay.ts'
+import { useMounted, useOverlayContext, usePresence, useTrigger } from './overlay.ts'
 
 export interface ModalProps {
   open?: boolean
@@ -46,6 +51,9 @@ export function useModal(
   const ids = { panel: id, title: `${id}-title`, description: `${id}-description` }
   const wrap = useTemplateRef<HTMLElement>('wrap')
   const panel = useTemplateRef<HTMLElement>('panel')
+  const presence = usePresence(open, () => panel.value)
+  /** The panel while it is open, not while it leaves. */
+  const live = computed(() => (presence.closing.value ? null : panel.value))
 
   const trigger = useTrigger(wrap, () => ({
     'aria-haspopup': 'dialog',
@@ -56,26 +64,29 @@ export function useModal(
   watch(open, (on) => on && context.refresh(), { immediate: true, flush: 'sync' })
 
   const close = () => (open.value = false)
-  useDismiss(panel, {
+  useDismiss(live, {
     onDismiss: close,
     escape: () => props.dismissible !== false,
     outside: false,
     returnTo: () => trigger.el.value,
   })
-  useFocusTrap(panel, {
+  useFocusTrap(live, {
     active: open,
     initial: () => {
-      const el = panel.value
+      const el = live.value
       if (!el) return null
       const list = tabbables(el)
       return list.find((t) => !t.classList.contains(CLOSE_CLASS)) ?? list[0] ?? el
     },
   })
   useScrollLock(open)
+  useInert(open)
 
   return {
     open,
     mounted,
+    present: presence.present,
+    closing: presence.closing,
     ids,
     panel,
     context,

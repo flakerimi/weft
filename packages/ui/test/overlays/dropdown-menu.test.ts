@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import MenuCases from '../fixtures/overlays/MenuCases.vue'
 import { mount } from '../mount.ts'
-import { loadStyles } from '../styles.ts'
+import { loadStyles, ruleFor } from '../styles.ts'
 import { px } from '../forms/helpers.ts'
+import { press as pressKey } from '../keyboard.ts'
 import { $, $$, active, key, locked, overlays, press, reset, settle } from './helpers.ts'
 
 let unmount: (() => void) | undefined
@@ -20,7 +21,7 @@ async function cases(props: Record<string, unknown> = {}) {
 const menus = () => $$('[role="menu"]')
 const menu = () => menus()[0]!
 const items = (el: Element = menu()) => $$('[role^="menuitem"]', el)
-const named = (label: string, el: Element = menu()) => items(el).find((i) => i.textContent!.trim() === label)!
+const named = (label: string, el: Element = menu()) => items(el).find((i) => i.querySelector('.weft-menu__text')!.textContent!.trim() === label)!
 const trigger = () => $('.trigger')
 async function openWith(k?: string) {
   trigger().focus()
@@ -53,7 +54,7 @@ describe('DropdownMenu', () => {
     key('Escape')
     await settle()
     await openWith('ArrowUp')
-    expect(active()).toBe(named('Delete'))
+    expect(active()).toBe(named('Delete')) // the last that can be chosen: Sync is loading
   })
 
   it('draws groups, a group label, separators and roles for each kind of item', async () => {
@@ -66,7 +67,7 @@ describe('DropdownMenu', () => {
     expect(items().map((i) => i.getAttribute('role'))).toEqual([
       'menuitem', 'menuitem', 'menuitem', 'menuitem',
       'menuitemcheckbox', 'menuitemradio', 'menuitemradio',
-      'menuitem', 'menuitem',
+      'menuitem', 'menuitem', 'menuitem',
     ])
     expect(named('Open').getAttribute('aria-disabled')).toBe('true')
     expect(named('Show grid').getAttribute('aria-checked')).toBe('false')
@@ -84,11 +85,11 @@ describe('DropdownMenu', () => {
     expect(active()).toBe(named('Open')) // disabled, still focusable (APG)
     key('ArrowUp')
     key('ArrowUp')
-    expect(active()).toBe(named('Delete'))
+    expect(active()).toBe(named('Sync'))
     key('ArrowDown')
     expect(active()).toBe(named('New'))
     key('End')
-    expect(active()).toBe(named('Delete'))
+    expect(active()).toBe(named('Sync'))
     key('Home')
     expect(active()).toBe(named('New'))
   })
@@ -115,6 +116,7 @@ describe('DropdownMenu', () => {
     expect(active()).toBe(trigger())
     await openWith()
     key('End')
+    key('ArrowUp')
     key(' ')
     await settle()
     await openWith()
@@ -122,6 +124,38 @@ describe('DropdownMenu', () => {
     await settle()
     expect(m.exposed.log).toEqual(['new', 'delete', 'rename'])
     expect(m.exposed.open).toBe(false)
+  })
+
+  it('opens from its trigger by Enter and by Space, as a native button does', async () => {
+    const m = await cases()
+    expect(pressKey(trigger(), 'Enter')).toBe(true)
+    await settle()
+    expect(m.exposed.open).toBe(true)
+    expect(active()).toBe(named('New'))
+    key('Escape')
+    await settle()
+    expect(pressKey(trigger(), ' ')).toBe(true)
+    await settle()
+    expect(m.exposed.open).toBe(true)
+  })
+
+  it('shows shortcuts with Kbd, a description, a loading item that cannot be chosen, and color as tone', async () => {
+    const m = await cases()
+    await openWith()
+    const item = named('New')
+    expect($$('.weft-kbd', item).map((k) => k.textContent!.trim())).toHaveLength(2)
+    const description = $('.weft-menu__description', item)
+    expect(description.textContent).toBe('An empty file')
+    expect(item.getAttribute('aria-describedby')).toBe(description.id)
+    const sync = named('Sync')
+    expect(sync.getAttribute('aria-busy')).toBe('true')
+    expect(sync.getAttribute('aria-disabled')).toBe('true')
+    expect($('.weft-spinner', sync)).not.toBeNull()
+    expect(sync.dataset.tone).toBe('warning')
+    sync.click()
+    await settle()
+    expect(m.exposed.log).toEqual([])
+    expect(m.exposed.open).toBe(true)
   })
 
   it('stays open after an item whose onSelect prevents the default, and ignores a disabled item', async () => {
@@ -165,6 +199,27 @@ describe('DropdownMenu', () => {
     await settle()
     expect(m.exposed.open).toBe(false)
     expect(locked()).toBe(false)
+  })
+
+  it('shows a focus ring on the focused item and fades out when it closes', async () => {
+    const unstyle = loadStyles()
+    try {
+      const m = await cases()
+      const ring = ruleFor('.weft-menu__item:focus-visible')!.style
+      expect(ring.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+      await openWith()
+      const el = menu()
+      el.style.transitionDuration = '40ms'
+      key('Escape')
+      await settle()
+      expect(m.exposed.open).toBe(false)
+      expect(el.parentElement!.dataset.state).toBe('closed')
+      expect(active()).toBe(trigger())
+      await new Promise((r) => setTimeout(r, 120))
+      expect(el.isConnected).toBe(false)
+    } finally {
+      unstyle()
+    }
   })
 
   describe('submenus', () => {
@@ -242,6 +297,7 @@ describe('DropdownMenu', () => {
       await settle()
       expect(m.exposed.open).toBe(false)
       expect(menus()).toHaveLength(0)
+      expect(active()).not.toBe(trigger()) // a press elsewhere: no focus comes back
     })
   })
 
@@ -256,6 +312,7 @@ describe('DropdownMenu', () => {
         expect($('.weft-overlay-backdrop')).not.toBeNull()
         expect(active()).toBe(named('New'))
         expect(px(getComputedStyle(named('New')).minBlockSize)).toBe(48)
+        expect(menu().getAttribute('aria-modal')).toBe('true')
       } finally {
         unstyle()
       }
@@ -269,7 +326,7 @@ describe('DropdownMenu', () => {
       expect(menus()).toHaveLength(2)
       const sub = menus()[1]!
       expect(sub.dataset.form).toBe('sheet')
-      expect(items(sub)[0]!.textContent!.trim()).toBe('Share')
+      expect(items(sub)[0]!.querySelector('.weft-menu__text')!.textContent!.trim()).toBe('Share')
       expect(items(sub)[0]!.classList.contains('weft-menu__back')).toBe(true)
       items(sub)[0]!.click()
       await settle()

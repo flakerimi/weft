@@ -15,13 +15,16 @@ it never takes focus, and while shown the trigger is described by it
 
 It hides on Escape (only it, when it is the top overlay), on a press, when
 the trigger loses focus, and when the pointer leaves both the trigger and the
-tooltip, so the pointer can move onto it to read it. Once one tooltip has
+tooltip, so the pointer can move onto it to read it. A press outside it
+also goes on to the overlay below (a menu it shows over), so one press
+closes both, while Escape closes only the tooltip. Once one tooltip has
 hidden, the next shows without a delay for a moment, as when running the
 pointer along a toolbar.
 
 **Naming.** An icon-only trigger needs a name. When the trigger has none (no
 `aria-label`, `aria-labelledby`, `title` or text), the tooltip's text becomes
-its `aria-label`, on pointer and touch alike. A trigger that has a name keeps
+its `aria-label`, on pointer and touch alike, and the trigger is then not
+described by it as well (it would be read twice). A trigger that has a name keeps
 it; on touch the tooltip's extra hint is then not shown, so do not put what a
 person must know in a tooltip.
 

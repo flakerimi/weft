@@ -1,5 +1,5 @@
 /**
- * useDismiss(el, { onDismiss, escape?, outside?, ignore?, returnTo?, returnFocus? })
+ * useDismiss(el, { onDismiss, escape?, outside?, ignore?, returnTo?, returnFocus?, passThrough? })
  *
  * Close an overlay on Escape or on a press outside it, the way every Weft
  * overlay closes. While `el` holds an element, the overlay is on the
@@ -19,6 +19,9 @@
  *   getter read at close (a template ref works); by default the element that
  *   had focus when it opened. The overlay stack returns focus, and none after
  *   a press outside; see `overlayStack`.
+ * - `passThrough`: a press outside closes this overlay and goes on to the
+ *   overlay below too (a tooltip over a menu: one press closes both). Escape
+ *   still stops at it. Not a ref: fixed for the overlay's life.
  * - `returnFocus` (default true): false returns no focus at all, for an
  *   overlay that never takes focus (a tooltip shown while its trigger has
  *   focus must not refocus it when it hides after a blur).
@@ -42,6 +45,7 @@ export interface DismissOptions {
   ignore?: () => (Element | null | undefined)[]
   returnTo?: MaybeRefOrGetter<HTMLElement | null | undefined>
   returnFocus?: MaybeRefOrGetter<boolean | undefined>
+  passThrough?: boolean
 }
 
 let count = 0
@@ -64,6 +68,7 @@ export function useDismiss(
       ignore: opts.ignore,
       returnTo: () => toValue(opts.returnTo),
       returnFocus: () => toValue(opts.returnFocus),
+      passThrough: opts.passThrough,
     })
   }
   const leave = () => {

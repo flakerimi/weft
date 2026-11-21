@@ -7,6 +7,7 @@ import Button from '../../../src/basics/Button.vue'
 import Dialog from '../../../src/overlays/Dialog.vue'
 import DropdownMenu from '../../../src/overlays/DropdownMenu.vue'
 import Popover from '../../../src/overlays/Popover.vue'
+import Toaster from '../../../src/overlays/Toaster.vue'
 import Tooltip from '../../../src/overlays/Tooltip.vue'
 import type { MenuItem } from '../../../src/overlays/menu.ts'
 
@@ -41,4 +42,5 @@ defineExpose({ log })
   <DropdownMenu :items="actions"><button class="open-actions">Actions</button></DropdownMenu>
   <Dialog v-model:open="details" title="Details"><template #body><button class="inside">ok</button></template></Dialog>
   <button class="elsewhere">elsewhere</button>
+  <Toaster />
 </template>

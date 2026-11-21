@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useToast } from '../../src/overlays/toast.ts'
 import ToastCases from '../fixtures/overlays/ToastCases.vue'
 import { mount } from '../mount.ts'
-import { loadStyles } from '../styles.ts'
+import { loadStyles, ruleFor } from '../styles.ts'
 import { $, $$, active, key, reset } from './helpers.ts'
 
 let unmount: (() => void) | undefined
@@ -35,7 +35,9 @@ describe('Toaster and useToast', () => {
     await toaster()
     expect(region().getAttribute('role')).toBe('region')
     expect(region().getAttribute('aria-label')).toBe('Notifications')
-    expect($('ol', region()).getAttribute('aria-live')).toBe('polite')
+    // Two announcers, polite and assertive, there before any toast so each is heard.
+    expect($('[aria-live="polite"]', region()).textContent).toBe('')
+    expect($('[aria-live="assertive"]', region()).textContent).toBe('')
     expect(document.getElementById('weft-overlays')!.contains(region())).toBe(true)
     useToast().add({ title: 'Saved', description: 'The draft is safe.', tone: 'success' })
     await flush()
@@ -44,6 +46,51 @@ describe('Toaster and useToast', () => {
     expect(toasts()[0]!.textContent).toContain('The draft is safe.')
     expect(toasts()[0]!.dataset.tone).toBe('success')
     expect(region().dataset.position).toBe('bottom-end')
+  })
+
+  it('announces background toasts politely and foreground ones (danger by default) assertively', async () => {
+    await toaster()
+    useToast().add({ title: 'Saved', description: 'Draft kept.' })
+    await flush()
+    expect($('.weft-toaster [aria-live="polite"]').textContent).toBe('Saved Draft kept.')
+    useToast().add({ title: 'Payment failed', tone: 'danger' })
+    await flush()
+    expect($('.weft-toaster [aria-live="assertive"]').textContent).toBe('Payment failed')
+    useToast().add({ title: 'Sent', type: 'foreground' })
+    await flush()
+    expect($('.weft-toaster [aria-live="assertive"]').textContent).toBe('Sent')
+    expect($('ol', region()).hasAttribute('aria-live')).toBe(false) // one announcement each
+  })
+
+  it('restarts its time when update() or a new add() with its id changes the duration', async () => {
+    await toaster()
+    const t = useToast()
+    const one = t.add({ title: 'Uploading', duration: 1000 })
+    await flush()
+    await vi.advanceTimersByTimeAsync(900)
+    t.update(one.id, { title: 'Uploaded', duration: 500 })
+    await vi.advanceTimersByTimeAsync(400)
+    expect(toasts()).toHaveLength(1)
+    t.add({ id: one.id, title: 'Uploaded', duration: 300 })
+    await vi.advanceTimersByTimeAsync(250)
+    expect(toasts()).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(toasts()).toHaveLength(0)
+  })
+
+  it('shows its remaining time as a progress bar that stops while paused', async () => {
+    await toaster()
+    useToast().add({ title: 'Saved' })
+    useToast().add({ title: 'No bar', progress: false })
+    useToast().add({ title: 'Stays', duration: 0 })
+    await flush()
+    const bars = toasts().map((t) => t.querySelector<HTMLElement>('.weft-toast__progress'))
+    expect(bars[0]!.getAttribute('aria-hidden')).toBe('true')
+    expect(bars[0]!.style.getPropertyValue('--weft-toast-time')).toBe('4000ms')
+    expect(bars.slice(1)).toEqual([null, null])
+    hover(region(), 'pointerenter')
+    await flush()
+    expect(toasts()[0]!.dataset.paused).toBe('true')
   })
 
   it('leaves after --weft-duration-toast, the theme’s 4000 ms', async () => {
@@ -146,17 +193,56 @@ describe('Toaster and useToast', () => {
   it('shows the newest `max`, and updates or removes a toast by id', async () => {
     await toaster({ max: 2 })
     const t = useToast()
-    t.add({ title: 'One' })
+    const gone = vi.fn()
+    t.add({ title: 'One', onClose: gone })
     t.add({ title: 'Two' })
     const three = t.add({ title: 'Three' })
     await flush()
+    // The oldest is dropped, as Nuxt UI does, not kept waiting.
     expect(toasts().map((e) => $('.weft-toast__title', e).textContent)).toEqual(['Two', 'Three'])
+    expect(t.toasts.value).toHaveLength(2)
+    expect(gone).toHaveBeenCalledOnce()
     t.update(three.id, { title: 'Third' })
     await flush()
     expect(toasts().map((e) => $('.weft-toast__title', e).textContent)).toEqual(['Two', 'Third'])
     t.remove(three.id)
     await flush()
-    expect(toasts().map((e) => $('.weft-toast__title', e).textContent)).toEqual(['One', 'Two'])
-    expect(t.toasts.value).toHaveLength(2)
+    expect(toasts().map((e) => $('.weft-toast__title', e).textContent)).toEqual(['Two'])
+  })
+
+  describe('on touch', () => {
+    const swipe = (el: Element, type: string, x: number) =>
+      el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerType: 'touch', pointerId: 7, clientX: x, clientY: 10 }))
+
+    it('swipes away towards the edge it sits on, and springs back from a short slow drag', async () => {
+      await toaster()
+      useToast().add({ title: 'Saved', duration: 0 })
+      await flush()
+      const toast = toasts()[0]!
+      Object.defineProperty(toast, 'offsetWidth', { value: 300, configurable: true })
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1000)
+      swipe(toast, 'pointerdown', 100)
+      swipe(toast, 'pointermove', 140)
+      expect(toast.style.getPropertyValue('--weft-toast-swipe')).toBe('40px')
+      now.mockReturnValue(2000)
+      swipe(toast, 'pointerup', 140)
+      await flush()
+      expect(toasts()).toHaveLength(1)
+      expect(toast.style.getPropertyValue('--weft-toast-swipe')).toBe('')
+      now.mockReturnValue(3000)
+      swipe(toast, 'pointerdown', 100)
+      swipe(toast, 'pointermove', 120)
+      now.mockReturnValue(3030)
+      swipe(toast, 'pointermove', 160) // a flick at the end
+      swipe(toast, 'pointerup', 160)
+      await flush()
+      expect(toasts()).toHaveLength(0)
+      now.mockRestore()
+    })
+
+    it('gives its close button the touch hit area', () => {
+      const before = ruleFor('.weft-close-button::before')!
+      expect(before.style.getPropertyValue('inline-size')).toBe('max(100%, var(--weft-hit-min, 24px))')
+    })
   })
 })

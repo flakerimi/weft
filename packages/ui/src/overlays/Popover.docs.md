@@ -30,5 +30,13 @@ turns both off); a press on its trigger toggles it shut. Focus returns to
 the trigger, except after a press outside, which put the user's attention
 elsewhere. On touch a press on the backdrop closes it and does return focus.
 
+**Hover mode.** `mode="hover"` opens it too while the pointer is over the
+trigger or the content (after `open-delay`, 100 ms) and closes it when the
+pointer has left both (after `close-delay`, 200 ms), without moving focus;
+a press still toggles it, and on touch it is pressed as ever. `arrow` draws
+an arrow pointing at the trigger. When it starts open (`default-open`) it
+does not take focus, so a page that hydrates keeps its own. Modal, the page
+behind is inert. It fades out when it closes, unless motion is reduced.
+
 `placement` is a floating-ui placement (`bottom`, `top-start`, …); `start`
 and `end` follow the text direction.

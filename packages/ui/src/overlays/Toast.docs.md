@@ -15,5 +15,10 @@ close button (× drawn inline; `close="false"` hides it). The default,
 
 It emits `close` when it should go: after `duration` ms (by default the
 theme's `--weft-duration-toast`, 4000 ms in the neutral theme; 0 stays until
-closed), when closed, acted on, or on Escape while focus is in it. Its time
-stands still while `paused`, and resumes with what it had left.
+closed), when closed, acted on, swiped away, or on Escape while focus is in
+it, once its leave transition has played. Its time stands still while
+`paused`, resumes with what it had left, and starts again when `duration`
+changes. A bar along its bottom edge shows the time left (`progress="false"`
+hides it; it is hidden under reduced motion). On touch, a swipe towards
+`swipe` (its Toaster's side) past a third of its width, or a flick, throws it
+away; short of that it springs back.

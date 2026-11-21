@@ -5,7 +5,9 @@
 // and closes; a confirm handler that returns a promise keeps it open with
 // the confirm button loading (and nothing else closing it) until the
 // promise settles: it closes when the work succeeds and stays, ready again,
-// when it fails. Cancel, Escape and the backdrop emit `cancel` and close.
+// when it fails, emitting `error` with what it failed with (or, with no
+// error listener, rethrowing it). Cancel, Escape and the backdrop emit
+// `cancel` and close.
 import { ref } from 'vue'
 import Button from '../basics/Button.vue'
 import { useControllable } from '../headless/useControllable.ts'
@@ -31,6 +33,8 @@ const props = withDefaults(
     tone?: Tone
     /** Run on confirm; a promise it returns keeps the dialog open, loading, until it settles. Given by `@confirm`. */
     onConfirm?: () => unknown
+    /** Called with the error a confirm handler's work failed with. Given by `@error`. */
+    onError?: (error: unknown) => void
   }>(),
   { open: undefined, defaultOpen: false, confirmLabel: 'Confirm', cancelLabel: 'Cancel', tone: 'primary' },
 )
@@ -70,11 +74,13 @@ async function confirm() {
   busy.value = true
   try {
     await work
-    open.value = false
-  } catch {
-    // It failed: stay open, so the person can try again or cancel.
-  } finally {
     busy.value = false
+    open.value = false
+  } catch (error) {
+    // It failed: stay open, ready again, so the person can retry or cancel.
+    busy.value = false
+    if (props.onError) props.onError(error)
+    else throw error
   }
 }
 </script>
