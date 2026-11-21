@@ -33,3 +33,7 @@ announced as a disabled link (`role="link"`, `aria-disabled="true"`); a click
 does nothing.
 
 **Keyboard:** a native anchor, so Tab reaches it and Enter follows it.
+
+**In a Form** that is disabled or busy (submitting), a Link is disabled, so
+it cannot navigate mid-submit: a disabled fieldset leaves links alone, so the
+Link reads the Form itself.

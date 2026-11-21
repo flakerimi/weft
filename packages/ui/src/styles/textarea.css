@@ -1,8 +1,10 @@
-/* Textarea: an input's box over several lines. */
+/* Textarea: an input's box over several lines, never shorter than an md
+   control (so at least --weft-hit-min, 44 px, on touch), whatever its rows
+   and size. */
 .weft-textarea {
   display: block;
   inline-size: 100%;
-  min-block-size: var(--weft-control-md, 36px);
+  min-block-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
   padding: var(--weft-space-2, 8px) var(--weft-space-3, 12px);
   border: 1px solid var(--weft-color-border, GrayText);
   border-radius: var(--weft-radius-control, 8px);

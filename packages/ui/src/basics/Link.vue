@@ -5,8 +5,10 @@
 // first client render agree, and an island hydrates without a mismatch. Pass
 // `active` where the server knows (a layout's own navigation). Only a
 // standalone link gets a touch hit area: in running text it would cover the
-// lines above and below.
+// lines above and below. In a disabled or busy Form it is disabled (a
+// disabled fieldset leaves links alone), so it cannot navigate mid-submit.
 import { computed, onMounted, ref } from 'vue'
+import { useFormState } from '../forms/field.ts'
 import { isExternal as looksExternal, relFor } from './address.ts'
 import '../styles/base.css'
 import '../styles/link.css'
@@ -54,8 +56,11 @@ const current = computed(() => {
   return url.origin === location.origin && trim(url.pathname) === trim(location.pathname)
 })
 
+const form = useFormState()
+const off = computed(() => props.disabled || !!form?.disabled())
+
 function onClick(event: MouseEvent) {
-  if (props.disabled) {
+  if (off.value) {
     event.preventDefault()
     event.stopPropagation()
     return
@@ -67,11 +72,11 @@ function onClick(event: MouseEvent) {
 <template>
   <a
     class="weft-link"
-    :href="disabled ? undefined : address"
-    :target="disabled ? undefined : target"
-    :rel="disabled ? undefined : rel"
-    :role="disabled ? 'link' : undefined"
-    :aria-disabled="disabled ? 'true' : undefined"
+    :href="off ? undefined : address"
+    :target="off ? undefined : target"
+    :rel="off ? undefined : rel"
+    :role="off ? 'link' : undefined"
+    :aria-disabled="off ? 'true' : undefined"
     :aria-current="current ? 'page' : undefined"
     :data-standalone="standalone ? 'true' : undefined"
     @click="onClick"

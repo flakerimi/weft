@@ -4,7 +4,7 @@ purpose: Text over several lines, which can grow with what is typed.
 use: For a message, a description, a note; with autoresize where the length varies.
 avoid: For one line, use Input; for formatted text, use an editor.
 adapts:
-  input: Nothing changes; it is taller than the touch minimum at any size.
+  input: It is never shorter than an md control, so at least 44 px on touch whatever its rows and size.
   surface: Nothing changes in behaviour; text follows the surface's type scale.
   width: It fills the width of its container.
 ---

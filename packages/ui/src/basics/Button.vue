@@ -5,8 +5,12 @@
 // click); disabled is the native attribute on a button and no address on a
 // link. On touch an md button is at least --weft-hit-min (44 px) tall; a
 // small or square one keeps its size and grows its hit area to
-// --weft-hit-min through a pseudo-element.
-import { useAttrs, useSlots } from 'vue'
+// --weft-hit-min through a pseudo-element. In a Form: as a link it is
+// disabled while the Form is disabled or busy (a disabled fieldset leaves
+// links alone); as a button, while the Form is busy, a submit button loads
+// and any other ignores presses, both keeping focus.
+import { computed, useAttrs, useSlots } from 'vue'
+import { useFormState } from '../forms/field.ts'
 import { isExternal, relFor } from './address.ts'
 import Icon from './Icon.vue'
 import Spinner from './Spinner.vue'
@@ -73,8 +77,16 @@ if (import.meta.env.DEV && !slots.default && !props.label && (props.icon || prop
   if (!attrs['aria-label'] && !attrs['aria-labelledby'] && !attrs.title) warnUnnamed()
 }
 
+const form = useFormState()
+/** Disabled: by its own prop, or, as a link, by a disabled or busy Form. */
+const off = computed(() => props.disabled || (!!props.to && !!form?.disabled()))
+/** Loading: by its own prop, or as the submit button of a busy Form. */
+const busy = computed(() => props.loading || (!props.to && props.type === 'submit' && !!form?.busy()))
+/** Ignoring presses but focusable: loading, or any button of a busy Form. */
+const held = computed(() => busy.value || (!props.to && !!form?.busy()))
+
 function blocked(event: MouseEvent): boolean {
-  if (!props.loading && !props.disabled) return false
+  if (!held.value && !off.value) return false
   // As a disabled button would: no navigation, no form submit, no handlers.
   event.preventDefault()
   event.stopPropagation()
@@ -103,13 +115,13 @@ function warnUnnamed() {
     :is="to ? 'a' : 'button'"
     class="weft-button"
     :type="to ? undefined : type"
-    :href="to && !disabled ? to : undefined"
-    :rel="to && !disabled ? relFor(rel, isExternal(to)) : undefined"
-    :target="to && !disabled ? target : undefined"
-    :role="to && disabled ? 'link' : undefined"
-    :disabled="!to && disabled ? true : undefined"
-    :aria-disabled="loading || (to && disabled) ? 'true' : undefined"
-    :aria-busy="loading ? 'true' : undefined"
+    :href="to && !off ? to : undefined"
+    :rel="to && !off ? relFor(rel, isExternal(to)) : undefined"
+    :target="to && !off ? target : undefined"
+    :role="to && off ? 'link' : undefined"
+    :disabled="!to && off ? true : undefined"
+    :aria-disabled="held || (to && off) ? 'true' : undefined"
+    :aria-busy="busy ? 'true' : undefined"
     :aria-current="to && active ? 'page' : undefined"
     :data-variant="variant"
     :data-tone="tone"
@@ -117,7 +129,7 @@ function warnUnnamed() {
     :data-active="active ? 'true' : undefined"
     :data-block="block ? 'true' : undefined"
     :data-square="square || (!$slots.default && !label && (icon || trailingIcon)) ? 'true' : undefined"
-    :data-loading="loading ? 'true' : undefined"
+    :data-loading="busy ? 'true' : undefined"
     @click="onClick"
     @auxclick="blocked"
   >
@@ -126,7 +138,7 @@ function warnUnnamed() {
       <slot><span v-if="label" class="weft-button__label">{{ label }}</span></slot>
       <slot name="trailing"><Icon v-if="trailingIcon" :name="trailingIcon" /></slot>
     </span>
-    <span v-if="loading" class="weft-button__spinner">
+    <span v-if="busy" class="weft-button__spinner">
       <Icon v-if="loadingIcon" class="weft-button__loading-icon" :name="loadingIcon" />
       <Spinner v-else />
     </span>

@@ -22,8 +22,9 @@ right. Each thumb's `aria-valuemin` and `aria-valuemax` are its neighbours.
 and drags it until let go. `update:modelValue` fires as it moves; `change`
 fires once a move ends (a key press, or a drag let go).
 
-Thumbs are named by `thumb-labels`, or for a range "Minimum" and "Maximum";
+Thumbs are named by `thumb-labels`, or for a range "Minimum" and "Maximum"
+(a thumb between them "Value 2 of 3");
 a single thumb takes the Slider's own `aria-label`, or its FormField's label.
-In a FormField a range's thumbs are named by the label and their own end
+In a FormField a range's thumbs are named by the label and their own name
 ("Price Minimum"). With `name`
 each value posts from a hidden input.

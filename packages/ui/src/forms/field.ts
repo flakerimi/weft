@@ -39,6 +39,8 @@ export interface FormContext {
   required(name: string): boolean
   /** Disabled, or busy submitting: every control in the form is disabled. */
   disabled: () => boolean
+  /** Busy submitting (`loading`, or an async submit handler running). */
+  busy: () => boolean
   blur(name: string): void
   input(name: string): void
 }
@@ -57,6 +59,17 @@ export const provideField = (field: FieldContext) => provide(fieldKey, field)
 export const provideForm = (form: FormContext) => provide(formKey, form)
 export const provideFieldGroup = (group: FieldGroupContext) => provide(fieldGroupKey, group)
 export const useForm = () => inject(formKey, null)
+
+/**
+ * For a control that is not a form control (Button, Link): the Form it is
+ * in, as `disabled` (disabled or busy) and `busy`. A disabled fieldset
+ * disables native buttons but not links, and a busy Form keeps its buttons
+ * focusable (see Form.vue), so these read the Form themselves.
+ */
+export function useFormState(): { disabled: () => boolean; busy: () => boolean } | null {
+  const form = useForm()
+  return form ? { disabled: form.disabled, busy: form.busy } : null
+}
 /**
  * For a group control (CheckboxGroup, RadioGroup): the group takes its
  * FormField's wiring itself, so the controls inside it must not, or each would

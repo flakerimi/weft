@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { reactive, toRaw } from 'vue'
+import FormProbe from '../../src/forms/Form.vue'
 import FormCases from '../fixtures/forms/FormCases.vue'
+import SearchForm from '../fixtures/forms/SearchForm.vue'
 import { actuallyDisabled, press } from '../keyboard.ts'
 import { mount } from '../mount.ts'
 import { settle, type } from './helpers.ts'
@@ -95,6 +98,16 @@ describe('Form', () => {
     await settle()
     expect(f.exposed.failed).toEqual([])
     expect((f.exposed.submitted as { age: unknown }[]).map((v) => v.age)).toEqual([40])
+  })
+
+  it('submits a form with one text field and no button when Enter is pressed in the field', async () => {
+    const m = mount(SearchForm)
+    mounted.push(m)
+    const input = m.el.querySelector('input')!
+    type(input, 'weft')
+    expect(press(input, 'Enter')).toBe(true)
+    await settle()
+    expect(m.exposed.sent).toEqual(['weft'])
   })
 
   it('submits a copy of the values, lists and objects included, that later edits do not change', async () => {
@@ -199,6 +212,17 @@ describe('Form', () => {
     expect(press(check, 'Enter')).toBe(false)
     expect(actuallyDisabled(f.q<HTMLButtonElement>('button[type="submit"]'))).toBe(true)
     expect(press(f.q('.email input'), 'Enter')).toBe(false)
+    // Links are not form controls, so the fieldset leaves them: they are disabled as a disabled Link is.
+    for (const sel of ['a.cancel', 'a.help']) {
+      const link = f.q<HTMLAnchorElement>(sel)
+      expect(link.hasAttribute('href'), sel).toBe(false)
+      expect(link.getAttribute('aria-disabled'), sel).toBe('true')
+      expect(link.getAttribute('role'), sel).toBe('link')
+      const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+      link.dispatchEvent(click)
+      expect(click.defaultPrevented, sel).toBe(true)
+      expect(press(link, 'Enter'), sel).toBe(false)
+    }
     f.q<HTMLFormElement>('form').requestSubmit()
     await settle()
     expect(f.exposed.failed).toEqual([])
@@ -225,6 +249,9 @@ describe('Form', () => {
     expect(f.exposed.submitted).toHaveLength(1)
     expect(f.q('form').getAttribute('aria-busy')).toBe('true')
     expect(f.q('.email input').disabled).toBe(true)
+    // Links are disabled while it is busy: a Cancel cannot navigate mid-submit.
+    expect(f.q('a.cancel').hasAttribute('href')).toBe(false)
+    expect(f.q('a.help').getAttribute('aria-disabled')).toBe('true')
     f.q<HTMLFormElement>('form').requestSubmit()
     await settle()
     expect(f.exposed.submitted).toHaveLength(1)
@@ -234,5 +261,83 @@ describe('Form', () => {
     expect(f.q('.email input').disabled).toBe(false)
     await f.submit()
     expect(f.exposed.submitted).toHaveLength(2)
+  })
+
+  it('keeps focus on the submit button through an async submit: busy and unavailable, not disabled', async () => {
+    const f = render({ slow: true })
+    type(f.q('.email input'), 'ada@example.com')
+    f.q('.terms input').click()
+    f.q('.plan input').click()
+    await settle()
+    const button = f.q<HTMLButtonElement>('button[type="submit"]')
+    expect(press(button, 'Enter')).toBe(true)
+    await settle()
+    expect(f.exposed.submitted).toHaveLength(1)
+    expect(document.activeElement).toBe(button)
+    expect(actuallyDisabled(button)).toBe(false)
+    expect(button.getAttribute('aria-busy')).toBe('true')
+    expect(button.getAttribute('aria-disabled')).toBe('true')
+    expect(button.querySelector('.weft-spinner')).not.toBeNull()
+    // A second press does nothing while it runs.
+    press(button, 'Enter')
+    press(button, ' ')
+    await settle()
+    expect(f.exposed.submitted).toHaveLength(1)
+    // Other buttons stay focusable too, and are unavailable.
+    const check = f.q<HTMLButtonElement>('.joined button')
+    expect(actuallyDisabled(check)).toBe(false)
+    expect(check.getAttribute('aria-disabled')).toBe('true')
+    expect(check.querySelector('.weft-spinner')).toBeNull()
+    ;(f.exposed.finish as () => void)()
+    await settle()
+    expect(document.activeElement).toBe(button)
+    expect(button.hasAttribute('aria-busy')).toBe(false)
+    expect(button.hasAttribute('aria-disabled')).toBe(false)
+    expect(f.q('a.cancel').getAttribute('href')).toBe('/cancel')
+  })
+
+  it('gives focus back to the field Enter was pressed in, once an async submit is done', async () => {
+    const f = render({ slow: true })
+    type(f.q('.email input'), 'ada@example.com')
+    f.q('.terms input').click()
+    f.q('.plan input').click()
+    await settle()
+    const nick = f.q('.nick input')
+    expect(press(nick, 'Enter')).toBe(true)
+    await settle()
+    expect(nick.disabled).toBe(true)
+    // A browser drops focus to the body when the focused control is disabled;
+    // happy-dom keeps it, so drop it here as a browser would.
+    const away = document.body.appendChild(document.createElement('button'))
+    away.focus()
+    away.remove()
+    expect(document.activeElement).toBe(document.body)
+    ;(f.exposed.finish as () => void)()
+    await settle()
+    expect(nick.disabled).toBe(false)
+    expect(document.activeElement).toBe(nick)
+  })
+
+  it('submits a copy that keeps cycles, Maps and Sets, without sharing them with the state', async () => {
+    const shared = { tag: 'x' }
+    const loop: Record<string, unknown> = { name: 'loop' }
+    loop.self = loop
+    const state = reactive({ loop, map: new Map([['a', shared]]), set: new Set([shared]), when: new Date(0) })
+    const sent: (typeof state)[] = []
+    const m = mount(FormProbe, { state, onSubmit: () => (v: typeof state) => void sent.push(v) })
+    mounted.push(m)
+    m.el.querySelector('form')!.requestSubmit()
+    await settle()
+    const [copy] = sent
+    expect(copy!.loop).not.toBe(loop)
+    expect(copy!.loop.self).toBe(copy!.loop)
+    expect(copy!.map).toBeInstanceOf(Map)
+    expect(copy!.map).not.toBe(state.map)
+    expect(copy!.map.get('a')).toEqual({ tag: 'x' })
+    expect(copy!.map.get('a')).not.toBe(shared)
+    expect(copy!.set).toBeInstanceOf(Set)
+    // One object reached twice is one object in the copy.
+    expect([...copy!.set][0]).toBe(copy!.map.get('a'))
+    expect(copy!.when).toBe(toRaw(state).when)
   })
 })

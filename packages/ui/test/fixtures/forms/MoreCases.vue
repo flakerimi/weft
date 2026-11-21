@@ -34,6 +34,7 @@ void props
     <Slider class="tall" orientation="vertical" :default-value="25" aria-label="Level" />
     <FormField label="Brightness" class="in-field"><Slider name="brightness" /></FormField>
     <FormField label="Price" class="range-field"><Slider :default-value="[10, 90]" /></FormField>
+    <FormField label="Stops" class="three-field"><Slider :default-value="[10, 50, 90]" /></FormField>
   </div>
   <div v-else-if="$props.case === 'pin'" :dir="dir">
     <PinInput v-model="code" class="code" :length="4" type="number" otp @complete="completed.push($event)" />

@@ -1,7 +1,7 @@
 <script setup vapor lang="ts">
 import { reactive, ref, useTemplateRef } from 'vue'
 import {
-  Button, Checkbox, CheckboxGroup, FieldGroup, Form, FormField, Input, InputNumber, RadioGroup, type FieldSchema,
+  Button, Checkbox, CheckboxGroup, FieldGroup, Form, FormField, Input, InputNumber, Link, RadioGroup, type FieldSchema,
 } from '../../../src/index.ts'
 
 const props = defineProps<{ disabled?: boolean; loading?: boolean; slow?: boolean }>()
@@ -51,6 +51,8 @@ defineExpose({
     <FormField label="Fruit" name="fruit" class="fruit"><CheckboxGroup v-model="state.fruit" :items="['apple', 'pear']" /></FormField>
     <Input v-model="state.loose" class="bare" aria-label="Loose" />
     <FieldGroup class="joined"><Input aria-label="Site" /><Button label="Check" /></FieldGroup>
+    <Button class="cancel" to="/cancel" label="Cancel" variant="ghost" />
+    <Link class="help" to="/help">Help</Link>
     <Button type="submit" label="Create account" />
   </Form>
 </template>

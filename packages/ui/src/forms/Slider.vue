@@ -37,7 +37,7 @@ const props = withDefaults(
     minStepsBetweenThumbs?: number
     /** `horizontal` (min at the inline start) or `vertical` (min at the bottom). */
     orientation?: 'horizontal' | 'vertical'
-    /** Each thumb's name for assistive technology; for a range the default is "Minimum" and "Maximum". A single thumb takes the Slider's own aria-label, or its FormField's label. */
+    /** Each thumb's name for assistive technology; for a range the default is "Minimum", "Value 2 of 3"… and "Maximum". A single thumb takes the Slider's own aria-label, or its FormField's label. */
     thumbLabels?: string[]
     /** The form field name: each value posts under it from a hidden input. */
     name?: string
@@ -84,7 +84,10 @@ const bounds = (i: number, list = values.value): [number, number] => [
 
 function label(i: number): string | undefined {
   if (props.thumbLabels?.[i]) return props.thumbLabels[i]
-  if (range.value) return i === 0 ? 'Minimum' : i === values.value.length - 1 ? 'Maximum' : undefined
+  if (range.value) {
+    const count = values.value.length
+    return i === 0 ? 'Minimum' : i === count - 1 ? 'Maximum' : `Value ${i + 1} of ${count}`
+  }
   return attrs['aria-label'] as string | undefined
 }
 /** Thumb `i`'s id: the field's for the first, so the field's id names a control. */

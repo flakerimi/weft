@@ -34,6 +34,11 @@ middle click nor Enter follows it.
 **Keyboard:** a native button, so Enter and Space press it; as a link, Enter
 follows it. Focus shows the theme's focus ring.
 
+**In a Form.** As a link it is disabled while the Form is disabled or busy,
+so a Cancel cannot navigate mid-submit (a disabled fieldset disables native
+buttons but leaves links alone). While the Form is busy, a `type="submit"`
+button loads and any other button ignores presses, both keeping focus.
+
 `click` is emitted only when the button is pressed while neither loading nor
 disabled. `type` defaults to `button`, so a Button inside a form submits it
 only with `type="submit"`.

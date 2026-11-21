@@ -311,6 +311,14 @@ describe('Slider', () => {
     expect(m.exposed.changes).toEqual([[20, 50]])
   })
 
+  it('names a middle thumb by its place, so three thumbs read apart', () => {
+    const f = cases({ case: 'slider' }).el.querySelector('.three-field')!
+    const label = f.querySelector('label')!
+    const all = [...f.querySelectorAll<HTMLElement>('[role="slider"]')]
+    expect(all.map((t) => t.getAttribute('aria-label'))).toEqual(['Minimum', 'Value 2 of 3', 'Maximum'])
+    expect(all[1]!.getAttribute('aria-labelledby')).toBe(`${label.id} ${all[1]!.id}`)
+  })
+
   it('names each thumb of a range in a FormField by the field\'s label and its own end', () => {
     const f = cases({ case: 'slider' }).el.querySelector('.range-field')!
     const label = f.querySelector('label')!
@@ -562,9 +570,11 @@ describe('touch', () => {
       expect(px(getComputedStyle(el.querySelector('.n .weft-input-number__step')!).inlineSize)).toBe(44)
     })
 
-    it('needs no hit area for an sm Textarea, which is taller than 44 px at three rows', () => {
-      const t = cases({ case: 'small', input: 'touch' }).el.querySelector<HTMLTextAreaElement>('.t')!
-      expect(t.getAttribute('rows')).toBe('3')
+    it('keeps an sm Textarea at least 44 px tall on touch, whatever its rows', () => {
+      const height = (input: string) =>
+        px(getComputedStyle(cases({ case: 'small', input }).el.querySelector('.t')!).minBlockSize)
+      expect(height('touch')).toBe(44)
+      expect(height('pointer')).toBe(36)
     })
   })
 

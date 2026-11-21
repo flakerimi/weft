@@ -34,11 +34,22 @@ taken.' })` shows errors from elsewhere. Leaving such a field keeps its error
 again. `validate()` checks without submitting, and `clear()` clears every
 error.
 
-**Disabled and busy.** The content sits in a `<fieldset>` with no frame, so
+A server error on a field the schema has no rule for clears the first time
+that field changes: there is nothing to check it against.
+
+**Disabled.** The content sits in a `<fieldset>` with no frame, so
 `disabled` disables every control in the form at once - Weft's and native
-ones, Buttons included - and a submit does nothing. `loading` does the same
-and sets `aria-busy`. With `loading-auto` (on by default), a `@submit`
-handler that returns a promise keeps the form busy until it settles, so a
-second press or Enter submits nothing. (`@submit` is a handler prop, as in
-Nuxt UI, so the form can wait for it.) The native form has `novalidate`:
-Weft shows the errors, not the browser.
+ones, Buttons included - and a submit does nothing. A fieldset leaves links
+alone, so a Link, or a Button with `to`, in the form reads it and is
+disabled as a disabled link is: no address, `aria-disabled`, no navigation.
+
+**Busy.** `loading`, or with `loading-auto` (on by default) a `@submit`
+handler that returns a promise, makes the form busy until it settles: it sets
+`aria-busy`, a second press or Enter submits nothing, its fields are
+disabled and its links have no address. Its buttons are not natively
+disabled, so the submit button keeps focus: it shows its spinner and is
+`aria-busy` and `aria-disabled`, and any other button is `aria-disabled`,
+all ignoring presses. A field that had focus (Enter pressed in it) gets it
+back when the form is done. (`@submit` is a handler prop, as in Nuxt UI, so
+the form can wait for it.) The native form has `novalidate`: Weft shows the
+errors, not the browser.

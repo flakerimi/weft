@@ -3,7 +3,8 @@
 // when the key event is not cancelled: Enter on a link with an href, or on a
 // button, fires click at keydown; Space on a button fires click at keyup;
 // Enter in a text field submits its form implicitly, by clicking the form's
-// default button (its first submit button) unless that is disabled.
+// default button (its first submit button) unless that is disabled, or, with
+// no submit button, by submitting the form when that field is its only one.
 // Keys go to the focused element, so an element that cannot take focus (a
 // disabled button, a link without an href) receives nothing. happy-dom lets
 // an <a> without an href take focus, which browsers do not; this follows the
@@ -30,11 +31,17 @@ const focusable = (el: Element) =>
 /** Input types whose Enter submits the form implicitly. */
 const IMPLICIT = new Set(['text', 'search', 'url', 'tel', 'email', 'password', 'number', 'date', 'month', 'week', 'time', 'datetime-local'])
 
+/** Whether Enter in `el` submits its form implicitly. */
+const implicit = (el: Element): el is HTMLInputElement => el instanceof HTMLInputElement && IMPLICIT.has(el.type) && !!el.form
+
 /** The default button Enter in `el` would click, for implicit submission. */
-function defaultButton(el: Element): HTMLButtonElement | HTMLInputElement | null {
-  if (!(el instanceof HTMLInputElement) || !IMPLICIT.has(el.type) || !el.form) return null
-  return el.form.querySelector<HTMLButtonElement | HTMLInputElement>('button[type="submit"], button:not([type]), input[type="submit"]')
+function defaultButton(el: HTMLInputElement): HTMLButtonElement | HTMLInputElement | null {
+  return el.form!.querySelector<HTMLButtonElement | HTMLInputElement>('button[type="submit"], button:not([type]), input[type="submit"]')
 }
+
+/** With no default button: whether `el` is the only field of its form that would submit it, so Enter submits. */
+const onlyField = (el: HTMLInputElement) =>
+  [...el.form!.elements].filter((f) => implicit(f) && !actuallyDisabled(f)).length === 1
 
 const activatable = (el: Element, key: string) =>
   el instanceof HTMLButtonElement ? !actuallyDisabled(el) : key === 'Enter' && el instanceof HTMLAnchorElement && el.hasAttribute('href')
@@ -50,11 +57,17 @@ export function press(el: HTMLElement, key: 'Enter' | ' '): boolean {
     target.click()
     return true
   }
-  const submitter = key === 'Enter' && down ? defaultButton(target) : null
-  if (submitter) {
-    if (actuallyDisabled(submitter)) return false
-    submitter.click()
-    return true
+  if (key === 'Enter' && down && implicit(target)) {
+    const submitter = defaultButton(target)
+    if (submitter) {
+      if (actuallyDisabled(submitter)) return false
+      submitter.click()
+      return true
+    }
+    if (onlyField(target)) {
+      target.form!.requestSubmit()
+      return true
+    }
   }
   const up = target.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true, cancelable: true }))
   if (key === ' ' && down && up && target instanceof HTMLButtonElement && activatable(target, key)) {

@@ -12,10 +12,18 @@
 //   as soon as it is fixed.
 // - `setErrors({ field: message })` shows errors from elsewhere (a server's
 //   answer). Leaving such a field keeps its error; changing it checks it.
-// - While `disabled`, or busy (`loading`, or an async submit handler still
-//   running, with `loading-auto`), every control in it is disabled, buttons
-//   too, and a submit does nothing. A disabled <fieldset> holds the content,
-//   so native controls (a Button) are disabled as well as Weft's own.
+// - While `disabled`, every control in it is disabled, buttons and links too,
+//   and a submit does nothing: a disabled <fieldset> holds the content, so
+//   native controls are disabled as well as Weft's own, and Button and Link
+//   read the Form to drop their addresses (a fieldset leaves links alone).
+// - While busy (`loading`, or an async submit handler still running, with
+//   `loading-auto`), a submit does nothing, its fields are disabled and its
+//   links have no address, but its buttons are not natively disabled: they
+//   are aria-disabled and ignore presses (the submit button shows a spinner),
+//   so a focused submit button keeps focus. Focus that busy took from a
+//   field (a disabled control loses it) goes back when it is done.
+// - `setErrors` on a field the schema has no rule for: the error clears the
+//   first time the field changes, as there is nothing to check it against.
 // The native form keeps `novalidate`: Weft shows the errors, not the browser.
 import { computed, isProxy, nextTick, ref, toRaw, useTemplateRef } from 'vue'
 import { tabbables } from '../headless/dom.ts'
@@ -75,6 +83,7 @@ provideForm({
   error: (name) => errors.value[name],
   required: (name) => !!ruleOf(name)?.required,
   disabled: () => off.value,
+  busy: () => busy.value,
   blur(name) {
     if (submitted.value && !fromServer.has(name)) check(name)
   },
@@ -90,14 +99,39 @@ function validate(): boolean {
   return Object.keys(errors.value).length === 0
 }
 
-/** A deep copy of `value`, out of Vue's proxies: lists and plain objects copied, anything else (a File, a Date) as it is. */
-function copy<V>(value: V): V {
-  const raw = isProxy(value) ? toRaw(value) : value
-  if (Array.isArray(raw)) return raw.map(copy) as V
-  if (raw !== null && typeof raw === 'object' && Object.getPrototypeOf(raw) === Object.prototype) {
-    return Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, copy(v)])) as V
+/**
+ * A deep copy of `value`, out of Vue's proxies: arrays, plain objects, Maps
+ * (keys kept, values copied) and Sets (members copied) are copied; anything
+ * else (a File, a Date, a class instance) is passed as it is. An object
+ * reached twice, or a cycle, is copied once and reached the same way.
+ */
+function copy<V>(value: V, seen = new Map<object, unknown>()): V {
+  const raw = (isProxy(value) ? toRaw(value) : value) as unknown
+  if (raw === null || typeof raw !== 'object') return raw as V
+  if (seen.has(raw)) return seen.get(raw) as V
+  if (Array.isArray(raw)) {
+    const out: unknown[] = []
+    seen.set(raw, out)
+    for (const item of raw) out.push(copy(item, seen))
+    return out as V
   }
-  return raw
+  if (raw instanceof Map) {
+    const out = new Map()
+    seen.set(raw, out)
+    for (const [k, v] of raw) out.set(k, copy(v, seen))
+    return out as V
+  }
+  if (raw instanceof Set) {
+    const out = new Set()
+    seen.set(raw, out)
+    for (const v of raw) out.add(copy(v, seen))
+    return out as V
+  }
+  if (Object.getPrototypeOf(raw) !== Object.prototype && Object.getPrototypeOf(raw) !== null) return raw as V
+  const out: Record<string, unknown> = {}
+  seen.set(raw, out)
+  for (const [k, v] of Object.entries(raw)) out[k] = copy(v, seen)
+  return out as V
 }
 
 async function focusFirstInvalid() {
@@ -119,11 +153,20 @@ async function onSubmit(event: Event) {
   }
   const result = props.onSubmit?.(copy(props.state))
   if (!props.loadingAuto || !(result instanceof Promise)) return
+  const had = document.activeElement as HTMLElement | null
   pending.value = true
   try {
     await result
   } finally {
     pending.value = false
+    // A field that had focus was disabled while busy, which drops focus to
+    // the body; give it back once the field is enabled again.
+    if (had && form.value?.contains(had)) {
+      void nextTick(() => {
+        const now = document.activeElement
+        if ((!now || now === document.body) && had.isConnected) had.focus()
+      })
+    }
   }
 }
 
@@ -165,7 +208,7 @@ defineExpose({
     :aria-busy="busy ? 'true' : undefined"
     @submit="onSubmit"
   >
-    <fieldset class="weft-form__body" :disabled="off || undefined">
+    <fieldset class="weft-form__body" :disabled="disabled || undefined">
       <slot />
     </fieldset>
   </form>
