@@ -321,20 +321,26 @@ const cancelTimer = () => {
   if (timer !== undefined) clearTimeout(timer)
   timer = undefined
 }
+/** No load waiting or on its way: the debounce timer goes, the request in flight is aborted. */
+function stopLoading() {
+  cancelTimer()
+  controller?.abort()
+  controller = null
+  pending.value = false
+}
 // Load when the list opens, then for each new search, after `debounce` ms
 // of quiet; busy from the keystroke on, so the results shown, which are for
 // the search before, cannot be chosen meanwhile.
+// Closing stops it all, so a closed Combobox is never busy.
 watch([open, search], ([on, t], [wasOn]) => {
+  if (!on || !props.load) return stopLoading()
   cancelTimer()
-  if (!on || !props.load) return
   if (!wasOn || props.debounce <= 0) return runLoad(t)
   pending.value = true
+  loadError.value = undefined
   timer = setTimeout(() => runLoad(t), props.debounce)
 })
-onScopeDispose(() => {
-  cancelTimer()
-  controller?.abort()
-})
+onScopeDispose(stopLoading)
 
 let start: 'selected' | 'last' | null = 'selected'
 function show(at: typeof start) {
@@ -427,9 +433,13 @@ function onFieldKeydown(event: KeyboardEvent) {
   }
   listKeydown(event)
 }
-/** A key for the open list. Enter never submits the form from it, and chooses nothing while results are on their way. */
+/**
+ * A key for the open list. Enter never submits the form from it, and
+ * chooses nothing while its own `load` is on its way (the options shown are
+ * for the search before); the `loading` prop alone does not hold it back.
+ */
 function listKeydown(event: KeyboardEvent) {
-  if (event.key === 'Enter' && busy.value) return event.preventDefault()
+  if (event.key === 'Enter' && pending.value) return event.preventDefault()
   if (list.keydown(event, { edges: false, typeahead: false, space: false }) || event.key === 'Enter') event.preventDefault()
 }
 const searchAttrs = searchField(list, {
@@ -531,7 +541,7 @@ function onPanelDown(event: MouseEvent) {
       :size="f.size.value"
       :disabled="f.disabled.value"
       :readonly="sheet || undefined"
-      :aria-required="required ? 'true' : undefined"
+      :aria-required="required ? 'true' : ($attrs['aria-required'] as 'true' | 'false' | undefined)"
       :placeholder="multiple && hasValue ? undefined : placeholder"
       :icon="icon"
       :loading="busy"

@@ -40,7 +40,9 @@
  *   the rows in view are rendered (useVirtualList), every row `rowHeight`
  *   px tall: the estimate (from the size, 48 on touch, or
  *   `virtualize.estimateSize`), grown to the tallest row the Listbox
- *   measured (`measure`). Separators are left out, each option knows its
+ *   measured (`measure`), measured again from the estimate when it changes
+ *   or the Listbox asks (`remeasure`: its width or the fonts changed), so
+ *   rows can get smaller too. Separators are left out, each option knows its
  *   place in its group (`posInSet`, `setSize`), and the active option is
  *   always rendered and scrolled into view.
  */
@@ -174,6 +176,8 @@ export interface Listbox {
   keydown: (event: KeyboardEvent, opts: { edges: boolean; typeahead: boolean; space: boolean; range?: boolean }) => boolean
   /** A drawn row measured this tall: rows grow to the tallest. */
   measure: (height: number) => void
+  /** Forget the measured height (the list's width or fonts changed): rows go back to the estimate and are measured again. */
+  remeasure: () => void
   /** Forget the typed search of the typeahead. */
   resetTypeahead: () => void
 }
@@ -299,8 +303,9 @@ export function useListbox(props: ListboxProps, model: Ref<unknown>, opts: Listb
     return described ? base + (opts.touch() ? 20 : 16) : base
   })
   const rowHeight = computed(() => Math.max(estimate.value, measured.value))
-  // A new size or input draws rows anew: measure them again.
-  watch([opts.touch, () => props.size], () => (measured.value = 0))
+  // A new estimate (size, input, estimateSize, descriptions) draws rows
+  // anew: measure them again, from the estimate, so they can get smaller.
+  watch(estimate, () => (measured.value = 0))
   const virtual = useVirtualList(scroller, {
     count: () => rows.value.length,
     itemHeight: () => rowHeight.value,
@@ -427,10 +432,12 @@ export function useListbox(props: ListboxProps, model: Ref<unknown>, opts: Listb
   /** Choose every enabled option from the anchor to `c`: added to the choice, or (replace) as the whole choice. */
   function chooseRange(c: Choice, event: Event, replace = replacing()) {
     if (!props.multiple || c.disabled || props.disabled || c.kind !== 'option') return
-    const from = Math.max(0, options.value.findIndex((o) => o.key === anchor))
-    const [a, b] = anchor === null ? [c.index, c.index] : [Math.min(from, c.index), Math.max(from, c.index)]
+    // No anchor, or one filtered out of view: the range starts here.
+    const at = options.value.findIndex((o) => o.key === anchor)
+    const from = at < 0 ? c.index : at
+    if (at < 0) anchor = c.key
+    const [a, b] = [Math.min(from, c.index), Math.max(from, c.index)]
     const range = valuesOf(options.value.slice(a, b + 1))
-    if (anchor === null) anchor = c.key
     const kept = replace ? [] : values()
     commit([...kept, ...range.filter((v) => !kept.some((k) => sameValue(k, v, props.by)))], c, event)
   }
@@ -536,6 +543,7 @@ export function useListbox(props: ListboxProps, model: Ref<unknown>, opts: Listb
     measure: (height: number) => {
       if (height > measured.value) measured.value = Math.ceil(height)
     },
+    remeasure: () => (measured.value = 0),
   }
 }
 

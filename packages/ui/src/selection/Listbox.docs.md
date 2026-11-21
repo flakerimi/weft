@@ -50,7 +50,9 @@ assistive technology announces; `loading` shows a spinner there and sets
 spacer as tall as the list. Rows share one height: an estimate from the size
 (48 px on touch; `virtualize: { estimateSize }` sets it), grown to the
 tallest row drawn so far (a larger font, a taller `item` slot), and at least
---weft-hit-min. Options carry `aria-setsize` and `aria-posinset`, counted
+--weft-hit-min; when the estimate, the list's width or the page's fonts
+change they are measured again from the estimate, so they can get smaller
+too. Options carry `aria-setsize` and `aria-posinset`, counted
 within their group, and the active option is always drawn (with its group's
 heading), so `aria-activedescendant` never names a missing element.
 `virtualize` forces it either way; `{ overscan }` sets how many rows are

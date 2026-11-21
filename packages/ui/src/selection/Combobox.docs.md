@@ -41,7 +41,9 @@ when the list opens and, `debounce` ms (200) after typing stops, for each
 new search; the latest answer is shown as given, an older one arriving late
 is dropped, and the signal aborts it. From the keystroke on the field shows a spinner and
 the list is `aria-busy`, saying "Loading…" in place of an empty list; Enter
-chooses nothing meanwhile, as the options shown are for the search before.
+chooses nothing meanwhile, as the options shown are for the search before
+(the `loading` prop alone does not hold Enter back). Closing the list stops
+it: the timer goes, a load on its way is aborted, nothing stays busy.
 A failure emits `error`, drops the results (they answered another search),
 and shows "Couldn’t load results" (the `error` slot, given the error) until
 the next load. Or filter yourself: bind `v-model:search-term`, set

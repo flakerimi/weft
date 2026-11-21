@@ -204,6 +204,12 @@ describe('InputTags', () => {
       const tag = ruleFor('.weft-tag:focus-visible')!.style
       expect(tag.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
       expect(ruleFor('.weft-input:focus-within')!.style.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+      // And it applies to a focused tag (happy-dom computes :focus-visible, not :focus-within).
+      tags()[0]!.focus()
+      expect(tags()[0]!.matches(':focus-visible')).toBe(true)
+      const drawn = getComputedStyle(tags()[0]!)
+      expect(drawn.outlineStyle).toBe('solid')
+      expect(drawn.outlineColor).toBe(getComputedStyle(document.documentElement).getPropertyValue('--weft-color-focus').trim())
     } finally {
       unstyle()
     }

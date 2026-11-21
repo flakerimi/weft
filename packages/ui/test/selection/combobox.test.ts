@@ -336,6 +336,61 @@ describe('Combobox', () => {
         vi.useRealTimers()
       }
     })
+    it('is not busy once closed during the debounce, nor with a load in flight, which it aborts', async () => {
+      vi.useFakeTimers()
+      try {
+        const m = mount(ComboboxCases, { async: true, debounce: 300 })
+        unmount = m.unmount
+        await vi.advanceTimersByTimeAsync(0)
+        const e = m.exposed as unknown as Exposed
+        field().focus()
+        key('ArrowDown')
+        await vi.advanceTimersByTimeAsync(0)
+        e.calls[0]!.resolve([{ label: 'Lime', id: 11 }])
+        await vi.advanceTimersByTimeAsync(0)
+        type(field(), 'li')
+        await vi.advanceTimersByTimeAsync(100)
+        key('Escape')
+        await vi.advanceTimersByTimeAsync(0)
+        expect(e.open).toBe(false)
+        expect(field().hasAttribute('aria-busy')).toBe(false)
+        expect($('.weft-combobox .weft-spinner')).toBeNull()
+        await vi.advanceTimersByTimeAsync(400)
+        expect(e.calls).toHaveLength(1) // the timer went with the list
+        // Open again, and close with a load on its way: it is aborted.
+        key('ArrowDown')
+        await vi.advanceTimersByTimeAsync(0)
+        expect(e.calls).toHaveLength(2)
+        key('Escape')
+        await vi.advanceTimersByTimeAsync(0)
+        expect(e.calls[1]!.signal.aborted).toBe(true)
+        expect(field().hasAttribute('aria-busy')).toBe(false)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('shows busy, not the last error, while a new search waits out the debounce', async () => {
+      vi.useFakeTimers()
+      try {
+        const m = mount(ComboboxCases, { async: true, debounce: 300 })
+        unmount = m.unmount
+        await vi.advanceTimersByTimeAsync(0)
+        const e = m.exposed as unknown as Exposed
+        field().focus()
+        key('ArrowDown')
+        await vi.advanceTimersByTimeAsync(0)
+        e.calls[0]!.reject(new Error('boom'))
+        await vi.advanceTimersByTimeAsync(0)
+        expect($('[role="status"]', overlays()!).textContent!.trim()).toBe('Couldn’t load results')
+        type(field(), 'l')
+        await vi.advanceTimersByTimeAsync(50)
+        expect($('[role="status"]', overlays()!).textContent!.trim()).toBe('Loading…')
+        expect(list().getAttribute('aria-busy')).toBe('true')
+      } finally {
+        vi.useRealTimers()
+      }
+    })
   })
 
   describe('as a button (Nuxt SelectMenu)', () => {
@@ -415,6 +470,23 @@ describe('Combobox', () => {
       expect(input.required).toBe(false)
       m.unmount()
     }
+  })
+
+  it('keeps an aria-required given as an attribute when required is not set', async () => {
+    for (const component of [Combobox, InputTags]) {
+      const m = mount(component, { 'aria-required': 'true' })
+      expect(m.el.querySelector('input.weft-input__field')!.getAttribute('aria-required')).toBe('true')
+      m.unmount()
+    }
+  })
+
+  it('chooses with Enter while loading static items: only a load of its own holds Enter back', async () => {
+    const m = await cases({ loading: true })
+    await typeIn('ap')
+    expect(field().getAttribute('aria-busy')).toBe('true')
+    key('Enter')
+    await settle()
+    expect((m.exposed as unknown as Exposed).value).toBe(1)
   })
 
   it('does not open while disabled', async () => {

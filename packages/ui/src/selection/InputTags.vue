@@ -249,7 +249,7 @@ function onTagBlur(event: FocusEvent) {
     :placeholder="placeholder"
     :loading="loading"
     :maxlength="maxLength"
-    :aria-required="required ? 'true' : undefined"
+    :aria-required="required ? 'true' : ($attrs['aria-required'] as 'true' | 'false' | undefined)"
     @update:model-value="onDraft"
     @keydown="onKeydown"
     @paste="onPaste"

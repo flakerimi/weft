@@ -17,6 +17,7 @@ const props = defineProps<{
   clear?: boolean
   disabled?: boolean
   async?: boolean
+  loading?: boolean
   emptySlot?: boolean
   errorSlot?: boolean
   debounce?: number
@@ -61,6 +62,7 @@ defineExpose({ input, value, open, term, log, calls, submitted })
           :create-item="createItem"
           :clear="clear"
           :disabled="disabled"
+          :loading="loading"
           value-key="id"
           placeholder="Search fruit"
           @create="(t: string) => log.push(`create:${t}`)"

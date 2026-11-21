@@ -21,10 +21,11 @@ const props = withDefaults(defineProps<{
   selectionBehavior?: 'toggle' | 'replace'
 }>(), { virtualize: undefined, initial: undefined })
 const fruit: SelectItems = ['Apple', 'Banana', { label: 'Blueberry', disabled: true }, 'Cherry', 'Date']
+const vz = ref(props.virtualize)
 const value = ref<unknown>(props.initial ?? (props.multiple ? [] : undefined))
 const term = ref('')
 const created = ref<string[]>([])
-defineExpose({ value, term, created })
+defineExpose({ value, term, created, vz })
 </script>
 
 <template>
@@ -40,7 +41,7 @@ defineExpose({ value, term, created })
         :loading="loading"
         :disabled="disabled"
         :create-item="createItem"
-        v-bind="virtualize === undefined ? {} : { virtualize }"
+        v-bind="vz === undefined ? {} : { virtualize: vz }"
         :selection-behavior="selectionBehavior"
         @create="(t: string) => created.push(t)"
       />

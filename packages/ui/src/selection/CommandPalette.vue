@@ -271,7 +271,7 @@ defineExpose({
         spellcheck="false"
         aria-expanded="true"
         aria-autocomplete="list"
-        :aria-label="($attrs['aria-labelledby'] ? undefined : ($attrs['aria-label'] as string | undefined)) ?? page?.placeholder ?? placeholder ?? 'Search commands'"
+        :aria-label="$attrs['aria-labelledby'] ? undefined : (($attrs['aria-label'] as string | undefined) ?? page?.placeholder ?? placeholder ?? 'Search commands')"
         :aria-labelledby="$attrs['aria-labelledby'] as string | undefined"
         :placeholder="page?.placeholder ?? placeholder ?? 'Type a command or search…'"
         :value="term"

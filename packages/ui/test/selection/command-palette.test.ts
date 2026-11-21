@@ -65,6 +65,7 @@ describe('CommandPalette', () => {
       await cases()
       const ring = ruleFor('.weft-command-palette__search:focus-within')!.style
       expect(ring.getPropertyValue('box-shadow')).toContain('var(--weft-color-focus, Highlight)')
+      // happy-dom neither matches nor computes :focus-within, so this ring is checked by its rule only.
       expect(ruleFor('.weft-listbox__option[data-active]')).toBeDefined()
     } finally {
       unstyle()
@@ -250,6 +251,13 @@ describe('CommandPalette', () => {
     expect(el.hasAttribute('style')).toBe(false)
     expect(el.hasAttribute('aria-label')).toBe(false)
     expect(input().getAttribute('aria-label')).toBe('Jump to')
+    unmount!()
+    reset()
+    const n = mount(CommandPalette, { groups: [], 'aria-labelledby': 'heading', placeholder: 'Find…' })
+    unmount = n.unmount
+    await settle()
+    expect(input().getAttribute('aria-labelledby')).toBe('heading')
+    expect(input().hasAttribute('aria-label')).toBe(false)
   })
 
   it('reads labels, descriptions and keys at label-key, description-key and value-key', async () => {

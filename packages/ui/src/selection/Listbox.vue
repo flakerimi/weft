@@ -7,7 +7,7 @@
 // options are skipped. Past 200 options only the rows in view are drawn.
 // Select, Combobox and CommandPalette draw their lists with it: they own the
 // list's state (useListbox) and this draws theirs.
-import { computed, onMounted, useTemplateRef, watch } from 'vue'
+import { computed, onMounted, onScopeDispose, useTemplateRef, watch } from 'vue'
 import { useWeft } from '../adaptive/context.ts'
 import Icon from '../basics/Icon.vue'
 import Spinner from '../basics/Spinner.vue'
@@ -223,6 +223,33 @@ function measure() {
 }
 watch(() => [virtual.value && shown.value, list.rowHeight.value], measure, { flush: 'post' })
 onMounted(measure)
+// Rows can get smaller as well as taller (a smaller font, a wider list
+// wrapping less): when the list's width or the page's fonts change, they go
+// back to the estimate and are measured again.
+let width = 0
+let observer: ResizeObserver | undefined
+const remeasure = () => virtual.value && list.remeasure()
+watch(
+  listEl,
+  (el) => {
+    observer?.disconnect()
+    observer = undefined
+    if (!el || typeof ResizeObserver === 'undefined') return
+    width = el.getBoundingClientRect().width
+    observer = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? width
+      if (w !== width) remeasure()
+      width = w
+    })
+    observer.observe(el)
+  },
+  { immediate: true, flush: 'post' },
+)
+onMounted(() => document.fonts?.addEventListener?.('loadingdone', remeasure))
+onScopeDispose(() => {
+  observer?.disconnect()
+  if (typeof document !== 'undefined') document.fonts?.removeEventListener?.('loadingdone', remeasure)
+})
 
 const isOption = (r: Row): r is Choice => r.kind === 'option' || r.kind === 'create'
 const selected = (r: Row) => isOption(r) && list.isSelected(r)

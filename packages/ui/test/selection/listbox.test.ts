@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ListboxCases from '../fixtures/selection/ListboxCases.vue'
 import { mount } from '../mount.ts'
+import { installResizeObserver } from '../resize-observer.ts'
 import { loadStyles, ruleFor } from '../styles.ts'
 import { px, type } from '../forms/helpers.ts'
 import { $, $$, active, key, reset, settle } from '../overlays/helpers.ts'
@@ -140,6 +141,18 @@ describe('Listbox', () => {
       key('a', { metaKey: true })
       await settle()
       expect(m.exposed.value).toEqual([])
+    })
+
+    it('starts a range at the option pressed when the last one chosen is filtered out', async () => {
+      const m = await cases({ multiple: true, filter: true })
+      named('Banana').click()
+      const input = $<HTMLInputElement>('.weft-listbox__filter input')
+      input.focus()
+      type(input, 'e') // Banana goes
+      await settle()
+      named('Cherry').dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }))
+      await settle()
+      expect(m.exposed.value).toEqual(['Banana', 'Cherry'])
     })
 
     it('Shift+press chooses a range, Ctrl+press toggles one', async () => {
@@ -362,6 +375,34 @@ describe('Listbox', () => {
         expect(options()[1]!.style.top).toBe('60px')
       } finally {
         rect.mockRestore()
+      }
+    })
+
+    it('measures its rows again, smaller too, when the estimate or the list width changes', async () => {
+      const ro = installResizeObserver()
+      let height = 60
+      const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+        const h = this.classList.contains('weft-listbox__option') ? height : 0
+        return { height: h, width: 200, top: 0, bottom: h, left: 0, right: 200, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
+      })
+      try {
+        const m = await cases({ items: many.slice(0, 300) })
+        await settle()
+        const row = () => list().style.getPropertyValue('--weft-listbox-row')
+        expect(row()).toBe('60px')
+        height = 40 // a smaller font
+        ;(m.exposed as { vz: unknown }).vz = { estimateSize: 30 }
+        await settle()
+        await settle()
+        expect(row()).toBe('40px')
+        height = 36
+        ro.report(list(), 320)
+        await settle()
+        await settle()
+        expect(row()).toBe('36px')
+      } finally {
+        rect.mockRestore()
+        ro.restore()
       }
     })
 
