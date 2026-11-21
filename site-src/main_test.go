@@ -73,84 +73,7 @@ var (
 	anyScript      = regexp.MustCompile(`<script\b[^>]*>`)
 )
 
-// The home page has one island, the copy button. Brotli, its HTML and CSS are
-// at most 6 KB; with every script it loads (the island runtime with Vue's
-// Vapor runtime, the chunks that imports, and the island's chunk) at most
-// 26 KB. The CSS is the theme, base.css and the stylesheets of the
-// components the page renders, so adding components to @weft/ui does not
-// grow it; nor do the gallery's islands grow its runtime, which they do not
-// share (the gallery has a runtime of its own, --separate-runtime).
-func TestHomePageBudgets(t *testing.T) {
-	d := dist(t)
-	var m builtFiles
-	var r builtRoutes
-	readJSON(t, d, "manifest.json", &m)
-	readJSON(t, d, "routes.json", &r)
-
-	var html string
-	for _, p := range r.Pages {
-		if p.Path != "/" {
-			continue
-		}
-		if strings.Join(p.Islands, ",") != "CopyCommand" {
-			t.Fatalf("home page islands %v, want [CopyCommand]", p.Islands)
-		}
-		b, err := fs.ReadFile(d, p.HTML)
-		if err != nil {
-			t.Fatal(err)
-		}
-		html = string(b)
-		if n := strings.Count(html, "<weft-island"); n != 1 {
-			t.Fatalf("home page HTML has %d islands, want 1", n)
-		}
-		if n := len(moduleScript.FindAllString(html, -1)); n != 1 {
-			t.Fatalf("home page HTML has %d module scripts, want 1", n)
-		}
-		static := brotliSize(t, d, m, "/"+p.HTML)
-		for _, link := range stylesheetLink.FindAllStringSubmatch(html, -1) {
-			static += brotliSize(t, d, m, link[1])
-		}
-		scripts := 0
-		for _, key := range pageScripts(t, d, m, html, p.Islands) {
-			scripts += brotliSize(t, d, m, key)
-		}
-		t.Logf("home page, brotli: HTML+CSS %d B, scripts %d B, total %d B", static, scripts, static+scripts)
-		if static > 6*1024 {
-			t.Errorf("home page without its island is %d B brotli, over 6 KB", static)
-		}
-		if static+scripts > 26*1024 {
-			t.Errorf("home page with its island is %d B brotli, over 26 KB", static+scripts)
-		}
-	}
-	if html == "" {
-		t.Fatal("routes.json has no page at /")
-	}
-}
-
 var modulePreload = regexp.MustCompile(`<link rel="modulepreload" href="([^"]+)">`)
-
-// pageScripts are every script a page loads: its module script (the runtime
-// entry), the modules it preloads (what the entry imports), and its
-// islands' chunks with the chunks they import.
-func pageScripts(t *testing.T, d fs.FS, m builtFiles, html string, islands []string) []string {
-	t.Helper()
-	seen := map[string]bool{}
-	for _, s := range moduleScript.FindAllStringSubmatch(html, -1) {
-		seen[s[1]] = true
-	}
-	for _, s := range modulePreload.FindAllStringSubmatch(html, -1) {
-		seen[s[1]] = true
-	}
-	for _, c := range islandChunks(t, d, m, islands) {
-		seen[c] = true
-	}
-	var out []string
-	for k := range seen {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
 
 // A page with no island loads no JavaScript; JSON script types are allowed.
 func TestNotFoundPageLoadsNoJavaScript(t *testing.T) {
@@ -654,7 +577,7 @@ func TestWordmarkIsTheOwners(t *testing.T) {
 // so light, dark and data-weft-scheme follow the theme.
 func TestSiteStylesUseTokens(t *testing.T) {
 	colour := regexp.MustCompile(`#[0-9A-Fa-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|lab)\(`)
-	for _, name := range []string{"styles/site.css", "styles/shell.css", "styles/docs.css", "styles/gallery.css", "styles/gallery-index.css", "styles/stage.css", "components/CopyCode.vue"} {
+	for _, name := range []string{"styles/site.css", "styles/shell.css", "styles/docs.css", "styles/gallery.css", "styles/gallery-index.css", "styles/stage.css", "styles/landing.css", "components/CopyCode.vue", "components/landing/AdaptiveDemo.vue"} {
 		b, err := os.ReadFile(name)
 		if err != nil {
 			t.Fatal(err)

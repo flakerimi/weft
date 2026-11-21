@@ -1,100 +1,190 @@
 <script setup vapor lang="ts">
-import { Card, Island, Page, Section, Stack, useHead } from '@weft/ui'
+// weft.base.al's landing page, after the approved design
+// (docs/design/site-2026-11-21/). The hero is the owner's wordmark, whose
+// thread pulls across the page (CSS, the page's one automatic motion), the
+// pitch and the install command with its copy button, an island. Then three
+// bands, each hanging off a thread across the warp:
+//   - the adaptive demo: VisitDay.vue's source, highlighted at build time;
+//     the same file drawn by the server as the DatePicker's pointer and
+//     touch forms, inert previews; and AdaptiveDemo, an island that starts
+//     when it comes into view, to try the real one;
+//   - the benchmark: bars and facts from the newest bench/results/*.json;
+//   - for agents: the DatePicker's catalogue entry, the skills, llms.txt.
+// Everything but the two islands is HTML from the build.
+import { Calendar, Island, Link, WeftProvider, useHead } from '@weft/ui'
+import { highlightCode, useCollection } from 'virtual:weft/content'
+import '@weft/vite/code.css'
+import '../styles/fonts.css'
+import '../styles/landing.css'
+import catalogText from '../../catalog/components.json?raw'
+import visitDaySource from '../components/landing/VisitDay.vue?raw'
+import AdaptiveDemo from '../components/landing/AdaptiveDemo.vue'
 import CopyCommand from '../components/CopyCommand.vue'
+import SiteFooter from '../components/SiteFooter.vue'
+import SiteHeader from '../components/SiteHeader.vue'
+import VisitDay from '../components/landing/VisitDay.vue'
+import { slugOf, type Catalog } from '../gallery/model.ts'
+import { benchFacts, benchRows, catalogExcerpt, formatBytes, formatCount, newestResults, type BenchResults } from '../landing/model.ts'
 
 useHead({
   title: 'Weft — one UI system for Go and Vue apps',
   description:
-    'Vapor-first Vue components that adapt to touch and pointer, landing and app, shipped inside a single Go binary.',
+    'Vue components that know whether they are under a finger or a mouse, on a landing page or in an app. Your site and your API ship as one Go binary.',
 })
 
 const install = 'curl -fsSL https://weft.base.al/install | sh'
+const repoPublic = __WEFT_REPO_PUBLIC__
 
-const features = [
-  { title: 'Yours, all the way down', text: "Every component, API and style is Weft's. No wrapped library to wait on." },
-  { title: 'Adaptive by default', text: 'Written once; sized and shaped for touch or pointer, landing or app.' },
-  { title: 'Go-first', text: 'One binary serves your API and embeds your Vue app, pre-compressed.' },
-  { title: 'Built for agents', text: 'Big building blocks and one way to do each thing.' },
-]
+// The demo: the example's source as it is on disk, highlighted.
+const sourceHTML = await highlightCode(visitDaySource, 'vue')
+/** The day the example starts on, which the previews' calendars show open. */
+const day = /ref<string \| null>\('(\d{4}-\d{2}-\d{2})'\)/.exec(visitDaySource)?.[1]
+if (!day) throw new Error('landing: components/landing/VisitDay.vue starts on no ISO day; the previews draw its calendar open on it.')
+
+// The benchmark: the newest results file, every number from it.
+const bench = newestResults(import.meta.glob<BenchResults>('../../bench/results/*.json', { eager: true, import: 'default' }))
+const rows = benchRows(bench.results)
+const facts = benchFacts(bench.results)
+
+// For agents: the DatePicker's catalogue entry, and the skills.
+const components = (JSON.parse(catalogText) as Catalog).components
+const datePicker = components.find((c) => c.name === 'DatePicker')
+if (!datePicker) throw new Error('landing: catalog/components.json has no DatePicker; the agents section shows its entry.')
+const entryPath = `/components/${slugOf(datePicker.name)}.json`
+const excerptHTML = await highlightCode(catalogExcerpt(datePicker), 'json')
+const skills = useCollection('skills')
 </script>
 
 <template>
-  <div class="site" data-weft-surface="landing">
-    <Page>
-      <template #header>
-        <Stack :gap="4" align="start">
-          <span class="site-tag">pre-alpha</span>
-          <h1 class="site-title">weft</h1>
-          <p class="site-lead">One UI system for Go and Vue apps.</p>
-          <p class="site-sub">
-            Vapor-first components that know whether they're under a finger or a mouse, on a landing page or in an
-            app — shipped inside a single Go binary.
-          </p>
-        </Stack>
-      </template>
-
-      <Section title="Install" description="One file, checked against its SHA-256, put in ~/.local/bin.">
-        <Stack :gap="3">
-          <Island when="idle" :component="CopyCommand" :props="{ command: install }" />
-          <p class="site-note">
-            Already installed? <code>weft update</code> moves you to the newest release;
-            <code>weft update --check</code> only looks. Set <code>WEFT_BIN_DIR</code> to install elsewhere,
-            <code>WEFT_VERSION</code> to pin one.
-          </p>
-        </Stack>
-      </Section>
-
-      <Section title="Why Weft">
-        <div class="site-features">
-          <Card v-for="f in features" :key="f.title" as="article">
-            <template #header>{{ f.title }}</template>
-            <p class="site-card-text">{{ f.text }}</p>
-          </Card>
+  <div class="site landing" data-weft-surface="landing">
+    <SiteHeader path="/" :sticky="false" />
+    <main id="main" class="landing-main">
+      <section class="landing-wrap landing-hero" aria-labelledby="landing-title">
+        <div class="landing-mark">
+          <span class="landing-word" role="img" aria-label="weft" />
+          <span class="landing-thread" aria-hidden="true" />
         </div>
-      </Section>
+        <h1 id="landing-title">One UI system for Go and Vue apps.</h1>
+        <p class="landing-lead">
+          Components that know whether they're under a finger or a mouse, on a landing page or in an app. Your site and
+          your API ship as one Go binary.
+        </p>
+        <div class="landing-install" data-weft-scheme="dark">
+          <Island when="idle" :component="CopyCommand" :props="{ command: install }" />
+        </div>
+        <p class="landing-after">Already installed? <code>weft update</code> moves you to the newest release.</p>
+      </section>
 
-      <footer class="site-footer">
-        This page is built with Weft: rendered at build time, one island for the copy button, served by the Weft
-        binary. MIT licensed.
-      </footer>
-    </Page>
+      <section id="adapts" class="landing-wrap landing-band" aria-labelledby="adapts-title">
+        <h2 id="adapts-title">Write a component once. It adapts.</h2>
+        <p class="landing-intro">
+          You write <code>&lt;DatePicker&gt;</code>. On a trackpad it opens a calendar beside the field; under a thumb it
+          rises as a sheet with targets big enough to hit. No mobile variant to remember.
+        </p>
+        <div class="landing-adapt">
+          <figure class="landing-code landing-code--source" data-weft-scheme="dark">
+            <figcaption>site-src/components/landing/VisitDay.vue</figcaption>
+            <div v-html="sourceHTML" />
+          </figure>
+          <figure class="landing-frame landing-frame--pointer">
+            <figcaption class="landing-frame__title">Mouse and keyboard <span class="landing-tag">Preview</span></figcaption>
+            <div class="landing-preview" inert>
+              <WeftProvider input="pointer" surface="app">
+                <VisitDay />
+                <div class="landing-popover"><Calendar :model-value="day" locale="en-GB" /></div>
+              </WeftProvider>
+            </div>
+            <p class="landing-caption">A popover calendar, typed dates welcome.</p>
+          </figure>
+          <figure class="landing-frame landing-frame--touch">
+            <figcaption class="landing-frame__title">Touch <span class="landing-tag">Preview</span></figcaption>
+            <div class="landing-preview" inert>
+              <WeftProvider input="touch" surface="app">
+                <div class="landing-behind"><VisitDay /></div>
+                <div class="landing-sheet">
+                  <span class="landing-sheet__grab" />
+                  <p class="landing-sheet__title">Day</p>
+                  <Calendar :model-value="day" locale="en-GB" />
+                </div>
+              </WeftProvider>
+            </div>
+            <p class="landing-caption">A bottom sheet, its dates 44&nbsp;px a side.</p>
+          </figure>
+          <div class="landing-demo">
+            <Island when="visible" :component="AdaptiveDemo" />
+          </div>
+        </div>
+      </section>
+
+      <section id="speed" class="landing-wrap landing-band" aria-labelledby="speed-title">
+        <h2 id="speed-title">One binary, nothing left to do per request.</h2>
+        <p class="landing-intro">
+          Pages are rendered and compressed when you build. The Go binary keeps every byte in memory and only sends it.
+          The benchmark's landing page, requests per second:
+        </p>
+        <div class="landing-bench" role="table" aria-label="Requests per second">
+          <div v-for="row in rows" :key="row.id" class="landing-bench__row" role="row">
+            <div class="landing-bench__who" role="rowheader">{{ row.label }}<small>{{ row.server }}</small></div>
+            <div class="landing-bench__bar" :data-ours="row.ours ? 'true' : undefined" role="cell" aria-hidden="true">
+              <i :style="{ inlineSize: `${(row.share * 100).toFixed(1)}%` }" />
+            </div>
+            <div class="landing-bench__n" role="cell">{{ formatCount(row.rps) }}</div>
+          </div>
+        </div>
+        <p class="landing-bench-note">
+          Requests per second, the median of {{ facts.runs }} runs on an {{ facts.machine }} ({{ facts.date }}). The Go
+          servers run on one core; <code>astro preview</code> is not held to one. Part of the gap is the server: Weft
+          sends the brotli it made at build time, Astro's servers compress each response. Astro's page with no framework
+          island still ships less JavaScript than ours ({{ formatBytes(facts.plainJS) }} against
+          {{ formatBytes(facts.weftJS) }}), and the benchmark says where,
+          <template v-if="repoPublic">in <a href="https://github.com/flakerimi/weft/tree/main/bench">its README</a>.</template>
+          <template v-else>in <code>bench/README.md</code>.</template>
+        </p>
+        <div class="landing-facts">
+          <p><strong>No JavaScript unless you ask</strong>A page ships script only for the parts you mark interactive.</p>
+          <p><strong>{{ facts.ttfb }} to first byte</strong>Pages come from memory, already compressed.</p>
+          <p><strong>Deploy one file</strong>No Node in production. Copy it, run it.</p>
+        </div>
+      </section>
+
+      <section id="agents" class="landing-wrap landing-band" aria-labelledby="agents-title">
+        <h2 id="agents-title">Made to be built with an agent.</h2>
+        <p class="landing-intro">
+          Agents do best with big pieces and one right way. Weft gives them both, and tells them when they're wrong
+          before you see it.
+        </p>
+        <div class="landing-agents">
+          <ul>
+            <li>
+              <strong>A catalogue they can read</strong>
+              <span>
+                Each of the {{ components.length }} components' purpose, props, slots, events and how it adapts, as JSON:
+                all of them at <Link to="/catalog.json">/catalog.json</Link>, one at <Link :to="entryPath">{{ entryPath }}</Link>.
+              </span>
+            </li>
+            <li>
+              <strong>Mistakes fail the build</strong>
+              <span>
+                Frontmatter that breaks its schema, a link that leads nowhere or an island prop JSON cannot carry stops the
+                build with one sentence that names the file.
+              </span>
+            </li>
+            <li>
+              <strong>Skills, ready to install</strong>
+              <span>
+                {{ skills.length }} Claude Code skills:
+                <template v-for="(s, i) in skills" :key="s.slug"><Link :to="s.path">{{ s.title }}</Link>{{ i < skills.length - 2 ? ', ' : i === skills.length - 2 ? ' and ' : '. ' }}</template>
+                <Link to="/skills">Install them</Link>, or point an agent at <Link to="/llms.txt">/llms.txt</Link>.
+              </span>
+            </li>
+          </ul>
+          <figure class="landing-code" data-weft-scheme="dark">
+            <figcaption>{{ entryPath }}, shortened</figcaption>
+            <div v-html="excerptHTML" />
+          </figure>
+        </div>
+      </section>
+    </main>
+    <SiteFooter />
   </div>
 </template>
-
-<style>
-.site {
-  --weft-page-max: 960px;
-  --site-accent: var(--weft-color-primary);
-  min-height: 100vh;
-  font-size: var(--weft-text-base);
-}
-@media (prefers-color-scheme: dark) {
-  .site { --site-accent: var(--weft-color-primary-soft); }
-}
-.site .weft-page { padding-block: clamp(40px, 9vw, 96px) var(--weft-space-8); }
-.site code { font-family: var(--weft-font-mono); font-size: 0.9em; }
-.site-tag {
-  font: 0.75em/1.6 var(--weft-font-mono);
-  padding: 2px 10px;
-  border: 1px solid var(--site-accent);
-  border-radius: 999px;
-  color: var(--site-accent);
-}
-.site-title {
-  font-size: clamp(56px, 12vw, 96px);
-  font-weight: var(--weft-weight-title);
-  letter-spacing: -0.045em;
-  line-height: 0.9;
-}
-.site-lead { font-size: 1.5em; font-weight: var(--weft-weight-heading); line-height: 1.3; }
-.site-sub, .site-note, .site-footer { color: var(--weft-color-text-muted); max-width: 40em; }
-.site-note, .site-footer { font-size: 0.85em; }
-.site-features {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
-  gap: var(--weft-space-4);
-}
-.site-features .weft-card__title { color: var(--site-accent); }
-.site-card-text { color: var(--weft-color-text-muted); font-size: 0.9em; }
-.site-footer { max-width: none; border-top: 1px solid var(--weft-color-border); padding-top: var(--weft-space-6); }
-</style>

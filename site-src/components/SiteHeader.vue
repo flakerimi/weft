@@ -15,14 +15,19 @@ import '../styles/site.css'
 type Section = 'docs' | 'components' | 'agents'
 const FRONT: Record<Section, string> = { docs: '/docs', components: '/components', agents: '/skills' }
 
-const props = defineProps<{
-  /** The section the page is in, drawn as current. */
-  current?: Section
-  /** The page's path, so the section's own front page is the current page. */
-  path?: string
-  /** The id of the page's sidebar, a `popover` element the narrow Menu button opens. */
-  menu?: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    /** The section the page is in, drawn as current. */
+    current?: Section
+    /** The page's path, so the section's own front page is the current page. */
+    path?: string
+    /** The id of the page's sidebar, a `popover` element the narrow Menu button opens. */
+    menu?: string
+    /** Whether it stays at the top as the page scrolls; the landing page's scrolls away. */
+    sticky?: boolean
+  }>(),
+  { sticky: true },
+)
 
 const repoPublic = __WEFT_REPO_PUBLIC__
 /** aria-current for a section's link: "page" on its front page, "true" anywhere else in it. */
@@ -31,7 +36,7 @@ const currentOf = (section: Section) => (props.current !== section ? undefined :
 
 <template>
   <a class="site-skip" href="#main">Skip to the content</a>
-  <Header>
+  <Header :sticky="sticky">
     <template #leading><SiteMark /></template>
     <nav class="site-nav" aria-label="Site">
       <Link to="/docs" standalone :aria-current="currentOf('docs')">Docs</Link>

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "weft-build-pages --root . --out dist --theme weft --separate-runtime /components",
+    "build": "weft-build-pages --root . --out dist --theme weft --separate-runtime /components --separate-runtime /docs --separate-runtime /skills",
     "test": "vitest run",
     "typecheck": "vue-tsc -p tsconfig.json"
   },

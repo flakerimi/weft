@@ -12,6 +12,7 @@
     "components",
     "agents",
     "gallery",
+    "landing",
     "test",
     "content.config.ts",
     "env.d.ts",
