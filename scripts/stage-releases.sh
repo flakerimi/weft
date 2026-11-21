@@ -23,12 +23,15 @@
 # SITE/releases.txt may not list it (its publish went live, but was not
 # verified in time to be listed): its users keep it. It must be in
 # SITE/releases.
+# With --new-from DIR, LATEST is read from DIR/LATEST rather than
+# SITE/releases/LATEST: a dry run builds it there, leaving SITE as it was.
 # With --check, only check, and stage nothing; OUT_DIR is then not given.
-# Usage: scripts/stage-releases.sh [--link-from KEPT] [--live LIVE] [--check] SITE_DIR [OUT_DIR] [LATEST_VERSION]
+# Usage: scripts/stage-releases.sh [--link-from KEPT] [--live LIVE] [--new-from DIR] [--check] SITE_DIR [OUT_DIR] [LATEST_VERSION]
 set -eu
 kept=
 check=
 live=
+new_from=
 while :; do
 	case "${1:-}" in
 	--link-from)
@@ -37,6 +40,10 @@ while :; do
 		;;
 	--live)
 		live="$2"
+		shift 2
+		;;
+	--new-from)
+		new_from="$2"
 		shift 2
 		;;
 	--check)
@@ -58,12 +65,20 @@ fail() {
 	echo "stage-releases: $1" >&2
 	exit 1
 }
+# Where release $1 is: SITE/releases, or DIR for the new one with --new-from.
+from() {
+	if [ -n "$new_from" ] && [ "$1" = "$latest" ]; then
+		printf '%s' "$new_from/$1"
+	else
+		printf '%s' "$site/releases/$1"
+	fi
+}
 real() {
 	case "$1" in '' | *-test) return 1 ;; esac
-	[ -d "$site/releases/$1" ]
+	[ -d "$(from "$1")" ]
 }
 if [ -n "$latest" ]; then
-	real "$latest" || fail "$site/releases/$latest does not exist or is a test build"
+	real "$latest" || fail "$(from "$latest") does not exist or is a test build"
 fi
 if [ -n "$live" ]; then
 	real "$live" || fail "$site/releases/$live, the release the site serves now, does not exist or is a test build"
@@ -91,24 +106,24 @@ staged() {
 	return 1
 }
 for v in $versions; do
-	dir="$site/releases/$v"
+	dir=$(from "$v")
 	dot=$(cd "$dir" && find . -name '.?*' | head -n 1)
 	[ -z "$dot" ] ||
-		fail "$site/releases/$v holds ${dot#./}, named with a leading dot, which the site does not serve; move it out"
+		fail "$dir holds ${dot#./}, named with a leading dot, which the site does not serve; move it out"
 done
 for dir in ${out:+"$out"/releases/*/}; do
 	[ -d "$dir" ] || continue
 	v=$(basename "$dir")
 	staged "$v" || fail "$out/releases/$v is not a release to stage ($list does not list it, and it is neither live nor the one being published); remove it by hand"
-	diff -r "$site/releases/$v" "$dir" >/dev/null 2>&1 ||
-		fail "$out/releases/$v differs from $site/releases/$v, so staging would merge two releases; remove it by hand"
+	diff -r "$(from "$v")" "$dir" >/dev/null 2>&1 ||
+		fail "$out/releases/$v differs from $(from "$v"), so staging would merge two releases; remove it by hand"
 done
 if [ -n "$kept" ]; then
 	for v in $versions; do
-		dir="$site/releases/$v"
+		dir=$(from "$v")
 		[ -d "$kept/$v" ] || continue
 		diff -r "$dir" "$kept/$v" >/dev/null 2>&1 ||
-			fail "$site/releases/$v differs from $kept/$v, the release $v a verified push served, whose users have its checksums; put $kept/$v back in $site/releases/$v"
+			fail "$dir differs from $kept/$v, the release $v a verified push served, whose users have its checksums; put $kept/$v back in $dir"
 	done
 fi
 [ -z "$check" ] || exit 0
@@ -122,7 +137,7 @@ for v in $versions; do
 	if [ -n "$kept" ] && [ -d "$kept/$v" ]; then
 		sh "$(dirname "$0")/link-release.sh" "$kept/$v" "$out/releases/$v"
 	else
-		cp -R "$site/releases/$v" "$out/releases/"
+		cp -R "$(from "$v")" "$out/releases/"
 	fi
 done
 if [ -z "$latest" ] && [ -f "$site/releases/latest" ]; then

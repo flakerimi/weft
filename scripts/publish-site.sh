@@ -7,13 +7,15 @@
 # container whose /data/releases holds the installer and the releases.
 # Usage: scripts/publish-site.sh [--dry-run] <version>
 #   --dry-run  stop before the push and print the push tree's path (in
-#              TMPDIR); it still builds the release (site/releases/<version>)
-#              and the site locally
+#              TMPDIR); it builds the release in TMPDIR too, leaving
+#              site/releases as it was, and the site locally
 # Every version in site/releases.txt must be in site/releases, and the version
-# published must not be one of them (building it again would change tarballs
-# its users have checksums for). A verified push keeps its tree as
-# site/pushed/<version>/ (git-ignored), one per version, and only then adds the
-# version to that list. Each release a verified push served is kept once, in
+# published must be neither listed nor in site/releases (building it again
+# would change tarballs its users have checksums for). A version is listed in
+# site/releases.txt the moment its push succeeds: pushed, it counts as
+# published, and every later publish stages it, even if it is never verified
+# live. A verified push keeps its tree as site/pushed/<version>/ (git-ignored),
+# one per version. Each release a verified push served is kept once, in
 # site/pushed/releases/<version>/: the trees hold hard links to it, not copies.
 # Rollback: scripts/rollback-site.sh <version> pushes such a kept tree again.
 set -eu
@@ -39,6 +41,9 @@ scripts/version.sh "$version" ||
 # A published version is never built again; its kept tree is never replaced.
 grep -qxF "$version" site/releases.txt 2>/dev/null &&
 	fail "$version is already published (site/releases.txt lists it), and building it again would change its tarballs; publish a new version, or roll back with scripts/rollback-site.sh $version."
+# Nor is a version built before rebuilt, whoever built it: its tarballs may be out there.
+[ ! -e "site/releases/$version" ] ||
+	fail "$version is already released (site/releases/$version exists), and building it again would change its tarballs; publish a new version."
 [ ! -e "site/pushed/$version" ] ||
 	fail "site/pushed/$version already holds a pushed tree, so $version was pushed before; publish a new version, or roll back with scripts/rollback-site.sh $version."
 
@@ -46,7 +51,7 @@ grep -qxF "$version" site/releases.txt 2>/dev/null &&
 scripts/published-releases.sh check site || exit 1
 
 # The release the site serves now must be staged too, even if the list missed
-# it: a publish that went live after wait-live gave up was never listed.
+# it: a publish from before pushes were listed at once may have pushed it.
 live=$(curl -fsSL "$url/releases/latest" 2>/dev/null | tr -d ' \r\n') || live=
 unlisted=
 if scripts/version.sh "$live"; then
@@ -54,7 +59,7 @@ if scripts/version.sh "$live"; then
 		fail "$url serves release $live, which site/releases does not have; fetch it (SHA256SUMS and the files it lists, from $url/releases/$live/) before publishing"
 	if [ "$live" != "$version" ] && ! grep -qxF "$live" site/releases.txt; then
 		unlisted=$live
-		echo "publish: $url serves $live, which site/releases.txt does not list; it is staged so its users keep it, and listed once $version is verified live." >&2
+		echo "publish: $url serves $live, which was pushed earlier without being listed in site/releases.txt; it is staged so its users keep it, and listed when $version is pushed." >&2
 	fi
 elif [ -n "$dry" ]; then
 	echo "publish: cannot read the live release from $url/releases/latest; not checked in a dry run" >&2
@@ -66,7 +71,16 @@ fi
 store=site/pushed/releases
 scripts/stage-releases.sh --link-from "$store" ${unlisted:+--live "$unlisted"} --check site || exit 1
 
-scripts/release.sh "$version"
+# A dry run builds the release in TMPDIR, leaving site/releases as it was, so
+# the version can still be published for real.
+tmp=${TMPDIR:-/tmp}
+if [ -n "$dry" ]; then
+	releases=$(mktemp -d "${tmp%/}/weft-dry-release.XXXXXX")
+	scripts/release.sh "$version" "$releases"
+else
+	releases=
+	scripts/release.sh "$version"
+fi
 scripts/site.sh build
 
 # The push tree: the weft package, the site's main package and its build, the
@@ -74,7 +88,6 @@ scripts/site.sh build
 # compiles the binary on an empty image beside the releases. It is made where it will be kept, so
 # a release kept before is a hard link to it there; a dry run's goes to TMPDIR.
 if [ -n "$dry" ]; then
-	tmp=${TMPDIR:-/tmp}
 	tree=$(mktemp -d "${tmp%/}/weft-site-push.XXXXXX")
 else
 	mkdir -p site/pushed
@@ -88,7 +101,7 @@ done
 mkdir "$tree/site-src"
 cp site-src/main.go "$tree/site-src/"
 cp -R site-src/dist "$tree/site-src/dist"
-scripts/stage-releases.sh --link-from "$store" ${unlisted:+--live "$unlisted"} site "$tree/site-src/releases" "$version"
+scripts/stage-releases.sh --link-from "$store" ${unlisted:+--live "$unlisted"} ${releases:+--new-from "$releases"} site "$tree/site-src/releases" "$version"
 cat >"$tree/Dockerfile" <<EOF
 FROM golang:1.26 AS build
 WORKDIR /src
@@ -111,21 +124,27 @@ echo "push tree:"
 (cd "$tree" && find . -type f | sort)
 
 if [ -n "$dry" ]; then
-	echo "dry run: built $version into site/releases/$version and named it in site/releases/latest, locally; site/releases.txt does not list it, so no later staging includes it unless $version is the version published."
+	echo "dry run: built $version in $releases/$version; site/releases is as it was, so $version can still be published."
 	echo "dry run: not pushed; the tree is $tree"
 	exit 0
 fi
 
 lisa server push --name weft "$tree"
 
-# The server builds the image after the push; wait for the new site to answer.
-scripts/wait-live.sh "$version" || fail "the push of $version is not verified (see above), so it is not listed as published; its tree stays in $tree."
+# Pushed, so published: the site may serve it from now on, and every later
+# publish must stage it. Listed at once, before waiting, so a wait that times
+# out cannot drop it (nor the live release this push carried).
+[ -z "$unlisted" ] || scripts/published-releases.sh add site "$unlisted"
+scripts/published-releases.sh add site "$version"
 
-# Only now, with the push verified, is its tree kept for a rollback, and only
-# once it is kept is the version listed as published.
+# The server builds the image after the push; wait for the new site to answer.
+scripts/wait-live.sh "$version" ||
+	fail "$version was pushed and is listed in site/releases.txt (commit it), so the next publish stages it, but it is not verified live (see above); its tree stays in $tree: once $url serves $version, move it to site/pushed/$version for a rollback."
+
+# Only now, with the push verified, is its tree kept for a rollback.
 kept=site/pushed/$version
 mv "$tree" "$kept" ||
-	fail "$version is live, but its tree $tree could not be kept as $kept, so $version is not listed as published; move the tree there, then run scripts/published-releases.sh add site $version."
+	fail "$version is live and listed in site/releases.txt, but its tree $tree could not be kept as $kept; move the tree there for a rollback."
 
 # Each release the tree holds is kept once, beside the trees, for the next
 # push to link: hard links to the tree's files, read-only so that a write
@@ -146,7 +165,4 @@ keep_releases() {
 }
 keep_releases ||
 	echo "publish: $kept holds every release it served, but not all could be kept once in $store; the next publish copies those again." >&2
-# The live release the list missed was served by this push too: list it first.
-[ -z "$unlisted" ] || scripts/published-releases.sh add site "$unlisted"
-scripts/published-releases.sh add site "$version"
 echo "published weft $version at $url; listed in site/releases.txt (commit it); its tree is $kept"

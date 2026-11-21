@@ -57,7 +57,9 @@ Build it from the repository's root. Build the pages before `docker build`, so `
 1. builds a release of the `weft` command for four platforms, with `scripts/release.sh`;
 2. builds this site with `scripts/site.sh build`;
 3. makes a tree with the Go sources, the built pages, a Dockerfile like the one above, the installer, every release `site/releases.txt` lists as published, and the new one;
-4. pushes the tree to the server, which builds the image and runs it, and waits until the new version answers.
+4. pushes the tree to the server, which builds the image and runs it, lists the version in `site/releases.txt` as soon as the push succeeds, so every later publish keeps it, and waits until the new version answers.
+
+A version that is already released, listed or in `site/releases`, is refused: building it again would change tarballs its users have checksums for. `--dry-run` builds the release in a temporary folder and leaves `site/releases` as it was.
 
 The releases are not in the binary. They are in the image under `/data/releases`, served with [`weft.WithFiles`](go-serving.md#files-from-disk), so the binary does not grow with each release. `scripts/rollback-site.sh <version>` pushes an earlier version's tree again.
 

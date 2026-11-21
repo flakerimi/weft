@@ -426,10 +426,11 @@ func newFakeRepo(t *testing.T) *fakeRepo {
 	// release.sh and site.sh make what the real ones make, from nothing.
 	write(r.root, "scripts/release.sh", `#!/bin/sh
 set -eu
-mkdir -p "site/releases/$1"
-echo "sums of $1" >"site/releases/$1/SHA256SUMS"
-echo "tarball of $1" >"site/releases/$1/weft_linux_amd64.tar.gz"
-echo "$1" >site/releases/latest
+out="${2:-site/releases}"
+mkdir -p "$out/$1"
+echo "sums of $1" >"$out/$1/SHA256SUMS"
+echo "tarball of $1" >"$out/$1/weft_linux_amd64.tar.gz"
+echo "$1" >"$out/latest"
 echo "$1" >>"$FAKE/built"
 `, 0o755)
 	write(r.root, "scripts/site.sh", `#!/bin/sh
@@ -662,22 +663,151 @@ func TestRollbackSiteRefusesAChangedTarball(t *testing.T) {
 	}
 }
 
-// The tree is kept before the version is listed: a version listed as
-// published always has a tree to roll back to.
-func TestPublishSiteListsOnlyAKeptTree(t *testing.T) {
+// A version is listed as published the moment its push succeeds: a tree
+// that cannot then be kept leaves it listed, and says so.
+func TestPublishSiteListsAPushedVersionWhoseTreeIsNotKept(t *testing.T) {
 	skipWindows(t)
 	r := newFakeRepo(t)
 	r.env = append(r.env, "BLOCK_KEEP="+filepath.Join(r.root, "site/pushed/0.0.3"))
 	out, err := r.run("publish-site.sh", "0.0.3")
 	msg := lastLine(out)
-	if err == nil || !strings.HasPrefix(msg, "publish: 0.0.3 is live, but its tree ") || !strings.Contains(msg, "so 0.0.3 is not listed as published") {
+	if err == nil || !strings.HasPrefix(msg, "publish: 0.0.3 is live and listed in site/releases.txt, but its tree ") {
 		t.Fatalf("err %v, output\n%s", err, out)
 	}
-	if got := r.read("site/releases.txt"); got != "0.0.1\n0.0.2\n" {
+	if got := r.read("site/releases.txt"); got != "0.0.1\n0.0.2\n0.0.3\n" {
 		t.Fatalf("releases.txt %q", got)
 	}
 	if _, err := os.Stat(filepath.Join(r.root, "site/pushed/releases")); err == nil {
 		t.Fatal("releases were kept for a tree that was not")
+	}
+}
+
+// failWaitLive makes wait-live.sh time out, as when the server is slow to
+// build the image: the push itself succeeded.
+func (r *fakeRepo) failWaitLive(t *testing.T) func() {
+	t.Helper()
+	p := filepath.Join(r.root, "scripts/wait-live.sh")
+	real, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(p, []byte("#!/bin/sh\necho \"wait-live: after 5 minutes it is not live\" >&2\nexit 1\n"), 0o755)
+	return func() { os.WriteFile(p, real, 0o755) }
+}
+
+// A pushed release counts as published, so it is listed when its push
+// succeeds, not after wait-live: when wait-live then times out it stays
+// listed, and the next publish stages it. Chained: X (0.0.3) is live but not
+// listed; Y (0.0.4) stages and lists it, then times out itself; Z (0.0.5)
+// still stages X, Y and Z.
+func TestPublishSiteKeepsReleasesThroughChainedTimeouts(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	os.MkdirAll(filepath.Join(r.root, "site/releases/0.0.3"), 0o755)
+	os.WriteFile(filepath.Join(r.root, "site/releases/0.0.3/SHA256SUMS"), []byte("sums of 0.0.3\n"), 0o644)
+	os.WriteFile(filepath.Join(r.fake, "latest"), []byte("0.0.3\n"), 0o644)
+
+	restore := r.failWaitLive(t)
+	out, err := r.run("publish-site.sh", "0.0.4")
+	restore()
+	if err == nil || !strings.Contains(lastLine(out), "publish: 0.0.4 was pushed and is listed in site/releases.txt (commit it), so the next publish stages it, but it is not verified live (see above)") {
+		t.Fatalf("a timed-out publish: err %v, output\n%s", err, out)
+	}
+	if got := r.read("site/releases.txt"); got != "0.0.1\n0.0.2\n0.0.3\n0.0.4\n" {
+		t.Fatalf("after the timeout, releases.txt %q", got)
+	}
+
+	if out, err := r.run("publish-site.sh", "0.0.5"); err != nil {
+		t.Fatalf("publish 0.0.5: %v\n%s", err, out)
+	}
+	pushed, _ := os.ReadFile(filepath.Join(r.fake, "pushed-files"))
+	for _, v := range []string{"0.0.1", "0.0.2", "0.0.3", "0.0.4", "0.0.5"} {
+		if !strings.Contains(string(pushed), "./site-src/releases/releases/"+v+"/SHA256SUMS") {
+			t.Errorf("publish 0.0.5 dropped release %s:\n%s", v, pushed)
+		}
+	}
+	if got := r.read("site/releases.txt"); got != "0.0.1\n0.0.2\n0.0.3\n0.0.4\n0.0.5\n" {
+		t.Fatalf("releases.txt %q", got)
+	}
+}
+
+// A real publish that cannot read the live release refuses before building
+// anything: it cannot tell which release it must keep.
+func TestPublishSiteRefusesAnUnreachableSite(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	os.Remove(filepath.Join(r.fake, "latest"))
+	out, err := r.run("publish-site.sh", "0.0.3")
+	if err == nil || out != "publish: cannot read the live release from https://weft.base.al/releases/latest, so cannot check that it is kept" {
+		t.Fatalf("err %v, output %q", err, out)
+	}
+	if b, err := os.ReadFile(filepath.Join(r.fake, "built")); err == nil {
+		t.Fatalf("release.sh ran for %q", b)
+	}
+	if r.lisa() != "" {
+		t.Fatalf("lisa ran: %s", r.lisa())
+	}
+}
+
+// When the site already serves the version being published (its earlier push
+// was listed by no one, and site/releases does not have it), it is published
+// as new, with no word of an unlisted release, and listed once.
+func TestPublishSiteWhenLiveIsTheNewVersion(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	os.WriteFile(filepath.Join(r.fake, "latest"), []byte("0.0.3\n"), 0o644)
+	out, err := r.run("publish-site.sh", "0.0.3")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if strings.Contains(out, "without being listed") {
+		t.Fatalf("the new version was reported as an unlisted live release:\n%s", out)
+	}
+	if got := r.read("site/releases.txt"); got != "0.0.1\n0.0.2\n0.0.3\n" {
+		t.Fatalf("releases.txt %q", got)
+	}
+}
+
+// When the site serves a listed release, nothing is said about it and nothing extra is staged.
+func TestPublishSiteWhenLiveIsListed(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	out, err := r.run("publish-site.sh", "0.0.3")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if strings.Contains(out, "without being listed") {
+		t.Fatalf("a listed live release was reported as unlisted:\n%s", out)
+	}
+	pushed, _ := os.ReadFile(filepath.Join(r.fake, "pushed-files"))
+	if got := strings.Count(string(pushed), "/SHA256SUMS"); got != 3 {
+		t.Fatalf("pushed %d releases, want 0.0.1 to 0.0.3:\n%s", got, pushed)
+	}
+}
+
+// A version site/releases already has was released before: building it again
+// would change the tarballs its users have checksums for. Refused, in one
+// sentence, before anything is built, even when the site serves it.
+func TestPublishSiteRefusesAReleasedVersion(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	os.MkdirAll(filepath.Join(r.root, "site/releases/0.0.3"), 0o755)
+	os.WriteFile(filepath.Join(r.root, "site/releases/0.0.3/SHA256SUMS"), []byte("sums of 0.0.3\n"), 0o644)
+	want := "publish: 0.0.3 is already released (site/releases/0.0.3 exists), and building it again would change its tarballs; publish a new version."
+	for _, live := range []string{"0.0.2", "0.0.3"} {
+		os.WriteFile(filepath.Join(r.fake, "latest"), []byte(live+"\n"), 0o644)
+		for _, args := range [][]string{{"0.0.3"}, {"--dry-run", "0.0.3"}} {
+			out, err := r.run("publish-site.sh", args...)
+			if err == nil || out != want {
+				t.Fatalf("live %s, %v: err %v, output %q", live, args, err, out)
+			}
+		}
+	}
+	if b, err := os.ReadFile(filepath.Join(r.fake, "built")); err == nil {
+		t.Fatalf("release.sh ran for %q", b)
+	}
+	if r.lisa() != "" {
+		t.Fatalf("lisa ran: %s", r.lisa())
 	}
 }
 
@@ -708,8 +838,15 @@ func TestPublishSiteDryRunPushesNothing(t *testing.T) {
 	if err != nil || !strings.Contains(out, "dry run: not pushed") {
 		t.Fatalf("dry run: %v\n%s", err, out)
 	}
-	if !strings.Contains(out, "dry run: built 0.0.3 into site/releases/0.0.3 and named it in site/releases/latest, locally") {
-		t.Fatalf("the dry run does not say it left site/releases/0.0.3 behind:\n%s", out)
+	if !strings.Contains(out, "dry run: built 0.0.3 in "+r.tmp+"/weft-dry-release.") || !strings.Contains(out, "site/releases is as it was") {
+		t.Fatalf("the dry run does not say where it built 0.0.3:\n%s", out)
+	}
+	// It leaves site/releases as it was, so 0.0.3 can be published for real after it.
+	if _, err := os.Stat(filepath.Join(r.root, "site/releases/0.0.3")); err == nil {
+		t.Fatal("the dry run left site/releases/0.0.3")
+	}
+	if _, err := os.Stat(filepath.Join(r.root, "site/releases/latest")); err == nil {
+		t.Fatal("the dry run wrote site/releases/latest")
 	}
 	if r.lisa() != "" {
 		t.Fatalf("lisa ran: %s", r.lisa())
@@ -724,11 +861,14 @@ func TestPublishSiteDryRunPushesNothing(t *testing.T) {
 	if got := files(t, filepath.Join(trees[0], "site-src/releases")); got != "install,releases/0.0.1/SHA256SUMS,releases/0.0.1/weft_linux_amd64.tar.gz,releases/0.0.2/SHA256SUMS,releases/0.0.2/weft_linux_amd64.tar.gz,releases/0.0.3/SHA256SUMS,releases/0.0.3/weft_linux_amd64.tar.gz,releases/latest" {
 		t.Fatalf("the dry run's tree stages %s", got)
 	}
+	if out, err := r.run("publish-site.sh", "0.0.3"); err != nil {
+		t.Fatalf("publishing 0.0.3 after its dry run: %v\n%s", err, out)
+	}
 }
 
 // A publish keeps the release the site serves now, even when site/releases.txt
-// missed it (its publish went live after wait-live gave up), says so, and
-// lists it once the new one is verified live; a leftover folder that is
+// missed it (pushed by a publish from before a push was listed at once), says
+// so, and lists it when the new one is pushed; a leftover folder that is
 // neither listed, live nor new is not pushed.
 func TestPublishSiteKeepsALiveUnlistedRelease(t *testing.T) {
 	skipWindows(t)
@@ -742,7 +882,7 @@ func TestPublishSiteKeepsALiveUnlistedRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("publish: %v\n%s", err, out)
 	}
-	if !strings.Contains(out, "publish: https://weft.base.al serves 0.0.3, which site/releases.txt does not list; it is staged so its users keep it, and listed once 0.0.4 is verified live") {
+	if !strings.Contains(out, "publish: https://weft.base.al serves 0.0.3, which was pushed earlier without being listed in site/releases.txt; it is staged so its users keep it, and listed when 0.0.4 is pushed") {
 		t.Fatalf("the publish does not say 0.0.3 was missing from site/releases.txt:\n%s", out)
 	}
 	pushed, _ := os.ReadFile(filepath.Join(r.fake, "pushed-files"))
