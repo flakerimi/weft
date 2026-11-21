@@ -70,6 +70,30 @@ describe('InputTags', () => {
     expect(e.tags).toEqual(['a', 'b', 'x', 'y', 'z'])
   })
 
+  it('with add-on-paste, inserts a paste at the caret and makes the whole text tags, draft or none', async () => {
+    const { e } = await cases({ addOnPaste: true })
+    const paste = (text: string) => {
+      const event = new Event('paste', { bubbles: true, cancelable: true }) as Event & { clipboardData: unknown }
+      event.clipboardData = { getData: () => text }
+      field().dispatchEvent(event)
+      return event
+    }
+    field().focus()
+    expect(paste('solo').defaultPrevented).toBe(true)
+    await settle()
+    expect(e.tags).toEqual(['solo'])
+    type(field(), 'ac')
+    field().setSelectionRange(1, 1)
+    paste('b')
+    await settle()
+    expect(e.tags).toEqual(['solo', 'abc'])
+    type(field(), 'd')
+    paste(',e,f')
+    await settle()
+    expect(e.tags).toEqual(['solo', 'abc', 'd', 'e', 'f'])
+    expect(field().value).toBe('')
+  })
+
   it('refuses a duplicate and past max, emitting invalid', async () => {
     const { e } = await cases({ initial: ['a'], max: 2 })
     await add('a')
@@ -171,6 +195,18 @@ describe('InputTags', () => {
     key('Delete', {}, tags()[0])
     await settle()
     expect(e.tags).toEqual(['a'])
+  })
+
+  it('shows the focus ring on a focused tag, and on the box while the field has focus', async () => {
+    const unstyle = loadStyles()
+    try {
+      await cases({ initial: ['a'] })
+      const tag = ruleFor('.weft-tag:focus-visible')!.style
+      expect(tag.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+      expect(ruleFor('.weft-input:focus-within')!.style.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+    } finally {
+      unstyle()
+    }
   })
 
   it('is at least 44 px tall on touch, its × buttons with a hit area of at least --weft-hit-min', async () => {

@@ -27,6 +27,15 @@ option whose label starts so; disabled options are skipped. Enter and Space
 choose; with `multiple` they toggle. Focusing the list makes the chosen
 option active, else the first.
 
+**Several at once.** With `multiple` the APG's recommended keys work too:
+Shift+ArrowDown and Shift+ArrowUp move and toggle the option reached,
+Shift+Space chooses every option from the last one chosen to the active
+one, Ctrl+A (Cmd+A) chooses every option (and again none), and Ctrl+Arrow
+moves without choosing, Ctrl+Space toggling; a Shift+press chooses a range
+and a Ctrl+press (Cmd+press) toggles one. `selection-behavior="replace"`
+makes the choice follow the arrows and a plain press, Shift extending it
+from where it started.
+
 **Filter.** With `filter` a search field above the list takes focus instead
 (`role="combobox"`, controlling the list); typing filters by label (or
 `filter-fields`), ignoring case and accents, the closest matches first, and
@@ -37,11 +46,15 @@ matches) the `empty` slot shows, by default "No results", in a status that
 assistive technology announces; `loading` shows a spinner there and sets
 `aria-busy`.
 
-**Long lists.** Past 200 options only the rows in view are drawn (each of a
-fixed height, from the size), over a spacer as tall as the list; options
-carry `aria-setsize` and `aria-posinset`, and the active option is always
-drawn, so `aria-activedescendant` never names a missing element.
-`virtualize` forces it either way.
+**Long lists.** Past 200 options only the rows in view are drawn, over a
+spacer as tall as the list. Rows share one height: an estimate from the size
+(48 px on touch; `virtualize: { estimateSize }` sets it), grown to the
+tallest row drawn so far (a larger font, a taller `item` slot), and at least
+--weft-hit-min. Options carry `aria-setsize` and `aria-posinset`, counted
+within their group, and the active option is always drawn (with its group's
+heading), so `aria-activedescendant` never names a missing element.
+`virtualize` forces it either way; `{ overscan }` sets how many rows are
+drawn past each edge.
 
 With a `name` (or its FormField's) the value submits in hidden inputs, one
 per value. The slots `item`, `item-leading`, `item-label`, `item-trailing`

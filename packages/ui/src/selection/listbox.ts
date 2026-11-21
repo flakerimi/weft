@@ -25,15 +25,24 @@
  *   Enter chooses the active option, Home and End go to the ends when
  *   `edges` (not in a text field, whose caret they move), Space chooses when
  *   `space`, and when `typeahead`, typing jumps to an option by its label
- *   (useTypeahead). Disabled options are skipped.
+ *   (useTypeahead). Disabled options are skipped. With `range` and
+ *   multiple, the APG's recommended keys: Shift+Arrow moves and toggles,
+ *   Shift+Space chooses from the anchor (the last option chosen) to the
+ *   active one, Ctrl+A all (or none), Ctrl+Arrow moves only, Ctrl+Space
+ *   toggles; `selectionBehavior: 'replace'` makes the choice follow the
+ *   arrows. `press(option, event)` does the same for a press (Shift, Ctrl).
  * - `choose(option, event)`: a disabled option does nothing; the create
  *   option calls `opts.onCreate(search)`; otherwise single selection sets
  *   the model to the option's value and multiple toggles it in the model's
- *   array; then the item's own `onSelect(event)`, then `opts.onChoose`.
+ *   array (or, `replace`, makes it the only one); then the item's own
+ *   `onSelect(event)`, then `opts.onChoose(option, event, changed)`.
  * - Long lists: past 200 options (or when `props.virtualize` says so) only
- *   the rows in view are rendered (useVirtualList), every row
- *   `rowHeight` px tall (from the size; 48 on touch), separators left out,
- *   and the active option is always rendered and scrolled into view.
+ *   the rows in view are rendered (useVirtualList), every row `rowHeight`
+ *   px tall: the estimate (from the size, 48 on touch, or
+ *   `virtualize.estimateSize`), grown to the tallest row the Listbox
+ *   measured (`measure`). Separators are left out, each option knows its
+ *   place in its group (`posInSet`, `setSize`), and the active option is
+ *   always rendered and scrolled into view.
  */
 import { computed, inject, nextTick, provide, ref, shallowRef, watch, type ComputedRef, type InjectionKey, type Ref, type ShallowRef } from 'vue'
 import { useTypeahead } from '../headless/useTypeahead.ts'
@@ -72,7 +81,12 @@ export interface ListboxProps {
   loop?: boolean
   disabled?: boolean
   loading?: boolean
-  virtualize?: boolean
+  /** Loading the items failed with this (a Combobox's `load`); undefined while not. */
+  error?: unknown
+  /** True or false forces it; an object turns it on with `estimateSize` (the first row height, px) and `overscan` (rows drawn past each edge). */
+  virtualize?: boolean | { estimateSize?: number; overscan?: number }
+  /** With multiple: `toggle`, choosing toggles; `replace`, the selection follows the arrows and a press, and Ctrl toggles. */
+  selectionBehavior?: 'toggle' | 'replace'
   size?: Size
 }
 
@@ -90,6 +104,9 @@ export interface OptionRow {
   description?: string
   icon?: string
   disabled: boolean
+  /** Its place in its group, from 1, and the options in the group (aria-posinset, aria-setsize). */
+  posInSet: number
+  setSize: number
 }
 export interface CreateRow {
   kind: 'create'
@@ -100,6 +117,8 @@ export interface CreateRow {
   /** The search, as the new item's label. */
   label: string
   disabled: false
+  posInSet: number
+  setSize: number
 }
 export type Choice = OptionRow | CreateRow
 export type Row = { kind: 'heading'; key: string; id: string; label: string; row: number } | { kind: 'separator'; key: string; row: number } | Choice
@@ -118,9 +137,12 @@ export interface ListboxOpts {
   autoHighlight?: () => boolean
   /** The listbox's name: `aria-labelledby` or `aria-label`. */
   label?: () => { 'aria-labelledby'?: string; 'aria-label'?: string }
-  onChoose?: (choice: Choice, event: Event) => void
+  /** A choice was made; `changed` says whether the model changed (not for the create option, or the same value again). */
+  onChoose?: (choice: Choice, event: Event, changed: boolean) => void
   onCreate?: (term: string) => void
   onHighlight?: (choice: Choice | undefined) => void
+  /** The list itself takes focus (a sheet with no search field): it is a tab stop with aria-activedescendant, and takes the keys. */
+  ownsFocus?: () => boolean
   /** Selection follows the highlight (a command palette's list of actions): the active option is the selected one, and no check is drawn. */
   selectsActive?: boolean
 }
@@ -142,10 +164,16 @@ export interface Listbox {
   label: () => { 'aria-labelledby'?: string; 'aria-label'?: string }
   /** Whether chosen options show a check (not when selection follows the highlight). */
   checks: boolean
+  /** Whether the list element itself takes focus. */
+  ownsFocus: () => boolean
   isSelected: (choice: Choice) => boolean
   highlight: (at: 'first' | 'last' | 'selected' | number, opts?: { scroll?: boolean }) => void
-  choose: (choice: Choice, event: Event) => void
-  keydown: (event: KeyboardEvent, opts: { edges: boolean; typeahead: boolean; space: boolean }) => boolean
+  choose: (choice: Choice, event: Event, toggle?: boolean) => void
+  /** A press on an option: with multiple, Shift chooses a range and Ctrl or Cmd toggles. */
+  press: (choice: Choice, event: MouseEvent) => void
+  keydown: (event: KeyboardEvent, opts: { edges: boolean; typeahead: boolean; space: boolean; range?: boolean }) => boolean
+  /** A drawn row measured this tall: rows grow to the tallest. */
+  measure: (height: number) => void
   /** Forget the typed search of the typeahead. */
   resetTypeahead: () => void
 }
@@ -171,7 +199,10 @@ export function useListbox(props: ListboxProps, model: Ref<unknown>, opts: Listb
   const optionCount = computed(() =>
     filtered.value.reduce((n, p) => n + p.items.filter((i) => !isStructural(source.value[p.group]![i]!)).length, 0),
   )
-  const virtualOn = computed(() => props.virtualize ?? optionCount.value > VIRTUAL_FROM)
+  const virtualOn = computed(() =>
+    props.virtualize === undefined ? optionCount.value > VIRTUAL_FROM : props.virtualize !== false,
+  )
+  const virtualOpts = () => (typeof props.virtualize === 'object' ? props.virtualize : {})
 
   const create = computed<string | null>(() => {
     const c = createOf(props.createItem)
@@ -196,7 +227,7 @@ export function useListbox(props: ListboxProps, model: Ref<unknown>, opts: Listb
     const addCreate = () => {
       const term = create.value
       if (term === null) return
-      out.push({ key: 'create', rows: [{ kind: 'create', key: 'create', id: `${id}-create`, index: index++, row: row++, label: term, disabled: false }] })
+      out.push({ key: 'create', rows: [{ kind: 'create', key: 'create', id: `${id}-create`, index: index++, row: row++, label: term, disabled: false, posInSet: 1, setSize: 1 }] })
     }
     const position = createOf(props.createItem)?.position
     if (position === 'top') addCreate()
@@ -232,8 +263,15 @@ export function useListbox(props: ListboxProps, model: Ref<unknown>, opts: Listb
           description: description == null ? undefined : String(description),
           icon: obj?.icon,
           disabled: !!obj?.disabled,
+          posInSet: 0,
+          setSize: 0,
         })
       }
+      const inGroup = rows.filter((r): r is OptionRow => r.kind === 'option')
+      inGroup.forEach((r, n) => {
+        r.posInSet = n + 1
+        r.setSize = inGroup.length
+      })
       out.push({ key: `g${gi}`, labelledBy, rows })
     })
     if (position !== 'top') {
@@ -251,16 +289,26 @@ export function useListbox(props: ListboxProps, model: Ref<unknown>, opts: Listb
   const activeOption = computed(() => options.value[active.value])
   const activeId = computed(() => activeOption.value?.id)
   const scroller = shallowRef<HTMLElement | null>(null)
-  const rowHeight = computed(() => {
+  /** The tallest a drawn row measured, px: rows never get shorter than it. */
+  const measured = ref(0)
+  const estimate = computed(() => {
+    const given = virtualOpts().estimateSize
+    if (given) return given
     const base = opts.touch() ? TOUCH_ROW : ROW[props.size ?? 'md']
     const described = options.value.some((o) => o.kind === 'option' && o.description)
     return described ? base + (opts.touch() ? 20 : 16) : base
   })
+  const rowHeight = computed(() => Math.max(estimate.value, measured.value))
+  // A new size or input draws rows anew: measure them again.
+  watch([opts.touch, () => props.size], () => (measured.value = 0))
   const virtual = useVirtualList(scroller, {
     count: () => rows.value.length,
     itemHeight: () => rowHeight.value,
     enabled: () => virtualOn.value,
     pinned: () => activeOption.value?.row ?? -1,
+    get overscan() {
+      return virtualOpts().overscan
+    },
   })
 
   const values = () => (props.multiple ? (Array.isArray(model.value) ? model.value : []) : [model.value])
@@ -344,44 +392,100 @@ export function useListbox(props: ListboxProps, model: Ref<unknown>, opts: Listb
     (i) => setActive(i),
   )
 
-  function choose(c: Choice, event: Event) {
+  /** The option the last choice (or range) started from, by key. */
+  let anchor: string | null = null
+  const replacing = () => props.multiple && props.selectionBehavior === 'replace'
+  const valuesOf = (list: Choice[]) => list.filter((c): c is OptionRow => c.kind === 'option' && !c.disabled).map((c) => c.value)
+
+  /** Set the model, telling the owner whether it changed. */
+  function commit(next: unknown, c: Choice, event: Event) {
+    const changed = !sameValue(model.value, next, props.by)
+    model.value = next
+    if (c.kind === 'option' && isObject(c.item)) (c.item as SelectOption).onSelect?.(event)
+    opts.onChoose?.(c, event, changed)
+  }
+
+  /**
+   * Choose `c`: a disabled option does nothing, the create option creates;
+   * single selection sets the value; multiple toggles it, or with
+   * `toggle: false` (replace behaviour) makes it the only one.
+   */
+  function choose(c: Choice, event: Event, toggle = !replacing()) {
     if (c.disabled || props.disabled) return
     if (c.kind === 'create') {
       opts.onCreate?.(c.label)
-      opts.onChoose?.(c, event)
+      opts.onChoose?.(c, event, false)
       return
     }
-    if (props.multiple) {
-      const list = values()
-      model.value = isSelected(c) ? list.filter((v) => !sameValue(v, c.value, props.by)) : [...list, c.value]
-    } else model.value = c.value
-    if (isObject(c.item)) (c.item as SelectOption).onSelect?.(event)
-    opts.onChoose?.(c, event)
+    anchor = c.key
+    if (!props.multiple) return commit(c.value, c, event)
+    const list = values()
+    if (!toggle) return commit([c.value], c, event)
+    commit(isSelected(c) ? list.filter((v) => !sameValue(v, c.value, props.by)) : [...list, c.value], c, event)
   }
 
-  function keydown(event: KeyboardEvent, k: { edges: boolean; typeahead: boolean; space: boolean }): boolean {
+  /** Choose every enabled option from the anchor to `c`: added to the choice, or (replace) as the whole choice. */
+  function chooseRange(c: Choice, event: Event, replace = replacing()) {
+    if (!props.multiple || c.disabled || props.disabled || c.kind !== 'option') return
+    const from = Math.max(0, options.value.findIndex((o) => o.key === anchor))
+    const [a, b] = anchor === null ? [c.index, c.index] : [Math.min(from, c.index), Math.max(from, c.index)]
+    const range = valuesOf(options.value.slice(a, b + 1))
+    if (anchor === null) anchor = c.key
+    const kept = replace ? [] : values()
+    commit([...kept, ...range.filter((v) => !kept.some((k) => sameValue(k, v, props.by)))], c, event)
+  }
+
+  /** Every enabled option chosen, or none when they all are. */
+  function chooseAll(event: Event) {
+    const c = activeOption.value ?? options.value[firstEnabled()]
+    if (!props.multiple || props.disabled || !c) return
+    const shown = valuesOf(options.value)
+    const list = values()
+    const all = shown.every((v) => list.some((x) => sameValue(x, v, props.by)))
+    const others = list.filter((x) => !shown.some((v) => sameValue(x, v, props.by)))
+    commit(all ? others : [...others, ...shown], c, event)
+  }
+
+  /** A press on `c`: Shift chooses a range, Ctrl or Cmd toggles, else as `choose`. */
+  function press(c: Choice, event: MouseEvent) {
+    if (props.multiple && event.shiftKey) return chooseRange(c, event)
+    if (props.multiple && (event.ctrlKey || event.metaKey)) return choose(c, event, true)
+    choose(c, event)
+  }
+
+  /** After a move with the arrows (multiple): Shift extends or toggles, Ctrl only moves, replace makes the choice follow. */
+  function afterMove(event: KeyboardEvent) {
+    const c = activeOption.value
+    if (!props.multiple || !c || c.kind !== 'option' || event.ctrlKey || event.metaKey) return
+    if (event.shiftKey) {
+      if (replacing()) chooseRange(c, event, true)
+      else choose(c, event, true)
+    } else if (replacing()) choose(c, event, false)
+  }
+
+  function keydown(event: KeyboardEvent, k: { edges: boolean; typeahead: boolean; space: boolean; range?: boolean }): boolean {
     if (event.defaultPrevented || event.isComposing) return false
-    const plain = !event.altKey && !event.ctrlKey && !event.metaKey
+    // Ctrl (or Cmd) with an arrow moves without choosing, in a list that takes ranges.
+    const ctrl = event.ctrlKey || event.metaKey
+    const plain = !event.altKey && (!ctrl || (!!k.range && !!props.multiple))
+    const moved = (fn: () => void) => {
+      fn()
+      if (k.range) afterMove(event)
+      return true
+    }
     switch (event.key) {
       case 'ArrowDown':
-        if (!plain) return false
-        move(1)
-        return true
+        return plain && moved(() => move(1))
       case 'ArrowUp':
-        if (!plain) return false
-        move(-1)
-        return true
+        return plain && moved(() => move(-1))
       case 'PageDown':
-        move(10)
-        return true
+        return moved(() => move(10))
       case 'PageUp':
-        move(-10)
-        return true
+        return moved(() => move(-10))
       case 'Home':
       case 'End':
         if (!k.edges) return false
-        setActive(event.key === 'Home' ? firstEnabled() : lastEnabled())
-        return true
+        return moved(() => setActive(event.key === 'Home' ? firstEnabled() : lastEnabled()))
       case 'Enter': {
         const o = activeOption.value
         if (!o) return false
@@ -389,12 +493,19 @@ export function useListbox(props: ListboxProps, model: Ref<unknown>, opts: Listb
         return true
       }
     }
+    if (k.range && props.multiple && ctrl && !event.altKey && event.key.toLowerCase() === 'a') {
+      chooseAll(event)
+      return true
+    }
     // Space inside a typed search is part of it; otherwise it chooses.
-    if (k.typeahead && typeahead.onKeydown(event, active.value)) return true
+    if (k.typeahead && !ctrl && typeahead.onKeydown(event, active.value)) return true
     if (event.key === ' ' && k.space) {
       const o = activeOption.value
-      if (o) choose(o, event)
-      return !!o
+      if (!o) return false
+      if (k.range && event.shiftKey) chooseRange(o, event)
+      else if (k.range && ctrl) choose(o, event, true)
+      else choose(o, event)
+      return true
     }
     return false
   }
@@ -415,11 +526,16 @@ export function useListbox(props: ListboxProps, model: Ref<unknown>, opts: Listb
     search: opts.search,
     label: () => opts.label?.() ?? {},
     checks: !opts.selectsActive,
+    ownsFocus: () => !!opts.ownsFocus?.(),
     isSelected,
     highlight,
     choose,
+    press,
     keydown,
     resetTypeahead: typeahead.reset,
+    measure: (height: number) => {
+      if (height > measured.value) measured.value = Math.ceil(height)
+    },
   }
 }
 

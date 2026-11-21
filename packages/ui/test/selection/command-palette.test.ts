@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { registerIcon } from '../../src/basics/icons.ts'
+import CommandPalette from '../../src/selection/CommandPalette.vue'
 import CommandCases from '../fixtures/selection/CommandCases.vue'
 import { mount } from '../mount.ts'
-import { type } from '../forms/helpers.ts'
+import { loadStyles, ruleFor } from '../styles.ts'
+import { px, type } from '../forms/helpers.ts'
 import { navigations } from '../keyboard.ts'
 import { $, $$, active, key, overlays, reset, settle } from '../overlays/helpers.ts'
 
@@ -55,6 +57,18 @@ describe('CommandPalette', () => {
     expect($('.weft-spinner', named('Sync'))).not.toBeNull()
     expect(named('Sync').getAttribute('aria-disabled')).toBe('true')
     expect($('.weft-command-palette__chevron', named('Change theme'))).not.toBeNull()
+  })
+
+  it('shows a focus ring under the search field while it has focus, and marks the active command', async () => {
+    const unstyle = loadStyles()
+    try {
+      await cases()
+      const ring = ruleFor('.weft-command-palette__search:focus-within')!.style
+      expect(ring.getPropertyValue('box-shadow')).toContain('var(--weft-color-focus, Highlight)')
+      expect(ruleFor('.weft-listbox__option[data-active]')).toBeDefined()
+    } finally {
+      unstyle()
+    }
   })
 
   it('matches fuzzily, marks the matched letters, and orders groups by their best match', async () => {
@@ -210,6 +224,56 @@ describe('CommandPalette', () => {
     close.click()
     await settle()
     expect(e.closed).toBe(1)
+  })
+
+  it('on touch draws its commands at least --weft-hit-min tall, long lists too', async () => {
+    const unstyle = loadStyles()
+    try {
+      await cases({ input: 'touch', many: 300 })
+      expect($('.weft-listbox', root()).dataset.touch).toBe('true')
+      expect(list().dataset.virtual).toBe('true')
+      const option = named('Ada Lovelace')
+      expect(px(getComputedStyle(option).minBlockSize)).toBeGreaterThanOrEqual(44)
+    } finally {
+      unstyle()
+    }
+  })
+
+  it('gives its attributes to its root, but the name to the search field, and draws no empty style', async () => {
+    const m = mount(CommandPalette, { groups: [], class: 'mine', id: 'palette', 'data-x': '1', 'aria-label': 'Jump to' })
+    unmount = m.unmount
+    await settle()
+    const el = $('.weft-command-palette')
+    expect(el.id).toBe('palette')
+    expect(el.classList.contains('mine')).toBe(true)
+    expect(el.dataset.x).toBe('1')
+    expect(el.hasAttribute('style')).toBe(false)
+    expect(el.hasAttribute('aria-label')).toBe(false)
+    expect(input().getAttribute('aria-label')).toBe('Jump to')
+  })
+
+  it('reads labels, descriptions and keys at label-key, description-key and value-key', async () => {
+    const log: string[] = []
+    const m = mount(CommandPalette, {
+      groups: [{ id: 'g', label: 'Places', items: [{ name: 'Lisbon', info: 'Portugal', code: 'lis' }, { name: 'Oslo', info: 'Norway', code: 'osl' }] }],
+      labelKey: 'name',
+      descriptionKey: 'info',
+      valueKey: 'code',
+      recent: true,
+      recentKey: 'keys',
+      // Root props that are functions are read as getters: the handler is what this one returns.
+      onSelect: () => (item: { code: string }) => log.push(item.code),
+    })
+    unmount = m.unmount
+    await settle()
+    expect(labels()).toEqual(['Lisbon', 'Oslo'])
+    expect($('.weft-listbox__description', named('Oslo')).textContent).toBe('Norway')
+    await search('norw')
+    expect(labels()).toEqual(['Oslo'])
+    key('Enter')
+    await settle()
+    expect(log).toEqual(['osl'])
+    expect(JSON.parse(localStorage.getItem('weft:recent:keys')!)).toEqual(['osl'])
   })
 
   it('runs nothing while disabled', async () => {

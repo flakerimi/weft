@@ -18,6 +18,8 @@ const props = defineProps<{
   disabled?: boolean
   async?: boolean
   emptySlot?: boolean
+  errorSlot?: boolean
+  debounce?: number
   initial?: unknown
 }>()
 const input = ref<Input | undefined>(props.input)
@@ -34,9 +36,9 @@ const term = ref('')
 const log = ref<string[]>([])
 const submitted = ref(0)
 /** The pending loads, each resolved by the test: `calls[i].resolve(items)`. */
-const calls: { term: string; signal: AbortSignal; resolve: (items: SelectItem[]) => void }[] = []
+const calls: { term: string; signal: AbortSignal; resolve: (items: SelectItem[]) => void; reject: (error: unknown) => void }[] = []
 function load(t: string, ctx: { signal: AbortSignal }) {
-  return new Promise<SelectItem[]>((resolve) => calls.push({ term: t, signal: ctx.signal, resolve }))
+  return new Promise<SelectItem[]>((resolve, reject) => calls.push({ term: t, signal: ctx.signal, resolve, reject }))
 }
 defineExpose({ input, value, open, term, log, calls, submitted })
 </script>
@@ -52,7 +54,7 @@ defineExpose({ input, value, open, term, log, calls, submitted })
           v-model:search-term="term"
           :items="async ? undefined : (items ?? fruit)"
           :load="async ? load : undefined"
-          :debounce="async ? 0 : undefined"
+          :debounce="async ? (debounce ?? 0) : undefined"
           :trigger="trigger"
           :mode="mode"
           :multiple="multiple"
@@ -64,7 +66,10 @@ defineExpose({ input, value, open, term, log, calls, submitted })
           @create="(t: string) => log.push(`create:${t}`)"
           @clear="log.push('clear')"
           @remove-tag="(v: unknown) => log.push(`remove:${v}`)"
-        />
+          @error="(e: unknown) => log.push(`error:${(e as Error).message}`)"
+        >
+          <template v-if="errorSlot" #error="{ error }"><b class="failed">Sorry: {{ (error as Error).message }}</b></template>
+        </Combobox>
         <Combobox v-else v-model="value" :items="fruit" value-key="id">
           <template #empty="{ searchTerm }"><b class="none">No fruit like {{ searchTerm }}</b></template>
         </Combobox>

@@ -10,13 +10,14 @@
 // Combobox, its list always shown). Usually opened from a Dialog, a Cmd+K
 // launcher: the Dialog's focus trap moves focus into the field, Escape
 // closes the Dialog, and the app closes it on `select`.
-import { computed, nextTick, onMounted, ref, useTemplateRef } from 'vue'
+import { computed, nextTick, onMounted, ref, useAttrs, useTemplateRef } from 'vue'
+import { useWeft } from '../adaptive/context.ts'
 import Kbd from '../basics/Kbd.vue'
 import Spinner from '../basics/Spinner.vue'
 import { useControllable } from '../headless/useControllable.ts'
 import { useId } from '../headless/useId.ts'
 import CloseButton from '../overlays/CloseButton.vue'
-import { commandsByKey, keyOf, searchGroups, type CommandGroup, type CommandItem } from './command.ts'
+import { commandsByKey, descriptionOfCommand, keyOf, labelOfCommand, searchGroups, type CommandGroup, type CommandItem, type CommandKeys } from './command.ts'
 import { segments } from './fuzzy.ts'
 import type { SelectItem, SelectOption } from './items.ts'
 import { listProps, provideListbox, useListbox } from './listbox.ts'
@@ -59,14 +60,22 @@ const props = withDefaults(
     loop?: boolean
     /** `sm`, `md` or `lg`. */
     size?: Size
-    /** Draw only the rows in view; by default past 200 commands. */
-    virtualize?: boolean
+    /** Read a command's label at this key. */
+    labelKey?: string
+    /** Read a command's description at this key. */
+    descriptionKey?: string
+    /** Read the key a command is kept by among the recent ones at this key; by default its `id`, else its label. */
+    valueKey?: string
+    /** Draw only the rows in view: by default past 200 commands; an object sets `estimateSize` (px, the row height to start from) and `overscan`. */
+    virtualize?: boolean | { estimateSize?: number; overscan?: number }
   }>(),
   {
     groups: () => [],
     searchTerm: undefined,
     limit: 12,
     recentLabel: 'Recent',
+    labelKey: 'label',
+    descriptionKey: 'description',
     back: true,
     size: 'md',
     virtualize: undefined,
@@ -96,6 +105,15 @@ defineSlots<{
 }>()
 
 const term = useControllable(props, 'searchTerm', emit, '')
+const weft = useWeft()
+const attrs = useAttrs()
+/** Every attribute goes to the root, but the name, which is the search field's; style only when given. */
+const rootAttrs = computed(() => {
+  const { 'aria-label': _label, 'aria-labelledby': _by, style, ...rest } = attrs
+  return { ...rest, ...(style !== undefined && style !== '' && { style }) }
+})
+const keys = computed<CommandKeys>(() => ({ labelKey: props.labelKey, descriptionKey: props.descriptionKey, valueKey: props.valueKey }))
+const labelOf = (item: CommandItem) => labelOfCommand(item, keys.value)
 const listId = useId('command-list')
 const input = useTemplateRef<HTMLInputElement>('input')
 /** The pages of children opened, the latest last. */
@@ -106,14 +124,16 @@ const keep = computed(() => (props.recent === true ? 5 : typeof props.recent ===
 const storageKey = computed(() => (props.recentKey ? `weft:recent:${props.recentKey}` : undefined))
 
 const shownGroups = computed<CommandGroup[]>(() => {
-  if (page.value) return [{ id: 'page', label: page.value.label, items: page.value.children }]
+  if (page.value) return [{ id: 'page', label: labelOf(page.value), items: page.value.children }]
   const all = props.groups
   if (!keep.value || term.value.trim() || !recentKeys.value.length) return all
-  const byKey = commandsByKey(all)
+  const byKey = commandsByKey(all, keys.value)
   const items = recentKeys.value.map((k) => byKey.get(k)).filter((i): i is CommandItem => !!i)
   return items.length ? [{ id: 'recent', label: props.recentLabel, items }, ...all] : all
 })
-const found = computed(() => searchGroups(shownGroups.value, term.value, { limit: props.limit, preserveGroupOrder: !!props.preserveGroupOrder }))
+const found = computed(() =>
+  searchGroups(shownGroups.value, term.value, { limit: props.limit, preserveGroupOrder: !!props.preserveGroupOrder, keys: keys.value }),
+)
 
 // The list draws each command as an option: a copy that carries the command,
 // disabled while it is loading.
@@ -122,22 +142,35 @@ type Option = SelectOption & { [SOURCE]: CommandItem }
 const items = computed(() =>
   found.value.groups.map(({ group, items: list }) => [
     ...(group.label ? [{ type: 'label' as const, label: group.label }] : []),
-    ...list.map((item): Option => ({ label: item.label, description: item.description, icon: item.icon, disabled: !!item.disabled || !!item.loading, [SOURCE]: item })),
+    ...list.map((item): Option => ({
+      label: labelOf(item),
+      description: descriptionOfCommand(item, keys.value),
+      icon: item.icon,
+      disabled: !!item.disabled || !!item.loading,
+      [SOURCE]: item,
+    })),
   ]),
 )
 const source = (item: SelectItem) => (item as Option)[SOURCE]
 
 const unused = ref<unknown>(undefined)
 const list = useListbox(
-  listProps(props, { items: () => items.value as SelectItem[][], ignoreFilter: () => true }),
+  // The copies carry their label and description under the usual keys.
+  listProps(props, {
+    items: () => items.value as SelectItem[][],
+    ignoreFilter: () => true,
+    labelKey: () => 'label',
+    descriptionKey: () => 'description',
+    valueKey: () => undefined,
+  }),
   unused,
   {
     id: listId,
     search: () => term.value,
-    touch: () => false,
+    touch: () => weft.input.value === 'touch',
     autoHighlight: () => true,
     selectsActive: true,
-    label: () => ({ 'aria-label': page.value?.label ?? 'Commands' }),
+    label: () => ({ 'aria-label': page.value ? labelOf(page.value) : 'Commands' }),
     onChoose: (c, event) => c.kind === 'option' && run(source(c.item), event),
     onHighlight: (c) => emit('highlight', c?.kind === 'option' ? source(c.item) : undefined),
   },
@@ -146,7 +179,7 @@ provideListbox(list)
 
 function remember(item: CommandItem) {
   if (!keep.value) return
-  const k = keyOf(item)
+  const k = keyOf(item, keys.value)
   recentKeys.value = [k, ...recentKeys.value.filter((x) => x !== k)].slice(0, keep.value)
   if (storageKey.value) {
     try {
@@ -211,7 +244,7 @@ function onKeydown(event: KeyboardEvent) {
 
 const marked = (item: SelectItem) => {
   const c = source(item)
-  return segments(c.label, found.value.marks.get(c) ?? [])
+  return segments(labelOf(c), found.value.marks.get(c) ?? [])
 }
 
 defineExpose({
@@ -223,7 +256,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="weft-command-palette" :class="$attrs.class" :style="$attrs.style as string | undefined" :data-size="size">
+  <div class="weft-command-palette" v-bind="rootAttrs" :data-size="size">
     <div class="weft-command-palette__search">
       <button v-if="back && pages.length" type="button" class="weft-command-palette__back" aria-label="Back" @click="goBack">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
@@ -238,7 +271,8 @@ defineExpose({
         spellcheck="false"
         aria-expanded="true"
         aria-autocomplete="list"
-        :aria-label="($attrs['aria-label'] as string | undefined) ?? page?.placeholder ?? placeholder ?? 'Search commands'"
+        :aria-label="($attrs['aria-labelledby'] ? undefined : ($attrs['aria-label'] as string | undefined)) ?? page?.placeholder ?? placeholder ?? 'Search commands'"
+        :aria-labelledby="$attrs['aria-labelledby'] as string | undefined"
         :placeholder="page?.placeholder ?? placeholder ?? 'Type a command or search…'"
         :value="term"
         :disabled="disabled || undefined"

@@ -8,8 +8,9 @@
  * (the element that scrolls) and each rendered row at `offset(index)`.
  *
  * - `indices`: the rows to render, ascending: those in view, `overscan`
- *   more on each side (default 6), and the `pinned()` index wherever it is.
- *   Pin the active option: a listbox's `aria-activedescendant` must name an
+ *   more on each side (default 6; read each time, so it may be a getter on
+ *   the options object), and the `pinned()` index wherever it is. Pin the
+ *   active option: a listbox's `aria-activedescendant` must name an
  *   element that exists, and keyboard focus must not vanish when the pointer
  *   scrolls it away.
  * - `scrollTo(index)`: scroll the least that shows the row (to its top
@@ -51,7 +52,7 @@ export interface VirtualList {
 }
 
 export function useVirtualList(scroller: Readonly<Ref<HTMLElement | null | undefined>>, opts: VirtualListOptions): VirtualList {
-  const overscan = opts.overscan ?? 6
+  const overscan = () => opts.overscan ?? 6
   const top = ref(0)
   const height = ref(0)
   const virtual = computed(() => opts.enabled?.() !== false)
@@ -65,8 +66,8 @@ export function useVirtualList(scroller: Readonly<Ref<HTMLElement | null | undef
     const count = opts.count()
     if (!virtual.value) return Array.from({ length: count }, (_, i) => i)
     const h = rowHeight()
-    const start = Math.max(0, Math.floor(at() / h) - overscan)
-    const end = Math.min(count, Math.ceil((at() + view()) / h) + overscan)
+    const start = Math.max(0, Math.floor(at() / h) - overscan())
+    const end = Math.min(count, Math.ceil((at() + view()) / h) + overscan())
     const out = Array.from({ length: Math.max(0, end - start) }, (_, i) => start + i)
     const pin = opts.pinned?.() ?? -1
     if (pin >= 0 && pin < count && (pin < start || pin >= end)) {

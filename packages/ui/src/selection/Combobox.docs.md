@@ -23,7 +23,7 @@ with a `name` (or its FormField's) the value submits in hidden inputs.
 **Keyboard.** Typing opens the list and filters it, the first match active.
 ArrowDown opens it on the chosen option (Alt+ArrowDown without moving),
 ArrowUp on the last; open, the arrows and Page Up and Page Down move,
-skipping disabled options. Enter chooses (and does not submit the form),
+skipping disabled options. Enter chooses (and, while the list is open, never submits the form),
 Escape closes, and a second Escape clears the text and the value;
 Alt+ArrowUp and Tab close. Home and End move the caret. Leaving the field
 puts back the chosen label. With `multiple` the chosen values are tags
@@ -39,9 +39,12 @@ or `'always'` unless an option is the search, at the `bottom` or `top`.
 **Async.** `load(term, { signal })` returns the items for a search: it runs
 when the list opens and, `debounce` ms (200) after typing stops, for each
 new search; the latest answer is shown as given, an older one arriving late
-is dropped, and the signal aborts it. Meanwhile the field shows a spinner,
-the list is `aria-busy` and says "Loading…" in place of an empty list; a
-failure emits `error`. Or filter yourself: bind `v-model:search-term`, set
+is dropped, and the signal aborts it. From the keystroke on the field shows a spinner and
+the list is `aria-busy`, saying "Loading…" in place of an empty list; Enter
+chooses nothing meanwhile, as the options shown are for the search before.
+A failure emits `error`, drops the results (they answered another search),
+and shows "Couldn’t load results" (the `error` slot, given the error) until
+the next load. Or filter yourself: bind `v-model:search-term`, set
 `ignore-filter` and `loading`, and pass the items (Nuxt UI's way).
 
 `trigger="button"` makes it a button (Nuxt UI's SelectMenu) showing the
@@ -50,4 +53,7 @@ choice, whose list has the search field at the top: the button has
 choosing returns focus to the button. `mode="autocomplete"` binds the text
 itself, the list suggesting completions. `clear` adds a clear button while
 there is a value (emits `clear`); `open-on-focus` and `open-on-click` open
-the list sooner. `disabled` blocks typing, the chevron and every key.
+the list sooner. `required` sets `aria-required` (a Form's schema or a
+FormField can too); the field gets no native `required`, which would read
+the search, not the value. `disabled` blocks typing, the chevron and every
+key.

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import ListboxCases from '../fixtures/selection/ListboxCases.vue'
 import { mount } from '../mount.ts'
 import { loadStyles, ruleFor } from '../styles.ts'
@@ -103,6 +103,80 @@ describe('Listbox', () => {
     await settle()
     expect(m.exposed.value).toEqual(['Apple'])
     expect(options().filter((o) => o.getAttribute('aria-selected') === 'true')).toEqual([named('Apple')])
+  })
+
+  describe('range selection with multiple (APG)', () => {
+    it('Shift+Arrow moves and toggles the option reached, skipping disabled ones', async () => {
+      const m = await cases({ multiple: true })
+      list().focus()
+      await settle()
+      key(' ')
+      key('ArrowDown', { shiftKey: true })
+      key('ArrowDown', { shiftKey: true })
+      await settle()
+      expect(m.exposed.value).toEqual(['Apple', 'Banana', 'Cherry'])
+      expect(current()).toBe(named('Cherry'))
+    })
+
+    it('Shift+Space chooses every option from the last one chosen to the active one', async () => {
+      const m = await cases({ multiple: true })
+      list().focus()
+      await settle()
+      key('ArrowDown')
+      key(' ') // Banana: the anchor
+      key('End')
+      key(' ', { shiftKey: true })
+      await settle()
+      expect(m.exposed.value).toEqual(['Banana', 'Cherry', 'Date'])
+    })
+
+    it('Ctrl+A (or Cmd+A) chooses every option, and again none', async () => {
+      const m = await cases({ multiple: true })
+      list().focus()
+      await settle()
+      expect(key('a', { ctrlKey: true }).defaultPrevented).toBe(true)
+      await settle()
+      expect(m.exposed.value).toEqual(['Apple', 'Banana', 'Cherry', 'Date'])
+      key('a', { metaKey: true })
+      await settle()
+      expect(m.exposed.value).toEqual([])
+    })
+
+    it('Shift+press chooses a range, Ctrl+press toggles one', async () => {
+      const m = await cases({ multiple: true })
+      named('Apple').click()
+      named('Date').dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }))
+      await settle()
+      expect(m.exposed.value).toEqual(['Apple', 'Banana', 'Cherry', 'Date'])
+      named('Banana').dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }))
+      await settle()
+      expect(m.exposed.value).toEqual(['Apple', 'Cherry', 'Date'])
+    })
+
+    it('with selection-behavior="replace" the selection follows the arrows; Shift extends it, Ctrl+Space toggles', async () => {
+      const m = await cases({ multiple: true, selectionBehavior: 'replace' })
+      list().focus()
+      await settle()
+      key(' ')
+      key('ArrowDown')
+      await settle()
+      expect(m.exposed.value).toEqual(['Banana'])
+      key('ArrowDown', { shiftKey: true })
+      key('ArrowDown', { shiftKey: true })
+      await settle()
+      expect(m.exposed.value).toEqual(['Banana', 'Cherry', 'Date'])
+      // Ctrl+Arrow moves without choosing; Ctrl+Space toggles.
+      for (let i = 0; i < 3; i++) key('ArrowUp', { ctrlKey: true })
+      await settle()
+      expect(current()).toBe(named('Apple'))
+      expect(m.exposed.value).toEqual(['Banana', 'Cherry', 'Date'])
+      key(' ', { ctrlKey: true })
+      await settle()
+      expect(m.exposed.value).toEqual(['Banana', 'Cherry', 'Date', 'Apple'])
+      named('Cherry').click()
+      await settle()
+      expect(m.exposed.value).toEqual(['Cherry'])
+    })
   })
 
   it('draws groups labelled by their headings, and separators hidden from assistive technology', async () => {
@@ -251,6 +325,44 @@ describe('Listbox', () => {
       for (const ch of 'item 9') key(ch) // the typeahead finds an option that was not rendered
       await settle()
       expect(current()!.textContent!.trim()).toBe('Item 9')
+    })
+
+    it('counts aria-posinset and aria-setsize within each group', async () => {
+      const half = (name: string) => [{ type: 'label', label: name }, ...Array.from({ length: 150 }, (_, i) => `${name} ${i + 1}`)]
+      await cases({ items: [half('A'), half('B')] })
+      expect(list().dataset.virtual).toBe('true')
+      expect(options()[0]!.getAttribute('aria-setsize')).toBe('150')
+      list().focus()
+      await settle()
+      key('End')
+      await settle()
+      expect(current()!.textContent!.trim()).toBe('B 150')
+      expect(current()!.getAttribute('aria-posinset')).toBe('150')
+      expect(current()!.getAttribute('aria-setsize')).toBe('150')
+      // Its group is drawn with its heading, which names it.
+      const group = current()!.closest('[role="group"]')!
+      expect(document.getElementById(group.getAttribute('aria-labelledby')!)!.textContent).toBe('B')
+    })
+
+    it('starts from estimate-size, then takes the height its rows measure, so a taller row never overlaps the next', async () => {
+      await cases({ items: many.slice(0, 300), virtualize: { estimateSize: 50 } })
+      const spacer = () => $('.weft-listbox__spacer')
+      expect(spacer().style.blockSize).toBe('15000px')
+      unmount!()
+      reset()
+      const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+        const h = this.classList.contains('weft-listbox__option') ? 60 : 0
+        return { height: h, width: 100, top: 0, bottom: h, left: 0, right: 100, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
+      })
+      try {
+        await cases({ items: many.slice(0, 300) })
+        await settle()
+        expect(list().style.getPropertyValue('--weft-listbox-row')).toBe('60px')
+        expect(spacer().style.blockSize).toBe('18000px')
+        expect(options()[1]!.style.top).toBe('60px')
+      } finally {
+        rect.mockRestore()
+      }
     })
 
     it('renders every option up to 200', async () => {

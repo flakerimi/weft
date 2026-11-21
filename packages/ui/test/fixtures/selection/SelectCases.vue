@@ -6,7 +6,7 @@ import WeftProvider from '../../../src/adaptive/WeftProvider.vue'
 import type { Input } from '../../../src/adaptive/detect.ts'
 import type { SelectItems } from '../../../src/selection/items.ts'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   input?: Input
   dir?: 'ltr' | 'rtl'
   items?: SelectItems
@@ -14,7 +14,8 @@ const props = defineProps<{
   disabled?: boolean
   loading?: boolean
   initial?: unknown
-}>()
+  searchInput?: boolean
+}>(), { searchInput: true, initial: undefined })
 const input = ref<Input | undefined>(props.input)
 const fruit: SelectItems = [
   { label: 'Apple', value: 'apple' },
@@ -46,6 +47,7 @@ defineExpose({ input, value, open, submitted })
             :multiple="multiple"
             :disabled="disabled"
             :loading="loading"
+            :search-input="searchInput"
             placeholder="Pick a fruit"
           />
         </FormField>

@@ -25,7 +25,7 @@ import Popover from '../overlays/Popover.vue'
 import { formValue, itemOf, labelOfValue, sameValue, type By, type SelectItem, type SelectItems } from './items.ts'
 import { listProps, provideListbox, useListbox, type CreateItem } from './listbox.ts'
 import Listbox from './Listbox.vue'
-import { labelText, usePopup, whenFocusLeaves } from './popup.ts'
+import { labelText, searchField, usePopup, whenFocusLeaves } from './popup.ts'
 import type { Size } from '../types.ts'
 import '../styles/base.css'
 import '../styles/input.css'
@@ -97,6 +97,8 @@ const props = withDefaults(
     selectedIcon?: string
     /** Cannot be opened or changed. */
     disabled?: boolean
+    /** A value is required: aria-required on the field (not the native `required`, which would read the search). */
+    required?: boolean
     /** The form field name its value submits under; a FormField's name applies when not set. */
     name?: string
     /** The field's id; inside a FormField the field's id is used, so its label points here. */
@@ -109,8 +111,8 @@ const props = withDefaults(
     placement?: Placement
     /** The arrows wrap round at the ends. */
     loop?: boolean
-    /** Draw only the rows in view; by default past 200 options. */
-    virtualize?: boolean
+    /** Draw only the rows in view: by default past 200 options; an object sets `estimateSize` (px, the row height to start from) and `overscan`. */
+    virtualize?: boolean | { estimateSize?: number; overscan?: number }
   }>(),
   {
     modelValue: undefined,
@@ -177,12 +179,14 @@ defineSlots<{
   'create-item-label'?: (props: { item: string }) => unknown
   /** Shown when there is no option, or none matches the search. */
   empty?: (props: { searchTerm: string }) => unknown
+  /** Shown in place of the list when `load` failed, with its error: by default "Couldn’t load results". */
+  error?: (props: { error: unknown }) => unknown
 }>()
 
 const f = useField(props)
 const { own, box, describedBy } = useControlAttrs(f)
 // The Input inside is the field's control, but its text is the search.
-shareField(f.field)
+shareField(f.field, { required: () => !!props.required })
 
 const autocomplete = computed(() => props.mode === 'autocomplete')
 const buttonMode = computed(() => props.trigger === 'button')
@@ -205,6 +209,7 @@ const opts = () => ({ valueKey: valueKey(), labelKey: props.labelKey, by: props.
 // Items from `load`: the latest answer, while a newer one is not on its way.
 const loaded = shallowRef<SelectItems>([])
 const pending = ref(false)
+const loadError = shallowRef<unknown>(undefined)
 let controller: AbortController | null = null
 let timer: ReturnType<typeof setTimeout> | undefined
 const items = computed(() => (props.load ? loaded.value : props.items))
@@ -228,6 +233,7 @@ const list = useListbox(
     items: () => items.value,
     ignoreFilter: () => !!props.load || !!props.ignoreFilter,
     loading: () => busy.value,
+    error: () => loadError.value,
     valueKey,
     disabled: () => f.disabled.value,
     size: () => f.size.value,
@@ -241,14 +247,16 @@ const list = useListbox(
       if (labelText(f.field)) return { 'aria-labelledby': f.field!.labelId }
       return { 'aria-label': (own.value['aria-label'] as string | undefined) ?? props.placeholder }
     },
-    onChoose: (choice) => {
+    onChoose: (choice, _event, listChanged) => {
+      let changed = listChanged
       if (choice.kind === 'option' && autocomplete.value) {
+        changed = model.value !== choice.label
         model.value = choice.label
         term.value = choice.label
       }
       typing.value = false
       if (props.resetSearchTermOnSelect && !autocomplete.value) term.value = ''
-      if (choice.kind === 'option') {
+      if (choice.kind === 'option' && changed) {
         emit('change', model.value)
         f.input()
       }
@@ -284,10 +292,12 @@ const focusTrigger = () => (buttonMode.value ? button.value : fieldEl())?.focus(
 
 function runLoad(t: string) {
   if (!props.load) return
+  cancelTimer()
   controller?.abort()
   const mine = new AbortController()
   controller = mine
   pending.value = true
+  loadError.value = undefined
   Promise.resolve()
     .then(() => props.load!(t, { signal: mine.signal }))
     .then(
@@ -300,7 +310,9 @@ function runLoad(t: string) {
         if (controller !== mine) return
         pending.value = false
         if (mine.signal.aborted) return
+        // The results shown were for another search: none are kept.
         loaded.value = []
+        loadError.value = error ?? new Error('load failed')
         emit('error', error)
       },
     )
@@ -309,12 +321,15 @@ const cancelTimer = () => {
   if (timer !== undefined) clearTimeout(timer)
   timer = undefined
 }
-// Load when the list opens, then for each new search, after `debounce` ms.
+// Load when the list opens, then for each new search, after `debounce` ms
+// of quiet; busy from the keystroke on, so the results shown, which are for
+// the search before, cannot be chosen meanwhile.
 watch([open, search], ([on, t], [wasOn]) => {
   cancelTimer()
   if (!on || !props.load) return
-  if (!wasOn || props.debounce <= 0) runLoad(t)
-  else timer = setTimeout(() => runLoad(t), props.debounce)
+  if (!wasOn || props.debounce <= 0) return runLoad(t)
+  pending.value = true
+  timer = setTimeout(() => runLoad(t), props.debounce)
 })
 onScopeDispose(() => {
   cancelTimer()
@@ -361,9 +376,6 @@ function setText(value: string, opening: boolean) {
   if (opening && !open.value && value !== '') show(null)
 }
 const onType = (value: string | number | null) => setText(String(value ?? ''), true)
-function onSearchInput(event: Event) {
-  setText((event.target as HTMLInputElement).value, false)
-}
 
 function removeValue(v: unknown) {
   if (f.disabled.value) return
@@ -413,11 +425,19 @@ function onFieldKeydown(event: KeyboardEvent) {
     event.preventDefault()
     return popup.hide()
   }
-  if (list.keydown(event, { edges: false, typeahead: false, space: false })) event.preventDefault()
+  listKeydown(event)
 }
-function onSearchKeydown(event: KeyboardEvent) {
-  if (list.keydown(event, { edges: false, typeahead: false, space: false })) event.preventDefault()
+/** A key for the open list. Enter never submits the form from it, and chooses nothing while results are on their way. */
+function listKeydown(event: KeyboardEvent) {
+  if (event.key === 'Enter' && busy.value) return event.preventDefault()
+  if (list.keydown(event, { edges: false, typeahead: false, space: false }) || event.key === 'Enter') event.preventDefault()
 }
+const searchAttrs = searchField(list, {
+  value: () => (autocomplete.value ? text.value : term.value),
+  onInput: (value) => setText(value, false),
+  placeholder: () => props.searchPlaceholder,
+  onKeydown: listKeydown,
+})
 function onButtonKeydown(event: KeyboardEvent) {
   if (f.disabled.value || open.value) return
   const k = event.key
@@ -485,7 +505,7 @@ function onPanelDown(event: MouseEvent) {
       :aria-expanded="open ? 'true' : 'false'"
       :aria-describedby="describedBy()"
       :aria-invalid="f.aria.value['aria-invalid']"
-      :aria-required="f.aria.value['aria-required']"
+      :aria-required="required || f.aria.value['aria-required'] ? 'true' : undefined"
       :aria-busy="busy ? 'true' : undefined"
       @click="popup.press()"
       @keydown="onButtonKeydown"
@@ -511,6 +531,7 @@ function onPanelDown(event: MouseEvent) {
       :size="f.size.value"
       :disabled="f.disabled.value"
       :readonly="sheet || undefined"
+      :aria-required="required ? 'true' : undefined"
       :placeholder="multiple && hasValue ? undefined : placeholder"
       :icon="icon"
       :loading="busy"
@@ -584,21 +605,7 @@ function onPanelDown(event: MouseEvent) {
       <template #content>
         <span v-if="searchInPopup" class="weft-input weft-select__search" :data-size="f.size.value">
           <svg class="weft-select__glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
-          <input
-            class="weft-input__field"
-            type="text"
-            role="combobox"
-            autocomplete="off"
-            aria-expanded="true"
-            aria-autocomplete="list"
-            :aria-label="searchPlaceholder ?? 'Search'"
-            :placeholder="searchPlaceholder ?? 'Search…'"
-            :value="autocomplete ? text : term"
-            :aria-controls="listId"
-            :aria-activedescendant="list.activeId.value"
-            @input="onSearchInput"
-            @keydown="onSearchKeydown"
-          />
+          <input v-bind="searchAttrs" />
         </span>
         <Listbox :selected-icon="selectedIcon">
           <template v-if="$slots.item" #item="p"><slot name="item" v-bind="p" /></template>
@@ -607,6 +614,7 @@ function onPanelDown(event: MouseEvent) {
           <template v-if="$slots['item-trailing']" #item-trailing="p"><slot name="item-trailing" v-bind="p" /></template>
           <template v-if="$slots['create-item-label']" #create-item-label="p"><slot name="create-item-label" v-bind="p" /></template>
           <template v-if="$slots.empty" #empty="p"><slot name="empty" v-bind="p" /></template>
+          <template v-if="$slots.error" #error="p"><slot name="error" v-bind="p" /></template>
         </Listbox>
       </template>
     </Popover>

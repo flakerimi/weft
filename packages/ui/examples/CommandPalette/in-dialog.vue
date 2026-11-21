@@ -29,7 +29,7 @@ const groups: CommandGroup[] = [
 ]
 
 function onSelect(item: CommandItem) {
-  last.value = item.label
+  last.value = item.label ?? ''
   open.value = false
 }
 

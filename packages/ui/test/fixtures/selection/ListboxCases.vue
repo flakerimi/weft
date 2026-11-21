@@ -7,7 +7,7 @@ import type { Input } from '../../../src/adaptive/detect.ts'
 import type { SelectItems } from '../../../src/selection/items.ts'
 import type { CreateItem } from '../../../src/selection/listbox.ts'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   input?: Input
   items?: SelectItems
   multiple?: boolean
@@ -17,7 +17,9 @@ const props = defineProps<{
   createItem?: CreateItem
   emptySlot?: boolean
   initial?: unknown
-}>()
+  virtualize?: boolean | { estimateSize?: number; overscan?: number }
+  selectionBehavior?: 'toggle' | 'replace'
+}>(), { virtualize: undefined, initial: undefined })
 const fruit: SelectItems = ['Apple', 'Banana', { label: 'Blueberry', disabled: true }, 'Cherry', 'Date']
 const value = ref<unknown>(props.initial ?? (props.multiple ? [] : undefined))
 const term = ref('')
@@ -38,6 +40,8 @@ defineExpose({ value, term, created })
         :loading="loading"
         :disabled="disabled"
         :create-item="createItem"
+        v-bind="virtualize === undefined ? {} : { virtualize }"
+        :selection-behavior="selectionBehavior"
         @create="(t: string) => created.push(t)"
       />
       <Listbox v-else v-model="value" v-model:search-term="term" :items="items ?? fruit" filter>

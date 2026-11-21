@@ -4,8 +4,9 @@
    the theme's focus ring when focused; inside a Select, Combobox or command
    palette (data-hosted) the popup or the palette draws the box. Options are
    at least --weft-hit-min tall, 48 px on touch. A long list (data-virtual)
-   draws only the rows in view, each exactly --weft-listbox-row tall, over a
-   spacer as tall as the whole list. */
+   draws only the rows in view, each at least --weft-listbox-row tall (the
+   height the list measured its tallest row at, or its estimate) and
+   --weft-hit-min, over a spacer as tall as the whole list. */
 .weft-listbox {
   display: flex;
   flex-direction: column;
@@ -75,9 +76,7 @@
 .weft-listbox__list[data-virtual] .weft-listbox__heading {
   position: absolute;
   inset-inline: 0;
-  block-size: var(--weft-listbox-row, 32px);
-  min-block-size: 0;
-  overflow: hidden;
+  min-block-size: max(var(--weft-listbox-row, 32px), var(--weft-hit-min, 24px));
 }
 .weft-listbox__spacer { inline-size: 1px; pointer-events: none; }
 

@@ -11,11 +11,16 @@
  *   Popover's anchor, so the overlay stack does not take the press as one
  *   outside the list.)
  * - `labelText()`: the text of the field's label, for naming the sheet.
+ * - `searchField(list, opts)`: the attributes and handlers of the search
+ *   field at the top of a list (Select's touch sheet, a Combobox's popup):
+ *   a text input with `role="combobox"` that controls the list and carries
+ *   its active option; the list's keys work from it, Enter choosing.
  * - `whenFocusLeaves(open, listId, trigger, left)`: the list closed while
  *   focus was in it (its search field) and focus did not come back to the
  *   trigger (Tab left the popup): `left()`, so the field hears a blur.
  */
-import { computed, watch, type Ref } from 'vue'
+import { computed, watch, type ComputedRef, type Ref } from 'vue'
+import type { Listbox } from './listbox.ts'
 import { useWeft } from '../adaptive/context.ts'
 import { useControllable } from '../headless/useControllable.ts'
 import type { FieldContext } from '../forms/field.ts'
@@ -65,4 +70,31 @@ export function whenFocusLeaves(open: Readonly<Ref<boolean>>, listId: string, tr
     },
     { flush: 'sync' },
   )
+}
+
+export function searchField(
+  list: Listbox,
+  opts: { value: () => string; onInput: (text: string) => void; placeholder: () => string | undefined; onKeydown?: (event: KeyboardEvent) => void },
+): ComputedRef<Record<string, unknown>> {
+  const keydown =
+    opts.onKeydown ??
+    ((event: KeyboardEvent) => {
+      if (list.keydown(event, { edges: false, typeahead: false, space: false })) event.preventDefault()
+    })
+  const input = (event: Event) => opts.onInput((event.target as HTMLInputElement).value)
+  return computed(() => ({
+    class: 'weft-input__field',
+    type: 'text',
+    role: 'combobox',
+    autocomplete: 'off',
+    'aria-expanded': 'true',
+    'aria-autocomplete': 'list',
+    'aria-label': opts.placeholder() ?? 'Search',
+    placeholder: opts.placeholder() ?? 'Search…',
+    value: opts.value(),
+    'aria-controls': list.id,
+    'aria-activedescendant': list.activeId.value,
+    onInput: input,
+    onKeydown: keydown,
+  }))
 }

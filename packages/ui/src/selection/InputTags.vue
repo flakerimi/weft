@@ -1,7 +1,8 @@
 <script setup vapor lang="ts">
 // A text field that turns what is typed into tags: Enter or the delimiter
-// (a comma) adds the text as a tag, and so can a paste, Tab and leaving the
-// field when asked. The tags are a list before the text, each with a ×.
+// (a comma) adds the text as a tag, and so can Tab and leaving the field
+// when asked; with add-on-paste a paste goes in at the caret and the whole
+// text becomes tags. The tags are a list before the text, each with a ×.
 // Backspace in an empty field, or ArrowLeft at its start (ArrowRight right
 // to left), moves focus onto the last tag; the arrows move between tags and
 // back to the field, and Backspace or Delete takes out the focused tag.
@@ -33,7 +34,7 @@ const props = withDefaults(
     placeholder?: string
     /** Typing this adds the text before it as a tag; a string or a pattern. */
     delimiter?: string | RegExp
-    /** A paste is split at the delimiter into tags. */
+    /** A paste goes in at the caret, and the whole text, split at the delimiter, becomes tags. */
     addOnPaste?: boolean
     /** Tab adds the text as a tag (and stays). */
     addOnTab?: boolean
@@ -57,6 +58,8 @@ const props = withDefaults(
     loading?: boolean
     /** Tags cannot be added or taken out. */
     disabled?: boolean
+    /** At least one tag is required: aria-required on the field (not the native `required`, which would read the draft). */
+    required?: boolean
     /** The form field name its tags submit under; a FormField's name applies when not set. */
     name?: string
     /** The text field's id; inside a FormField the field's id is used. */
@@ -93,7 +96,7 @@ defineSlots<{
 
 const f = useField(props)
 // The Input inside is the field's control, but its text is a draft.
-shareField(f.field)
+shareField(f.field, { required: () => !!props.required })
 const model = useControllable(props, 'modelValue', emit, () => props.defaultValue ?? [])
 const draft = ref('')
 const wrap = useTemplateRef<HTMLElement>('wrap')
@@ -195,13 +198,23 @@ function onTagKeydown(event: KeyboardEvent, i: number) {
     else focusField()
   } else if (k === 'Escape') focusField()
 }
+/**
+ * With add-on-paste: the paste goes in at the caret (in place of what is
+ * selected), then the whole text is split at the delimiter and every piece
+ * becomes a tag; a refused piece stays in the field.
+ */
 function onPaste(event: ClipboardEvent) {
   if (!props.addOnPaste || f.disabled.value) return
-  const text = event.clipboardData?.getData('text') ?? ''
-  const pieces = parts(text).filter((p) => p.trim())
-  if (pieces.length <= 1 && !draft.value) return
+  const pasted = event.clipboardData?.getData('text') ?? ''
+  if (!pasted) return
   event.preventDefault()
-  for (const p of pieces) add(p)
+  const el = event.target as HTMLInputElement
+  const at = el.selectionStart ?? draft.value.length
+  const to = el.selectionEnd ?? at
+  const text = draft.value.slice(0, at) + pasted + draft.value.slice(to)
+  const refused = parts(text).filter((p) => p.trim() && !add(p))
+  draft.value = refused.map((p) => p.trim()).join(typeof props.delimiter === 'string' ? props.delimiter : ',')
+  showDraft()
 }
 function onRemove(i: number) {
   removeAt(i)
@@ -236,6 +249,7 @@ function onTagBlur(event: FocusEvent) {
     :placeholder="placeholder"
     :loading="loading"
     :maxlength="maxLength"
+    :aria-required="required ? 'true' : undefined"
     @update:model-value="onDraft"
     @keydown="onKeydown"
     @paste="onPaste"

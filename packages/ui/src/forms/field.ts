@@ -83,10 +83,19 @@ export const hideField = () => provide(fieldKey, null as unknown as FieldContext
  * takes the field's id, description and error, as the control's focusable
  * element, but no name (the control submits its value itself) and reports
  * no blur or change (the control reports them, when its value changes and
- * when focus leaves the whole control).
+ * when focus leaves the whole control). `own.required` marks it required
+ * (aria-required) besides the field's own rule.
  */
-export function shareField(field: FieldContext | null): void {
-  if (field) provideField({ ...field, name: () => undefined, blur() {}, input() {}, namedByLabel() {} })
+export function shareField(field: FieldContext | null, own: { required?: () => boolean } = {}): void {
+  if (!field) return
+  provideField({
+    ...field,
+    name: () => undefined,
+    required: () => field.required() || !!own.required?.(),
+    blur() {},
+    input() {},
+    namedByLabel() {},
+  })
 }
 
 /** What a control's own props say, which win over what its field and group say. */

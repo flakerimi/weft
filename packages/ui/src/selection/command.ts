@@ -2,7 +2,8 @@
  * The commands of a CommandPalette, and how a search finds them.
  *
  * - A command has a `label` and may have an `id` (what recent commands are
- *   kept by; the label otherwise), `icon`, `prefix` and `suffix` (drawn
+ *   kept by; the label otherwise; CommandPalette's `label-key`,
+ *   `description-key` and `value-key` read other keys), `icon`, `prefix` and `suffix` (drawn
  *   before and after the label), `description`, `keywords` (searched, not
  *   shown), `kbds` (its shortcut, shown with Kbd), `disabled`, `loading`,
  *   `to` and `target` (a link it follows), `children` (a page of commands it
@@ -20,10 +21,25 @@
  * in order, unlimited.
  */
 import { fuzzyMatch } from './fuzzy.ts'
+import { get } from './items.ts'
+
+/** Where a command's label, description and key are read (CommandPalette's `label-key`, `description-key`, `value-key`). */
+export interface CommandKeys {
+  labelKey: string
+  descriptionKey: string
+  valueKey?: string
+}
+export const DEFAULT_KEYS: CommandKeys = { labelKey: 'label', descriptionKey: 'description' }
+
+const text = (v: unknown) => (v == null ? '' : String(v))
+/** A command's label, read at `labelKey`. */
+export const labelOfCommand = (item: CommandItem, keys: CommandKeys = DEFAULT_KEYS) => text(get(item, keys.labelKey))
+/** A command's description, read at `descriptionKey`. */
+export const descriptionOfCommand = (item: CommandItem, keys: CommandKeys = DEFAULT_KEYS) => text(get(item, keys.descriptionKey)) || undefined
 
 export interface CommandItem {
   id?: string
-  label: string
+  label?: string
   prefix?: string
   suffix?: string
   description?: string
@@ -55,10 +71,10 @@ export interface Found {
 }
 
 /** How well `item` matches `term`, and where its label did; null when it does not. */
-function scoreOf(item: CommandItem, term: string): { score: number; ranges: [number, number][] } | null {
-  const label = fuzzyMatch(item.label, term)
+function scoreOf(item: CommandItem, term: string, keys: CommandKeys): { score: number; ranges: [number, number][] } | null {
+  const label = fuzzyMatch(labelOfCommand(item, keys), term)
   let best = label ? { score: label.score, ranges: label.ranges } : null
-  for (const other of [item.description, item.suffix, ...(item.keywords ?? [])]) {
+  for (const other of [descriptionOfCommand(item, keys), item.suffix, ...(item.keywords ?? [])]) {
     if (!other) continue
     const m = fuzzyMatch(other, term)
     if (m && (!best || m.score / 2 > best.score)) best = { score: m.score / 2, ranges: label?.ranges ?? [] }
@@ -66,7 +82,12 @@ function scoreOf(item: CommandItem, term: string): { score: number; ranges: [num
   return best
 }
 
-export function searchGroups(groups: CommandGroup[], term: string, opts: { limit: number; preserveGroupOrder: boolean }): Found {
+export function searchGroups(
+  groups: CommandGroup[],
+  term: string,
+  opts: { limit: number; preserveGroupOrder: boolean; keys?: CommandKeys },
+): Found {
+  const keys = opts.keys ?? DEFAULT_KEYS
   const marks = new Map<CommandItem, [number, number][]>()
   const t = term.trim()
   type Result = { group: CommandGroup; items: CommandItem[]; best: number; at: number }
@@ -80,7 +101,7 @@ export function searchGroups(groups: CommandGroup[], term: string, opts: { limit
     else {
       const scored: { item: CommandItem; score: number }[] = []
       for (const item of all) {
-        const s = scoreOf(item, t)
+        const s = scoreOf(item, t, keys)
         if (!s) continue
         scored.push({ item, score: s.score })
         if (s.ranges.length) marks.set(item, s.ranges)
@@ -109,15 +130,17 @@ export function searchGroups(groups: CommandGroup[], term: string, opts: { limit
   return { groups: out.map(({ group, items }) => ({ group, items })), marks }
 }
 
-/** What a recent command is kept by. */
-export const keyOf = (item: CommandItem) => item.id ?? item.label
+/** What a recent command is kept by: its key at `valueKey`, else its `id`, else its label. */
+export const keyOf = (item: CommandItem, keys: CommandKeys = DEFAULT_KEYS) =>
+  text(keys.valueKey ? get(item, keys.valueKey) : undefined) || item.id || labelOfCommand(item, keys)
 
 /** Every command in `groups`, children included, by its key. */
-export function commandsByKey(groups: CommandGroup[]): Map<string, CommandItem> {
+export function commandsByKey(groups: CommandGroup[], keys: CommandKeys = DEFAULT_KEYS): Map<string, CommandItem> {
   const out = new Map<string, CommandItem>()
   const walk = (items: CommandItem[] | undefined) => {
     for (const item of items ?? []) {
-      if (!out.has(keyOf(item))) out.set(keyOf(item), item)
+      const k = keyOf(item, keys)
+      if (!out.has(k)) out.set(k, item)
       walk(item.children)
     }
   }

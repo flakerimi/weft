@@ -23,7 +23,7 @@ import type { Placement } from '../headless/useFloating.ts'
 import { formValue, itemOf, labelOfValue, type By, type SelectItem, type SelectItems } from './items.ts'
 import { listProps, provideListbox, useListbox } from './listbox.ts'
 import Listbox from './Listbox.vue'
-import { labelText, usePopup, whenFocusLeaves } from './popup.ts'
+import { labelText, searchField, usePopup, whenFocusLeaves } from './popup.ts'
 import type { Size } from '../types.ts'
 import '../styles/base.css'
 import '../styles/input.css'
@@ -53,6 +53,8 @@ const props = withDefaults(
     placeholder?: string
     /** The search field's placeholder, in the touch sheet. */
     searchPlaceholder?: string
+    /** A search field at the top of the touch sheet; false leaves it out, and the list itself takes focus. */
+    searchInput?: boolean
     /** `sm`, `md` or `lg`; a FieldGroup's or FormField's size applies when not set. md is 44 px tall on touch. */
     size?: Size
     /** A Lucide icon before the value. The leading slot replaces it. */
@@ -79,8 +81,8 @@ const props = withDefaults(
     placement?: Placement
     /** The arrows wrap round at the ends. */
     loop?: boolean
-    /** Draw only the rows in view; by default past 200 options. */
-    virtualize?: boolean
+    /** Draw only the rows in view: by default past 200 options; an object sets `estimateSize` (px, the row height to start from) and `overscan`. */
+    virtualize?: boolean | { estimateSize?: number; overscan?: number }
   }>(),
   {
     modelValue: undefined,
@@ -92,6 +94,7 @@ const props = withDefaults(
     defaultOpen: false,
     placement: 'bottom-start',
     virtualize: undefined,
+    searchInput: true,
   },
 )
 
@@ -146,13 +149,17 @@ const list = useListbox(
     id: listId,
     search: () => (sheet.value ? search.value : ''),
     touch: () => sheet.value,
+    // A sheet with no search field: the list takes focus itself.
+    ownsFocus: () => sheet.value && !props.searchInput,
     label: () => {
       if (labelText(f.field)) return { 'aria-labelledby': f.field!.labelId }
       return { 'aria-label': (own.value['aria-label'] as string | undefined) ?? props.placeholder }
     },
-    onChoose: () => {
-      emit('change', model.value)
-      f.input()
+    onChoose: (_c, _event, changed) => {
+      if (changed) {
+        emit('change', model.value)
+        f.input()
+      }
       if (!props.multiple) popup.hide()
     },
   },
@@ -229,12 +236,11 @@ function onKeydown(event: KeyboardEvent) {
   }
   if (list.keydown(event, { edges: true, typeahead: true, space: true })) event.preventDefault()
 }
-function onSearchKeydown(event: KeyboardEvent) {
-  if (list.keydown(event, { edges: false, typeahead: false, space: false })) event.preventDefault()
-}
-function onSearchInput(event: Event) {
-  search.value = (event.target as HTMLInputElement).value
-}
+const searchAttrs = searchField(list, {
+  value: () => search.value,
+  onInput: (text) => (search.value = text),
+  placeholder: () => props.searchPlaceholder,
+})
 /** Focus leaving the button for somewhere other than its list. */
 function onBlur(event: FocusEvent) {
   const to = event.relatedTarget as Node | null
@@ -308,23 +314,9 @@ function onPanelDown(event: MouseEvent) {
       @update:open="onOpenChange"
     >
       <template #content>
-        <span v-if="sheet" class="weft-input weft-select__search" :data-size="f.size.value">
+        <span v-if="sheet && searchInput" class="weft-input weft-select__search" :data-size="f.size.value">
           <svg class="weft-select__glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
-          <input
-            class="weft-input__field"
-            type="text"
-            role="combobox"
-            autocomplete="off"
-            aria-expanded="true"
-            aria-autocomplete="list"
-            :aria-label="searchPlaceholder ?? 'Search'"
-            :placeholder="searchPlaceholder ?? 'Search…'"
-            :value="search"
-            :aria-controls="listId"
-            :aria-activedescendant="list.activeId.value"
-            @input="onSearchInput"
-            @keydown="onSearchKeydown"
-          />
+          <input v-bind="searchAttrs" />
         </span>
         <Listbox :selected-icon="selectedIcon">
           <template v-if="$slots.item" #item="p"><slot name="item" v-bind="p" /></template>

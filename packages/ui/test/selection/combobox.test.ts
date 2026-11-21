@@ -1,6 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import ComboboxCases from '../fixtures/selection/ComboboxCases.vue'
 import FieldSpy from '../fixtures/selection/FieldSpy.vue'
+import Combobox from '../../src/selection/Combobox.vue'
+import InputTags from '../../src/selection/InputTags.vue'
 import { mount } from '../mount.ts'
 import { type } from '../forms/helpers.ts'
 import { press as pressKey } from '../keyboard.ts'
@@ -18,7 +20,7 @@ async function cases(props: Record<string, unknown> = {}) {
   await settle()
   return m
 }
-type Exposed = { value: unknown; open: boolean; term: string; log: string[]; submitted: number; input: string; calls: { term: string; signal: AbortSignal; resolve: (items: unknown[]) => void }[] }
+type Exposed = { value: unknown; open: boolean; term: string; log: string[]; submitted: number; input: string; calls: { term: string; signal: AbortSignal; resolve: (items: unknown[]) => void; reject: (error: unknown) => void }[] }
 const field = () => $<HTMLInputElement>('.weft-combobox input:not([type="hidden"])')
 const list = () => $('[role="listbox"]', overlays() ?? document)
 const options = () => $$('[role="option"]', overlays() ?? document)
@@ -122,6 +124,18 @@ describe('Combobox', () => {
     await settle()
     expect((m.exposed as unknown as Exposed).value).toBe(3)
     expect(active()).toBe(field())
+  })
+
+  it('does not submit the form on Enter while the list is open with no option active', async () => {
+    const m = await cases()
+    field().focus()
+    key('ArrowDown', { altKey: true }) // opens without an active option
+    await settle()
+    expect((m.exposed as unknown as Exposed).open).toBe(true)
+    expect(field().hasAttribute('aria-activedescendant')).toBe(false)
+    pressKey(field(), 'Enter')
+    await settle()
+    expect((m.exposed as unknown as Exposed).submitted).toBe(0)
   })
 
   it('stays open on a press in the field, which is not outside the list', async () => {
@@ -254,6 +268,74 @@ describe('Combobox', () => {
       expect(e.value).toBe(11)
       expect(field().value).toBe('Lime')
     })
+
+    it('says it could not load when load fails, keeping no stale results and no busy state, until the next load', async () => {
+      const m = await cases({ async: true })
+      const e = m.exposed as unknown as Exposed
+      field().focus()
+      key('ArrowDown')
+      await settle()
+      e.calls[0]!.resolve([{ label: 'Lemon', id: 10 }])
+      await settle()
+      expect(labels()).toEqual(['Lemon'])
+      await typeIn('le')
+      e.calls[1]!.reject(new Error('boom'))
+      await settle()
+      expect(e.log).toEqual(['error:boom'])
+      expect(options()).toHaveLength(0) // Lemon was the answer to another search
+      expect($('[role="status"]', overlays()!).textContent!.trim()).toBe('Couldn’t load results')
+      expect(list().hasAttribute('aria-busy')).toBe(false)
+      expect(field().hasAttribute('aria-busy')).toBe(false)
+      await typeIn('lem')
+      expect($('[role="status"]', overlays()!).textContent!.trim()).toBe('Loading…')
+      e.calls[2]!.resolve([{ label: 'Lemon', id: 10 }])
+      await settle()
+      expect(labels()).toEqual(['Lemon'])
+      expect($('[role="status"]', overlays()!).textContent!.trim()).toBe('')
+    })
+
+    it('shows the error slot with the error', async () => {
+      const m = await cases({ async: true, errorSlot: true })
+      const e = m.exposed as unknown as Exposed
+      field().focus()
+      key('ArrowDown')
+      await settle()
+      e.calls[0]!.reject(new Error('offline'))
+      await settle()
+      expect($('.failed', overlays()!).textContent).toBe('Sorry: offline')
+    })
+
+    it('waits `debounce` ms after typing before it loads, but loads at once when the list opens; busy at once, so Enter cannot choose a stale option', async () => {
+      vi.useFakeTimers()
+      try {
+        const m = await (async () => {
+          const r = mount(ComboboxCases, { async: true, debounce: 300 })
+          unmount = r.unmount
+          await vi.advanceTimersByTimeAsync(0)
+          return r
+        })()
+        const e = m.exposed as unknown as Exposed
+        field().focus()
+        key('ArrowDown')
+        await vi.advanceTimersByTimeAsync(0)
+        expect(e.calls.map((c) => c.term)).toEqual([''])
+        e.calls[0]!.resolve([{ label: 'Lemon', id: 10 }, { label: 'Lime', id: 11 }])
+        await vi.advanceTimersByTimeAsync(0)
+        expect(labels()).toEqual(['Lemon', 'Lime'])
+        type(field(), 'lim')
+        await vi.advanceTimersByTimeAsync(299)
+        expect(e.calls.map((c) => c.term)).toEqual([''])
+        expect(list().getAttribute('aria-busy')).toBe('true')
+        const enter = key('Enter')
+        await vi.advanceTimersByTimeAsync(0)
+        expect(enter.defaultPrevented).toBe(true)
+        expect(e.value).toBeUndefined()
+        await vi.advanceTimersByTimeAsync(1)
+        expect(e.calls.map((c) => c.term)).toEqual(['', 'lim'])
+      } finally {
+        vi.useRealTimers()
+      }
+    })
   })
 
   describe('as a button (Nuxt SelectMenu)', () => {
@@ -323,6 +405,16 @@ describe('Combobox', () => {
       expect(field().value).toBe('Banana')
       expect(options().length).toBe(0)
     })
+  })
+
+  it('takes required as aria-required on its field, never the native required that would block a chosen value', async () => {
+    for (const component of [Combobox, InputTags]) {
+      const m = mount(component, { required: true })
+      const input = m.el.querySelector<HTMLInputElement>('input.weft-input__field')!
+      expect(input.getAttribute('aria-required')).toBe('true')
+      expect(input.required).toBe(false)
+      m.unmount()
+    }
   })
 
   it('does not open while disabled', async () => {

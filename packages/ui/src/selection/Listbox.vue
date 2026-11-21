@@ -7,7 +7,7 @@
 // options are skipped. Past 200 options only the rows in view are drawn.
 // Select, Combobox and CommandPalette draw their lists with it: they own the
 // list's state (useListbox) and this draws theirs.
-import { computed, useTemplateRef, watch } from 'vue'
+import { computed, onMounted, useTemplateRef, watch } from 'vue'
 import { useWeft } from '../adaptive/context.ts'
 import Icon from '../basics/Icon.vue'
 import Spinner from '../basics/Spinner.vue'
@@ -61,8 +61,10 @@ const props = withDefaults(
     size?: Size
     /** The arrows wrap round at the ends. */
     loop?: boolean
-    /** Draw only the rows in view; by default past 200 options. */
-    virtualize?: boolean
+    /** Draw only the rows in view: by default past 200 options; an object sets `estimateSize` (px, the row height to start from; rows then grow to the tallest measured) and `overscan`. */
+    virtualize?: boolean | { estimateSize?: number; overscan?: number }
+    /** With multiple: `toggle`, choosing toggles; `replace`, the choice follows the arrows and a press (Ctrl toggles, Shift extends). */
+    selectionBehavior?: 'toggle' | 'replace'
     /** A Lucide icon marking chosen options, in place of the drawn check. */
     selectedIcon?: string
     /** The list's id; inside a FormField the field's id is used. */
@@ -79,6 +81,7 @@ const props = withDefaults(
     labelKey: 'label',
     descriptionKey: 'description',
     virtualize: undefined,
+    selectionBehavior: 'toggle',
   },
 )
 
@@ -106,6 +109,8 @@ defineSlots<{
   'create-item-label'?: (props: { item: string }) => unknown
   /** Shown when no option is (or matches): by default "No results". */
   empty?: (props: { searchTerm: string }) => unknown
+  /** Shown in place of the list when its items failed to load (a Combobox's `load`): by default "Couldn’t load results". */
+  error?: (props: { error: unknown }) => unknown
 }>()
 
 const host = injectListbox()
@@ -142,7 +147,9 @@ watch(listEl, (el) => (list.scroller.value = el ?? null), { immediate: true, flu
 const disabled = computed(() => (host ? !!list.props.disabled : f.disabled.value))
 const virtual = computed(() => list.virtual.virtual.value)
 /** The element that has focus and so carries aria-activedescendant, when this list owns it. */
-const focusesList = computed(() => !host && !props.filter)
+const focusesList = computed(() => (host ? list.ownsFocus() : !props.filter))
+/** The attributes and description of a list that is its own control (not its owner's list). */
+const ownControl = computed(() => focusesList.value && !host)
 /** The rows drawn now: those in view, when virtual, and in each group drawn its heading, which labels it. */
 const shown = computed(() => new Set(virtual.value ? list.virtual.indices.value : []))
 const rowsOf = (g: RowGroup) => {
@@ -153,7 +160,8 @@ const rowsOf = (g: RowGroup) => {
   return rows
 }
 const empty = computed(() => list.options.value.length === 0)
-const busy = computed(() => !!list.props.loading)
+const failed = computed(() => list.props.error !== undefined && list.props.error !== null)
+const busy = computed(() => !!list.props.loading && !failed.value)
 const values = computed(() => {
   if (host || !f.name.value) return []
   const v = model.value
@@ -168,7 +176,7 @@ const focusOwner = () => (props.filter ? filterEl.value : listEl.value)
 
 function onKeydown(event: KeyboardEvent) {
   if (disabled.value) return
-  if (list.keydown(event, { edges: true, typeahead: true, space: true })) event.preventDefault()
+  if (list.keydown(event, { edges: true, typeahead: true, space: true, range: true })) event.preventDefault()
 }
 function onFilterKeydown(event: KeyboardEvent) {
   if (disabled.value) return
@@ -199,8 +207,22 @@ function onClick(event: MouseEvent) {
   const o = optionOf(event)
   if (!o || disabled.value) return
   if (list.activeId.value !== o.id) list.highlight(o.index, { scroll: false })
-  list.choose(o, event)
+  list.press(o, event)
 }
+
+// Long lists: rows start at an estimated height and grow to the tallest one
+// drawn (a larger font, a taller item slot), so none overlaps the next.
+function measure() {
+  const el = listEl.value
+  if (!virtual.value || !el) return
+  let tallest = 0
+  for (const row of el.querySelectorAll<HTMLElement>('.weft-listbox__option, .weft-listbox__heading')) {
+    tallest = Math.max(tallest, row.getBoundingClientRect().height)
+  }
+  list.measure(tallest)
+}
+watch(() => [virtual.value && shown.value, list.rowHeight.value], measure, { flush: 'post' })
+onMounted(measure)
 
 const isOption = (r: Row): r is Choice => r.kind === 'option' || r.kind === 'create'
 const selected = (r: Row) => isOption(r) && list.isSelected(r)
@@ -251,7 +273,7 @@ defineExpose({
       ref="listEl"
       class="weft-listbox__list"
       role="listbox"
-      v-bind="focusesList ? own : undefined"
+      v-bind="ownControl ? own : undefined"
       :id="list.id"
       :tabindex="focusesList ? (disabled ? -1 : 0) : undefined"
       :aria-activedescendant="focusesList ? list.activeId.value : undefined"
@@ -260,14 +282,14 @@ defineExpose({
       :aria-multiselectable="list.props.multiple ? 'true' : undefined"
       :aria-busy="busy ? 'true' : undefined"
       :aria-disabled="disabled ? 'true' : undefined"
-      :aria-describedby="focusesList ? describedBy() : undefined"
-      :aria-invalid="focusesList ? f.aria.value['aria-invalid'] : undefined"
-      :aria-required="focusesList && (required || f.aria.value['aria-required']) ? 'true' : undefined"
+      :aria-describedby="ownControl ? describedBy() : undefined"
+      :aria-invalid="ownControl ? f.aria.value['aria-invalid'] : undefined"
+      :aria-required="ownControl && (required || f.aria.value['aria-required']) ? 'true' : undefined"
       :data-virtual="virtual ? 'true' : undefined"
       :style="virtual ? { '--weft-listbox-row': `${list.rowHeight.value}px` } : undefined"
       @keydown="focusesList && onKeydown($event)"
       @focus="focusesList && onFocus()"
-      @blur="focusesList && onBlur($event)"
+      @blur="ownControl && onBlur($event)"
       @mousedown="onMousedown"
       @pointermove="onPointermove"
       @click="onClick"
@@ -292,8 +314,8 @@ defineExpose({
               :data-index="r.row"
               :aria-selected="selected(r) ? 'true' : 'false'"
               :aria-disabled="r.disabled ? 'true' : undefined"
-              :aria-setsize="virtual ? list.options.value.length : undefined"
-              :aria-posinset="virtual ? r.index + 1 : undefined"
+              :aria-setsize="virtual ? r.setSize : undefined"
+              :aria-posinset="virtual ? r.posInSet : undefined"
               :data-active="list.activeId.value === r.id ? 'true' : undefined"
               :style="rowStyle(r)"
             >
@@ -323,7 +345,10 @@ defineExpose({
       </template>
     </div>
     <div class="weft-listbox__status" role="status">
-      <template v-if="empty">
+      <template v-if="failed">
+        <slot name="error" :error="list.props.error">Couldn’t load results</slot>
+      </template>
+      <template v-else-if="empty">
         <template v-if="busy"><Spinner /> <span>Loading…</span></template>
         <slot v-else name="empty" :search-term="list.search()">No results</slot>
       </template>

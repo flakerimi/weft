@@ -4,7 +4,7 @@ purpose: A search field over grouped commands, found by fuzzy matching and run f
 use: For a Cmd+K launcher in a Dialog, or a search-first menu of everything an app can do or go to.
 avoid: For a value in a form, use Combobox; for a handful of actions on one thing, DropdownMenu.
 adapts:
-  input: Commands are at least --weft-hit-min tall, so 44 px on touch; inside a Dialog it is full-screen when narrow, as the Dialog is.
+  input: Commands are at least --weft-hit-min tall on pointer and 48 px on touch, with larger text, in long lists too; inside a Dialog it is full-screen when narrow, as the Dialog is.
   surface: Nothing changes in behaviour; text follows the surface's type scale.
   width: It fills its container (a Dialog's body); the list scrolls past 24rem, or 60% of the viewport's height.
 ---
@@ -42,5 +42,9 @@ returns to its opener; close the Dialog on `select`. `close` adds a close
 button to the field, emitting `update:open` with false. The example
 `in-dialog` opens one with Cmd+K or Ctrl+K.
 
-The slots `item-label` and `item-trailing` replace or add to a command's
-parts, and `footer` goes under the list.
+`label-key` and `description-key` read a command's label and description
+at other keys, and `value-key` the key recent commands are kept by (by
+default `id`, else the label). Attributes go to the root, except
+`aria-label` and `aria-labelledby`, which name the search field. The slots
+`item-label` and `item-trailing` replace or add to a command's parts, and
+`footer` goes under the list.

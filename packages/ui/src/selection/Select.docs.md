@@ -34,7 +34,9 @@ sheet's search field, and back on the button when it closes).
 A press on the button toggles the list; a press outside closes it, and so
 does focus leaving. `disabled` blocks the press and every key (the button is
 natively disabled); `loading` draws a spinner in place of the chevron and
-sets `aria-busy`. With a `name` (or its FormField's) the value submits in
+sets `aria-busy`. `search-input="false"` leaves the touch sheet's search
+field out; the list then takes focus itself. Choosing the value already
+chosen emits no `change`. With a `name` (or its FormField's) the value submits in
 hidden inputs. Past 200 options only the rows in view are drawn, the active
 one always. The `default` slot draws the value on the button, `leading`
 and `trailing` its ends, and `item`, `item-leading`, `item-label`,

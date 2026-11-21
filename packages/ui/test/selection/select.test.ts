@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import SelectCases from '../fixtures/selection/SelectCases.vue'
 import SelectInDialog from '../fixtures/selection/SelectInDialog.vue'
+import FieldSpy from '../fixtures/selection/FieldSpy.vue'
 import { mount } from '../mount.ts'
-import { loadStyles } from '../styles.ts'
+import { loadStyles, ruleFor } from '../styles.ts'
 import { px, type } from '../forms/helpers.ts'
 import { press as pressKey } from '../keyboard.ts'
 import { $, $$, active, key, locked, overlays, press, reset, settle } from '../overlays/helpers.ts'
@@ -95,6 +96,20 @@ describe('Select', () => {
     expect(active()).toBe(trigger())
     expect($('.weft-select__value', trigger()).textContent!.trim()).toBe('Cherry')
     expect(trigger().hasAttribute('aria-activedescendant')).toBe(false)
+  })
+
+  it('reports no change when the chosen value is chosen again', async () => {
+    const m = mount(FieldSpy, { control: 'select' })
+    unmount = m.unmount
+    await settle()
+    const spy = m.exposed as unknown as { inputs: number; changes: number }
+    for (let i = 0; i < 2; i++) {
+      await openWith()
+      key('Enter') // One, the first, then the chosen one
+      await settle()
+    }
+    expect(spy.changes).toBe(1)
+    expect(spy.inputs).toBe(1)
   })
 
   it('chooses with a press on an option and with Space', async () => {
@@ -211,6 +226,18 @@ describe('Select', () => {
     expect(m.exposed.value).toBe(9_999)
   })
 
+  it('shows the focus ring on the button and marks the active option', async () => {
+    const unstyle = loadStyles()
+    try {
+      await cases()
+      const ring = ruleFor('.weft-input.weft-select__trigger:focus-visible')!.style
+      expect(ring.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+      expect(ruleFor('.weft-listbox__option[data-active]')).toBeDefined()
+    } finally {
+      unstyle()
+    }
+  })
+
   it('mirrors its placement right to left: the list opens in the layer of a right-to-left page', async () => {
     await cases({ dir: 'rtl' })
     await openWith()
@@ -290,6 +317,22 @@ describe('Select', () => {
       } finally {
         unstyle()
       }
+    })
+
+    it('with search-input false opens the sheet with no search field, focus on the list itself', async () => {
+      const m = await cases({ input: 'touch', searchInput: false })
+      trigger().focus()
+      trigger().click()
+      await settle()
+      expect($('.weft-select__search')).toBeNull()
+      expect(active()).toBe(list())
+      expect(list().tabIndex).toBe(0)
+      expect(current(list())).toBe(named('Apple'))
+      key('ArrowDown')
+      key('Enter')
+      await settle()
+      expect(m.exposed.value).toBe('banana')
+      expect(active()).toBe(trigger())
     })
 
     it('keeps its state when the input switches to pointer while open, focus back on the button', async () => {

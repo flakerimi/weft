@@ -10,10 +10,12 @@ adapts:
 ---
 Bind the tags with `v-model` (an array). Enter adds the typed text, trimmed,
 as a tag (and does not submit the form; Enter in an empty field does), and
-so does typing the `delimiter` (a comma; a pattern works). `add-on-paste`
-splits a paste into tags, `add-on-tab` adds on Tab, `add-on-blur` when focus
-leaves. A duplicate is refused unless `duplicate`, and so is a tag past
-`max`: both emit `invalid` and the text stays. `convert-value` turns the text
+so does typing the `delimiter` (a comma; a pattern works). With
+`add-on-paste` a paste goes in at the caret and the whole text, split at the
+delimiter, becomes tags (a draft and a pasted word together are one tag);
+`add-on-tab` adds on Tab, `add-on-blur` when focus leaves. A duplicate is
+refused unless `duplicate`, and so is a tag past `max`: both emit `invalid`
+and the text stays. `convert-value` turns the text
 into the tag's value and `display-value` the value into the tag's text.
 
 The tags are a list (`role="list"`) before the text, each a list item with a
@@ -23,4 +25,6 @@ the last tag; the arrows move between tags and back to the field; Backspace
 or Delete takes out the focused tag, focus going to its neighbour or the
 field. Inside a FormField the text field takes the field's id, description,
 error and required mark; with a `name` (or its FormField's) the tags submit
-in hidden inputs, one each. `disabled` blocks typing and removing.
+in hidden inputs, one each. `required` sets `aria-required` (no native
+`required`, which would read the draft). `disabled` blocks typing and
+removing.

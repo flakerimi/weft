@@ -10,6 +10,7 @@ import type { Input } from '../../../src/adaptive/detect.ts'
 const props = defineProps<{ control: 'select' | 'combobox-button'; input?: Input }>()
 const blurs = ref(0)
 const inputs = ref(0)
+const changes = ref(0)
 provideField({
   id: 'spy',
   labelId: 'spy-label',
@@ -24,12 +25,12 @@ provideField({
   namedByLabel: () => {},
 })
 const items = ['One', 'Two']
-defineExpose({ blurs, inputs })
+defineExpose({ blurs, inputs, changes })
 </script>
 
 <template>
   <WeftProvider :input="props.input">
-    <Select v-if="control === 'select'" :items="items" value-key="" />
+    <Select v-if="control === 'select'" :items="items" value-key="" @change="changes++" />
     <Combobox v-else :items="items" trigger="button" />
     <button class="after">after</button>
   </WeftProvider>
