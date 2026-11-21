@@ -29,9 +29,14 @@ tree="$root/site/pushed/$version"
 	fail "site/pushed/$version holds no pushed tree; only a version scripts/publish-site.sh published from this checkout can be rolled back to."
 
 scripts/published-releases.sh check site || exit 1
+# The releases the tree serves: from site-src/releases, which the image has in
+# /data/releases; a tree kept before releases moved out of the binary embeds
+# them in its build instead.
+served="$tree/site-src/releases/releases"
+[ -d "$tree/site-src/releases" ] || served="$tree/site-src/dist/releases"
 while IFS= read -r v || [ -n "$v" ]; do
 	[ -n "$v" ] || continue
-	cmp -s "site/releases/$v/SHA256SUMS" "$tree/site-src/dist/releases/$v/SHA256SUMS" ||
+	cmp -s "site/releases/$v/SHA256SUMS" "$served/$v/SHA256SUMS" ||
 		fail "the tree kept for $version does not serve the published release $v as site/releases has it, so pushing it would drop or change that release; publish a new version with scripts/publish-site.sh instead."
 done <site/releases.txt
 

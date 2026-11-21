@@ -6,6 +6,9 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -156,8 +159,37 @@ func get(t *testing.T, srv *httptest.Server, path string, header ...string) (*ht
 	return res, string(b)
 }
 
+// stagedReleases writes a folder like the one scripts/stage-releases.sh
+// stages into the image: the installer and one release.
+func stagedReleases(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, data := range map[string]string{
+		"install":                                "#!/bin/sh\necho weft\n",
+		"releases/latest":                        "0.0.9\n",
+		"releases/0.0.9/SHA256SUMS":              "abc  weft_linux_amd64.tar.gz\n",
+		"releases/0.0.9/weft_linux_amd64.tar.gz": "tarball",
+	} {
+		p := filepath.Join(dir, name)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func siteHandler(t *testing.T, dir string) http.Handler {
+	t.Helper()
+	releases, err := releaseFiles(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return handler(releases)
+}
+
 func TestSiteServes(t *testing.T) {
-	srv := httptest.NewServer(handler())
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
 	defer srv.Close()
 
 	res, body := get(t, srv, "/", "Accept-Encoding", "identity")
@@ -175,28 +207,98 @@ func TestSiteServes(t *testing.T) {
 		t.Fatalf("GET / with If-None-Match %s: %d, want 304", etag, res.StatusCode)
 	}
 
-	// The installer is staged from site/install by scripts/site.sh build.
-	if res, body = get(t, srv, "/install"); res.StatusCode != 200 || !strings.HasPrefix(body, "#!/bin/sh") {
-		t.Fatalf("GET /install: %d %.80q", res.StatusCode, body)
-	}
-
-	for _, p := range []string{"/routes.json", "/manifest.json", "/pages/index/index.html", "/nothing"} {
+	for _, p := range []string{"/routes.json", "/manifest.json", "/pages/index/index.html", "/nothing", "/releases/", "/releases/0.0.8/SHA256SUMS"} {
 		if res, body = get(t, srv, p); res.StatusCode != 404 || !strings.Contains(body, "Not found") {
 			t.Errorf("GET %s: %d, want the 404 page", p, res.StatusCode)
 		}
 	}
+}
 
-	// Releases are staged only where site/releases has them (not in CI).
+// The installer and the releases come from the folder on disk, not the binary.
+func TestSiteServesReleasesFromDisk(t *testing.T) {
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
+	defer srv.Close()
+	for p, want := range map[string]string{
+		"/install":                                "#!/bin/sh\necho weft\n",
+		"/releases/latest":                        "0.0.9\n",
+		"/releases/0.0.9/SHA256SUMS":              "abc  weft_linux_amd64.tar.gz\n",
+		"/releases/0.0.9/weft_linux_amd64.tar.gz": "tarball",
+	} {
+		res, body := get(t, srv, p)
+		if res.StatusCode != 200 || body != want {
+			t.Fatalf("GET %s: %d %q", p, res.StatusCode, body)
+		}
+		etag := res.Header.Get("Etag")
+		if etag == "" {
+			t.Fatalf("GET %s: no ETag", p)
+		}
+		if res, _ = get(t, srv, p, "If-None-Match", etag); res.StatusCode != 304 {
+			t.Fatalf("GET %s with If-None-Match %s: %d, want 304", p, etag, res.StatusCode)
+		}
+	}
+}
+
+// The folder holds the installer and releases/, as scripts/stage-releases.sh
+// writes them, and nothing else: anything else would be served at the root.
+func TestReleaseFilesRefuses(t *testing.T) {
+	dir := stagedReleases(t)
+	os.WriteFile(filepath.Join(dir, "index.html"), []byte("x"), 0o644)
+	if _, err := releaseFiles(dir); err == nil || err.Error() != "the releases folder "+dir+" holds index.html; it holds only install and releases/, as scripts/stage-releases.sh stages them" {
+		t.Fatalf("an extra file: %v", err)
+	}
+	empty := t.TempDir()
+	if _, err := releaseFiles(empty); err == nil || err.Error() != "the releases folder "+empty+" has no install; stage it with scripts/stage-releases.sh, or set WEFT_RELEASES_DIR" {
+		t.Fatalf("no installer: %v", err)
+	}
+	missing := filepath.Join(empty, "none")
+	if _, err := releaseFiles(missing); err == nil || !strings.HasPrefix(err.Error(), "the releases folder "+missing+" cannot be read (") {
+		t.Fatalf("no folder: %v", err)
+	}
+	// Where site/releases is empty, as in CI, only the installer is staged.
+	only := t.TempDir()
+	os.WriteFile(filepath.Join(only, "install"), []byte("#!/bin/sh\n"), 0o644)
+	if _, err := releaseFiles(only); err != nil {
+		t.Fatalf("the installer alone: %v", err)
+	}
+}
+
+func TestReleasesDirDefault(t *testing.T) {
+	t.Setenv("WEFT_RELEASES_DIR", "")
+	if got := releasesDir(); got != "/data/releases" {
+		t.Fatalf("default %q", got)
+	}
+	t.Setenv("WEFT_RELEASES_DIR", "/srv/r")
+	if got := releasesDir(); got != "/srv/r" {
+		t.Fatalf("from the environment %q", got)
+	}
+}
+
+// The binary embeds the pages only: no installer and no release, so it no
+// longer grows by every release's tarballs.
+func TestBinaryHoldsNoReleases(t *testing.T) {
 	var m builtFiles
 	readJSON(t, dist(t), "manifest.json", &m)
-	if _, ok := m.Files["/releases/latest"]; ok {
-		res, body = get(t, srv, "/releases/latest")
-		v := strings.TrimSpace(body)
-		if res.StatusCode != 200 || v == "" {
-			t.Fatalf("GET /releases/latest: %d %q", res.StatusCode, body)
+	for key := range m.Files {
+		if key == "/install" || strings.HasPrefix(key, "/releases/") {
+			t.Errorf("the build embeds %s; releases are served from WEFT_RELEASES_DIR", key)
 		}
-		if res, _ = get(t, srv, "/releases/"+v+"/SHA256SUMS"); res.StatusCode != 200 {
-			t.Fatalf("GET /releases/%s/SHA256SUMS: %d", v, res.StatusCode)
-		}
+	}
+	if testing.Short() {
+		t.Skip("builds the binary")
+	}
+	out := filepath.Join(t.TempDir(), "weft-site")
+	// As the Dockerfile scripts/publish-site.sh writes builds it.
+	cmd := exec.Command("go", "build", "-trimpath", "-ldflags", "-s -w", "-o", out, ".")
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v\n%s", err, b)
+	}
+	fi, err := os.Stat(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("site binary: %.1f MB", float64(fi.Size())/(1<<20))
+	if fi.Size() >= 15<<20 {
+		t.Fatalf("the site binary is %.1f MB, not under 15 MB", float64(fi.Size())/(1<<20))
 	}
 }

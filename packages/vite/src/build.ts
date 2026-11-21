@@ -30,7 +30,9 @@ export interface BuildOptions {
   /**
    * The client-rendered app's path prefix, e.g. `/app`; its build is copied from
    * `appDir` into the folder the prefix names (`/admin` into `admin/`), so its
-   * files are served at their own URLs.
+   * files are served at their own URLs. The files its build manifest lists
+   * (set `build.manifest: true` in the app's Vite config) with a content hash
+   * in their names are cached for a year; the rest are revalidated.
    */
   appPrefix?: string
   /** Where the app's own build is, with its `index.html`; read, never changed. Default `<root>/app-dist`. */
@@ -302,10 +304,11 @@ async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssT
   // The app's own .br/.gz would be stale beside the ones made here; public/ is copied as it is.
   if (app && appDir) {
     await copyTree(appDir, appDir, dir, app.prefix.slice(1), taken, { variants: false })
-    // Vite names the app's built assets <name>-<hash>.<ext>: those are cached forever, as an SPA's are.
-    const assets = `${app.prefix.slice(1)}/assets/`
-    for (const { path } of taken.values()) {
-      if (path.startsWith(assets) && hashedName(path.slice(assets.length))) immutable.add(path)
+    // What the app's Vite build emitted with a content hash in its name is cached forever, as an SPA's
+    // assets are; a file of its public/ folder is copied as it is, so a name that looks hashed proves nothing.
+    for (const file of await emittedFiles(appDir)) {
+      const path = `${app.prefix.slice(1)}/${file}`
+      if (taken.get(fsKey(path))?.path === path && hashedName(basename(file))) immutable.add(path)
     }
   }
   await copyTree(join(root, 'public'), 'public', dir, '', taken, { variants: true })
@@ -420,13 +423,41 @@ async function walk(dir: string, prefix = ''): Promise<Entry[]> {
 }
 
 /**
- * Whether a file name carries a content hash as Vite writes one: `name-<8 of
- * A-Z a-z 0-9 _ ->.ext`, the eight with a capital or a digit, so that a word
- * such as `app-settings.js` is not taken for one. A miss is only revalidated.
+ * Whether a file name carries a content hash as Vite writes one by default:
+ * `name-<8 of A-Z a-z 0-9 _ ->.ext`, the eight with a capital or a digit, so
+ * that a word such as `app-settings.js` is not taken for one. Asked only of
+ * files the app's build emitted; a miss is only revalidated.
  */
 const hashedName = (name: string) => {
   const hash = /^[^/]+-([A-Za-z0-9_-]{8})\.[A-Za-z0-9]+$/.exec(name)?.[1]
   return hash !== undefined && /[A-Z0-9]/.test(hash)
+}
+
+/**
+ * The files an app's Vite build emitted, relative to its folder: those its
+ * build manifest (`.vite/manifest.json`, which `build.manifest: true` writes)
+ * lists as an entry's file, CSS or assets. None without one.
+ */
+async function emittedFiles(appDir: string): Promise<string[]> {
+  const file = join(appDir, '.vite', 'manifest.json')
+  let text: string
+  try {
+    text = await readFile(file, 'utf8')
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw e
+  }
+  const strings = (v: unknown) => v === undefined || (Array.isArray(v) && v.every((x) => typeof x === 'string'))
+  let entries: { file: string; css?: string[]; assets?: string[] }[]
+  try {
+    const m = JSON.parse(text) as unknown
+    if (typeof m !== 'object' || m === null || Array.isArray(m)) throw new Error()
+    entries = Object.values(m) as typeof entries
+    if (!entries.every((x) => typeof x === 'object' && x !== null && typeof x.file === 'string' && strings(x.css) && strings(x.assets))) throw new Error()
+  } catch {
+    throw new Error(`buildSite: ${file} is not a Vite build manifest (each entry has a file name); rebuild the app, or remove it.`)
+  }
+  return [...new Set(entries.flatMap((x) => [x.file, ...(x.css ?? []), ...(x.assets ?? [])]))].filter(safePath)
 }
 
 /** A relative path in a marker: segments, none empty, `.` or `..`, no backslash or NUL. */
@@ -763,27 +794,34 @@ const noCSS: Plugin = {
 
 type OutputOptions = Rolldown.OutputOptions
 
-/** The client build's lock: its plugin, and the refusal it made, if any. */
+/** The client build's lock: its plugin, and the refusal an error carries, if any. */
 interface OutputLock {
   plugin: Plugin
-  /** The sentence the lock refused the build with, when it did. */
-  refused: () => string | null
+  /**
+   * The sentence the lock refused the build with, when `error` (or what it
+   * was wrapped from) is that refusal; null for any other error, even after
+   * a refusal a plugin caught and went on from.
+   */
+  refusal: (error: unknown) => string | null
 }
 
 /**
  * Hold the client build to `dir`: after every other plugin has had its say,
- * the client environment, the one `build()` builds, must still build into
- * `dir` once, without emptying it and with no output folder or file of its
- * own; otherwise the build stops, before anything is written, with one
- * sentence naming the setting. Then the settings that say where files go are
- * frozen on every environment, so a plugin that changes one later, in
- * `buildStart` say, is refused the same way.
+ * the environment `build()` builds (the client, or ssr when `build.ssr` is
+ * set) must still build into `dir` once, without emptying it and with no
+ * output folder or file of its own; otherwise the build stops, before
+ * anything is written, with one sentence naming the setting. Then the
+ * settings that say where files go, and the `build` object that holds them,
+ * are frozen on the top-level config and every environment, so a plugin that
+ * changes one later, in `buildStart` say, is refused the same way; assigning
+ * the value a setting has is not a change.
  */
 function lockOutput(dir: string): OutputLock {
-  let refused: string | null = null
+  const refusals = new Set<string>()
   const refuse = (setting: string, then = 'the page build alone decides where that goes'): never => {
-    refused = `buildSite: the site's Vite config or a plugin sets ${setting} for the client build; ${then}, so remove it.`
-    throw new Error(refused)
+    const sentence = `buildSite: the site's Vite config or a plugin sets ${setting} for the client build; ${then}, so remove it.`
+    refusals.add(sentence)
+    throw new Error(sentence)
   }
   const outputs = (o: OutputOptions | OutputOptions[] | undefined) => (Array.isArray(o) ? o : o ? [o] : [])
   const check = (root: string, b: ResolvedConfig['build']) => {
@@ -797,13 +835,15 @@ function lockOutput(dir: string): OutputLock {
     if (b.emptyOutDir !== false) refuse('build.emptyOutDir')
     if (b.watch != null) refuse('build.watch', 'the page build builds once')
   }
-  /** Make `obj[key]` keep the value it has: reading it gives that, setting it is refused, redefining it fails. */
+  /** Make `obj[key]` keep the value it has: reading it gives that, setting another is refused, redefining it fails. */
   const freeze = (obj: object, key: string, setting: string) => {
     if (Object.getOwnPropertyDescriptor(obj, key)?.configurable === false) return
     const value = (obj as Record<string, unknown>)[key]
     Object.defineProperty(obj, key, {
       get: () => value,
-      set: () => refuse(setting),
+      set: (v: unknown) => {
+        if (!Object.is(v, value)) refuse(setting)
+      },
       enumerable: true,
       configurable: false,
     })
@@ -812,12 +852,14 @@ function lockOutput(dir: string): OutputLock {
     name: 'weft:lock-output',
     enforce: 'post',
     configResolved(config) {
-      check(config.root, config.environments.client!.build)
+      // build() builds one environment, as Vite's legacy builder picks it.
+      check(config.root, config.environments[config.build.ssr ? 'ssr' : 'client']!.build)
       // The top-level options and every environment's. An environment reads
       // publicDir from the top level unless it has its own, and setting it on
       // the environment's config gives it one: each gets its own, frozen.
       for (const target of [config, ...Object.values(config.environments)]) {
         for (const key of ['outDir', 'emptyOutDir', 'copyPublicDir']) freeze(target.build, key, `build.${key}`)
+        freeze(target, 'build', 'build')
         if (!('publicDir' in target)) Object.assign(target, { publicDir: config.publicDir })
         freeze(target, 'publicDir', 'publicDir')
       }
@@ -829,7 +871,15 @@ function lockOutput(dir: string): OutputLock {
       },
     },
   }
-  return { plugin, refused: () => refused }
+  const refusal = (error: unknown) => {
+    // Vite and Rolldown pass a hook's error on wrapped, or with their own words around its message.
+    for (let e = error, depth = 0; e != null && depth < 8; e = (e as { cause?: unknown }).cause, depth++) {
+      const message = e instanceof Error ? e.message : String(e)
+      for (const sentence of refusals) if (message.includes(sentence)) return sentence
+    }
+    return null
+  }
+  return { plugin, refusal }
 }
 
 /** The site's output options without those that say where files go or what they are called. */
@@ -874,7 +924,7 @@ async function buildClient(root: string, dir: string, islands: string[]): Promis
     result = (await build(config)) as typeof result
   } catch (e) {
     // Vite and Rolldown wrap a hook's error in their own words; the lock's sentence is the one to give.
-    const refused = lock.refused()
+    const refused = lock.refusal(e)
     throw refused ? new Error(refused) : e
   }
   const chunks = (Array.isArray(result) ? result : [result]).flatMap((r) => r.output)

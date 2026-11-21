@@ -1,16 +1,21 @@
 // Command site-src serves weft.base.al: the pages Weft builds from this folder,
-// the installer and every release, embedded in one Go binary.
+// embedded in the Go binary, and the installer and every release from a
+// folder on disk, $WEFT_RELEASES_DIR (in the image, /data/releases), so the
+// binary does not grow with each release.
 //
 // Build the pages first (scripts/site.sh build); scripts/publish-site.sh ships
-// this binary to the Lisa server in a container.
+// this binary and the releases to the Lisa server in a container.
 package main
 
 import (
 	"embed"
+	"errors"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/flakerimi/weft"
 )
@@ -18,12 +23,41 @@ import (
 //go:embed all:dist
 var siteDist embed.FS
 
-func handler() http.Handler {
+// releasesDir is where the installer and the releases are: $WEFT_RELEASES_DIR,
+// or /data/releases, where the image has them.
+func releasesDir() string {
+	if d := os.Getenv("WEFT_RELEASES_DIR"); d != "" {
+		return d
+	}
+	return "/data/releases"
+}
+
+// releaseFiles opens dir, the folder scripts/stage-releases.sh stages: the
+// installer as install and the releases under releases/. Its files are served
+// at their own paths, so it may hold nothing else.
+func releaseFiles(dir string) (fs.FS, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("the releases folder %s cannot be read (%w)", dir, err)
+	}
+	for _, e := range entries {
+		if name := e.Name(); name != "install" && name != "releases" {
+			return nil, fmt.Errorf("the releases folder %s holds %s; it holds only install and releases/, as scripts/stage-releases.sh stages them", dir, name)
+		}
+	}
+	if fi, err := os.Stat(filepath.Join(dir, "install")); errors.Is(err, fs.ErrNotExist) || (err == nil && !fi.Mode().IsRegular()) {
+		return nil, fmt.Errorf("the releases folder %s has no install; stage it with scripts/stage-releases.sh, or set WEFT_RELEASES_DIR", dir)
+	}
+	return os.DirFS(dir), nil
+}
+
+// handler serves the embedded pages, and /install and /releases/ from releases.
+func handler(releases fs.FS) http.Handler {
 	dist, err := fs.Sub(siteDist, "dist")
 	if err != nil {
 		panic(err)
 	}
-	return weft.Serve(dist, nil)
+	return weft.Serve(dist, nil, weft.WithFiles("/", releases))
 }
 
 func main() {
@@ -31,7 +65,11 @@ func main() {
 	if p := os.Getenv("PORT"); p != "" {
 		addr = ":" + p
 	}
-	h := handler()
-	log.Printf("weft.base.al (weft %s) on http://localhost%s", weft.Version, addr)
+	releases, err := releaseFiles(releasesDir())
+	if err != nil {
+		log.Fatalf("weft.base.al: %v.", err)
+	}
+	h := handler(releases)
+	log.Printf("weft.base.al (weft %s) on http://localhost%s, releases from %s", weft.Version, addr, releasesDir())
 	log.Fatal(http.ListenAndServe(addr, h))
 }

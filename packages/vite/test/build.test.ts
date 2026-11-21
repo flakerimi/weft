@@ -668,18 +668,49 @@ describe('buildSite with an app build', { timeout: 30_000 }, () => {
     expect(snapshot(app)).toEqual(before)
   })
 
-  it("marks the app's content-hashed assets immutable, and nothing else of it", async () => {
+  it("marks the app's content-hashed assets its Vite build emitted immutable, and nothing else of it", async () => {
     const app = tempDir()
     appFiles(app)
     writeFileSync(join(app, 'assets/index-FeUbVT--.js'), 'hashed')
     writeFileSync(join(app, 'assets/logo-D9x2kQ7a.svg'), '<svg/>')
+    writeFileSync(join(app, 'assets/index-Cq3xY7pL.css'), 'a{}')
+    // Hand-placed in the app's public/ folder: named like a hash, but nothing guarantees it changes when it does.
+    writeFileSync(join(app, 'assets/vendor-Ab12Cd34.js'), 'hand-placed')
     writeFileSync(join(app, 'assets/app-settings.js'), 'a name, not a hash')
     writeFileSync(join(app, 'boot-Ab12Cd34.js'), 'outside assets/')
+    mkdirSync(join(app, '.vite'))
+    // Vite's build manifest (build.manifest: true) lists what the build emitted; main.js is emitted but not hashed.
+    writeFileSync(
+      join(app, '.vite/manifest.json'),
+      JSON.stringify({
+        'index.html': { file: 'assets/index-FeUbVT--.js', src: 'index.html', isEntry: true, css: ['assets/index-Cq3xY7pL.css'], assets: ['assets/logo-D9x2kQ7a.svg'] },
+        'src/main.ts': { file: 'assets/main.js', src: 'src/main.ts', isDynamicEntry: true },
+      }),
+    )
     const manifest = await buildSite({ root: fixture('static-site'), outDir: tempDir(), appPrefix: '/admin', appDir: app })
     const immutable = Object.keys(manifest.files).filter((f) => manifest.files[f]!.immutable).sort()
-    expect(immutable).toEqual(['/admin/assets/index-FeUbVT--.js', '/admin/assets/logo-D9x2kQ7a.svg'])
+    expect(immutable).toEqual(['/admin/assets/index-Cq3xY7pL.css', '/admin/assets/index-FeUbVT--.js', '/admin/assets/logo-D9x2kQ7a.svg'])
+    expect(manifest.files['/admin/assets/vendor-Ab12Cd34.js']).toMatchObject({ immutable: false })
     expect(manifest.files['/admin/assets/main.js']).toMatchObject({ immutable: false })
     expect(manifest.files['/admin/index.html']).toMatchObject({ immutable: false })
+  })
+
+  it("marks nothing of the app immutable without its Vite build manifest: a hashed-looking name may be hand-placed", async () => {
+    const app = tempDir()
+    appFiles(app)
+    writeFileSync(join(app, 'assets/index-FeUbVT--.js'), 'hashed')
+    const manifest = await buildSite({ root: fixture('static-site'), outDir: tempDir(), appPrefix: '/admin', appDir: app })
+    expect(Object.keys(manifest.files).filter((f) => manifest.files[f]!.immutable)).toEqual([])
+  })
+
+  it("refuses an app build manifest it cannot read, in one sentence", async () => {
+    const app = tempDir()
+    appFiles(app)
+    mkdirSync(join(app, '.vite'))
+    writeFileSync(join(app, '.vite/manifest.json'), '{"index.html": {"file": 3}}')
+    await expect(buildSite({ root: fixture('static-site'), outDir: tempDir(), appPrefix: '/admin', appDir: app })).rejects.toThrow(
+      new Error(`buildSite: ${join(app, '.vite/manifest.json')} is not a Vite build manifest (each entry has a file name); rebuild the app, or remove it.`),
+    )
   })
 
   it('copies the app into the folder its prefix names, so its URLs are its files', async () => {
@@ -922,6 +953,84 @@ describe('buildSite with a plugin that changes the client build late', { timeout
       new Error(`buildSite: the site's Vite config or a plugin sets build.watch for the client build; the page build builds once, so remove it.`),
     )
     expect(readdirSync(parent)).toEqual([])
+  })
+
+  for (const [name, plugin] of [
+    [
+      "an environment's whole build",
+      (o: string) => `{ name: 'late', buildStart() { this.environment.config.build = { ...this.environment.config.build, outDir: ${JSON.stringify(o)}, emptyOutDir: true } } }`,
+    ],
+    [
+      "the top-level config's whole build",
+      (o: string) =>
+        `(() => { let c; return { name: 'late', configResolved(x) { c = x }, buildStart() { c.build = { ...c.build, outDir: ${JSON.stringify(o)}, emptyOutDir: true } } } })()`,
+    ],
+  ] as const) {
+    it(`refuses ${name} replaced in buildStart, and leaves the owner's folder and outDir as they were`, async () => {
+      const { root, parent, out, owner, before } = await withPlugin(plugin)
+      const failed = expectFailureLogs()
+      await expect(buildSite({ root, outDir: out })).rejects.toThrow(new Error(sentence('build')))
+      failed()
+      expect(snapshot(owner)).toEqual({ 'keep.txt': Buffer.from('owner').toString('base64') })
+      expect(snapshot(out)).toEqual(before)
+      expect(readdirSync(parent).sort()).toEqual(['dist', 'owner'])
+    })
+  }
+
+  it('allows a setting to be assigned the value it has', async () => {
+    const { root, out } = await withPlugin(
+      () => `{ name: 'same', buildStart() { const c = this.environment.config; c.build.outDir = c.build.outDir; c.build.emptyOutDir = c.build.emptyOutDir; c.publicDir = c.publicDir; c.build = c.build } }`,
+    )
+    const manifest = await buildSite({ root, outDir: out })
+    expect(manifest.files['/pages/counter/index.html']).toBeDefined()
+  })
+
+  it("gives the build's own error, not a refusal a plugin caught and went on from", async () => {
+    const { root, out, owner, before } = await withPlugin(
+      (o) =>
+        `{ name: 'caught', buildStart() { try { this.environment.config.build.outDir = ${JSON.stringify(o)} } catch {} }, renderChunk() { throw new Error('the chunk is broken') } }`,
+    )
+    const failed = expectFailureLogs()
+    const error = await buildSite({ root, outDir: out }).then(
+      () => null,
+      (e: Error) => e,
+    )
+    failed()
+    expect(error?.message).toContain('the chunk is broken')
+    expect(error?.message).not.toContain('buildSite: ')
+    expect(snapshot(owner)).toEqual({ 'keep.txt': Buffer.from('owner').toString('base64') })
+    expect(snapshot(out)).toEqual(before)
+  })
+
+  it('builds when a plugin caught a refusal and went on, into outDir alone', async () => {
+    const { root, out, owner } = await withPlugin(
+      (o) => `{ name: 'caught', buildStart() { try { this.environment.config.build.outDir = ${JSON.stringify(o)} } catch {} } }`,
+    )
+    const manifest = await buildSite({ root, outDir: out })
+    expect(manifest.files['/pages/counter/index.html']).toBeDefined()
+    expect(snapshot(owner)).toEqual({ 'keep.txt': Buffer.from('owner').toString('base64') })
+  })
+
+  it('checks the environment Vite builds: ssr, when build.ssr is set', async () => {
+    const root = linkedSite('site')
+    const parent = tempDir()
+    const owner = join(parent, 'owner')
+    mkdirSync(owner)
+    writeFileSync(join(owner, 'keep.txt'), 'owner')
+    writeFileSync(
+      join(root, 'vite.config.ts'),
+      `import { defineConfig } from 'vite'
+export default defineConfig({
+  build: { ssr: true, rollupOptions: { external: ['weft-test-external'] } },
+  environments: { ssr: { build: { outDir: ${JSON.stringify(owner)}, emptyOutDir: true } } },
+})
+`,
+    )
+    const failed = expectFailureLogs()
+    await expect(buildSite({ root, outDir: join(parent, 'dist') })).rejects.toThrow(new Error(sentence('build.outDir')))
+    failed()
+    expect(snapshot(owner)).toEqual({ 'keep.txt': Buffer.from('owner').toString('base64') })
+    expect(readdirSync(parent)).toEqual(['owner'])
   })
 
   it("does not refuse another environment's output settings: only the client is built", async () => {

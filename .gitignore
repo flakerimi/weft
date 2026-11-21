@@ -7,5 +7,7 @@ dist/
 .superpowers/
 site/releases/
 site/pushed/
+site-src/releases/
+# Where scripts/site.sh staged releases before they moved out of the binary.
 site-src/public/install
 site-src/public/releases/

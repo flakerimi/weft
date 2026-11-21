@@ -6,8 +6,19 @@
 # OUT may hold an earlier staging; a release in it that SITE no longer has, or
 # has with other contents, is refused, never removed or merged into, so the
 # site cannot serve a release by mistake.
-# Usage: scripts/stage-releases.sh SITE_DIR OUT_DIR [LATEST_VERSION]
+# With --link-from KEPT, a release KEPT already holds (KEPT/<version>, as
+# scripts/publish-site.sh keeps each pushed release once) is hard-linked from
+# there instead of copied, so it is kept once however many trees hold it; one
+# KEPT holds with other contents than SITE is refused. A release is never
+# linked to SITE/releases itself: rebuilding one there would change it in
+# every tree.
+# Usage: scripts/stage-releases.sh [--link-from KEPT] SITE_DIR OUT_DIR [LATEST_VERSION]
 set -eu
+kept=
+if [ "${1:-}" = --link-from ]; then
+	kept="$2"
+	shift 2
+fi
 site="$1"
 out="$2"
 latest="${3:-}"
@@ -29,6 +40,25 @@ for dir in "$out"/releases/*/; do
 	diff -r "$site/releases/$v" "$dir" >/dev/null 2>&1 ||
 		fail "$out/releases/$v differs from $site/releases/$v, so staging would merge two releases; remove it by hand"
 done
+if [ -n "$kept" ]; then
+	for dir in "$site"/releases/*/; do
+		[ -d "$dir" ] || continue
+		v=$(basename "$dir")
+		real "$v" && [ -d "$kept/$v" ] || continue
+		diff -r "$dir" "$kept/$v" >/dev/null 2>&1 ||
+			fail "$site/releases/$v differs from $kept/$v, the release $v a verified push served, whose users have its checksums; put $kept/$v back in $site/releases/$v"
+	done
+fi
+
+# Each file of release folder $1 as a hard link in the new folder $2, or a
+# copy where the file system cannot link.
+link() {
+	mkdir "$2"
+	for f in "$1"/* "$1"/.[!.]* "$1"/..?*; do
+		[ -e "$f" ] || continue
+		ln "$f" "$2/" 2>/dev/null || cp -R "$f" "$2/"
+	done
+}
 
 mkdir -p "$out"
 cp "$site/install" "$out/install"
@@ -39,7 +69,11 @@ for dir in "$site"/releases/*/; do
 	# Already staged, and the same (checked above).
 	[ ! -d "$out/releases/$v" ] || continue
 	mkdir -p "$out/releases"
-	cp -R "$site/releases/$v" "$out/releases/"
+	if [ -n "$kept" ] && [ -d "$kept/$v" ]; then
+		link "$kept/$v" "$out/releases/$v"
+	else
+		cp -R "$site/releases/$v" "$out/releases/"
+	fi
 done
 if [ -z "$latest" ] && [ -f "$site/releases/latest" ]; then
 	latest=$(tr -d ' \r\n' <"$site/releases/latest")

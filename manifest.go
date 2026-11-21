@@ -194,6 +194,18 @@ func readVariant(dist fs.FS, key string, f manifestFile, encoding string) *varia
 	return &variant{body: body, etag: etag, values: values}
 }
 
+// serves says what the site serves at the URL path p: "a page", "a file", or
+// "" for nothing of its own.
+func (s *site) serves(p string) string {
+	switch {
+	case s.pages[p] != nil:
+		return "a page"
+	case s.files[p] != nil:
+		return "a file"
+	}
+	return ""
+}
+
 // ServeHTTP serves a request that is not for the API: a page, a listed file,
 // the app, or the not-found page.
 func (s *site) ServeHTTP(w http.ResponseWriter, r *http.Request) {

@@ -30,6 +30,8 @@ function unserialisable(value: unknown, path: string, parents: object[] = []): {
     case 'boolean':
       return null
     case 'number':
+      // JSON writes -0 as 0.
+      if (Object.is(value, -0)) return { path, what: '-0' }
       return Number.isFinite(value) ? null : { path, what: String(value) }
     case 'undefined':
       return { path, what: 'undefined' }
@@ -55,6 +57,9 @@ function unserialisable(value: unknown, path: string, parents: object[] = []): {
     const name = (proto as { constructor?: { name?: string } }).constructor?.name || 'class instance'
     return { path, what: `${/^[aeiou]/i.test(name) ? 'an' : 'a'} ${name}` }
   }
+  // JSON leaves a symbol-keyed member out.
+  const symbol = Object.getOwnPropertySymbols(obj).find((k) => Object.prototype.propertyIsEnumerable.call(obj, k))
+  if (symbol) return { path, what: `an object with the symbol key ${String(symbol)}` }
   for (const [key, v] of Object.entries(obj)) {
     const bad = unserialisable(v, path ? `${path}.${key}` : key, inner)
     if (bad) return bad

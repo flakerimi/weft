@@ -37,20 +37,40 @@ const (
 // content-hashed by Vite, so they are cached for a year; everything else is
 // revalidated. A missing file under /assets/ is a 404, never index.html.
 // Serve panics if dist has no index.html.
-func Serve(dist fs.FS, api http.Handler) http.Handler {
+//
+// Options add to what is served: WithFiles serves a folder on disk beside dist.
+func Serve(dist fs.FS, api http.Handler, opts ...Option) http.Handler {
 	if api == nil {
 		api = http.HandlerFunc(noAPI)
 	}
-	var pages http.Handler
-	if manifest, ok := pageManifest(dist); ok {
-		pages = loadSite(dist, manifest)
-	} else {
-		pages = spa(dist)
+	var o options
+	for _, opt := range opts {
+		opt(&o)
 	}
+	var pages http.Handler
+	var taken func(p string) string
+	if manifest, ok := pageManifest(dist); ok {
+		s := loadSite(dist, manifest)
+		pages, taken = s, s.serves
+	} else {
+		pages, taken = spa(dist), func(p string) string {
+			if fi, err := fs.Stat(dist, p[1:]); err == nil && !fi.IsDir() {
+				return "a file"
+			}
+			return ""
+		}
+	}
+	files := loadFolders(o.folders, taken)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
 			api.ServeHTTP(w, r)
 			return
+		}
+		// A folder's file is only its exact path, as a build's file is.
+		if len(files) > 0 && !strings.HasSuffix(r.URL.Path, "/") {
+			if f := files[path.Clean("/"+r.URL.Path)]; f != nil && f.serve(w, r) {
+				return
+			}
 		}
 		pages.ServeHTTP(w, r)
 	})

@@ -11,7 +11,8 @@ adapts:
 The component must be a `<script setup>` single-file component: its file name
 is the island's id. `props` travel to the browser as JSON, so they may hold
 only strings, finite numbers, booleans, null, arrays and plain objects; the
-build refuses anything else with a sentence naming the prop. `when="media"`
+build refuses anything else with a sentence naming the prop, `-0` (which
+JSON writes as `0`) and a symbol key (which JSON leaves out) included. `when="media"`
 needs a `media` query. Ids from `useId` inside an island are counted per
 island, so they match between the server and the browser.
 
