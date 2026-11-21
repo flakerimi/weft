@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -357,5 +360,89 @@ func TestGalleryExampleHeadingsKeepTheirOwnLook(t *testing.T) {
 	}
 	if examples == 0 {
 		t.Fatal("no example on a gallery page has a heading")
+	}
+}
+
+// hover moves the mouse onto the middle of the first element matching
+// selector, which must be on screen.
+func (b *browser) hover(selector string) {
+	b.t.Helper()
+	var at struct{ X, Y float64 }
+	b.eval(`(() => {
+		const r = document.querySelector(`+jsString(selector)+`).getBoundingClientRect()
+		return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+	})()`, &at)
+	b.call(b.session, "Input.dispatchMouseEvent", map[string]any{"type": "mouseMoved", "x": at.X, "y": at.Y})
+}
+
+// until waits, in the page, for the expression to be true, failing after a few seconds.
+func (b *browser) until(expr string) {
+	b.t.Helper()
+	var ok bool
+	b.eval(`new Promise((done) => {
+		const end = Date.now() + 5000
+		const check = () => (`+expr+`) ? done(true) : Date.now() > end ? done(false) : setTimeout(check, 20)
+		check()
+	})`, &ok)
+	if !ok {
+		b.t.Fatalf("%s: never became true: %s", b.doing, expr)
+	}
+}
+
+func jsString(s string) string {
+	data, _ := json.Marshal(s)
+	return string(data)
+}
+
+// A link in an overlay opened from a gallery example is no more prefetched
+// than one in the example itself: the Sheet teleports to the overlay root
+// under <body>, outside the stage's [data-weft-no-prefetch], so its layer
+// must carry the mark. A link of the site's own, hovered first, is
+// prefetched, so the browser is shown to prefetch at all.
+func TestOverlayLinksFromAnExampleAreNotPrefetched(t *testing.T) {
+	dist(t)
+	b := startBrowser(t)
+	var mu sync.Mutex
+	var prefetched []string
+	site := siteHandler(t, stagedReleases(t))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Sec-Purpose") != "" {
+			mu.Lock()
+			prefetched = append(prefetched, r.URL.Path)
+			mu.Unlock()
+		}
+		site.ServeHTTP(w, r)
+	}))
+	defer srv.Close()
+	got := func(path string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Contains(prefetched, path)
+	}
+	// Wait long enough for a moderate prefetch (200 ms of hover) to be sent, and answered.
+	settle := func() {
+		var ok bool
+		b.eval(`new Promise((done) => setTimeout(() => done(true), 1000))`, &ok)
+	}
+
+	b.doing, b.deadline = "emulating 1280 px", time.Now().Add(pageTimeout)
+	b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 1280, "height": 900, "deviceScaleFactor": 1, "mobile": false})
+	b.open(srv.URL + "/components/sheet")
+	b.doing, b.deadline = "hovering on /components/sheet", time.Now().Add(pageTimeout)
+	b.until(`document.querySelector('.gallery-toolbar[data-ready]')`)
+
+	b.hover(`.site-nav a[href="/skills"]`)
+	settle()
+	if !got("/skills") {
+		t.Fatalf("hovering the header's /skills link prefetched nothing (prefetched: %v): the browser does not prefetch, so this test proves nothing", prefetched)
+	}
+
+	b.eval(`(document.querySelector('.gallery-canvas button[aria-label="Open menu"]').click(), true)`, new(bool))
+	b.until(`document.querySelector('#weft-overlays a[href="/settings"]')`)
+	b.until(`document.querySelector('#weft-overlays .weft-sheet').getAnimations().length === 0`)
+	b.hover(`#weft-overlays a[href="/settings"]`)
+	settle()
+	if got("/settings") {
+		t.Errorf("hovering the Settings link in the stage's Sheet prefetched /settings, a page of the example's app that is not here")
 	}
 }

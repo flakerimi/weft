@@ -90,7 +90,8 @@ export interface Manifest {
  * the app's: an API call may change something, and the app is not a page. Nor
  * a link inside an element marked `data-weft-no-prefetch` (or marked so
  * itself), such as a gallery's live examples, whose links name pages of an
- * app that is not there.
+ * app that is not there. An overlay opened from inside one carries the mark
+ * onto its layer (@weft/ui's useOverlayContext), so this reaches it too.
  */
 function speculationRules(app: RoutesJson['app']): string {
   const skip = ['/api', ...(app ? [app.prefix] : [])].flatMap((p) => [p, `${p}/*`])

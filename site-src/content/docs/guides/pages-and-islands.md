@@ -60,7 +60,7 @@ The build writes them into the page's `<head>`, with `og:title` and `og:descript
 Every page the build writes has:
 
 - its CSS inlined in a `<style>`: the theme, Weft's base styles, and the stylesheets of the components the page renders. If that is over 14 KB brotli, it goes in one stylesheet the page links instead.
-- speculation rules, so the browser fetches a same-site link when the pointer rests on it. Links under `/api` are left out, and so is any link inside an element marked `data-weft-no-prefetch` (or marked so itself), such as a demo whose links name pages that do not exist.
+- speculation rules, so the browser fetches a same-site link when the pointer rests on it. Links under `/api` are left out, and so is any link inside an element marked `data-weft-no-prefetch` (or marked so itself), such as a demo whose links name pages that do not exist. A dialog, sheet or menu opened from inside such an element carries the mark with it, so its links are left out too.
 - `@view-transition { navigation: auto; }`, so going from page to page cross-fades in browsers that support it.
 
 A page with no island has no script that loads JavaScript.
