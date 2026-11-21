@@ -1,0 +1,22 @@
+/* Popover: floating, a raised card beside its trigger, at most the room
+   left on its side; hidden until positioned, so it never flashes at the
+   corner. In its sheet form (touch) sheet.css draws it, with padding. */
+.weft-popover[data-form="floating"] {
+  z-index: 50;
+  min-inline-size: 8rem;
+  max-inline-size: min(24rem, var(--weft-floating-available-width, 100vw));
+  max-block-size: var(--weft-floating-available-height, 70vh);
+  overflow: auto;
+  padding: var(--weft-space-3, 12px);
+  border: 1px solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-card, 12px);
+  background: var(--weft-color-surface-raised, Canvas);
+  color: var(--weft-color-text, CanvasText);
+  box-shadow: 0 8px 24px color-mix(in srgb, CanvasText 16%, transparent);
+  outline: none;
+  transition: opacity var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease);
+  @starting-style { opacity: 0; }
+}
+.weft-popover[data-form="floating"]:not([data-positioned]) { opacity: 0; }
+.weft-popover[data-form="sheet"] { gap: var(--weft-space-3, 12px); padding: var(--weft-space-4, 16px); }
+.weft-popover__title { font-size: 1.05em; }

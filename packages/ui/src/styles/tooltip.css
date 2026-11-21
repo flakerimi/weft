@@ -1,0 +1,15 @@
+/* Tooltip: small inverted text beside its trigger; it can be hovered. */
+.weft-tooltip {
+  z-index: 60;
+  max-inline-size: min(20rem, calc(100vw - 16px));
+  padding: var(--weft-space-1, 4px) var(--weft-space-2, 8px);
+  border-radius: var(--weft-radius-control, 8px);
+  background: var(--weft-color-text, CanvasText);
+  color: var(--weft-color-bg, Canvas);
+  font-size: 0.875em;
+  line-height: 1.4;
+  overflow-wrap: break-word;
+  transition: opacity var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease);
+  @starting-style { opacity: 0; }
+}
+.weft-tooltip:not([data-positioned]) { opacity: 0; }

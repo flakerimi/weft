@@ -19,6 +19,6 @@ export const neutral: Theme = {
   radius: { control: 8, card: 12, panel: 16 },
   control: { sm: 28, md: 36, lg: 44 },
   space: { 1: 4, 2: 8, 3: 12, 4: 16, 6: 24, 8: 32 },
-  motion: { control: 150, layout: 220, dialog: 260 },
+  motion: { control: 150, layout: 220, dialog: 260, toast: 4000 },
   ease: { standard: [0.2, 0, 0, 1], emphasized: [0.3, 0, 0, 1] },
 }

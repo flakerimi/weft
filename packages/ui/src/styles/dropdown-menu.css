@@ -1,0 +1,65 @@
+/* DropdownMenu: a raised list of items, each at least --weft-hit-min tall.
+   Floating (pointer) it is at least 10rem wide and at most the room left;
+   as a sheet (touch) its items are larger: 48 px tall, with larger text. The focused item is
+   the highlighted one; a danger item reads in the danger colour. */
+.weft-menu {
+  outline: none;
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-menu[data-form="floating"] {
+  z-index: 50;
+  min-inline-size: 10rem;
+  max-inline-size: min(20rem, var(--weft-floating-available-width, 100vw));
+  max-block-size: var(--weft-floating-available-height, 70vh);
+  overflow: auto;
+  padding: var(--weft-space-1, 4px);
+  border: 1px solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-card, 12px);
+  background: var(--weft-color-surface-raised, Canvas);
+  box-shadow: 0 8px 24px color-mix(in srgb, CanvasText 16%, transparent);
+  transition: opacity var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease);
+  @starting-style { opacity: 0; }
+}
+.weft-menu[data-form="floating"]:not([data-positioned]) { opacity: 0; }
+.weft-menu[data-form="sheet"] { padding: var(--weft-space-2, 8px); font-size: 1.0625rem; }
+
+.weft-menu__heading {
+  padding: var(--weft-space-2, 8px) var(--weft-space-2, 8px) var(--weft-space-1, 4px);
+  color: var(--weft-color-text-muted, GrayText);
+  font-size: 0.85em;
+  font-weight: var(--weft-weight-heading, 600);
+}
+.weft-menu__separator {
+  block-size: 1px;
+  margin: var(--weft-space-1, 4px) calc(-1 * var(--weft-space-1, 4px));
+  background: var(--weft-color-border, GrayText);
+}
+.weft-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--weft-space-2, 8px);
+  min-block-size: max(var(--weft-control-sm, 28px), var(--weft-hit-min, 24px));
+  padding: var(--weft-space-1, 4px) var(--weft-space-2, 8px);
+  border-radius: calc(var(--weft-radius-control, 8px) - 2px);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.weft-menu[data-form="sheet"] .weft-menu__item {
+  min-block-size: max(var(--weft-hit-min, 24px), 48px);
+  padding-inline: var(--weft-space-3, 12px);
+}
+.weft-menu__item:focus { background: color-mix(in srgb, var(--weft-color-text, CanvasText) 8%, transparent); }
+.weft-menu__item:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: -2px; }
+.weft-menu__item[aria-expanded="true"] { background: color-mix(in srgb, var(--weft-color-text, CanvasText) 8%, transparent); }
+.weft-menu__item[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+.weft-menu__item[data-tone] { color: var(--weft-tone-text, CanvasText); }
+.weft-menu__text { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weft-menu__glyph { flex: none; display: inline-grid; place-items: center; inline-size: 16px; block-size: 16px; }
+.weft-menu__glyph svg { inline-size: 100%; block-size: 100%; }
+.weft-menu__chevron { color: var(--weft-color-text-muted, GrayText); }
+[dir="rtl"] .weft-menu__chevron { scale: -1 1; }
+.weft-menu__back { color: var(--weft-color-text-muted, GrayText); font-weight: var(--weft-weight-heading, 600); }

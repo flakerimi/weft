@@ -1,0 +1,70 @@
+/* What every overlay shares. Overlays render into #weft-overlays at the end
+   of the body, each inside a .weft-overlay layer that carries the direction,
+   scheme, input and surface of where it opened (display: contents, so it
+   adds no box; later layers paint over earlier ones). A trigger wrapper
+   (.weft-overlay-trigger) adds no box either. The backdrop dims the page
+   under a modal; the header, title, body and footer parts are those of
+   Dialog, Sheet and Drawer. */
+.weft-overlay-trigger { display: contents; }
+.weft-overlay { display: contents; font-size: var(--weft-text-base, 0.875rem); }
+
+.weft-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: color-mix(in srgb, var(--weft-color-text, CanvasText) 32%, transparent);
+  transition: opacity var(--weft-duration-dialog, 260ms) var(--weft-ease-standard, ease);
+  @starting-style { opacity: 0; }
+}
+
+.weft-overlay__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--weft-space-3, 12px);
+  padding: var(--weft-space-4, 16px) var(--weft-space-4, 16px) 0;
+}
+.weft-overlay__heading { flex: 1; min-inline-size: 0; display: grid; gap: var(--weft-space-1, 4px); }
+.weft-overlay__title { font-size: 1.15em; font-weight: var(--weft-weight-heading, 600); }
+.weft-overlay__description { color: var(--weft-color-text-muted, GrayText); }
+.weft-overlay__actions { display: flex; gap: var(--weft-space-2, 8px); }
+.weft-overlay__body { padding: var(--weft-space-4, 16px); overflow: auto; flex: 1; min-block-size: 0; }
+.weft-overlay__header + .weft-overlay__footer { padding-block-start: var(--weft-space-4, 16px); }
+.weft-overlay__footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--weft-space-2, 8px);
+  padding: 0 var(--weft-space-4, 16px) var(--weft-space-4, 16px);
+}
+
+/* The close button (×): 28 px drawn; its hit area is at least --weft-hit-min. */
+.weft-overlay__close {
+  position: relative;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--weft-control-sm, 28px);
+  block-size: var(--weft-control-sm, 28px);
+  margin-block: -4px;
+  margin-inline-end: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--weft-radius-control, 8px);
+  background: transparent;
+  color: var(--weft-color-text-muted, GrayText);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.weft-overlay__close::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  inline-size: max(100%, var(--weft-hit-min, 24px));
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  translate: -50% -50%;
+}
+.weft-overlay__close svg { inline-size: 18px; block-size: 18px; }
+@media (hover: hover) {
+  .weft-overlay__close:hover { background: color-mix(in srgb, var(--weft-color-text, CanvasText) 10%, transparent); color: var(--weft-color-text, CanvasText); }
+}

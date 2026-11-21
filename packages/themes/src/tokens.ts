@@ -42,7 +42,7 @@ export interface Theme {
   control: { sm: number; md: number; lg: number }
   /** px */
   space: { 1: number; 2: number; 3: number; 4: number; 6: number; 8: number }
-  /** ms */
-  motion: { control: number; layout: number; dialog: number }
+  /** ms: transitions, and `toast`, how long a toast stays before it leaves on its own (an interaction delay, kept under reduced motion). */
+  motion: { control: number; layout: number; dialog: number; toast: number }
   ease: { standard: Curve; emphasized: Curve }
 }

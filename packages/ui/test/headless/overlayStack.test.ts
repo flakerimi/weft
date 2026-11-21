@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { computed, effectScope } from 'vue'
+import { computed, effectScope, ref } from 'vue'
 import { overlayStack } from '../../src/headless/overlayStack.ts'
 import { $, active, html, key, press, reset } from './dom.ts'
 
@@ -101,6 +101,16 @@ describe('overlayStack', () => {
     ;(document.activeElement as HTMLElement | null)?.blur()
     overlayStack.pop('a')
     expect(active()).toBe($('.opener', root))
+  })
+
+  it('returns no focus from an overlay whose returnFocus is false (one that never takes focus)', () => {
+    const root = html('<button class="opener">o</button><div class="tip">t</div>')
+    $('.opener', root).focus()
+    const on = ref(false)
+    overlayStack.push('tip', { el: () => $('.tip', root), returnFocus: on })
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    overlayStack.pop('tip')
+    expect(active()).toBe(document.body)
   })
 
   it('does not take focus back from an element the user moved to outside the overlay', () => {

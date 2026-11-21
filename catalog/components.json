@@ -759,6 +759,112 @@
       ]
     },
     {
+      "name": "ConfirmDialog",
+      "group": "overlays",
+      "file": "packages/ui/src/overlays/ConfirmDialog.vue",
+      "purpose": "Asks the user to confirm an action before it goes ahead, with Cancel and a confirm button.",
+      "use": "Before an action that is hard to undo: delete, discard changes, leave without saving.",
+      "avoid": "For an action that can be undone, do it and offer Undo in a toast; for a form, use Dialog.",
+      "adapts": {
+        "input": "Nothing changes in behaviour; its buttons follow Button's touch sizes.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "As Dialog: full-screen when the viewport is narrow."
+      },
+      "props": [
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "Open or closed, bound with `v-model:open`."
+        },
+        {
+          "name": "defaultOpen",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "Whether it starts open when `v-model:open` is not bound."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "default": null,
+          "description": "The question, which names the dialog."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "What happens if the action goes ahead."
+        },
+        {
+          "name": "confirmLabel",
+          "type": "string",
+          "required": false,
+          "default": "'Confirm'",
+          "description": "The confirm button's text: say the action (`Delete`)."
+        },
+        {
+          "name": "cancelLabel",
+          "type": "string",
+          "required": false,
+          "default": "'Cancel'",
+          "description": "The cancel button's text."
+        },
+        {
+          "name": "tone",
+          "type": "'neutral' | 'primary' | 'danger' | 'warning' | 'success'",
+          "required": false,
+          "default": "'primary'",
+          "description": "The confirm button's colour: `danger` for an action that destroys."
+        },
+        {
+          "name": "onConfirm",
+          "type": "() => unknown",
+          "required": false,
+          "default": null,
+          "description": "Run on confirm; a promise it returns keeps the dialog open, loading, until it settles. Given by `@confirm`."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:open",
+          "payload": "[open: boolean]",
+          "description": "Opened or closed."
+        },
+        {
+          "name": "cancel",
+          "payload": "[]",
+          "description": "Answered no: Cancel, Escape or the backdrop."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [
+            "open"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "body",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "It has no stylesheet of its own: it is a Dialog with `role=\"alertdialog\"`\n(WAI-ARIA APG, Alert and Message Dialogs) and two Buttons.\n\n`title` is the question, `description` what happens; `confirm-label` names\nthe action (`Delete`) and `tone=\"danger\"` colours it for one that destroys.\nFocus starts on Cancel, the safe answer.\n\n`@confirm` runs on confirm and the dialog closes. When the handler returns a\npromise, the confirm button loads and nothing closes the dialog until the\npromise settles: it closes when the work succeeds and stays, ready again,\nwhen it fails, so the person can retry or cancel. Cancel, Escape and the\nbackdrop emit `cancel` and close it. The default slot is the trigger, or bind\n`v-model:open`; the `body` slot adds content under the description.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/ConfirmDialog/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Button, ConfirmDialog } from '@weft/ui'\n\n// A promise keeps the dialog open, Delete loading, until the work is done.\nfunction remove() {\n  return new Promise((resolve) => setTimeout(resolve, 1000))\n}\n</script>\n\n<template>\n  <ConfirmDialog\n    title=\"Delete this file?\"\n    description=\"It is removed for everyone it is shared with. This cannot be undone.\"\n    confirm-label=\"Delete\"\n    tone=\"danger\"\n    @confirm=\"remove\"\n  >\n    <Button label=\"Delete\" icon=\"trash\" tone=\"danger\" variant=\"soft\" />\n  </ConfirmDialog>\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "Container",
       "group": "layout",
       "file": "packages/ui/src/layout/Container.vue",
@@ -798,6 +904,198 @@
       ]
     },
     {
+      "name": "ContextMenu",
+      "group": "overlays",
+      "file": "packages/ui/src/overlays/ContextMenu.vue",
+      "purpose": "A menu for an area, opened in place of the browser's own by a right press, the context menu key or a long press.",
+      "use": "For actions on an item that a power user expects on right press (a file, a row, a canvas), alongside a visible way to reach them.",
+      "avoid": "As the only way to an action, since nothing shows that it is there; give the item a DropdownMenu button too.",
+      "adapts": {
+        "input": "On pointer it opens at the pointer. On touch a long press (600 ms, held still) opens it as a bottom sheet with large items; a finger that moves is scrolling and opens nothing.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "As DropdownMenu."
+      },
+      "props": [
+        {
+          "name": "items",
+          "type": "MenuItem[] | MenuItem[][]",
+          "required": false,
+          "default": "() => []",
+          "description": "The menu's items, or groups of them."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Leave the browser's own menu in place."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:open",
+          "payload": "[open: boolean]",
+          "description": "Opened or closed."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "item",
+          "props": [
+            "item"
+          ],
+          "dynamic": false
+        }
+      ],
+      "notes": "The default slot is the area; `items` are DropdownMenu's `MenuItem`s, and\nthe menu is a DropdownMenu, with the same keyboard, submenus and closing.\nOpened with the keyboard (the context menu key or Shift+F10 on something\nfocused inside), it opens under that element. Focus returns to where it was.\nAttributes go to the menu: give it an `aria-label`. `disabled` leaves the\nbrowser's own menu in place.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/ContextMenu/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ContextMenu, type MenuItem } from '@weft/ui'\n\nconst items: MenuItem[] = [\n  { label: 'Open', icon: 'folder-open' },\n  { label: 'Rename', icon: 'pencil' },\n  { type: 'separator' },\n  { label: 'Delete', icon: 'trash', tone: 'danger' },\n]\n</script>\n\n<template>\n  <!-- Right press, the context menu key, or a long press on touch. -->\n  <ContextMenu :items=\"items\" aria-label=\"File actions\">\n    <div tabindex=\"0\" style=\"padding: 32px; border: 1px dashed; border-radius: 12px\">report.pdf</div>\n  </ContextMenu>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "Dialog",
+      "group": "overlays",
+      "file": "packages/ui/src/overlays/Dialog.vue",
+      "purpose": "A modal window over the page, for a task or message that needs the user's attention before going back.",
+      "use": "For a short form, a decision or details that interrupt the page on purpose: rename, invite, settings of one thing.",
+      "avoid": "To confirm an action, use ConfirmDialog; for a panel at the edge (navigation, filters), Sheet; for a hint, Tooltip or Popover.",
+      "adapts": {
+        "input": "Nothing changes in behaviour; on touch its close button's hit area is at least 44 px.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "Centred, at most 32rem wide; when the viewport is narrow (under 640 px) it is full-screen, as it is at every width with `fullscreen`."
+      },
+      "props": [
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "Open or closed, bound with `v-model:open`."
+        },
+        {
+          "name": "defaultOpen",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "Whether it starts open when `v-model:open` is not bound."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The heading, which names the dialog. Without one, give the dialog an `aria-label`."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A sentence under the title, which describes the dialog."
+        },
+        {
+          "name": "close",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Show the close button (×) in the header."
+        },
+        {
+          "name": "closeLabel",
+          "type": "string",
+          "required": false,
+          "default": "'Close'",
+          "description": "The close button's name for assistive technology."
+        },
+        {
+          "name": "dismissible",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Escape and a press on the backdrop close it."
+        },
+        {
+          "name": "fullscreen",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Full-screen at every width; it is full-screen when narrow anyway."
+        },
+        {
+          "name": "role",
+          "type": "'dialog' | 'alertdialog'",
+          "required": false,
+          "default": "'dialog'",
+          "description": "`alertdialog` for a dialog that needs an answer before going on (ConfirmDialog uses it)."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:open",
+          "payload": "[open: boolean]",
+          "description": "Opened or closed, by the trigger, Escape, the backdrop or a close."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [
+            "open"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "header",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "actions",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "body",
+          "props": [
+            "close"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "footer",
+          "props": [
+            "close"
+          ],
+          "dynamic": false
+        }
+      ],
+      "notes": "The default slot is the trigger, one element (a Button), which opens it and\ncarries `aria-haspopup=\"dialog\"`, `aria-expanded` and `aria-controls`; or\nbind `v-model:open`. `title` names it and `description` describes it\n(`aria-labelledby`, `aria-describedby`). The `body` and `footer` slots get\n`close()`; `header` replaces the title and description, and `actions` adds\ncontrols before the close button (×, drawn inline; `close=\"false\"` hides it).\n\nIt follows the WAI-ARIA APG Dialog (Modal) pattern: `aria-modal=\"true\"`,\nfocus trapped inside, starting on the first tabbable element that is not the\nclose button, and the page does not scroll while it is open.\n\n**Closing.** Escape, a press on the backdrop and the close button close it;\n`dismissible=\"false\"` keeps it open on Escape and the backdrop. Focus returns\nto its trigger, after a press on the backdrop too (the backdrop is the\ndialog's own), or, with no trigger, to the element that had focus when it\nopened.\n\nIts content renders into `#weft-overlays` only once mounted, so the server\nrenders none of it; attributes go to the dialog element.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Dialog/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Button, Dialog, FormField, Input } from '@weft/ui'\n\nconst name = ref('report.pdf')\n</script>\n\n<template>\n  <Dialog title=\"Rename file\" description=\"The new name shows everywhere the file is shared.\">\n    <Button label=\"Rename\" variant=\"outline\" tone=\"neutral\" />\n    <template #body>\n      <FormField label=\"Name\"><Input v-model=\"name\" /></FormField>\n    </template>\n    <template #footer=\"{ close }\">\n      <Button label=\"Cancel\" variant=\"ghost\" tone=\"neutral\" @click=\"close()\" />\n      <Button label=\"Save\" @click=\"close()\" />\n    </template>\n  </Dialog>\n</template>\n"
+        },
+        {
+          "name": "controlled",
+          "title": "Controlled",
+          "file": "packages/ui/examples/Dialog/controlled.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Button, Dialog } from '@weft/ui'\n\n// Opened from code; `dismissible: false` keeps it open on Escape and the backdrop.\nconst open = ref(false)\n</script>\n\n<template>\n  <Button label=\"Show terms\" @click=\"open = true\" />\n  <Dialog v-model:open=\"open\" title=\"Terms of use\" :dismissible=\"false\" fullscreen>\n    <template #body><p>Read these before going on.</p></template>\n    <template #footer=\"{ close }\"><Button label=\"I agree\" @click=\"close()\" /></template>\n  </Dialog>\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "Divider",
       "group": "layout",
       "file": "packages/ui/src/layout/Divider.vue",
@@ -827,6 +1125,215 @@
           "title": "Basic",
           "file": "packages/ui/examples/Divider/basic.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { Divider, Stack } from '@weft/ui'\n</script>\n\n<template>\n  <Stack :gap=\"3\">\n    <p>Signed in as ada@example.com</p>\n    <Divider />\n    <Stack direction=\"row\" :gap=\"3\" align=\"center\">\n      <span>Profile</span>\n      <Divider orientation=\"vertical\" />\n      <span>Sign out</span>\n    </Stack>\n  </Stack>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "Drawer",
+      "group": "overlays",
+      "file": "packages/ui/src/overlays/Drawer.vue",
+      "purpose": "A sheet with a handle that a finger can drag away, from the bottom by default.",
+      "use": "For a touch-first panel of options or details that the user dismisses with a swipe, as on a phone.",
+      "avoid": "For a panel at the side of a large screen, use Sheet; for a decision, Dialog.",
+      "adapts": {
+        "input": "Dragging its handle or header towards its edge moves it with the finger; past a quarter of its size, or with a flick, it closes, short of that it springs back. Pointer users can drag too, or use Escape and the backdrop.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "As Sheet: a bottom or top drawer is the viewport's width and at most 85% of its height."
+      },
+      "props": [
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "Open or closed, bound with `v-model:open`."
+        },
+        {
+          "name": "defaultOpen",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "Whether it starts open when `v-model:open` is not bound."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The heading, which names the drawer. Without one, give the drawer an `aria-label`."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A sentence under the title, which describes the drawer."
+        },
+        {
+          "name": "close",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "Show the close button (×) in the header; off by default, as the handle and the backdrop close it."
+        },
+        {
+          "name": "closeLabel",
+          "type": "string",
+          "required": false,
+          "default": "'Close'",
+          "description": "The close button's name for assistive technology."
+        },
+        {
+          "name": "dismissible",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Escape and a press on the backdrop close it."
+        },
+        {
+          "name": "side",
+          "type": "'start' | 'end' | 'top' | 'bottom'",
+          "required": false,
+          "default": "'bottom'",
+          "description": "The side it comes from and is dragged back to: `bottom`, `top`, `start` or `end` (mirrored right to left)."
+        },
+        {
+          "name": "handle",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Show the drag handle."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:open",
+          "payload": "[open: boolean]",
+          "description": "Opened or closed, by the trigger, Escape, the backdrop or a close."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [
+            "open"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "header",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "actions",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "body",
+          "props": [
+            "close"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "footer",
+          "props": [
+            "close"
+          ],
+          "dynamic": false
+        }
+      ],
+      "notes": "`side` is `bottom` (default), `top`, `start` or `end` (mirrored right to\nleft); `handle` shows the drag handle (default true); the close button is\noff by default (`close` shows it). Otherwise it is a Sheet, with the same\nslots, `v-model:open`, focus trap, scroll lock and closing by Escape and\nthe backdrop, focus back on the trigger. `dismissible=\"false\"` turns off\ndragging as well.\n\nA press on a control in the header is that control's, never the start of a\ndrag.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Drawer/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Button, Drawer, Stack } from '@weft/ui'\n</script>\n\n<template>\n  <!-- Drag the handle down to close it. -->\n  <Drawer title=\"Share\" description=\"Send a link to this page.\">\n    <Button label=\"Share\" icon=\"share\" />\n    <template #body>\n      <Stack :gap=\"2\">\n        <Button label=\"Copy link\" variant=\"outline\" tone=\"neutral\" block />\n        <Button label=\"Email\" variant=\"outline\" tone=\"neutral\" block />\n      </Stack>\n    </template>\n  </Drawer>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "DropdownMenu",
+      "group": "overlays",
+      "file": "packages/ui/src/overlays/DropdownMenu.vue",
+      "purpose": "A menu of actions opened from a button, with groups, checkbox and radio items, links and submenus.",
+      "use": "For the actions on one thing (a row's More button), a user menu, view options.",
+      "avoid": "To choose a value for a form, use a select; for navigation between pages, links or navigation components.",
+      "adapts": {
+        "input": "On pointer it floats beside its trigger and a submenu opens beside its item, on hover too. On touch it is a bottom sheet with large items, 48 px tall with larger text, and a submenu is a sheet above it, with a back item. The input can change while it is open; the focused item stays focused.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "Floating, it is at least 10rem wide and stays within the room left; as a sheet, the viewport's width."
+      },
+      "props": [
+        {
+          "name": "items",
+          "type": "MenuItem[] | MenuItem[][]",
+          "required": false,
+          "default": "() => []",
+          "description": "The items, or groups of them (an array of arrays), drawn with separators between."
+        },
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "Open or closed, bound with `v-model:open`."
+        },
+        {
+          "name": "defaultOpen",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "Whether it starts open when `v-model:open` is not bound."
+        },
+        {
+          "name": "placement",
+          "type": "Placement",
+          "required": false,
+          "default": "'bottom-start'",
+          "description": "Where it floats against the trigger on pointer (start and end follow the text direction)."
+        },
+        {
+          "name": "anchor",
+          "type": "{ getBoundingClientRect(): DOMRect /** For a point: the element it belongs to, whose scrolling and direction the overlay follows. */ contextElement?: Element }",
+          "required": false,
+          "default": null,
+          "description": "Float against this element or point instead of the trigger (ContextMenu gives the pointer's)."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:open",
+          "payload": "[open: boolean]",
+          "description": "Opened or closed."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [
+            "open"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "item",
+          "props": [
+            "item"
+          ],
+          "dynamic": false
+        }
+      ],
+      "notes": "`items` is a list of `MenuItem`s, or a list of groups (an array of arrays),\ndrawn with separators between. An item has `label`, `icon` (a Lucide name),\n`tone` (`danger`), `disabled`, `to` and `target` (a link), `children` (a\nsubmenu) and `onSelect(event)`; `type: 'label'` is a group's heading,\n`'separator'` a line, `'checkbox'` and `'radio'` items with `checked` and\n`onUpdateChecked(checked)`. The `item` slot replaces an item's label.\n\nIt follows the WAI-ARIA APG Menu Button and Menu patterns. The trigger, the\ndefault slot (one element), gets `aria-haspopup=\"menu\"`, `aria-expanded`\nand `aria-controls`, and the menu is labelled by it.\n\n**Keyboard.** On the trigger: Enter, Space and ArrowDown open the menu on\nits first item, ArrowUp on its last. In the menu: ArrowDown and ArrowUp move\n(looping), Home and End go to the ends, typing jumps to the item whose label\nstarts so, Enter and Space choose. ArrowRight opens a submenu on its first\nitem, ArrowLeft closes it back to its item (mirrored right to left). Escape\ncloses one level; Tab closes the menu. Disabled items are reached but cannot\nbe chosen.\n\n**Choosing** an item calls `onSelect`, closes every level and puts focus back\non the trigger, unless `onSelect` calls `event.preventDefault()`. A checkbox\nitem calls `onUpdateChecked(!checked)`, a radio item `onUpdateChecked(true)`.\nA press outside closes it; while it is open the page does not scroll.\n\nThe menu renders into `#weft-overlays` once mounted; attributes go to it.\n`anchor` positions it against another element or a point (ContextMenu).",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/DropdownMenu/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { computed, ref } from 'vue'\nimport { Button, DropdownMenu, type MenuItem } from '@weft/ui'\n\nconst grid = ref(true)\nconst sort = ref('name')\nconst items = computed<MenuItem[][]>(() => [\n  [\n    { type: 'label', label: 'File' },\n    { label: 'Rename', icon: 'pencil' },\n    { label: 'Duplicate', icon: 'copy' },\n    { label: 'Share', icon: 'share', children: [{ label: 'Copy link' }, { label: 'Email' }] },\n  ],\n  [\n    { type: 'checkbox', label: 'Show grid', checked: grid.value, onUpdateChecked: (on) => (grid.value = on) },\n    { type: 'radio', label: 'By name', checked: sort.value === 'name', onUpdateChecked: () => (sort.value = 'name') },\n    { type: 'radio', label: 'By date', checked: sort.value === 'date', onUpdateChecked: () => (sort.value = 'date') },\n  ],\n  [{ label: 'Delete', icon: 'trash', tone: 'danger' }],\n])\n</script>\n\n<template>\n  <!-- On touch it opens as a bottom sheet with large items. -->\n  <DropdownMenu :items=\"items\">\n    <Button label=\"Actions\" variant=\"outline\" tone=\"neutral\" trailing-icon=\"chevron-down\" />\n  </DropdownMenu>\n</template>\n"
         }
       ]
     },
@@ -1871,6 +2378,116 @@
       ]
     },
     {
+      "name": "Popover",
+      "group": "overlays",
+      "file": "packages/ui/src/overlays/Popover.vue",
+      "purpose": "Content that floats beside a trigger, opened by a press: filters, a short form, details.",
+      "use": "For a small panel of controls or information tied to one button, which the user opens, uses and closes.",
+      "avoid": "For a list of actions, use DropdownMenu; for a short hint on hover, Tooltip; for a task that needs the user's full attention, Dialog.",
+      "adapts": {
+        "input": "On pointer it floats beside the trigger and is not modal. On touch the same content is a bottom sheet over a backdrop, modal, with `title` as its heading. The input can change while it is open; what is inside keeps its state and focus.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "Floating, it stays within the room left on its side, flipping and sliding to stay in view; as a sheet it is the viewport's width."
+      },
+      "props": [
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "Open or closed, bound with `v-model:open`."
+        },
+        {
+          "name": "defaultOpen",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "Whether it starts open when `v-model:open` is not bound."
+        },
+        {
+          "name": "placement",
+          "type": "Placement",
+          "required": false,
+          "default": "'bottom'",
+          "description": "Where it floats against the trigger on pointer: `bottom`, `top-start`, … (start and end follow the text direction)."
+        },
+        {
+          "name": "offset",
+          "type": "number",
+          "required": false,
+          "default": "8",
+          "description": "The gap to the trigger, in px."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Names the content for assistive technology; on touch it is the sheet's heading too."
+        },
+        {
+          "name": "dismissible",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Escape and a press outside close it."
+        },
+        {
+          "name": "modal",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "Modal on pointer too: focus is trapped and the page does not scroll. On touch it is always modal."
+        },
+        {
+          "name": "autoFocus",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Move focus into the content when it opens (on pointer); false keeps focus where it is, as a combobox's input needs."
+        },
+        {
+          "name": "anchor",
+          "type": "{ getBoundingClientRect(): DOMRect /** For a point: the element it belongs to, whose scrolling and direction the overlay follows. */ contextElement?: Element }",
+          "required": false,
+          "default": null,
+          "description": "Float against this element or point instead of the trigger."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:open",
+          "payload": "[open: boolean]",
+          "description": "Opened or closed, by the trigger, Escape, a press outside or focus leaving."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [
+            "open"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "content",
+          "props": [
+            "close"
+          ],
+          "dynamic": false
+        }
+      ],
+      "notes": "The default slot is the trigger, one element (a Button); a press on it\ntoggles the popover, and it carries `aria-haspopup=\"dialog\"`,\n`aria-expanded` and `aria-controls`. The `content` slot is what it shows,\nand gets `close()`. Bind `v-model:open` to open it from code; `anchor`\npositions it against another element or a point.\n\nThe content renders into `#weft-overlays` at the end of the body (created\nwhen first needed), only once mounted, so the server renders none of it. It\nis a `role=\"dialog\"` named by `title` (or an `aria-label`); attributes go to\nit.\n\n**Focus.** On open, focus moves to the first tabbable element inside, or to\nthe content itself (`auto-focus=\"false\"` keeps it where it is, as a combobox\ndoes). On pointer it is not modal: Tab can leave, and focus leaving closes it\n(unless it went to an overlay opened from inside). With `modal`, or on touch,\nfocus is trapped and the page does not scroll.\n\n**Closing.** Escape and a press outside close it (`dismissible=\"false\"`\nturns both off); a press on its trigger toggles it shut. Focus returns to\nthe trigger, except after a press outside, which put the user's attention\nelsewhere. On touch a press on the backdrop closes it and does return focus.\n\n`placement` is a floating-ui placement (`bottom`, `top-start`, …); `start`\nand `end` follow the text direction.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Popover/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Button, Checkbox, Popover, Stack } from '@weft/ui'\n\nconst open = ref(false)\nconst archived = ref(false)\n</script>\n\n<template>\n  <!-- On touch the same content opens as a bottom sheet, titled \"Filters\". -->\n  <Popover v-model:open=\"open\" title=\"Filters\">\n    <Button variant=\"outline\" tone=\"neutral\" label=\"Filters\" trailing-icon=\"chevron-down\" />\n    <template #content=\"{ close }\">\n      <Stack :gap=\"3\">\n        <Checkbox v-model=\"archived\" label=\"Show archived\" />\n        <Button size=\"sm\" label=\"Apply\" @click=\"close()\" />\n      </Stack>\n    </template>\n  </Popover>\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "Progress",
       "group": "basics",
       "file": "packages/ui/src/basics/Progress.vue",
@@ -2166,6 +2783,132 @@
           "title": "Vertical",
           "file": "packages/ui/examples/Separator/vertical.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { Link, Separator, Stack } from '@weft/ui'\n</script>\n\n<template>\n  <Stack direction=\"row\" :gap=\"3\" align=\"center\">\n    <Link standalone to=\"/terms\">Terms</Link>\n    <Separator orientation=\"vertical\" decorative />\n    <Link standalone to=\"/privacy\">Privacy</Link>\n  </Stack>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "Sheet",
+      "group": "overlays",
+      "file": "packages/ui/src/overlays/Sheet.vue",
+      "purpose": "A modal panel that slides in from an edge of the viewport: a slideover from the side, or a bottom sheet.",
+      "use": "For navigation on small screens, filters, a detail view or a form that should keep the page visible beside it.",
+      "avoid": "For a short decision, use Dialog or ConfirmDialog; for content tied to one button on a large screen, Popover.",
+      "adapts": {
+        "input": "Nothing changes in behaviour; on touch its close button's hit area is at least 44 px. Popover and DropdownMenu render as a bottom sheet on touch with this stylesheet.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "A side sheet is at most 24rem wide, the full width when the viewport is narrower; a top or bottom sheet is the viewport's width and at most 85% of its height."
+      },
+      "props": [
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "Open or closed, bound with `v-model:open`."
+        },
+        {
+          "name": "defaultOpen",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "Whether it starts open when `v-model:open` is not bound."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The heading, which names the sheet. Without one, give the sheet an `aria-label`."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A sentence under the title, which describes the sheet."
+        },
+        {
+          "name": "close",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Show the close button (×) in the header."
+        },
+        {
+          "name": "closeLabel",
+          "type": "string",
+          "required": false,
+          "default": "'Close'",
+          "description": "The close button's name for assistive technology."
+        },
+        {
+          "name": "dismissible",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Escape and a press on the backdrop close it."
+        },
+        {
+          "name": "side",
+          "type": "'start' | 'end' | 'top' | 'bottom'",
+          "required": false,
+          "default": "'end'",
+          "description": "The side it comes from: `start` and `end` (the inline sides, mirrored right to left), `top` or `bottom`."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:open",
+          "payload": "[open: boolean]",
+          "description": "Opened or closed, by the trigger, Escape, the backdrop or a close."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [
+            "open"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "header",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "actions",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "body",
+          "props": [
+            "close"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "footer",
+          "props": [
+            "close"
+          ],
+          "dynamic": false
+        }
+      ],
+      "notes": "`side` is `start` or `end` (the inline sides, so mirrored in a right-to-left\ndocument), `top` or `bottom`; the default is `end`. Otherwise it is used as\nDialog is: the default slot is the trigger, or bind `v-model:open`; `title`\nand `description` name and describe it; `header`, `actions`, `body` and\n`footer` slots, the last two with `close()`.\n\nIt is a modal dialog (WAI-ARIA APG, Dialog (Modal)): focus is trapped inside,\nthe page does not scroll, and Escape, the backdrop and the close button\nclose it (`dismissible=\"false\"` keeps Escape and the backdrop from it), with\nfocus back on the trigger. The body scrolls when long.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Sheet/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Button, Link, Sheet, Stack } from '@weft/ui'\n</script>\n\n<template>\n  <Sheet title=\"Menu\" side=\"start\">\n    <Button icon=\"menu\" variant=\"ghost\" tone=\"neutral\" aria-label=\"Open menu\" />\n    <template #body>\n      <Stack :gap=\"2\">\n        <Link href=\"/\">Home</Link>\n        <Link href=\"/settings\">Settings</Link>\n      </Stack>\n    </template>\n  </Sheet>\n</template>\n"
+        },
+        {
+          "name": "sides",
+          "title": "Sides",
+          "file": "packages/ui/examples/Sheet/sides.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Button, Sheet, Stack } from '@weft/ui'\n\nconst sides = ['start', 'end', 'top', 'bottom'] as const\n</script>\n\n<template>\n  <Stack direction=\"row\" :gap=\"2\">\n    <Sheet v-for=\"side in sides\" :key=\"side\" :side=\"side\" :title=\"`From ${side}`\">\n      <Button :label=\"side\" variant=\"outline\" tone=\"neutral\" />\n      <template #body><p>A sheet from the {{ side }} side.</p></template>\n    </Sheet>\n  </Stack>\n</template>\n"
         }
       ]
     },
@@ -2711,6 +3454,249 @@
           "title": "Basic",
           "file": "packages/ui/examples/Textarea/basic.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, Textarea } from '@weft/ui'\n\nconst message = ref('')\n</script>\n\n<template>\n  <FormField label=\"Message\" description=\"It grows as you write, up to eight lines.\">\n    <Textarea v-model=\"message\" autoresize :rows=\"2\" :maxrows=\"8\" placeholder=\"How can we help?\" />\n  </FormField>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "Toast",
+      "group": "overlays",
+      "file": "packages/ui/src/overlays/Toast.vue",
+      "purpose": "One short message that appears for a moment, with an optional action: saved, sent, undone.",
+      "use": "Rendered by Toaster from useToast(); render one yourself only inside a live region of your own.",
+      "avoid": "To show a toast, call useToast().add and put a Toaster in the layout; for a message that must stay, use an inline alert.",
+      "adapts": {
+        "input": "Nothing changes in behaviour; its close button's hit area is at least 44 px on touch.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "It fills its Toaster's column."
+      },
+      "props": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The message, in bold."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "More about it, under the title."
+        },
+        {
+          "name": "tone",
+          "type": "'neutral' | 'primary' | 'danger' | 'warning' | 'success'",
+          "required": false,
+          "default": "'neutral'",
+          "description": "The colour and what it says: `success`, `danger`, …"
+        },
+        {
+          "name": "icon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon before the text."
+        },
+        {
+          "name": "duration",
+          "type": "number",
+          "required": false,
+          "default": null,
+          "description": "ms before it leaves on its own; default `--weft-duration-toast`; 0 stays until closed."
+        },
+        {
+          "name": "paused",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Its time stands still: hovered, or focus inside."
+        },
+        {
+          "name": "close",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Show the close button."
+        },
+        {
+          "name": "closeLabel",
+          "type": "string",
+          "required": false,
+          "default": "'Close'",
+          "description": "The close button's name for assistive technology."
+        },
+        {
+          "name": "actions",
+          "type": "ToastAction[]",
+          "required": false,
+          "default": null,
+          "description": "Buttons after the text; each closes the toast after it runs."
+        }
+      ],
+      "emits": [
+        {
+          "name": "close",
+          "payload": "[]",
+          "description": "It should go: its time ran out, or it was closed or acted on."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "leading",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "actions",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "`title`, `description`, `icon` (a Lucide name), `tone` (a bar at the inline\nstart), `actions` (buttons, each closing the toast after it runs) and a\nclose button (× drawn inline; `close=\"false\"` hides it). The default,\n`leading` and `actions` slots replace the text, icon and actions.\n\nIt emits `close` when it should go: after `duration` ms (by default the\ntheme's `--weft-duration-toast`, 4000 ms in the neutral theme; 0 stays until\nclosed), when closed, acted on, or on Escape while focus is in it. Its time\nstands still while `paused`, and resumes with what it had left.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Toast/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Stack, Toast } from '@weft/ui'\n</script>\n\n<template>\n  <!-- Toasts normally come from useToast() through a Toaster; these stay (duration 0). -->\n  <Stack :gap=\"2\" role=\"status\">\n    <Toast title=\"Saved\" description=\"Your draft is safe.\" tone=\"success\" icon=\"circle-check\" :duration=\"0\" />\n    <Toast title=\"Message deleted\" :actions=\"[{ label: 'Undo' }]\" :duration=\"0\" />\n  </Stack>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "Toaster",
+      "group": "overlays",
+      "file": "packages/ui/src/overlays/Toaster.vue",
+      "purpose": "Shows the toasts queued with useToast(), in a corner of the viewport, announced to assistive technology.",
+      "use": "Once, in the app's layout; then call useToast().add from anywhere in the browser.",
+      "avoid": "For a message tied to a form or a section, show it there instead.",
+      "adapts": {
+        "input": "Nothing changes in behaviour; toasts' buttons follow Button's touch sizes.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "At most 24rem wide, the viewport less a margin when narrower."
+      },
+      "props": [
+        {
+          "name": "position",
+          "type": "'top-start' | 'top-center' | 'top-end' | 'bottom-start' | 'bottom-center' | 'bottom-end'",
+          "required": false,
+          "default": "'bottom-end'",
+          "description": "Where toasts stack: a corner, or the middle of the top or bottom edge."
+        },
+        {
+          "name": "max",
+          "type": "number",
+          "required": false,
+          "default": "5",
+          "description": "How many show at once, the newest; the rest wait their turn."
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "default": "'Notifications'",
+          "description": "The region's name for assistive technology."
+        }
+      ],
+      "emits": [],
+      "slots": [],
+      "notes": "const toast = useToast()\n    toast.add({ title: 'Saved', description: 'Your draft is safe.', tone: 'success' })\n    toast.add({ title: 'Deleted', actions: [{ label: 'Undo', onClick: restore }] })\n\n`add` returns the toast with its `id`, for `update(id, patch)` and\n`remove(id)`; `clear()` empties the queue and `toasts` reads it. A toast\nleaves after its `duration`, by default the theme's `--weft-duration-toast`.\n\nThe Toaster is a region named \"Notifications\" (`label`) whose list is a\npolite live region, so a new toast is announced without moving focus. While\nthe pointer is over it or focus is inside it, no toast's time runs. F8 moves\nfocus to it, to reach a toast's actions; when the focused toast goes, focus\nstays in the region. `position` is a corner or the middle of the top or\nbottom edge (`bottom-end` by default; start and end follow the text\ndirection), and `max` (5) toasts show at once, the newest.\n\nIt renders into the overlay root only once mounted. The queue is one per\npage; on the server `add` does nothing.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Toaster/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Button, Stack, Toaster, useToast } from '@weft/ui'\n\nconst toast = useToast()\nfunction save() {\n  toast.add({ title: 'Saved', description: 'Your draft is safe.', tone: 'success', icon: 'circle-check' })\n}\nfunction remove() {\n  toast.add({ title: 'Message deleted', actions: [{ label: 'Undo', onClick: () => toast.add({ title: 'Restored' }) }] })\n}\n</script>\n\n<template>\n  <Stack direction=\"row\" :gap=\"2\">\n    <Button label=\"Save\" @click=\"save\" />\n    <Button label=\"Delete\" variant=\"outline\" tone=\"neutral\" @click=\"remove\" />\n  </Stack>\n  <!-- Once, in the app's layout. -->\n  <Toaster position=\"bottom-end\" />\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "Tooltip",
+      "group": "overlays",
+      "file": "packages/ui/src/overlays/Tooltip.vue",
+      "purpose": "A short text about a control, shown on hover or keyboard focus.",
+      "use": "For naming an icon button, or adding a short hint to a control, where hovering is how a pointer user would ask.",
+      "avoid": "For anything a touch user needs, put it in the interface, since tooltips do not show on touch; for interactive content, use Popover.",
+      "adapts": {
+        "input": "On pointer it shows on hover after `delay` and at once on keyboard focus. On touch it renders nothing, and nothing hovers; a trigger with no name of its own is named by the text (aria-label), so the meaning stays.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "It wraps at 20rem, and stays in view by flipping and sliding."
+      },
+      "props": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "What it says. The content slot replaces it; give text anyway, as the name of a trigger that has none."
+        },
+        {
+          "name": "placement",
+          "type": "Placement",
+          "required": false,
+          "default": "'top'",
+          "description": "Where it shows against the trigger: `top`, `bottom-start`, …"
+        },
+        {
+          "name": "delay",
+          "type": "number",
+          "required": false,
+          "default": "500",
+          "description": "ms of hover before it shows; focus shows it at once, and so does a hover just after another tooltip closed."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Never shown."
+        },
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "Shown or hidden, bound with `v-model:open`."
+        },
+        {
+          "name": "defaultOpen",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "Whether it starts shown when `v-model:open` is not bound."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:open",
+          "payload": "[open: boolean]",
+          "description": "Shown or hidden."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "content",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "The default slot is the trigger, one element; `text` is what it says (the\n`content` slot replaces it). It follows the WAI-ARIA APG Tooltip pattern:\nit never takes focus, and while shown the trigger is described by it\n(`aria-describedby`, added after any description the trigger has).\n\nIt hides on Escape (only it, when it is the top overlay), on a press, when\nthe trigger loses focus, and when the pointer leaves both the trigger and the\ntooltip, so the pointer can move onto it to read it. Once one tooltip has\nhidden, the next shows without a delay for a moment, as when running the\npointer along a toolbar.\n\n**Naming.** An icon-only trigger needs a name. When the trigger has none (no\n`aria-label`, `aria-labelledby`, `title` or text), the tooltip's text becomes\nits `aria-label`, on pointer and touch alike. A trigger that has a name keeps\nit; on touch the tooltip's extra hint is then not shown, so do not put what a\nperson must know in a tooltip.\n\n`v-model:open` shows it from code; `disabled` never shows it.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Tooltip/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Button, Stack, Tooltip } from '@weft/ui'\n</script>\n\n<template>\n  <Stack direction=\"row\" :gap=\"2\">\n    <!-- No name of its own: the tooltip's text becomes its aria-label, so touch users hear it too. -->\n    <Tooltip text=\"Delete file\">\n      <Button icon=\"trash\" variant=\"ghost\" tone=\"neutral\" />\n    </Tooltip>\n    <Tooltip text=\"Saves without publishing\" placement=\"bottom\">\n      <Button label=\"Save draft\" variant=\"outline\" tone=\"neutral\" />\n    </Tooltip>\n  </Stack>\n</template>\n"
         }
       ]
     },

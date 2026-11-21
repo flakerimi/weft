@@ -52,6 +52,22 @@ describe('weftIcons()', () => {
     expect(drawn(page.code)).not.toContain('star')
   })
 
+  it('ships no close or chevron glyph with a bundle that imports only Button', async () => {
+    // The paths as the compiled templates hold them.
+    const close = 'd=\\"M18 6 6 18\\"'
+    const chevron = 'd=\\"m9 18 6-6-6-6\\"'
+    const only = (await bundle({ only: 'components/OnlyButton.vue' })).map((c) => c.code).join('\n')
+    expect(drawn(only)).toEqual([])
+    for (const name of ['x', 'chevron-right', 'chevron-down', 'check']) expect(only, name).not.toContain(lucideBody(name)!)
+    expect(only).not.toContain(close)
+    expect(only).not.toContain(chevron)
+    // Those glyphs are drawn inline by the components that use them, and come only with them.
+    const overlays = (await bundle({ overlays: 'components/WithDialog.vue' })).map((c) => c.code).join('\n')
+    expect(overlays).toContain(close)
+    expect(overlays).toContain(chevron)
+    expect(drawn(overlays)).toEqual([])
+  })
+
   it('bundles names listed in the icons option, for names made at run time', async () => {
     const chunks = await bundle({ star: 'components/Starred.vue' }, { icons: ['bell'] })
     expect(drawn(chunks.map((c) => c.code).join('\n'))).toEqual(['bell', 'star'])

@@ -1,0 +1,26 @@
+/* Toaster: a column of toasts fixed in a corner (or the middle of an edge),
+   above every other overlay; the gaps between them let presses through.
+   Narrow viewports give it the full width. */
+.weft-toaster {
+  position: fixed;
+  z-index: 70;
+  inline-size: min(24rem, calc(100vw - 2 * var(--weft-space-4, 16px)));
+  margin: var(--weft-space-4, 16px);
+  pointer-events: none;
+  outline: none;
+}
+.weft-toaster:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: 2px; }
+.weft-toaster[data-position^="top"] { inset-block-start: env(safe-area-inset-top, 0px); }
+.weft-toaster[data-position^="bottom"] { inset-block-end: env(safe-area-inset-bottom, 0px); }
+.weft-toaster[data-position$="start"] { inset-inline-start: 0; }
+.weft-toaster[data-position$="end"] { inset-inline-end: 0; }
+.weft-toaster[data-position$="center"] { inset-inline: 0; margin-inline: auto; }
+.weft-toaster__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-2, 8px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.weft-toaster[data-position^="top"] .weft-toaster__list { flex-direction: column-reverse; }

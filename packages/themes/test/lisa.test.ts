@@ -20,6 +20,11 @@ describe('lisa theme', () => {
     expect(theme.motion.control).toBe(150)
   })
 
+  it('takes the toast timeout from the contract', () => {
+    expect(theme.motion.toast).toBe(tokens.motion['toast-timeout'].value)
+    expect(themeToCss(theme)).toContain(`--weft-duration-toast: ${tokens.motion['toast-timeout'].value}ms;`)
+  })
+
   it('builds for every accent in the contract', () => {
     for (const key of Object.keys(tokens.color.accent).filter((k) => /^accent-.+-500$/.test(k))) {
       expect(() => themeToCss(lisa(tokens, { accent: key.slice(7, -4) })), key).not.toThrow()

@@ -1,0 +1,50 @@
+/* Sheet: a panel against one edge of the viewport over a backdrop: start
+   and end (inline, so mirrored right to left), top and bottom. A bottom
+   sheet is as wide as the viewport, its top corners rounded, at most 85% of
+   its height, clear of the home indicator. Popover and DropdownMenu take the
+   bottom form on touch. */
+.weft-sheet {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--weft-color-surface-raised, Canvas);
+  color: var(--weft-color-text, CanvasText);
+  box-shadow: 0 8px 32px color-mix(in srgb, CanvasText 24%, transparent);
+  outline: none;
+  transition: translate var(--weft-duration-layout, 220ms) var(--weft-ease-emphasized, ease-out);
+}
+.weft-sheet[data-side="start"],
+.weft-sheet[data-side="end"] {
+  inset-block: 0;
+  inline-size: min(100%, 24rem);
+}
+.weft-sheet[data-side="start"] { inset-inline-start: 0; }
+.weft-sheet[data-side="end"] { inset-inline-end: 0; }
+.weft-sheet[data-side="top"],
+.weft-sheet[data-side="bottom"] {
+  inset-inline: 0;
+  max-block-size: 85dvh;
+}
+.weft-sheet[data-side="top"] {
+  inset-block-start: 0;
+  border-end-start-radius: var(--weft-radius-panel, 16px);
+  border-end-end-radius: var(--weft-radius-panel, 16px);
+}
+.weft-sheet[data-side="bottom"] {
+  inset-block-end: 0;
+  padding-block-end: env(safe-area-inset-bottom, 0px);
+  border-start-start-radius: var(--weft-radius-panel, 16px);
+  border-start-end-radius: var(--weft-radius-panel, 16px);
+}
+@starting-style {
+  .weft-sheet[data-side="bottom"] { translate: 0 100%; }
+  .weft-sheet[data-side="top"] { translate: 0 -100%; }
+  .weft-sheet[data-side="end"] { translate: 100% 0; }
+  .weft-sheet[data-side="start"] { translate: -100% 0; }
+  [dir="rtl"] .weft-sheet[data-side="end"] { translate: -100% 0; }
+  [dir="rtl"] .weft-sheet[data-side="start"] { translate: 100% 0; }
+}

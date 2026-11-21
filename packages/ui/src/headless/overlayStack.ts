@@ -24,12 +24,13 @@
  *   overlay or an overlay above it, or on nothing (it was in an element that
  *   went away). A user who clicked into another field keeps their focus, and
  *   an overlay closed by a press outside it returns no focus at all: the
- *   press put the user's attention elsewhere. An overlay that declines the
- *   press (it stays open past the end of that task) returns focus as usual
- *   when it closes later. `returnFocus(el)` applies the same rules without
- *   popping, for an overlay hidden but still mounted (`v-show`);
- *   `useFocusTrap` calls it, and returns focus itself only when its element
- *   is not a stacked overlay.
+ *   press put the user's attention elsewhere. An overlay that never takes
+ *   focus (a tooltip) sets `returnFocus: false` and returns none. An
+ *   overlay that declines the press (it stays open past the end of that
+ *   task) returns focus as usual when it closes later. `returnFocus(el)`
+ *   applies the same rules without popping, for an overlay hidden but still
+ *   mounted (`v-show`); `useFocusTrap` calls it, and returns focus itself
+ *   only when its element is not a stacked overlay.
  *
  * Components normally do not call this directly: `useDismiss` pushes and pops
  * while the overlay's element exists. Document listeners exist only while the
@@ -49,6 +50,8 @@ export interface OverlayEntry {
   ignore?: () => (Element | null | undefined)[]
   /** Where focus returns on pop, read then; defaults to the element focused at push, when it was outside the overlay. */
   returnTo?: MaybeRefOrGetter<HTMLElement | null | undefined>
+  /** False: this overlay returns no focus (it never takes any, as a tooltip). Read at pop. */
+  returnFocus?: MaybeRefOrGetter<boolean | undefined>
 }
 
 interface Entry extends OverlayEntry {
@@ -102,7 +105,7 @@ function outside(e: Entry, event: PointerEvent | MouseEvent) {
 
 /** Return focus for `e` by the rules above; `at` is its index, for the overlays above it. */
 function returnFocusFor(e: Entry, at: number) {
-  if (e.closedOutside) return
+  if (e.closedOutside || toValue(e.returnFocus) === false) return
   const within = [e, ...entries.slice(at + 1)].map(elOf)
   restoreFocus(toValue(e.returnTo) ?? e.opener, within)
 }

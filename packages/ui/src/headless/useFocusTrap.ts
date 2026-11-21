@@ -1,5 +1,5 @@
 /**
- * useFocusTrap(el, { active, initial?, returnTo? })
+ * useFocusTrap(el, { active, initial?, returnTo?, returnFocus? })
  *
  * Keep keyboard focus inside `el` while `active` is true, as a modal dialog
  * or sheet must (WAI-ARIA APG, Dialog (Modal) pattern).
@@ -27,6 +27,10 @@
  *   focus returns to `returnTo` (an element, ref or getter, read then), by
  *   default the element focused before activation, unless the user has
  *   moved focus out on purpose (see `restoreFocus` in `dom.ts`).
+ * - `returnFocus` (default true), a ref or getter read at deactivation:
+ *   false leaves focus where it is. For an overlay that stops trapping but
+ *   stays open, re-rendered in a form that does not trap (a touch sheet
+ *   becoming a pointer popover): `returnFocus: () => !open.value`.
  * - When `el` changes to another element while active (the overlay
  *   re-rendered in another form, a popover becoming a sheet), the trap moves
  *   to it directly: focus goes into the new element without passing through
@@ -42,6 +46,7 @@ export interface FocusTrapOptions {
   active: Readonly<Ref<boolean>>
   initial?: MaybeRefOrGetter<HTMLElement | null | undefined>
   returnTo?: MaybeRefOrGetter<HTMLElement | null | undefined>
+  returnFocus?: MaybeRefOrGetter<boolean>
 }
 
 interface Trap {
@@ -142,7 +147,9 @@ export function useFocusTrap(el: Readonly<Ref<HTMLElement | null | undefined>>, 
     lastInside = null
     // A stacked overlay's focus is returned by the overlay stack's rules, now,
     // since the element may stay mounted (v-show) and so never pop.
-    if (!overlayStack.returnFocus(container)) restoreFocus(toValue(opts.returnTo) ?? before, [container])
+    if (toValue(opts.returnFocus) !== false && !overlayStack.returnFocus(container)) {
+      restoreFocus(toValue(opts.returnTo) ?? before, [container])
+    }
     before = null
   }
 

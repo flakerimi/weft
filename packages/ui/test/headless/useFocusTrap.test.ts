@@ -238,6 +238,27 @@ describe('useFocusTrap', () => {
     scope.stop()
   })
 
+  it('leaves focus where it is when it ends while returnFocus says no (an overlay that stays open in another form)', async () => {
+    const open = ref(true)
+    const { on, q, scope } = setup({ returnFocus: () => !open.value })
+    overlayStack.push('popover', { el: () => q('.trap') })
+    on.value = true
+    await nextTick()
+    q('.middle').focus()
+    on.value = false // a sheet that became a popover: no trap now, still open
+    await nextTick()
+    expect(active()).toBe(q('.middle'))
+    on.value = true
+    await nextTick()
+    expect(active()).toBe(q('.middle')) // focus was inside already: it stays
+    open.value = false
+    on.value = false // now it closes: focus goes home
+    await nextTick()
+    expect(active()).toBe(q('.opener'))
+    overlayStack.pop('popover')
+    scope.stop()
+  })
+
   it('waits for its element when it activates before the element exists', async () => {
     const root = html(markup)
     $('.opener', root).focus()

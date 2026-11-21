@@ -11,7 +11,7 @@ import { buildSite } from '../src/build.ts'
 import { createRenderServer, renderPage } from '../src/render.ts'
 
 const root = fileURLToPath(new URL('./fixtures/css-site', import.meta.url))
-const pages = ['button', 'field', 'island', 'barrel-island', 'link', 'plain']
+const pages = ['button', 'field', 'island', 'barrel-island', 'dialog-island', 'link', 'plain']
 let parent: string
 let out: string
 /** Each page's CSS before minifying, which could merge a rule given twice: the theme, base.css, then the render's. */
@@ -140,6 +140,22 @@ describe('per-page CSS', () => {
     expect(css.match(/\}\.weft-switch__track\{/g)).toHaveLength(1)
     // The index brings every component's stylesheet: why islands import components by path.
     expect(css).toMatch(/\.weft-slider\s*\{/)
+  })
+
+  it('inlines the CSS of a Dialog an island opens after hydrating, and of the Button inside it', () => {
+    const html = readFileSync(join(out, 'pages', 'dialog-island', 'index.html'), 'utf8')
+    // The server drew only the trigger: the dialog exists only once the island runs.
+    expect(html).not.toContain('role="dialog"')
+    const css = styleOf('dialog-island')
+    // Its own rule once (its entry animation adds one under @starting-style).
+    expect(css.match(/\}\.weft-dialog\{/g)).toHaveLength(1)
+    expect(css).toMatch(/\.weft-overlay-backdrop\s*\{/)
+    expect(css).toMatch(/\.weft-overlay__close\s*\{/)
+    expect(css.match(/\.weft-button\s*\{/g)).toHaveLength(1)
+    expect(css).toMatch(/\.weft-spinner\s*\{/)
+    // By path, so no other overlay comes with it.
+    expect(css).not.toContain('.weft-menu')
+    expect(css).not.toContain('.weft-toast')
   })
 
   it('keeps what the browser targets need when minifying', () => {

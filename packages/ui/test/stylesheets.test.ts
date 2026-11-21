@@ -33,7 +33,7 @@ describe('stylesheets', () => {
     for (const name of ['base.css', 'button.css', 'input.css', 'card.css', 'form-field.css', 'slider.css']) {
       expect(sheets).toContain(name)
     }
-    expect(groups).toEqual(['basics.css', 'forms.css', 'layout.css'])
+    expect(groups).toEqual(['basics.css', 'forms.css', 'layout.css', 'overlays.css'])
     expect(importsIn('weft.css')[0]).toBe('base.css')
     for (const group of groups) expect(importsIn('weft.css')).toContain(group)
   })

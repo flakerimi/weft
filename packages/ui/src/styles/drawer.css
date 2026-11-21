@@ -1,0 +1,27 @@
+/* Drawer: a sheet with a handle, following a drag (--weft-drawer-drag, the
+   px dragged towards its edge) and springing back when let go. */
+.weft-drawer[data-side="bottom"] { translate: 0 var(--weft-drawer-drag, 0px); }
+.weft-drawer[data-side="top"] { translate: 0 calc(-1 * var(--weft-drawer-drag, 0px)); }
+.weft-drawer[data-side="end"] { translate: var(--weft-drawer-drag, 0px) 0; }
+.weft-drawer[data-side="start"] { translate: calc(-1 * var(--weft-drawer-drag, 0px)) 0; }
+[dir="rtl"] .weft-drawer[data-side="end"] { translate: calc(-1 * var(--weft-drawer-drag, 0px)) 0; }
+[dir="rtl"] .weft-drawer[data-side="start"] { translate: var(--weft-drawer-drag, 0px) 0; }
+.weft-drawer[data-dragging] { transition: none; user-select: none; }
+/* The handle: a 36 × 4 px bar, its grip area the full width and --weft-hit-min tall. */
+.weft-drawer__handle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  block-size: var(--weft-hit-min, 24px);
+  touch-action: none;
+  cursor: grab;
+}
+.weft-drawer__handle::before {
+  content: '';
+  inline-size: 36px;
+  block-size: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--weft-color-text, CanvasText) 24%, transparent);
+}
+.weft-drawer[data-side="bottom"] .weft-drawer__handle + .weft-overlay__header { padding-block-start: 0; }
+.weft-drawer .weft-overlay__header { touch-action: none; }

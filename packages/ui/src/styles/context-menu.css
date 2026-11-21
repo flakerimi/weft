@@ -1,0 +1,3 @@
+/* ContextMenu: its area keeps the system's own long-press callout away, so
+   a long press opens Weft's menu instead. */
+.weft-context-menu { -webkit-touch-callout: none; }

@@ -3,7 +3,7 @@ import { colorKeys, tints, tones, type Theme } from './tokens.ts'
 
 const spaceKeys = ['1', '2', '3', '4', '6', '8'] as const
 const radiusKeys = ['control', 'card', 'panel'] as const
-const motionKeys = ['control', 'layout', 'dialog'] as const
+const motionKeys = ['control', 'layout', 'dialog', 'toast'] as const
 const controlKeys = ['sm', 'md', 'lg'] as const
 
 /** Read a value by dotted path, or throw the one sentence a theme author needs. */

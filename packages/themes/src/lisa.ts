@@ -71,6 +71,7 @@ export function lisa(tokens: LisaTokens, opts: { accent?: string } = {}): Theme 
       control: pick<number>(tokens.motion, 'control', 'motion'),
       layout: pick<number>(tokens.motion, 'layout', 'motion'),
       dialog: pick<number>(tokens.motion, 'dialog', 'motion'),
+      toast: pick<number>(tokens.motion, 'toast-timeout', 'motion'),
     },
     ease: {
       standard: pick<Curve>(tokens.curve, 'standard', 'curve'),

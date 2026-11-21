@@ -11,6 +11,8 @@ describe('themeToCss', () => {
     expect(css).toContain('--weft-radius-control: 8px;')
     expect(css).toContain('--weft-space-4: 16px;')
     expect(css).toContain('--weft-duration-control: 150ms;')
+    // How long a toast stays before it leaves on its own.
+    expect(css).toContain('--weft-duration-toast: 4000ms;')
     expect(css).toContain('--weft-ease-standard: cubic-bezier(0.2, 0, 0, 1);')
   })
 

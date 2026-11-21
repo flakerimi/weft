@@ -113,6 +113,17 @@ describe('useDismiss', () => {
     scope.stop()
   })
 
+  it('returns no focus when returnFocus is false, for an overlay that never takes focus (a tooltip)', async () => {
+    const { el, panel, scope, root } = setup({ returnFocus: false })
+    $('.trigger', root).focus()
+    el.value = panel // shown while the trigger has focus
+    $('.trigger', root).blur() // focus goes nowhere, then the overlay hides
+    el.value = null
+    await tick()
+    expect(active()).toBe(document.body)
+    scope.stop()
+  })
+
   it('leaves the stack and returns focus when its scope is disposed', () => {
     const { el, panel, scope, root } = setup()
     $('.trigger', root).focus()
