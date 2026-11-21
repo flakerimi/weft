@@ -14,6 +14,13 @@ const props = withDefaults(defineProps<{
   locale?: string
   /** The element to render; it has `display: contents`, so it does not affect layout. */
   as?: string
+  /**
+   * Everything inside is a preview of a page, drawn inside another (a
+   * gallery's stage or thumbnail): a Page or an AppShell in it draws no
+   * `<main>` landmark, and a Page's title is an h2. An outer inset provider
+   * makes every one inside it inset too.
+   */
+  inset?: boolean
 }>(), {
   as: 'div',
 })
@@ -22,7 +29,8 @@ const parent = useWeft()
 const input = computed(() => props.input ?? parent.input.value)
 const surface = computed(() => props.surface ?? parent.surface.value)
 const locale = computed(() => props.locale ?? parent.locale.value)
-provide(weftKey, { input, surface, locale })
+const inset = computed(() => props.inset || parent.inset.value)
+provide(weftKey, { input, surface, locale, inset })
 // Only a forced input goes on the element: the detected one is CSS's own
 // `(pointer: coarse)` at the root, right before and after hydrating.
 </script>

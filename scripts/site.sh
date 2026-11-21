@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build weft.base.al from site-src with Weft and run the Go binary that serves it.
-# The binary embeds the pages only. To run it, the installer and every real
-# release in site/releases are staged into site-src/releases (git-ignored), the
+# The binary embeds the pages only. To run it, the installer and every
+# published release (site/releases.txt) are staged into site-src/releases (git-ignored), the
 # folder it serves them from (WEFT_RELEASES_DIR), as the image has them in
 # /data/releases.
 # Usage: scripts/site.sh [build]

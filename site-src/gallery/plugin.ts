@@ -129,7 +129,18 @@ export function gallery(opts: GalleryOptions): Plugin {
       }
       for (const e of rest) {
         if (name !== `${exampleIsland(c.name, e.name)}.vue`) continue
-        return ['<script setup vapor lang="ts">', `import Example from ${abs(e.file)}`, '</script>', '', '<template>', '  <Example />', '</template>', ''].join('\n')
+        // inset: a Page or an AppShell in the example is a preview, not the page's main or h1.
+        return [
+          '<script setup vapor lang="ts">',
+          "import { WeftProvider } from '@weft/ui'",
+          `import Example from ${abs(e.file)}`,
+          '</script>',
+          '',
+          '<template>',
+          '  <WeftProvider inset><Example /></WeftProvider>',
+          '</template>',
+          '',
+        ].join('\n')
       }
     }
     return undefined

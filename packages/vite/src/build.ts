@@ -6,7 +6,7 @@ import { basename, dirname, extname, join, relative, resolve, sep } from 'node:p
 import { fileURLToPath } from 'node:url'
 import { brotliCompressSync, constants as zlib, gzipSync } from 'node:zlib'
 import { transform as transformCSS, type Targets } from 'lightningcss'
-import { build, isCSSRequest, mergeConfig, type Plugin, type ResolvedConfig, type Rolldown } from 'vite'
+import { build, isCSSRequest, mergeConfig, normalizePath, type Plugin, type ResolvedConfig, type Rolldown } from 'vite'
 import { siteConfig } from './config.ts'
 import { weft } from './plugin.ts'
 import type { ContentAsset } from './content.ts'
@@ -87,16 +87,27 @@ export interface Manifest {
 
 /**
  * Prefetch same-site links as the pointer settles on them, except the API's and
- * the app's: an API call may change something, and the app is not a page.
+ * the app's: an API call may change something, and the app is not a page. Nor
+ * a link inside an element marked `data-weft-no-prefetch` (or marked so
+ * itself), such as a gallery's live examples, whose links name pages of an
+ * app that is not there.
  */
 function speculationRules(app: RoutesJson['app']): string {
   const skip = ['/api', ...(app ? [app.prefix] : [])].flatMap((p) => [p, `${p}/*`])
-  const rules = { prefetch: [{ where: { and: [{ href_matches: '/*' }, { not: { href_matches: skip } }] }, eagerness: 'moderate' }] }
+  const marked = ['[data-weft-no-prefetch]', '[data-weft-no-prefetch] *']
+  const rules = {
+    prefetch: [{ where: { and: [{ href_matches: '/*' }, { not: { href_matches: skip } }, { not: { selector_matches: marked } }] }, eagerness: 'moderate' }],
+  }
   return `<script type="speculationrules">${JSON.stringify(rules)}</script>`
 }
 const VIEW_TRANSITION = '@view-transition { navigation: auto; }'
+
+/** Whether an island in the page's HTML starts on load: `data-when="load"`, or no `data-when`. */
+export const startsOnLoad = (html: string) =>
+  [...html.matchAll(/<weft-island\b[^>]*>/g)].some(([tag]) => !['idle', 'visible', 'media'].includes(/\sdata-when="([^"]*)"/.exec(tag)?.[1] ?? 'load'))
 const THEMES: Theme[] = ['neutral', 'lisa', 'weft']
-const CLIENT_ENTRY = fileURLToPath(new URL('./client.ts', import.meta.url))
+const BOOT_ENTRY = normalizePath(fileURLToPath(new URL('./boot.ts', import.meta.url)))
+const RUNTIME_MODULE = normalizePath(fileURLToPath(new URL('./client.ts', import.meta.url)))
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -522,14 +533,21 @@ async function writeBuild(
       immutable.add(file)
       stylesheet = '/' + file
     }
-    const scripts = page.islands.length > 0 ? clients.get(sectionOf(sections, page.path))! : null
+    const client = page.islands.length > 0 ? clients.get(sectionOf(sections, page.path))! : null
+    // The loader, and the runtime too when an island starts on load: islands
+    // that wait (idle, visible, media) fetch the runtime when they start.
+    const scripts = client && {
+      entry: client.entry,
+      runtime: client.runtime[0]!,
+      preload: [...client.imports, ...(startsOnLoad(page.html) ? client.runtime : [])],
+    }
     const file = htmlFile(page.path)
     await write(file, pageHTML({ body: page.html, head: page.head, prePaint: page.prePaint, fonts, css, stylesheet, scripts, rules }))
 
     const links = [
       ...fonts.map((f) => `<${f}>; rel=preload; as=font; type="font/woff2"; crossorigin`),
       ...(stylesheet ? [`<${stylesheet}>; rel=preload; as=style`] : []),
-      ...(scripts ? [scripts.entry, ...scripts.imports].map((m) => `<${m}>; rel=modulepreload`) : []),
+      ...(scripts ? [scripts.entry, ...scripts.preload].map((m) => `<${m}>; rel=modulepreload`) : []),
     ]
     const notFound = page.file === '404.vue'
     if (links.length) hints[notFound ? '404' : page.path] = links
@@ -1060,10 +1078,16 @@ function htmlFile(path: string): string {
 }
 
 interface ClientBuild {
-  /** URL of the runtime entry, the page's one module script. */
+  /** URL of the loader (boot.ts), the page's one module script. */
   entry: string
-  /** URLs of the chunks the entry imports statically. */
+  /** URLs of the chunks the loader imports statically. */
   imports: string[]
+  /**
+   * URLs of the runtime (client.ts: Vue, the registry, the hydration), first,
+   * which the loader imports when the first island is due, and the chunks it
+   * imports statically, the loader's aside.
+   */
+  runtime: string[]
   /** Every file the build wrote, relative to outDir. */
   files: string[]
 }
@@ -1220,7 +1244,14 @@ async function buildClient(root: string, dir: string, islands: string[]): Promis
     output?: OutputOptions | OutputOptions[]
   }
   const output = Array.isArray(options.output) ? options.output.map(placeless) : placeless(options.output ?? {})
-  b.rolldownOptions = b.rollupOptions = { ...options, input: { client: CLIENT_ENTRY }, output }
+  // Two entries, the loader and the runtime, which share no module; the
+  // runtime keeps its export, which the loader calls, and may export Vue to the islands.
+  b.rolldownOptions = b.rollupOptions = {
+    ...options,
+    input: { boot: BOOT_ENTRY, client: RUNTIME_MODULE },
+    preserveEntrySignatures: 'allow-extension',
+    output,
+  }
   let result: Rolldown.RolldownOutput | Rolldown.RolldownOutput[]
   try {
     result = (await build(config)) as typeof result
@@ -1230,11 +1261,24 @@ async function buildClient(root: string, dir: string, islands: string[]): Promis
     throw refused ? new Error(refused) : e
   }
   const chunks = (Array.isArray(result) ? result : [result]).flatMap((r) => r.output)
-  const entry = chunks.find((o): o is Rolldown.OutputChunk => o.type === 'chunk' && o.isEntry)
-  if (!entry) throw new Error('buildSite: the client build produced no entry chunk.')
+  const js = chunks.filter((o): o is Rolldown.OutputChunk => o.type === 'chunk')
+  const entry = js.find((o) => o.isEntry && o.facadeModuleId === BOOT_ENTRY)
+  if (!entry) throw new Error('buildSite: the client build produced no loader chunk.')
+  const runtime = js.find((o) => o.isEntry && o.facadeModuleId === RUNTIME_MODULE)
+  if (!runtime) throw new Error('buildSite: the client build produced no runtime chunk.')
+  // The runtime chunk and what it imports, transitively, the loader's own aside.
+  const byName = new Map(js.map((o) => [o.fileName, o]))
+  const runtimeFiles: string[] = []
+  const visit = (name: string) => {
+    if (name === entry.fileName || entry.imports.includes(name) || runtimeFiles.includes(name)) return
+    runtimeFiles.push(name)
+    for (const dep of byName.get(name)?.imports ?? []) visit(dep)
+  }
+  visit(runtime.fileName)
   return {
     entry: '/' + entry.fileName,
     imports: entry.imports.map((f) => '/' + f),
+    runtime: runtimeFiles.map((f) => '/' + f),
     files: chunks.map((o) => o.fileName),
   }
 }
@@ -1276,7 +1320,8 @@ function pageHTML(p: {
   fonts: string[]
   css: string
   stylesheet: string | null
-  scripts: ClientBuild | null
+  /** The loader, the runtime it imports when an island is due, and the modules to preload beside it. */
+  scripts: { entry: string; runtime: string; preload: string[] } | null
   /** The speculation rules script. */
   rules: string
 }): string {
@@ -1293,8 +1338,9 @@ function pageHTML(p: {
     p.rules,
     ...(p.scripts
       ? [
-          ...p.scripts.imports.map((m) => `<link rel="modulepreload" href="${m}">`),
-          `<script type="module" src="${p.scripts.entry}"></script>`,
+          ...p.scripts.preload.map((m) => `<link rel="modulepreload" href="${m}">`),
+          // The runtime by its file name: the loader imports it from beside itself.
+          `<script type="module" src="${p.scripts.entry}" data-weft-runtime="${basename(p.scripts.runtime)}"></script>`,
         ]
       : []),
     '</head>',

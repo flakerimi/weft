@@ -1,6 +1,7 @@
 <script setup vapor lang="ts">
 // The frame of an app: navigation, a header and the page's main content
-// (the <main> landmark), in one of three layouts it picks itself.
+// (the <main> landmark; none inside a WeftProvider marked inset), in one of
+// three layouts it picks itself.
 //
 // - `sidebar` (a regular or wide viewport): a sidebar of the items as a
 //   vertical NavigationMenu beside a header and the content. The header's
@@ -90,6 +91,8 @@ defineSlots<{
 
 const t = computed<AppShellLabels>(() => ({ ...APP_SHELL_LABELS, ...props.labels }))
 const weft = useWeft()
+// A preview of an app, inside a page (WeftProvider inset), draws no <main> of its own.
+const inset = weft.inset.value
 const id = useId('app-shell')
 const sidebarId = `${id}-sidebar`
 const collapsed = useControllable(props, 'collapsed', emit, () => props.defaultCollapsed)
@@ -211,7 +214,7 @@ function onBarItem(item: NavItem, event: MouseEvent) {
       <div class="weft-app-shell__header-main"><slot name="header" /></div>
       <div v-if="$slots.actions" class="weft-app-shell__actions"><slot name="actions" /></div>
     </header>
-    <main class="weft-app-shell__main"><slot /></main>
+    <component :is="inset ? 'div' : 'main'" class="weft-app-shell__main"><slot /></component>
     <nav v-if="shows('bar')" class="weft-app-shell__bar" :aria-label="label">
       <ul class="weft-app-shell__bar-list">
         <li v-for="(item, i) in bar.shown" :key="i" class="weft-app-shell__bar-entry">

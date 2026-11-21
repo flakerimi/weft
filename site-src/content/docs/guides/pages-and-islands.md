@@ -60,7 +60,7 @@ The build writes them into the page's `<head>`, with `og:title` and `og:descript
 Every page the build writes has:
 
 - its CSS inlined in a `<style>`: the theme, Weft's base styles, and the stylesheets of the components the page renders. If that is over 14 KB brotli, it goes in one stylesheet the page links instead.
-- speculation rules, so the browser fetches a same-site link when the pointer rests on it. Links under `/api` are left out.
+- speculation rules, so the browser fetches a same-site link when the pointer rests on it. Links under `/api` are left out, and so is any link inside an element marked `data-weft-no-prefetch` (or marked so itself), such as a demo whose links name pages that do not exist.
 - `@view-transition { navigation: auto; }`, so going from page to page cross-fades in browsers that support it.
 
 A page with no island has no script that loads JavaScript.
@@ -127,7 +127,7 @@ The server renders the button, so it shows before any script runs. The island ru
 - **Props that JSON can carry:** strings, finite numbers, booleans, `null`, arrays and plain objects. The build refuses anything else and names the prop.
 - **Its own CSS.** The page inlines the CSS of everything the island's file uses, not only what the server drew, since the browser may draw the rest later.
 
-A page with islands loads one module script, the island runtime, which loads each island's code. Islands share one Vue runtime.
+A page with islands loads one small module script, the loader (about 0.5 KB), which sets each island's trigger. The first island that starts fetches the runtime, Vue and the hydration, once for the page; every island then shares it and loads its own code. A page with an island that starts on `load` preloads the runtime with the loader; one whose islands wait (`idle`, `visible`, `media`) fetches nothing more until one starts.
 
 ## Before the first paint
 

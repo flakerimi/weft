@@ -13,6 +13,9 @@ defineProps<{ case: string }>()
     <template #actions><button class="act">New</button></template>
     <p class="body">rows</p>
   </Page>
+  <WeftProvider v-else-if="$props.case === 'page-inset'" inset>
+    <Page title="Customers" description="Everyone who pays"><p class="body">rows</p></Page>
+  </WeftProvider>
   <Section v-else-if="$props.case === 'section'" title="Billing"><p>x</p></Section>
   <Card v-else-if="$props.case === 'card-plain'"><p class="card-body">x</p></Card>
   <Card v-else-if="$props.case === 'card-header'" :padding="6">

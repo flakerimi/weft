@@ -5,7 +5,7 @@ import WeftProvider from '../../../src/adaptive/WeftProvider.vue'
 import type { Input } from '../../../src/adaptive/detect.ts'
 import type { NavItem } from '../../../src/navigation/nav.ts'
 
-const props = withDefaults(defineProps<{ input?: Input; few?: boolean; persist?: string | false }>(), { persist: 'test:collapsed' })
+const props = withDefaults(defineProps<{ input?: Input; few?: boolean; persist?: string | false; inset?: boolean }>(), { persist: 'test:collapsed' })
 const input = ref<Input | undefined>(props.input)
 const chosen: string[] = []
 const manyItems: NavItem[] = [
@@ -25,7 +25,7 @@ defineExpose({ input, chosen })
 </script>
 
 <template>
-  <WeftProvider :input="input">
+  <WeftProvider :input="input" :inset="inset">
     <AppShell :items="few ? fewItems : manyItems" title="Acme" :persist="persist" @select="(item) => chosen.push(item.label!)">
       <template #actions><button class="account">Account</button></template>
       <template #footer="{ collapsed }"><span class="user">{{ collapsed ? 'A' : 'Ada' }}</span></template>

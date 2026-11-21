@@ -1,0 +1,6 @@
+/* The not-found page: one column on the page's plain ground. Colours come
+   from the theme's tokens only. */
+.not-found.weft-page { max-inline-size: 46rem; padding: 64px 24px 96px; gap: 24px; background: var(--weft-color-bg); }
+.not-found__title { font-size: clamp(2rem, 4vw, 2.75rem); line-height: 1.08; letter-spacing: -0.02em; }
+.not-found__lead { margin-block-start: 12px; font-size: 1.1875rem; color: var(--weft-color-text-muted); }
+.not-found__links { display: grid; gap: 10px; margin: 0; padding-inline-start: 1.25em; font-size: 1.0625rem; line-height: 1.5; }

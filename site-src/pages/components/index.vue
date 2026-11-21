@@ -48,7 +48,7 @@ const words = (c: (typeof components)[number]) => `${c.name} ${c.purpose}`.toLow
           <h2 :id="`group-${g.group}`">{{ g.label }}</h2>
           <ul class="gallery-cards">
             <li v-for="c in g.components" :key="c.name" class="gallery-card" :data-gallery-card="words(c)">
-              <div class="gallery-thumb" inert :data-component="c.name" :data-example="c.examples[0]!.file">
+              <div class="gallery-thumb" inert data-weft-no-prefetch :data-component="c.name" :data-example="c.examples[0]!.file">
                 <StillPreview :scope="`t${components.indexOf(c)}`"><component :is="c.examples[0]!.component" /></StillPreview>
               </div>
               <h3><a :href="c.path">{{ c.name }}</a></h3>

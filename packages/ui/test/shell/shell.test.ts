@@ -57,6 +57,12 @@ describe('AppShell, wide', () => {
     }
   })
 
+  it('inside a WeftProvider marked inset (a preview of a page), draws its content in no main landmark', async () => {
+    await mountAt(ShellCases, { inset: true })
+    expect($('main')).toBeNull()
+    expect($('div.weft-app-shell__main .page')).not.toBeNull()
+  })
+
   it('collapses the sidebar to icons from a toggle button the keyboard reaches', async () => {
     await mountAt(ShellCases, {})
     expect(toggle().getAttribute('aria-label')).toBe('Sidebar')

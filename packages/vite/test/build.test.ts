@@ -92,6 +92,8 @@ const styleOf = (html: string) => /<style>([\s\S]*?)<\/style>/.exec(html)?.[1]
 /** The JSON of the page's one speculation rules script. */
 const speculationRules = (html: string) =>
   JSON.parse(/<script type="speculationrules">([\s\S]*?)<\/script>/.exec(html)![1]!) as unknown
+/** The links the speculation rules leave alone: inside an element marked data-weft-no-prefetch, or marked so themselves. */
+const NO_PREFETCH = ['[data-weft-no-prefetch]', '[data-weft-no-prefetch] *']
 const etagOf = (bytes: Buffer) => `"${createHash('sha256').update(bytes).digest('hex').slice(0, 16)}"`
 
 describe('buildSite on a site with islands', () => {
@@ -214,8 +216,14 @@ describe('buildSite on a site with islands', () => {
       expect(css).toContain('@view-transition{navigation:auto}')
       expect(css).not.toContain('/*') // no comments: minified
       expect(html).not.toContain('rel="stylesheet"')
+      // Not the API, and no link inside an element marked data-weft-no-prefetch (a gallery's live examples).
       expect(speculationRules(html)).toEqual({
-        prefetch: [{ where: { and: [{ href_matches: '/*' }, { not: { href_matches: ['/api', '/api/*'] } }] }, eagerness: 'moderate' }],
+        prefetch: [
+          {
+            where: { and: [{ href_matches: '/*' }, { not: { href_matches: ['/api', '/api/*'] } }, { not: { selector_matches: NO_PREFETCH } }] },
+            eagerness: 'moderate',
+          },
+        ],
       })
     }
   })
@@ -266,10 +274,35 @@ describe('buildSite on a site with islands', () => {
     expect(leftovers(join(out, '..'))).toEqual([])
   })
 
-  it('hints the runtime modules for island pages only', () => {
-    const entry = /<script type="module" src="([^"]+)"/.exec(read('pages/counter/index.html'))![1]
-    expect(manifest.hints['/counter']).toContain(`<${entry}>; rel=modulepreload`)
+  it('starts island pages with the loader alone, and leaves the runtime until an island is due', () => {
+    // counter is visible, about idle, escape media: none starts on load.
+    for (const page of ['counter', 'about', 'escape']) {
+      const html = read(`pages/${page}/index.html`)
+      const entry = /<script type="module" src="([^"]+)"/.exec(html)![1]!
+      expect(entry).toMatch(/^\/assets\/boot-[\w-]+\.js$/)
+      // The page names the runtime the loader imports when an island is due.
+      const runtime = /<script type="module" src="[^"]+" data-weft-runtime="(client-[\w-]+\.js)">/.exec(html)?.[1]
+      expect(runtime, 'the page names its runtime').toBeDefined()
+      expect(html).toContain(`data-weft-runtime="${runtime}"`)
+      expect(html.replace(`data-weft-runtime="${runtime}"`, '')).not.toContain(runtime!)
+      expect(html).not.toContain('modulepreload')
+      expect(manifest.hints[`/${page}`]).toEqual([`<${entry}>; rel=modulepreload`])
+      // The islands import the runtime from beside the loader, by the URL the
+      // loader imports it by, so the browser loads it once.
+      for (const [, chunk] of read('assets/' + runtime).matchAll(/import\(`\.\/((?:Counter|Lazy)-[\w-]+\.js)`\)/g)) {
+        expect(read('assets/' + chunk), chunk).toContain(`from"./${runtime}"`)
+      }
+    }
     expect(manifest.hints['/']).toBeUndefined()
+  })
+
+  it('keeps the loader small and the same for every page: at most 1 KB brotli, importing nothing', () => {
+    const entries = new Set(['counter', 'about', 'escape'].map((p) => /<script type="module" src="([^"]+)"/.exec(read(`pages/${p}/index.html`))![1]!))
+    expect(entries.size).toBe(1)
+    const entry = [...entries][0]!.slice(1)
+    expect(read(entry)).not.toMatch(/\bfrom\s*"|import\s*"|import\(`/)
+    expect(manifest.files['/' + entry]).toMatchObject({ br: true })
+    expect(readFileSync(join(out, entry + '.br')).length).toBeLessThanOrEqual(1024)
   })
 
   it('writes routes.json in the route-map shape', () => {
@@ -324,7 +357,9 @@ describe('buildSite on a site without islands', () => {
     expect(speculationRules(html)).toEqual({
       prefetch: [
         {
-          where: { and: [{ href_matches: '/*' }, { not: { href_matches: ['/api', '/api/*', '/app', '/app/*'] } }] },
+          where: {
+            and: [{ href_matches: '/*' }, { not: { href_matches: ['/api', '/api/*', '/app', '/app/*'] } }, { not: { selector_matches: NO_PREFETCH } }],
+          },
           eagerness: 'moderate',
         },
       ],
@@ -1620,7 +1655,7 @@ describe('buildSite with a section of its own runtime', { timeout: 60_000 }, () 
   let out: string
   let manifest: Manifest
   const read = (p: string) => readFileSync(join(out, p), 'utf8')
-  const entryOf = (page: string) => /<script type="module" src="([^"]+)">/.exec(read(`pages/${page}/index.html`))?.[1]
+  const entryOf = (page: string) => /<script type="module" src="([^"]+)"/.exec(read(`pages/${page}/index.html`))?.[1]
 
   beforeAll(async () => {
     out = tempDir()
@@ -1628,23 +1663,26 @@ describe('buildSite with a section of its own runtime', { timeout: 60_000 }, () 
   })
 
   it("gives the section's pages a runtime of their own, which registers only its islands", () => {
-    const own = entryOf('counter')!
-    const rest = entryOf('about')!
-    expect(own).toMatch(/^\/assets\/client-[\w-]+\.js$/)
-    expect(rest).toMatch(/^\/assets\/client-[\w-]+\.js$/)
-    expect(own).not.toBe(rest)
-    expect(entryOf('escape')).toBe(rest)
-    const registry = (entry: string) => read(entry.slice(1)) + read(entry.slice(1)).match(/\.\/[\w-]+\.js/g)!.join(' ')
-    expect(registry(own)).toMatch(/Counter-[\w-]+\.js/)
-    expect(registry(own)).not.toMatch(/Lazy-[\w-]+\.js/)
-    expect(registry(rest)).toMatch(/Lazy-[\w-]+\.js/)
-    expect(registry(rest)).toMatch(/Counter-[\w-]+\.js/)
-    for (const entry of [own, rest]) expect(manifest.files[entry]).toMatchObject({ immutable: true, br: true })
+    // The page names its runtime, which registers the islands; the loader is the same for every page.
+    const runtimeOf = (page: string) => /data-weft-runtime="([^"]+)"/.exec(read(`pages/${page}/index.html`))![1]!
+    const registry = (page: string) => read('assets/' + runtimeOf(page))
+    expect(runtimeOf('counter')).toMatch(/^client-[\w-]+\.js$/)
+    expect(runtimeOf('about')).toMatch(/^client-[\w-]+\.js$/)
+    expect(runtimeOf('counter')).not.toBe(runtimeOf('about'))
+    expect(runtimeOf('escape')).toBe(runtimeOf('about'))
+    expect(entryOf('counter')).toBe(entryOf('about'))
+    expect(registry('counter')).toMatch(/Counter-[\w-]+\.js/)
+    expect(registry('counter')).not.toMatch(/Lazy-[\w-]+\.js/)
+    expect(registry('about')).toMatch(/Lazy-[\w-]+\.js/)
+    expect(registry('about')).toMatch(/Counter-[\w-]+\.js/)
+    for (const file of ['/assets/' + runtimeOf('counter'), '/assets/' + runtimeOf('about'), entryOf('counter')!]) {
+      expect(manifest.files[file]).toMatchObject({ immutable: true, br: true })
+    }
   })
 
-  it("hints each page its own runtime's modules", () => {
-    expect(manifest.hints['/counter']).toContain(`<${entryOf('counter')}>; rel=modulepreload`)
-    expect(manifest.hints['/about']).toContain(`<${entryOf('about')}>; rel=modulepreload`)
+  it('hints each page the loader alone, as none of its islands starts on load', () => {
+    expect(manifest.hints['/counter']).toEqual([`<${entryOf('counter')}>; rel=modulepreload`])
+    expect(manifest.hints['/about']).toEqual([`<${entryOf('about')}>; rel=modulepreload`])
   })
 })
 

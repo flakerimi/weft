@@ -18,6 +18,9 @@ sidebar, and of the menu sheet), and the default slot, the page in `<main>`.
 It emits `select(item, event)` for an item chosen anywhere; sheets close
 when an item is chosen.
 
+Inside a WeftProvider marked `inset` (a preview drawn inside a page) the
+default slot goes in a `<div>`, so that page keeps its one `<main>`.
+
 **Collapsing.** The header's toggle, named "Sidebar" (`labels.sidebar`),
 collapses the sidebar to icons and back, labels in tooltips: a button the
 keyboard reaches, whose `aria-expanded` says the state, with

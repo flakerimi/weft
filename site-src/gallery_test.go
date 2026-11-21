@@ -200,10 +200,11 @@ func TestComponentPages(t *testing.T) {
 			last = at
 		}
 
-		// The stage holds the first example as the index's thumbnail does: the same server render.
+		// The stage holds the first example as the index's thumbnail does: the
+		// same server render, each inside its inset WeftProvider.
 		stage := element(html, `data-id="Stage_`+c.Name+`"`)
 		drawn := sameRender(inner(element(stage, `class="gallery-example"`)))
-		thumb := sameRender(inner(element(index, `data-component="`+c.Name+`"`)))
+		thumb := sameRender(inner(element(element(index, `data-component="`+c.Name+`"`), `<div class="weft-provider"`)))
 		if strings.TrimSpace(drawn) == "" || drawn != thumb {
 			t.Errorf("%s: the stage does not hold %s as the server draws it\nstage: %.300s\nthumb: %.300s", c.Name, c.Examples[0].File, drawn, thumb)
 		}
@@ -318,13 +319,7 @@ func TestGalleryBudgets(t *testing.T) {
 		}
 		return size
 	}
-	runtimeOf := func(html string) string {
-		s := moduleScript.FindStringSubmatch(html)
-		if s == nil {
-			return ""
-		}
-		return s[1]
-	}
+	runtimeOf := func(html string) string { return pageRuntime(t, d, html) }
 	var home, gallery string
 	largest, largestPath := 0, ""
 	for _, p := range r.Pages {
@@ -374,4 +369,120 @@ func chunkBytes(t *testing.T, d fs.FS, m builtFiles, islands []string) int {
 		n += brotliSize(t, d, m, c)
 	}
 	return n
+}
+
+// The gallery's examples keep nothing between visits that could hide them:
+// a Banner closed in a stage or a thumbnail would otherwise stay closed
+// (localStorage, and a pre-paint snippet that hides it), leaving the stage
+// and the index's thumbnail blank. So no example's Banner has an id.
+func TestGalleryBannersAreNotRemembered(t *testing.T) {
+	d := dist(t)
+	var r builtRoutes
+	readJSON(t, d, "routes.json", &r)
+	banner := regexp.MustCompile(`<div class="weft-banner"[^>]*>`)
+	seen := 0
+	for _, p := range r.Pages {
+		if p.Path != "/components" && !strings.HasPrefix(p.Path, "/components/") {
+			continue
+		}
+		b, err := fs.ReadFile(d, p.HTML)
+		if err != nil {
+			t.Fatal(err)
+		}
+		html := string(b)
+		if strings.Contains(html, "weft-banner:") {
+			t.Errorf("%s remembers a closed Banner (weft-banner: in localStorage)", p.Path)
+		}
+		for _, tag := range banner.FindAllString(html, -1) {
+			seen++
+			if strings.Contains(tag, "data-id=") {
+				t.Errorf("%s draws a Banner with an id, which a close would keep closed: %s", p.Path, tag)
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no gallery page draws a Banner")
+	}
+}
+
+// The gallery's live examples link to pages that are not the site's (/inbox,
+// /settings): the speculation rules leave every link inside a stage, a
+// preview or a thumbnail alone, marked data-weft-no-prefetch, so hovering
+// one prefetches nothing.
+func TestGalleryExamplesAreNotPrefetched(t *testing.T) {
+	d := dist(t)
+	var r builtRoutes
+	readJSON(t, d, "routes.json", &r)
+	rules := regexp.MustCompile(`<script type="speculationrules">(.*?)</script>`)
+	marked := regexp.MustCompile(`<[^>]*\bclass="(gallery-thumb|gallery-canvas|gallery-preview)\b[^"]*"[^>]*>`)
+	checked := 0
+	for _, p := range r.Pages {
+		if p.Path != "/components" && !strings.HasPrefix(p.Path, "/components/") {
+			continue
+		}
+		b, err := fs.ReadFile(d, p.HTML)
+		if err != nil {
+			t.Fatal(err)
+		}
+		html := string(b)
+		m := rules.FindStringSubmatch(html)
+		if m == nil {
+			t.Fatalf("%s has no speculation rules", p.Path)
+		}
+		var got struct {
+			Prefetch []struct {
+				Where struct {
+					And []map[string]json.RawMessage `json:"and"`
+				} `json:"where"`
+			} `json:"prefetch"`
+		}
+		if err := json.Unmarshal([]byte(m[1]), &got); err != nil {
+			t.Fatalf("%s: %v", p.Path, err)
+		}
+		excluded := false
+		for _, rule := range got.Prefetch {
+			for _, cond := range rule.Where.And {
+				excluded = excluded || strings.Contains(string(cond["not"]), `"selector_matches":["[data-weft-no-prefetch]","[data-weft-no-prefetch] *"]`)
+			}
+		}
+		if !excluded {
+			t.Errorf("%s: the speculation rules do not leave links in [data-weft-no-prefetch] alone: %s", p.Path, m[1])
+		}
+		for _, tag := range marked.FindAllString(html, -1) {
+			checked++
+			if !strings.Contains(tag, "data-weft-no-prefetch") {
+				t.Errorf("%s: %s is not marked data-weft-no-prefetch", p.Path, tag)
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no gallery page has a stage, a preview or a thumbnail")
+	}
+}
+
+// Each gallery page keeps one main landmark and one h1, whatever its
+// examples draw: a Page or an AppShell in a stage, a preview or a thumbnail
+// is a preview of a page (WeftProvider inset), with no main and no h1.
+func TestGalleryPagesHaveOneMainAndOneH1(t *testing.T) {
+	d := dist(t)
+	var r builtRoutes
+	readJSON(t, d, "routes.json", &r)
+	main := regexp.MustCompile(`<main\b`)
+	h1 := regexp.MustCompile(`<h1\b`)
+	for _, p := range r.Pages {
+		if p.Path != "/components" && !strings.HasPrefix(p.Path, "/components/") {
+			continue
+		}
+		b, err := fs.ReadFile(d, p.HTML)
+		if err != nil {
+			t.Fatal(err)
+		}
+		html := string(b)
+		if n := len(main.FindAllString(html, -1)); n != 1 {
+			t.Errorf("%s has %d main landmarks, want 1", p.Path, n)
+		}
+		if n := len(h1.FindAllString(html, -1)); n != 1 {
+			t.Errorf("%s has %d h1, want 1", p.Path, n)
+		}
+	}
 }

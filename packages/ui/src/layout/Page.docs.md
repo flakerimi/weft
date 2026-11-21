@@ -11,3 +11,8 @@ adapts:
 The `title` renders as the page's `h1`. Give the `header` slot to replace the
 title and description with your own markup, and the `actions` slot for
 buttons beside them.
+
+Inside a WeftProvider marked `inset` (a preview of a page drawn inside
+another, such as a gallery's stage) it renders a `<div>` rather than
+`<main>`, and its title as an `h2`, so the page around keeps one main and
+one h1.

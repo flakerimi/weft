@@ -1,13 +1,10 @@
 import { createVaporSSRApp, type Component } from 'vue'
+import { scheduleIslands, type IslandOptions } from './island-schedule.ts'
+
+export type { IslandOptions } from './island-schedule.ts'
 
 /** Island name (the component's SFC `__name`) → a loader for its chunk. */
 export type IslandRegistry = Record<string, () => Promise<Component>>
-
-export interface IslandOptions {
-  observe?: typeof IntersectionObserver
-  idle?: (cb: () => void) => void
-  matchMedia?: (q: string) => MediaQueryList
-}
 
 /**
  * The key @weft/ui's useId reads an island's id scope under (its ID_SCOPE).
@@ -16,6 +13,7 @@ export interface IslandOptions {
  */
 export const ISLAND_ID_SCOPE = 'weft:id-scope'
 
+// Its own copy, not the scheduler's: the runtime and the loader share no module.
 const reason = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 /**
@@ -25,46 +23,17 @@ const reason = (e: unknown) => (e instanceof Error ? e.message : String(e))
  * warns once and keeps its server HTML; the others are unaffected.
  */
 export function startIslands(registry: IslandRegistry, opts: IslandOptions = {}): void {
-  for (const [index, el] of [...document.querySelectorAll<HTMLElement>('weft-island')].entries()) {
-    const { id = '', when, media } = el.dataset
-    const warn = (why: string) => console.warn(`weft: island ${id} did not start: ${why}`)
-    const start = () => void hydrate(el, index, registry[id], warn)
-
-    // A trigger that cannot be set up (no IntersectionObserver, a throwing
-    // scheduler) costs this island only.
-    try {
-      if (when === 'visible') {
-        const io = new (opts.observe ?? IntersectionObserver)((entries) => {
-          if (entries.some((e) => e.isIntersecting)) {
-            io.disconnect()
-            start()
-          }
-        })
-        io.observe(el)
-      } else if (when === 'idle') {
-        ;(opts.idle ?? ((cb) => (typeof requestIdleCallback == 'function' ? requestIdleCallback(cb) : setTimeout(cb, 200))))(start)
-      } else if (when === 'media') {
-        if (!media) throw new Error('data-when="media" has no data-media.')
-        const query = (opts.matchMedia ?? matchMedia)(media)
-        const check = () => {
-          if (!query.matches) return
-          query.removeEventListener('change', check)
-          start()
-        }
-        query.addEventListener('change', check)
-        check()
-      } else {
-        // No data-when means load; anything else unknown is reported once.
-        if (when !== undefined && when !== 'load') console.warn(`weft: island ${id} has unknown when "${when}"; starting on load`)
-        start()
-      }
-    } catch (e) {
-      warn(reason(e))
-    }
-  }
+  scheduleIslands((el, index, warn) => void hydrateIsland(el, index, loaderOf(registry, el), warn), opts)
 }
 
-async function hydrate(el: HTMLElement, index: number, load: (() => Promise<Component>) | undefined, warn: (why: string) => void) {
+/** The registry's loader for the island `el`, if it has one of its own (not, say, `constructor`). */
+export const loaderOf = (registry: IslandRegistry, el: HTMLElement) => {
+  const id = el.dataset.id ?? ''
+  return Object.hasOwn(registry, id) ? registry[id] : undefined
+}
+
+/** Hydrate one island from its chunk's loader; what stops it is reported once with `warn`, and its server HTML stays. */
+export async function hydrateIsland(el: HTMLElement, index: number, load: (() => Promise<Component>) | undefined, warn: (why: string) => void) {
   try {
     if (!load) throw new Error('no chunk is registered for it.')
     const component = await load()

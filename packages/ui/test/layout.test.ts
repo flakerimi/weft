@@ -65,6 +65,13 @@ describe('Page and Section', () => {
     expect(p.querySelector('.act')?.textContent).toBe('New')
     expect(p.querySelector('.body')).not.toBeNull()
   })
+  it('Page inside a WeftProvider marked inset (a preview of a page) is no main landmark, and its title no h1', () => {
+    const p = first('page-inset', '.weft-page')
+    expect(p.tagName).toBe('DIV')
+    expect(p.querySelector('.weft-page__title')?.tagName).toBe('H2')
+    expect(p.querySelector('.weft-page__title')?.textContent).toBe('Customers')
+    expect(p.closest('.weft-provider')!.querySelector('main, h1')).toBeNull()
+  })
   it('Section renders a section with an h2', () => {
     const s = first('section', 'section.weft-section')
     expect(s.querySelector('h2')?.textContent).toBe('Billing')

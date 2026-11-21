@@ -11,7 +11,7 @@ export const getPaths = async () => components.map((c) => ({ name: c.slug }))
 // props, slots and events; every other example, drawn by the server and
 // hydrated only when it needs JavaScript; and the raw entry for agents,
 // written to /components/<slug>.json and shown from there.
-import { Breadcrumb, Island, Link, Page, useHead, type BreadcrumbItem } from '@weft/ui'
+import { Breadcrumb, Island, Link, Page, WeftProvider, useHead, type BreadcrumbItem } from '@weft/ui'
 import { useFile } from 'virtual:weft/files'
 import '@weft/vite/code.css'
 import '../../styles/fonts.css'
@@ -73,7 +73,7 @@ const codeId = (example: string) => `code-${example}`
 
         <section class="gallery-section" aria-labelledby="adapts">
           <h2 id="adapts">Adapts</h2>
-          <div class="docs-table">
+          <div class="gallery-table">
             <table>
               <thead><tr><th scope="col">Axis</th><th scope="col">Between</th><th scope="col">What changes</th></tr></thead>
               <tbody>
@@ -86,7 +86,7 @@ const codeId = (example: string) => `code-${example}`
         <section class="gallery-section" aria-labelledby="api">
           <h2 id="api">API</h2>
           <h3 id="props">Props</h3>
-          <div v-if="c.props.length" class="docs-table">
+          <div v-if="c.props.length" class="gallery-table">
             <table class="gallery-api">
               <thead><tr><th scope="col">Prop</th><th scope="col">Type</th><th scope="col">Default</th><th scope="col">Description</th></tr></thead>
               <tbody>
@@ -101,7 +101,7 @@ const codeId = (example: string) => `code-${example}`
           </div>
           <p v-else>None.</p>
           <h3 id="slots">Slots</h3>
-          <div v-if="c.slots.length" class="docs-table">
+          <div v-if="c.slots.length" class="gallery-table">
             <table class="gallery-api">
               <thead><tr><th scope="col">Slot</th><th scope="col">Props</th></tr></thead>
               <tbody>
@@ -117,7 +117,7 @@ const codeId = (example: string) => `code-${example}`
           </div>
           <p v-else>None.</p>
           <h3 id="events">Events</h3>
-          <div v-if="c.emits.length" class="docs-table">
+          <div v-if="c.emits.length" class="gallery-table">
             <table class="gallery-api">
               <thead><tr><th scope="col">Event</th><th scope="col">Payload</th><th scope="col">Description</th></tr></thead>
               <tbody>
@@ -136,9 +136,9 @@ const codeId = (example: string) => `code-${example}`
           <h2 id="examples">More examples</h2>
           <article v-for="e in more" :key="e.name" class="gallery-more" :aria-labelledby="`example-${e.name}`">
             <h3 :id="`example-${e.name}`">{{ e.title }}</h3>
-            <div class="gallery-preview" :data-example="e.file">
+            <div class="gallery-preview" data-weft-no-prefetch :data-example="e.file">
               <Island v-if="e.interactive" when="visible" :component="e.island" />
-              <component :is="e.component" v-else />
+              <WeftProvider v-else inset><component :is="e.component" /></WeftProvider>
             </div>
             <figure class="gallery-code">
               <figcaption>

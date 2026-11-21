@@ -1,5 +1,5 @@
 <script setup vapor lang="ts">
-import { AppShell, Button, type NavItem } from '@weft/ui'
+import { AppShell, Button, Section, type NavItem } from '@weft/ui'
 
 const items: NavItem[] = [
   { label: 'Home', to: '/', icon: 'house' },
@@ -14,7 +14,8 @@ const items: NavItem[] = [
 <template>
   <AppShell :items="items" title="Acme">
     <template #actions><Button icon="user" variant="ghost" tone="neutral" aria-label="Account" /></template>
-    <h1>Inbox</h1>
-    <p>Three new messages.</p>
+    <Section title="Inbox">
+      <p>Three new messages.</p>
+    </Section>
   </AppShell>
 </template>

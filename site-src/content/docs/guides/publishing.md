@@ -56,11 +56,11 @@ Build it from the repository's root. Build the pages before `docker build`, so `
 
 1. builds a release of the `weft` command for four platforms, with `scripts/release.sh`;
 2. builds this site with `scripts/site.sh build`;
-3. makes a tree with the Go sources, the built pages, a Dockerfile like the one above, and the installer and every release;
+3. makes a tree with the Go sources, the built pages, a Dockerfile like the one above, the installer, every release `site/releases.txt` lists as published, and the new one;
 4. pushes the tree to the server, which builds the image and runs it, and waits until the new version answers.
 
 The releases are not in the binary. They are in the image under `/data/releases`, served with [`weft.WithFiles`](go-serving.md#files-from-disk), so the binary does not grow with each release. `scripts/rollback-site.sh <version>` pushes an earlier version's tree again.
 
 ## Page weight
 
-This site holds each docs page to 10 KB brotli. That counts the HTML, its CSS, and the scripts of the page's own islands with the chunks they import. It does not count the shared Vue runtime, `client-*.js`, which a browser caches once for the whole site and loads only on pages with an island, nor fonts, which are cached and preloaded. `site-src/main_test.go` checks every docs page after each build.
+This site holds each docs page to 10 KB brotli. That counts the HTML, its CSS, the loader every page with an island starts with (`boot-*.js`, about 0.5 KB), and the scripts of the page's own islands with the chunks they import. It does not count the shared Vue runtime, `client-*.js`, which a browser caches once for the whole site and fetches only when an island starts, nor fonts, which are cached and preloaded. `site-src/main_test.go` checks every docs page after each build.

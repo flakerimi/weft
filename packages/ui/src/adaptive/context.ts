@@ -6,12 +6,25 @@ export interface WeftContext {
   surface: Readonly<Ref<Surface>>
   /** The BCP 47 locale a WeftProvider set for dates, numbers and names inside it; undefined when none did. */
   locale: Readonly<Ref<string | undefined>>
+  /**
+   * Whether this part of the page is a preview of a page inside another (a
+   * gallery's stage or thumbnail): a WeftProvider marked `inset` said so.
+   * Page and AppShell then draw no `<main>` landmark, and Page's title is an
+   * h2, so the page around keeps one main and one h1.
+   */
+  inset: Readonly<Ref<boolean>>
 }
 
 export const weftKey: InjectionKey<WeftContext> = Symbol('weft')
 
 const appSurface = readonly(ref<Surface>('app'))
 const noLocale = readonly(ref<string | undefined>(undefined))
+const notInset = readonly(ref(false))
+
+/** Whether the nearest WeftProvider marked this part of the page `inset`, a preview of a page; read once, at setup. */
+export function useInset(): boolean {
+  return inject(weftKey, null)?.inset.value ?? false
+}
 
 /**
  * How the nearest WeftProvider says this part of the page is being used.
@@ -34,7 +47,7 @@ export function useWeft(): WeftContext {
   const given = inject(weftKey, null)
   if (given) return given
   // Outside a component's setup there is nothing to hydrate: the detection as it is.
-  if (!hasInjectionContext() || !getCurrentScope()) return { input: sharedInput(), surface: appSurface, locale: noLocale }
+  if (!hasInjectionContext() || !getCurrentScope()) return { input: sharedInput(), surface: appSurface, locale: noLocale, inset: notInset }
   const mounted = shallowRef(false)
   onMounted(() => (mounted.value = true))
   const detected = sharedInput()
@@ -42,6 +55,7 @@ export function useWeft(): WeftContext {
     input: computed(() => (mounted.value ? detected.value : 'pointer')),
     surface: appSurface,
     locale: noLocale,
+    inset: notInset,
   }
   provide(weftKey, context)
   return context

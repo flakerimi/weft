@@ -31,16 +31,18 @@ Pages follow `prefers-color-scheme`. To force a scheme, set `data-weft-scheme="l
 
 ## Override tokens
 
-Put a plain `:root` rule in a stylesheet your pages import. The theme's selectors add no specificity, so this wins in light and in dark:
+Put a rule on `:root, [data-weft-scheme]` in a stylesheet your pages import. The theme's selectors add no specificity, so this wins in light and in dark:
 
 ```css
-:root {
+:root, [data-weft-scheme] {
   --weft-color-primary: #0B6E4F;
   --weft-radius-control: 4px;
 }
 ```
 
-To change one scheme only, repeat the value on `[data-weft-scheme="dark"]` and inside `@media (prefers-color-scheme: dark)` on `:root:not([data-weft-scheme="light"])`, as the theme does.
+Why both selectors: an element with its own `data-weft-scheme` (a dark band on a light page, say) sets every one of the theme's tokens again on itself, for the scheme it names. A rule on `:root` alone would stop at that element, and everything inside it would show the theme's values. Overlays matter here too: a dialog, sheet, popover or menu opened from inside such an element is drawn outside it, at the end of `<body>`, and carries the element's `data-weft-scheme` with it, so it too sets the tokens again. `[data-weft-scheme]` reaches all of them.
+
+To change one scheme only, set the value on `[data-weft-scheme="dark"]` and inside `@media (prefers-color-scheme: dark)` on `:root:not([data-weft-scheme="light"])`, as the theme does.
 
 The tokens:
 

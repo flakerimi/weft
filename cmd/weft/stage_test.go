@@ -22,6 +22,7 @@ func TestStageSiteKeepsReleasesDropsTestBuilds(t *testing.T) {
 		os.MkdirAll(dir, 0o755)
 		os.WriteFile(filepath.Join(dir, "SHA256SUMS"), []byte(v), 0o644)
 	}
+	os.WriteFile(filepath.Join(site, "releases.txt"), []byte("0.0.1\n0.1.0-alpha.1\n"), 0o644)
 	out := t.TempDir()
 	cmd := exec.Command("sh", "../../scripts/stage-site.sh", site, out, "0.0.2")
 	if b, err := cmd.CombinedOutput(); err != nil {
@@ -50,16 +51,22 @@ func TestStageSiteKeepsReleasesDropsTestBuilds(t *testing.T) {
 }
 
 // fakeSite writes a site/ like the repository's: the installer, the given
-// releases (each with a SHA256SUMS) and, unless latest is "", releases/latest.
+// releases (each with a SHA256SUMS), releases.txt listing those that are not
+// test builds, and, unless latest is "", releases/latest.
 func fakeSite(t *testing.T, latest string, versions ...string) string {
 	t.Helper()
 	site := t.TempDir()
 	os.WriteFile(filepath.Join(site, "install"), []byte("#!/bin/sh\n"), 0o644)
+	list := ""
 	for _, v := range versions {
 		dir := filepath.Join(site, "releases", v)
 		os.MkdirAll(dir, 0o755)
 		os.WriteFile(filepath.Join(dir, "SHA256SUMS"), []byte(v), 0o644)
+		if !strings.HasSuffix(v, "-test") {
+			list += v + "\n"
+		}
 	}
+	os.WriteFile(filepath.Join(site, "releases.txt"), []byte(list), 0o644)
 	if latest != "" {
 		os.WriteFile(filepath.Join(site, "releases", "latest"), []byte(latest+"\n"), 0o644)
 	}
@@ -134,7 +141,7 @@ func TestStageReleasesRefuses(t *testing.T) {
 	os.MkdirAll(filepath.Join(public, "releases", "0.0.1"), 0o755)
 	os.WriteFile(filepath.Join(public, "releases", "0.0.1", "SHA256SUMS"), []byte("old"), 0o644)
 	out, err := stageReleases(site, public)
-	if err == nil || !strings.Contains(out, "releases/0.0.1 is not a release in") {
+	if err == nil || !strings.Contains(out, "releases/0.0.1 is not a release to stage") {
 		t.Fatalf("stale release: err %v, output %q", err, out)
 	}
 	if _, err := os.Stat(filepath.Join(public, "releases", "0.0.1", "SHA256SUMS")); err != nil {
@@ -144,6 +151,58 @@ func TestStageReleasesRefuses(t *testing.T) {
 	out, err = stageReleases(site, t.TempDir(), "0.0.3-test")
 	if err == nil || !strings.Contains(out, "does not exist or is a test build") {
 		t.Fatalf("test build as latest: err %v, output %q", err, out)
+	}
+}
+
+// Only the published releases (site/releases.txt) and the one being published
+// are staged: a folder left in site/releases (a dry run's build, a copy put
+// there by hand) is not, nor is it named latest.
+func TestStageReleasesStagesOnlyListedReleases(t *testing.T) {
+	skipWindows(t)
+	site := fakeSite(t, "0.0.9-leftover", "0.0.1", "0.0.2")
+	for _, v := range []string{"0.0.9-leftover", "0.0.3"} {
+		os.MkdirAll(filepath.Join(site, "releases", v), 0o755)
+		os.WriteFile(filepath.Join(site, "releases", v, "SHA256SUMS"), []byte(v), 0o644)
+	}
+	out := filepath.Join(t.TempDir(), "releases")
+	msg, err := stageReleases(site, out)
+	if err != nil {
+		t.Fatalf("%v: %s", err, msg)
+	}
+	if got := files(t, out); got != "install,releases/0.0.1/SHA256SUMS,releases/0.0.2/SHA256SUMS" {
+		t.Fatalf("staged %s, want the listed releases only", got)
+	}
+	if !strings.Contains(msg, "names 0.0.9-leftover, which is not staged; leaving latest out") {
+		t.Fatalf("no word that latest names a release not staged: %q", msg)
+	}
+	// The version being published is staged beside them, and named latest.
+	next := filepath.Join(t.TempDir(), "releases")
+	if msg, err := stageReleases(site, next, "0.0.3"); err != nil {
+		t.Fatalf("%v: %s", err, msg)
+	}
+	if got := files(t, next); got != "install,releases/0.0.1/SHA256SUMS,releases/0.0.2/SHA256SUMS,releases/0.0.3/SHA256SUMS,releases/latest" {
+		t.Fatalf("staged %s", got)
+	}
+	// A staging that holds the leftover is refused, not merged into.
+	os.MkdirAll(filepath.Join(next, "releases", "0.0.9-leftover"), 0o755)
+	os.WriteFile(filepath.Join(next, "releases", "0.0.9-leftover", "SHA256SUMS"), []byte("0.0.9-leftover"), 0o644)
+	if msg, err := stageReleases(site, next, "0.0.3"); err == nil || !strings.Contains(msg, "releases/0.0.9-leftover is not a release to stage") {
+		t.Fatalf("a staged leftover: err %v, output %q", err, msg)
+	}
+}
+
+// Without site/releases.txt nothing says which releases are published, so nothing is staged.
+func TestStageReleasesNeedsTheList(t *testing.T) {
+	skipWindows(t)
+	site := fakeSite(t, "0.0.1", "0.0.1")
+	os.Remove(filepath.Join(site, "releases.txt"))
+	out := filepath.Join(t.TempDir(), "releases")
+	msg, err := stageReleases(site, out)
+	if err == nil || strings.TrimSpace(msg) != "stage-releases: "+site+"/releases.txt does not exist; it lists the releases the site has published, the ones staged" {
+		t.Fatalf("err %v, output %q", err, msg)
+	}
+	if _, err := os.Stat(out); err == nil {
+		t.Fatal("staged something without the list")
 	}
 }
 
@@ -613,6 +672,9 @@ func TestPublishSiteDryRunPushesNothing(t *testing.T) {
 	out, err := r.run("publish-site.sh", "--dry-run", "0.0.3")
 	if err != nil || !strings.Contains(out, "dry run: not pushed") {
 		t.Fatalf("dry run: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "dry run: built 0.0.3 into site/releases/0.0.3 and named it in site/releases/latest, locally") {
+		t.Fatalf("the dry run does not say it left site/releases/0.0.3 behind:\n%s", out)
 	}
 	if r.lisa() != "" {
 		t.Fatalf("lisa ran: %s", r.lisa())

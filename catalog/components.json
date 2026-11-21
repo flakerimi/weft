@@ -366,13 +366,13 @@
           "dynamic": false
         }
       ],
-      "notes": "`items` are `NavItem`s (see NavigationMenu), or groups of them; give each an\n`icon`, which is all a collapsed sidebar and the bottom bar show besides the\nlabel. `title` names the app at the top of the sidebar (and in the header\nwhen there is no sidebar), linking to `to`; the `brand` slot replaces it.\nSlots: `header` (the header's middle), `actions` (its end), `sidebar` (in\nplace of the navigation built from `items`), `footer` (the bottom of the\nsidebar, and of the menu sheet), and the default slot, the page in `<main>`.\nIt emits `select(item, event)` for an item chosen anywhere; sheets close\nwhen an item is chosen.\n\n**Collapsing.** The header's toggle, named \"Sidebar\" (`labels.sidebar`),\ncollapses the sidebar to icons and back, labels in tooltips: a button the\nkeyboard reaches, whose `aria-expanded` says the state, with\n`aria-controls`. Bind it with `v-model:collapsed`. The state is kept in\nlocalStorage under `persist` (`weft:app-shell:collapsed`; false keeps\nnothing), read after mounting and never on the server. So that a reload\ndoes not flash the sidebar open, AppShell registers a pre-paint snippet\n(`usePrePaint`): on the pages that render an AppShell the page build writes\na small blocking inline script at the top of `<head>`, which copies the\nstored state to `<html data-weft-sidebar=\"collapsed\">`, and CSS draws the\nrail from the first paint. The server's markup is the same either way, so\nhydration matches.\n\n**Layouts.** Once mounted it reads Weft's input and the viewport's width and\nsets `data-layout`: `sidebar`, `bar` or `drawer`. The server renders every\npart, and until mounting CSS picks the layout from the viewport\n(`max-width: 639.98px`, with `pointer: coarse` for the bar), so a page\nthat is not hydrated lays out right too; its bottom bar links work without\nJavaScript, the sheets and the toggle need it. Once mounted only the\nlayout's own parts render, so the `brand`, `sidebar` and `footer` slots are\ndrawn once; before mounting the `brand` slot is drawn twice (in the sidebar\nand in the header), so give it no ids. When the layout changes, an open\ndrawer or More sheet closes, and focus in a part that goes moves to the same\nitem in the new layout, else to its menu button, toggle or bar. Current\npages say `aria-current=\"page\"` (Link's rule).\n\n**Bottom bar.** Links without children fill it, in order; when there are\nmore than five, or any item is a group or a button, it shows the first four\nlinks and a More button, whose sheet lists the rest.",
+      "notes": "`items` are `NavItem`s (see NavigationMenu), or groups of them; give each an\n`icon`, which is all a collapsed sidebar and the bottom bar show besides the\nlabel. `title` names the app at the top of the sidebar (and in the header\nwhen there is no sidebar), linking to `to`; the `brand` slot replaces it.\nSlots: `header` (the header's middle), `actions` (its end), `sidebar` (in\nplace of the navigation built from `items`), `footer` (the bottom of the\nsidebar, and of the menu sheet), and the default slot, the page in `<main>`.\nIt emits `select(item, event)` for an item chosen anywhere; sheets close\nwhen an item is chosen.\n\nInside a WeftProvider marked `inset` (a preview drawn inside a page) the\ndefault slot goes in a `<div>`, so that page keeps its one `<main>`.\n\n**Collapsing.** The header's toggle, named \"Sidebar\" (`labels.sidebar`),\ncollapses the sidebar to icons and back, labels in tooltips: a button the\nkeyboard reaches, whose `aria-expanded` says the state, with\n`aria-controls`. Bind it with `v-model:collapsed`. The state is kept in\nlocalStorage under `persist` (`weft:app-shell:collapsed`; false keeps\nnothing), read after mounting and never on the server. So that a reload\ndoes not flash the sidebar open, AppShell registers a pre-paint snippet\n(`usePrePaint`): on the pages that render an AppShell the page build writes\na small blocking inline script at the top of `<head>`, which copies the\nstored state to `<html data-weft-sidebar=\"collapsed\">`, and CSS draws the\nrail from the first paint. The server's markup is the same either way, so\nhydration matches.\n\n**Layouts.** Once mounted it reads Weft's input and the viewport's width and\nsets `data-layout`: `sidebar`, `bar` or `drawer`. The server renders every\npart, and until mounting CSS picks the layout from the viewport\n(`max-width: 639.98px`, with `pointer: coarse` for the bar), so a page\nthat is not hydrated lays out right too; its bottom bar links work without\nJavaScript, the sheets and the toggle need it. Once mounted only the\nlayout's own parts render, so the `brand`, `sidebar` and `footer` slots are\ndrawn once; before mounting the `brand` slot is drawn twice (in the sidebar\nand in the header), so give it no ids. When the layout changes, an open\ndrawer or More sheet closes, and focus in a part that goes moves to the same\nitem in the new layout, else to its menu button, toggle or bar. Current\npages say `aria-current=\"page\"` (Link's rule).\n\n**Bottom bar.** Links without children fill it, in order; when there are\nmore than five, or any item is a group or a button, it shows the first four\nlinks and a More button, whose sheet lists the rest.",
       "examples": [
         {
           "name": "basic",
           "title": "Basic",
           "file": "packages/ui/examples/AppShell/basic.vue",
-          "source": "<script setup vapor lang=\"ts\">\nimport { AppShell, Button, type NavItem } from '@weft/ui'\n\nconst items: NavItem[] = [\n  { label: 'Home', to: '/', icon: 'house' },\n  { label: 'Inbox', to: '/inbox', icon: 'inbox', badge: 3 },\n  { label: 'Calendar', to: '/calendar', icon: 'calendar' },\n  { label: 'Reports', to: '/reports', icon: 'chart-line' },\n  { label: 'Projects', icon: 'folder', children: [{ label: 'Weft', to: '/projects/weft' }] },\n  { label: 'Settings', to: '/settings', icon: 'settings' },\n]\n</script>\n\n<template>\n  <AppShell :items=\"items\" title=\"Acme\">\n    <template #actions><Button icon=\"user\" variant=\"ghost\" tone=\"neutral\" aria-label=\"Account\" /></template>\n    <h1>Inbox</h1>\n    <p>Three new messages.</p>\n  </AppShell>\n</template>\n"
+          "source": "<script setup vapor lang=\"ts\">\nimport { AppShell, Button, Section, type NavItem } from '@weft/ui'\n\nconst items: NavItem[] = [\n  { label: 'Home', to: '/', icon: 'house' },\n  { label: 'Inbox', to: '/inbox', icon: 'inbox', badge: 3 },\n  { label: 'Calendar', to: '/calendar', icon: 'calendar' },\n  { label: 'Reports', to: '/reports', icon: 'chart-line' },\n  { label: 'Projects', icon: 'folder', children: [{ label: 'Weft', to: '/projects/weft' }] },\n  { label: 'Settings', to: '/settings', icon: 'settings' },\n]\n</script>\n\n<template>\n  <AppShell :items=\"items\" title=\"Acme\">\n    <template #actions><Button icon=\"user\" variant=\"ghost\" tone=\"neutral\" aria-label=\"Account\" /></template>\n    <Section title=\"Inbox\">\n      <p>Three new messages.</p>\n    </Section>\n  </AppShell>\n</template>\n"
         }
       ]
     },
@@ -681,7 +681,7 @@
           "name": "basic",
           "title": "Basic",
           "file": "packages/ui/examples/Banner/basic.vue",
-          "source": "<script setup vapor lang=\"ts\">\nimport { Banner } from '@weft/ui'\n</script>\n\n<template>\n  <Banner\n    id=\"maintenance-2026-11\"\n    icon=\"info\"\n    title=\"Scheduled maintenance on Saturday, 02:00 to 04:00.\"\n    :actions=\"[{ label: 'Details', to: '/status' }]\"\n    close\n  />\n</template>\n"
+          "source": "<script setup vapor lang=\"ts\">\nimport { Banner } from '@weft/ui'\n</script>\n\n<template>\n  <Banner\n    icon=\"info\"\n    title=\"Scheduled maintenance on Saturday, 02:00 to 04:00.\"\n    :actions=\"[{ label: 'Details', to: '/status' }]\"\n    close\n  />\n</template>\n"
         }
       ]
     },
@@ -5828,7 +5828,7 @@
           "type": "string",
           "required": false,
           "default": null,
-          "description": "The page's heading, rendered as its h1."
+          "description": "The page's heading, rendered as its h1 (an h2 inside a WeftProvider marked `inset`)."
         },
         {
           "name": "description",
@@ -5856,7 +5856,7 @@
           "dynamic": false
         }
       ],
-      "notes": "The `title` renders as the page's `h1`. Give the `header` slot to replace the\ntitle and description with your own markup, and the `actions` slot for\nbuttons beside them.",
+      "notes": "The `title` renders as the page's `h1`. Give the `header` slot to replace the\ntitle and description with your own markup, and the `actions` slot for\nbuttons beside them.\n\nInside a WeftProvider marked `inset` (a preview of a page drawn inside\nanother, such as a gallery's stage) it renders a `<div>` rather than\n`<main>`, and its title as an `h2`, so the page around keeps one main and\none h1.",
       "examples": [
         {
           "name": "basic",
@@ -9113,6 +9113,13 @@
           "required": false,
           "default": "'div'",
           "description": "The element to render; it has `display: contents`, so it does not affect layout."
+        },
+        {
+          "name": "inset",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Everything inside is a preview of a page, drawn inside another (a gallery's stage or thumbnail): a Page or an AppShell in it draws no `<main>` landmark, and a Page's title is an h2. An outer inset provider makes every one inside it inset too."
         }
       ],
       "emits": [],
@@ -9123,7 +9130,7 @@
           "dynamic": false
         }
       ],
-      "notes": "Its element carries `data-weft-surface`, and `data-weft-input` when its\n`input` is set, which the theme's CSS reads to switch control heights, hit\nsizes and density. With no input set the theme follows `(pointer: coarse)`\nat the root, so a page that is never hydrated still has 44 px targets on a\nphone. Components read the detected input as `pointer` until they have\nmounted, then switch live: the server cannot know it, and a phone hydrates\nthe pointer markup first. It renders\nwith `display: contents`, so it does not affect layout. Nested providers\noverride one axis and inherit the other.\n\n`locale` (a BCP 47 tag, `de-DE`) sets the language of dates, times and sizes\nfor every component inside that has no `locale` of its own (Calendar,\nDatePicker, DateRangePicker, InputTime, FileUpload): names, digits, the order\nof day, month and year, the first day of the week. Unset, it passes on the\nouter one; with none at all they use `en-US`, never the browser's language,\nso the server renders what the browser hydrates.",
+      "notes": "Its element carries `data-weft-surface`, and `data-weft-input` when its\n`input` is set, which the theme's CSS reads to switch control heights, hit\nsizes and density. With no input set the theme follows `(pointer: coarse)`\nat the root, so a page that is never hydrated still has 44 px targets on a\nphone. Components read the detected input as `pointer` until they have\nmounted, then switch live: the server cannot know it, and a phone hydrates\nthe pointer markup first. It renders\nwith `display: contents`, so it does not affect layout. Nested providers\noverride one axis and inherit the other.\n\n`locale` (a BCP 47 tag, `de-DE`) sets the language of dates, times and sizes\nfor every component inside that has no `locale` of its own (Calendar,\nDatePicker, DateRangePicker, InputTime, FileUpload): names, digits, the order\nof day, month and year, the first day of the week. Unset, it passes on the\nouter one; with none at all they use `en-US`, never the browser's language,\nso the server renders what the browser hydrates.\n\n`inset` says everything inside is a preview of a page, drawn inside another\n(a gallery's stage or thumbnail, a screenshot frame): a Page or an AppShell\nin it renders no `<main>` landmark, and a Page's title is an `h2`, so the\npage around keeps one main and one h1. An inset provider makes every one\ninside it inset too.",
       "examples": [
         {
           "name": "basic",

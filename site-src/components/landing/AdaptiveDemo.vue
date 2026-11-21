@@ -34,7 +34,7 @@ function choose(value: unknown) {
 <template>
   <section class="landing-try" aria-labelledby="landing-try-title">
     <h3 id="landing-try-title" class="landing-try__title">Try it</h3>
-    <p v-if="!mounted" class="landing-try__note">The previews are pictures. With JavaScript on, the real date picker opens here, as a calendar or as a sheet.</p>
+    <p v-if="!mounted" class="landing-try__note">The previews above are the real components drawn by the server, not ones you can use. With JavaScript on, the real date picker opens here, as a calendar or as a sheet.</p>
     <template v-else>
       <ToggleGroup :items="inputs" :model-value="input" size="sm" attached aria-label="Input" @update:model-value="choose" />
       <WeftProvider :input="input" surface="app">

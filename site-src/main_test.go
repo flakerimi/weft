@@ -21,6 +21,8 @@ type builtFiles struct {
 	Files map[string]struct {
 		Br bool `json:"br"`
 	} `json:"files"`
+	// The Early Hints Link values per page path ("404" for the not-found page).
+	Hints map[string][]string `json:"hints"`
 }
 
 type builtRoutes struct {
@@ -69,11 +71,143 @@ func brotliSize(t *testing.T, d fs.FS, m builtFiles, key string) int {
 
 var (
 	stylesheetLink = regexp.MustCompile(`<link rel="stylesheet" href="([^"]+)">`)
-	moduleScript   = regexp.MustCompile(`<script type="module" src="([^"]+)">`)
+	moduleScript   = regexp.MustCompile(`<script type="module" src="([^"]+)"[^>]*>`)
 	anyScript      = regexp.MustCompile(`<script\b[^>]*>`)
 )
 
 var modulePreload = regexp.MustCompile(`<link rel="modulepreload" href="([^"]+)">`)
+
+var (
+	// The loader (boot-*.js, the page's one module script) imports the
+	// runtime (client-*.js: Vue, the registry, the hydration) the script
+	// names when the first island is due.
+	runtimeName = regexp.MustCompile(`<script type="module" src="/assets/boot-[\w-]+\.js" data-weft-runtime="(client-[\w-]+\.js)">`)
+	hintURL       = regexp.MustCompile(`^<([^>]+)>; rel=(modulepreload|preload; as=style)`)
+	loadIsland    = regexp.MustCompile(`<weft-island\b[^>]*>`)
+)
+
+// pageRuntime is the runtime the page's loader imports, or "" for a page with no loader.
+func pageRuntime(t *testing.T, d fs.FS, html string) string {
+	t.Helper()
+	if moduleScript.FindStringSubmatch(html) == nil {
+		return ""
+	}
+	rt := runtimeName.FindStringSubmatch(html)
+	if rt == nil {
+		t.Fatal("the page's loader names no runtime in data-weft-runtime")
+	}
+	if _, err := fs.Stat(d, "assets/"+rt[1]); err != nil {
+		t.Fatalf("the page names the runtime %s, which the build did not write", rt[1])
+	}
+	return "/assets/" + rt[1]
+}
+
+// startsOnLoad says whether an island on the page starts on load: data-when="load", or none.
+func startsOnLoad(html string) bool {
+	for _, tag := range loadIsland.FindAllString(html, -1) {
+		when := regexp.MustCompile(`\sdata-when="([^"]*)"`).FindStringSubmatch(tag)
+		if when == nil || when[1] == "load" {
+			return true
+		}
+	}
+	return false
+}
+
+// staticImports is every chunk `key` imports statically, itself included, transitively.
+func staticImports(t *testing.T, d fs.FS, key string, seen map[string]bool) {
+	t.Helper()
+	if seen[key] {
+		return
+	}
+	seen[key] = true
+	b, err := fs.ReadFile(d, strings.TrimPrefix(key, "/"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, imp := range chunkImport.FindAllStringSubmatch(string(b), -1) {
+		staticImports(t, d, "/assets/"+imp[1], seen)
+	}
+}
+
+// firstView is the brotli bytes a browser fetches for the page before an
+// idle, visible or media island starts: its HTML with the CSS inlined, any
+// stylesheet it links, its loader and what that imports, and every module
+// the page or its Early Hints preload. Fonts are not counted: they are cached
+// and preloaded.
+func firstView(t *testing.T, d fs.FS, m builtFiles, path, file, html string) int {
+	t.Helper()
+	keys := map[string]bool{"/" + file: true}
+	for _, link := range stylesheetLink.FindAllStringSubmatch(html, -1) {
+		keys[link[1]] = true
+	}
+	scripts := map[string]bool{}
+	if entry := moduleScript.FindStringSubmatch(html); entry != nil {
+		staticImports(t, d, entry[1], scripts)
+	}
+	for _, pre := range modulePreload.FindAllStringSubmatch(html, -1) {
+		staticImports(t, d, pre[1], scripts)
+	}
+	for _, hint := range m.Hints[path] {
+		if h := hintURL.FindStringSubmatch(hint); h != nil {
+			if h[2] == "modulepreload" {
+				staticImports(t, d, h[1], scripts)
+			} else {
+				keys[h[1]] = true
+			}
+		}
+	}
+	n := 0
+	for key := range keys {
+		n += brotliSize(t, d, m, key)
+	}
+	for key := range scripts {
+		n += brotliSize(t, d, m, key)
+	}
+	return n
+}
+
+// The runtime is fetched up front only for a page with an island that starts
+// on load; islands that wait (idle, visible, media) import it when they
+// start. No page, in its HTML or its Early Hints, preloads it otherwise.
+func TestRuntimePreloadedOnlyForLoadIslands(t *testing.T) {
+	d := dist(t)
+	var m builtFiles
+	var r builtRoutes
+	readJSON(t, d, "manifest.json", &m)
+	readJSON(t, d, "routes.json", &r)
+	type page struct{ path, hint, file string }
+	pages := []page{}
+	for _, p := range r.Pages {
+		pages = append(pages, page{p.Path, p.Path, p.HTML})
+	}
+	if r.NotFound != nil {
+		pages = append(pages, page{"404", "404", *r.NotFound})
+	}
+	checked := 0
+	for _, p := range pages {
+		b, err := fs.ReadFile(d, p.file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		html := string(b)
+		rt := pageRuntime(t, d, html)
+		if rt == "" {
+			continue
+		}
+		checked++
+		preloaded := strings.Contains(html, `<link rel="modulepreload" href="`+rt+`">`)
+		hinted := false
+		for _, h := range m.Hints[p.hint] {
+			hinted = hinted || strings.HasPrefix(h, "<"+rt+">")
+		}
+		if want := startsOnLoad(html); preloaded != want || hinted != want {
+			t.Errorf("%s: an island starts on load: %v, yet the runtime is preloaded: %v, hinted: %v", p.path, want, preloaded, hinted)
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no page has a loader")
+	}
+}
 
 // A page with no island loads no JavaScript; JSON script types are allowed.
 func TestNotFoundPageLoadsNoJavaScript(t *testing.T) {
@@ -91,6 +225,50 @@ func TestNotFoundPageLoadsNoJavaScript(t *testing.T) {
 		if !strings.Contains(tag, `type="speculationrules"`) && !strings.Contains(tag, `type="application/json"`) {
 			t.Errorf("not-found page has %s", tag)
 		}
+	}
+}
+
+// The not-found page is one of the site's: its header, its fonts and its
+// footer, a main landmark with one h1, and links back into the site. At most
+// 10 KB brotli as a docs page is: its HTML, the CSS inlined, any stylesheet
+// it links (fonts are cached and preloaded, so not counted).
+func TestNotFoundPage(t *testing.T) {
+	d := dist(t)
+	var m builtFiles
+	var r builtRoutes
+	readJSON(t, d, "manifest.json", &m)
+	readJSON(t, d, "routes.json", &r)
+	if r.NotFound == nil {
+		t.Fatal("routes.json has no not-found page")
+	}
+	b, err := fs.ReadFile(d, *r.NotFound)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(b)
+	for _, want := range []string{`<a class="site-skip" href="#main">`, `<nav class="site-nav" aria-label="Site">`, `class="weft-footer`, `font-family:Bricolage Grotesque`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the not-found page has no %s", want)
+		}
+	}
+	if !regexp.MustCompile(`<link rel="preload" href="/assets/bricolage-grotesque-[^"]+\.woff2" as="font"`).MatchString(html) {
+		t.Error("the not-found page does not preload the site's font")
+	}
+	if n := strings.Count(html, "<main"); n != 1 || !regexp.MustCompile(`<main [^>]*id="main"`).MatchString(html) {
+		t.Errorf("the not-found page has %d main landmarks; want one, the skip link's #main", n)
+	}
+	if n := strings.Count(html, "<h1"); n != 1 || !strings.Contains(text(element(html, "<h1")), "Not found") {
+		t.Errorf("the not-found page has %d h1, want one saying Not found", n)
+	}
+	for _, href := range []string{`href="/"`, `href="/docs"`, `href="/components"`} {
+		if !strings.Contains(element(html, "<main"), href) {
+			t.Errorf("the not-found page's text does not link %s", href)
+		}
+	}
+	size := firstView(t, d, m, "404", *r.NotFound, html)
+	t.Logf("not found: %d B brotli", size)
+	if size > 10*1024 {
+		t.Errorf("the not-found page is %d B brotli, over 10 KB", size)
 	}
 }
 
@@ -355,14 +533,14 @@ func contentDocs(t *testing.T) []doc {
 var chunkImport = regexp.MustCompile(`(?:from|import)\s*"\./([^"]+\.js)"`)
 
 // islandChunks are the scripts a page loads for its islands, the shared
-// runtime (client-*.js) aside: each island's chunk, /assets/<id>-<hash>.js,
-// and the chunks it imports.
+// loader (boot-*.js) and runtime (client-*.js) aside: each island's chunk,
+// /assets/<id>-<hash>.js, and the chunks it imports.
 func islandChunks(t *testing.T, d fs.FS, m builtFiles, islands []string) []string {
 	t.Helper()
 	seen := map[string]bool{}
 	var walk func(key string)
 	walk = func(key string) {
-		if seen[key] || strings.HasPrefix(key, "/assets/client-") {
+		if seen[key] || strings.HasPrefix(key, "/assets/client-") || strings.HasPrefix(key, "/assets/boot-") {
 			return
 		}
 		seen[key] = true
@@ -394,10 +572,11 @@ func islandChunks(t *testing.T, d fs.FS, m builtFiles, islands []string) []strin
 }
 
 // Each docs page is at most 10 KB brotli: its HTML, with its CSS inlined, any
-// stylesheet it links, and the scripts of its own islands (each island's
-// chunk and the chunks it imports). The shared runtime, client-*.js, is not
-// counted: it is cached once for the whole site and loads only on pages with
-// an island. Nor are fonts: they are cached and preloaded. A docs page loads
+// stylesheet it links, the loader (boot-*.js) and whatever it preloads, and
+// the scripts of its own islands (each island's chunk and the chunks it
+// imports). The shared runtime, client-*.js, is not counted: it is cached
+// once for the whole site and loads only when an island starts. Nor are
+// fonts: they are cached and preloaded. A docs page loads
 // no JavaScript, except one with a command marked copy, whose only island is
 // the copy button.
 func TestDocsPageBudgets(t *testing.T) {
@@ -420,10 +599,7 @@ func TestDocsPageBudgets(t *testing.T) {
 			t.Fatal(err)
 		}
 		html := string(b)
-		size := brotliSize(t, d, m, "/"+file)
-		for _, link := range stylesheetLink.FindAllStringSubmatch(html, -1) {
-			size += brotliSize(t, d, m, link[1])
-		}
+		size := firstView(t, d, m, path, file, html)
 		for _, chunk := range islandChunks(t, d, m, islands[path]) {
 			size += brotliSize(t, d, m, chunk)
 		}
@@ -577,7 +753,7 @@ func TestWordmarkIsTheOwners(t *testing.T) {
 // so light, dark and data-weft-scheme follow the theme.
 func TestSiteStylesUseTokens(t *testing.T) {
 	colour := regexp.MustCompile(`#[0-9A-Fa-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|lab)\(`)
-	for _, name := range []string{"styles/site.css", "styles/shell.css", "styles/docs.css", "styles/gallery.css", "styles/gallery-index.css", "styles/stage.css", "styles/landing.css", "components/CopyCode.vue", "components/landing/AdaptiveDemo.vue"} {
+	for _, name := range []string{"styles/site.css", "styles/shell.css", "styles/docs.css", "styles/gallery.css", "styles/gallery-index.css", "styles/stage.css", "styles/landing.css", "styles/not-found.css", "components/CopyCode.vue", "components/landing/AdaptiveDemo.vue"} {
 		b, err := os.ReadFile(name)
 		if err != nil {
 			t.Fatal(err)

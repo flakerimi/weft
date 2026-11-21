@@ -40,7 +40,7 @@ go test ./...
 ```
 
 - `scripts/site.sh` and `scripts/playground.sh` without `build` also run the server, on `:8080`.
-- After you change a component's props, its `.docs.md` or an example, run `pnpm catalog`. A stale catalogue fails the tests and the site build.
+- After you change a component's props, its `.docs.md` or an example, run `pnpm catalog`. A stale catalogue fails `pnpm test` (`packages/ui/test/catalog.test.ts` rebuilds it and compares). The site build checks only the examples: it fails when an example file is unlisted, changed or gone, not when props or docs changed.
 - `node scripts/sizes.ts` rewrites `docs/sizes.md`.
 
 ## How work is done

@@ -9,7 +9,8 @@
 .gallery-when { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 32px; margin: 8px 0 0; }
 .gallery-when dt { font-weight: 600; }
 .gallery-when dd { margin: 4px 0 0; color: var(--weft-color-text-muted); }
-.gallery-section { display: grid; gap: 16px; margin-block-start: 24px; }
+/* One column no wider than the page's, whatever its tables and examples need: they scroll in their own frames. */
+.gallery-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-block-start: 24px; }
 .gallery-section h2 { font-size: 1.5rem; padding-block-start: 0.5em; border-block-start: 2px solid var(--site-saffron); }
 .gallery-section h3 { font-size: 1.125rem; margin-block-start: 8px; }
 .gallery-section :is(h2, h3) { scroll-margin-block-start: 88px; }
@@ -28,12 +29,15 @@
 }
 .gallery-code pre { margin: 0; padding: 16px; overflow-x: auto; font-size: 0.875rem; line-height: 1.6; border: 0; border-radius: 0; }
 
-.gallery-more { display: grid; gap: 12px; }
+.gallery-more { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .gallery-more + .gallery-more { margin-block-start: 16px; }
 .gallery-preview {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: center;
-  justify-items: center;
+  /* An example wider than the column scrolls here, from its start. */
+  justify-items: safe center;
+  overflow-x: auto;
   min-block-size: 8rem;
   padding: 32px 24px;
   background: var(--weft-color-bg);
@@ -42,6 +46,8 @@
 }
 .gallery-preview > *, .gallery-preview > weft-island > * { max-inline-size: 100%; }
 
+/* A table scrolls on its own when it is wider than the column, so the page never does. */
+.gallery-table { max-inline-size: 100%; overflow-x: auto; }
 .gallery-page table { border-collapse: collapse; inline-size: 100%; font-size: 0.9375rem; }
 .gallery-page :is(th, td) { text-align: start; vertical-align: top; padding: 8px 12px; border-block-end: 1px solid var(--weft-color-border); }
 .gallery-page thead th { font-size: 0.8125rem; color: var(--weft-color-text-muted); }

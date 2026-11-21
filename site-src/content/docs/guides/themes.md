@@ -53,16 +53,18 @@ Dialogs, sheets and menus that open outside that element take its scheme with th
 
 ## Change the tokens
 
-Set tokens in a stylesheet your pages import. It comes after the theme, and the theme's scheme selectors add no specificity, so a plain `:root` rule wins in light and in dark:
+Set tokens in a stylesheet your pages import. It comes after the theme, and the theme's scheme selectors add no specificity, so a rule on `:root, [data-weft-scheme]` wins in light and in dark:
 
 ```css
-:root {
+:root, [data-weft-scheme] {
   --weft-color-primary: #0B6E4F;
   --weft-radius-control: 4px;
 }
 ```
 
-To change a token in one scheme only, set it on `[data-weft-scheme="dark"]` and in a `prefers-color-scheme: dark` media query on `:root:not([data-weft-scheme="light"])`, as the theme does. An element with its own `data-weft-scheme` takes the theme's values again for everything inside it.
+The rule names `[data-weft-scheme]` as well as `:root` because an element with its own `data-weft-scheme` sets all of the theme's tokens again on itself, for everything inside it. A `:root` rule alone would not reach inside that element. Dialogs, sheets and menus opened from inside it carry its `data-weft-scheme` with them, so the same rule reaches them too.
+
+To change a token in one scheme only, set it on `[data-weft-scheme="dark"]` and in a `prefers-color-scheme: dark` media query on `:root:not([data-weft-scheme="light"])`, as the theme does.
 
 When you change a colour this way, the derived `-fg`, `-text`, `-hover` and `-active` colours are not worked out again. Set them too, and check their contrast.
 

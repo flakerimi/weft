@@ -18,7 +18,6 @@
   background-image: repeating-linear-gradient(90deg, var(--site-warp) 0 1px, transparent 1px 28px);
   background-attachment: fixed;
 }
-html { overflow-x: clip; }
 /* Skip to the content: off screen until the keyboard reaches it. */
 .site-skip { position: absolute; inset-inline-start: 16px; inset-block-start: -64px; z-index: 50; padding: 8px 16px; border-radius: var(--weft-radius-control); background: var(--weft-color-surface); }
 .site-skip:focus { inset-block-start: 8px; }

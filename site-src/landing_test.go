@@ -295,17 +295,20 @@ func TestLandingAgents(t *testing.T) {
 	}
 }
 
-// The landing page's budgets, brotli. Without its islands, at most 12 KB:
-// its HTML with the CSS inlined and any stylesheet it links (fonts are
-// cached and preloaded, so not counted). With its islands, each island's
-// chunk and the chunks it imports added, the runtime (client-*.js) aside as
-// for the docs: at most 42 KB. The plan's 30 KB was set while the demo was
-// to be a mock date picker; the real DatePicker costs 24.9 KB of
-// JavaScript on its own (docs/sizes.md), so 42 KB is 12 KB of page, 2 KB
-// for the copy button and 28 KB for the demo, pending the controller's
-// ruling (Task 6 report). Islands load only what they need: the copy
-// button's chunk imports nothing of the demo's, and the page preloads only
-// the runtime, so the demo loads when it comes into view.
+// The landing page's budgets, brotli, all bytes. First view at most 12 KB:
+// what a browser fetches before an idle island starts, which is the HTML
+// with its CSS inlined, any stylesheet it links, the loader (boot-*.js) and
+// every module the page or its Early Hints preload (fonts are cached and
+// preloaded, so not counted). Neither island starts on load, so nothing of
+// the runtime is in it. Total at most 75 KB: that, the runtime (client-*.js,
+// Vue and the hydration, fetched once when the copy button starts at idle),
+// and each island's chunk with the chunks it imports. The plan's 30 KB was
+// set while the demo was to be a mock date picker and the runtime was not
+// counted; the real DatePicker costs about 25 KB of JavaScript on its own
+// (docs/sizes.md) and the runtime about 33 KB, so the controller ruled 75 KB
+// with the runtime counted (final fix wave). Islands load only what they
+// need: the copy button's chunk imports nothing of the demo's, and the demo
+// loads when it comes into view.
 func TestLandingBudgets(t *testing.T) {
 	d := dist(t)
 	var m builtFiles
@@ -321,41 +324,56 @@ func TestLandingBudgets(t *testing.T) {
 			t.Fatal(err)
 		}
 		page := string(b)
-		static := brotliSize(t, d, m, "/"+p.HTML)
-		for _, link := range stylesheetLink.FindAllStringSubmatch(page, -1) {
-			static += brotliSize(t, d, m, link[1])
+		first := firstView(t, d, m, p.Path, p.HTML, page)
+		runtime := pageRuntime(t, d, page)
+		if runtime == "" {
+			t.Fatal("the landing page loads no runtime")
 		}
-		copyChunks := runtimeIslandBytes(t, d, m, page, []string{"CopyCommand"})
-		islands := runtimeIslandBytes(t, d, m, page, p.Islands)
-		t.Logf("landing, brotli: without islands %d B; islands %d B (copy button %d B); with them %d B", static, islands, copyChunks, static+islands)
-		if static > 12*1024 {
-			t.Errorf("the landing page without its islands is %d B brotli, over 12 KB", static)
+		later := map[string]bool{}
+		staticImports(t, d, runtime, later)
+		for _, key := range landingIslandChunks(t, d, runtime, p.Islands) {
+			later[key] = true
 		}
-		if static+islands > 42*1024 {
-			t.Errorf("the landing page with its islands is %d B brotli, over 42 KB", static+islands)
+		// What first view already fetched is not fetched again.
+		seen := map[string]bool{}
+		staticImports(t, d, moduleScript.FindStringSubmatch(page)[1], seen)
+		rest := 0
+		for key := range later {
+			if !seen[key] {
+				rest += brotliSize(t, d, m, key)
+			}
+		}
+		copyChunks := 0
+		for _, key := range landingIslandChunks(t, d, runtime, []string{"CopyCommand"}) {
+			copyChunks += brotliSize(t, d, m, key)
+		}
+		t.Logf("landing, brotli: first view %d B; then the runtime and islands %d B (copy button %d B, runtime %d B); total %d B",
+			first, rest, copyChunks, brotliSize(t, d, m, runtime), first+rest)
+		if first > 12*1024 {
+			t.Errorf("the landing page's first view is %d B brotli, over 12 KB", first)
+		}
+		if first+rest > 75*1024 {
+			t.Errorf("the landing page with its runtime and islands is %d B brotli, over 75 KB", first+rest)
 		}
 		if copyChunks > 2*1024 {
 			t.Errorf("the copy button loads %d B brotli; it imports more than it needs", copyChunks)
 		}
-		for _, pre := range modulePreload.FindAllStringSubmatch(page, -1) {
-			if !strings.HasPrefix(pre[1], "/assets/client-") {
-				t.Errorf("the landing page preloads %s; only the runtime loads up front", pre[1])
-			}
+		if pre := modulePreload.FindAllStringSubmatch(page, -1); len(pre) != 0 {
+			t.Errorf("the landing page preloads %v; no island starts on load, so nothing is preloaded", pre)
 		}
 		if n := len(moduleScript.FindAllString(page, -1)); n != 1 {
 			t.Errorf("the landing page has %d module scripts, want 1", n)
 		}
 		// The demo's Vue features stay out of the runtime the docs and skills
 		// load for their copy buttons (package.json gives those sections their own).
-		landingRuntime := moduleScript.FindStringSubmatch(page)[1]
 		for _, q := range r.Pages {
 			if (strings.HasPrefix(q.Path, "/docs") || strings.HasPrefix(q.Path, "/skills")) && len(q.Islands) > 0 {
 				b, err := fs.ReadFile(d, q.HTML)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if rt := moduleScript.FindStringSubmatch(string(b)); rt != nil && rt[1] == landingRuntime {
-					t.Errorf("%s loads the landing page's runtime %s", q.Path, landingRuntime)
+				if pageRuntime(t, d, string(b)) == runtime {
+					t.Errorf("%s loads the landing page's runtime %s", q.Path, runtime)
 				}
 			}
 		}
@@ -364,45 +382,41 @@ func TestLandingBudgets(t *testing.T) {
 	t.Fatal("routes.json has no page at /")
 }
 
-// runtimeIslandBytes is the brotli bytes of the islands' chunks the page's own
-// runtime registers, and the chunks they import, the runtime aside: a site
-// with several runtimes builds an island once for each, and the page loads
-// only its runtime's.
-func runtimeIslandBytes(t *testing.T, d fs.FS, m builtFiles, page string, islands []string) int {
+// landingIslandChunks is the islands' chunks the runtime registers, and the
+// chunks they import, the loader and the runtime aside: a site with several
+// runtimes builds an island once for each, and the page loads only its
+// runtime's.
+func landingIslandChunks(t *testing.T, d fs.FS, runtime string, islands []string) []string {
 	t.Helper()
-	entry := moduleScript.FindStringSubmatch(page)
-	if entry == nil {
-		t.Fatal("the page loads no runtime")
-	}
-	runtime, err := fs.ReadFile(d, strings.TrimPrefix(entry[1], "/"))
+	b, err := fs.ReadFile(d, strings.TrimPrefix(runtime, "/"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	seen := map[string]bool{}
 	var walk func(key string)
 	walk = func(key string) {
-		if seen[key] || strings.HasPrefix(key, "/assets/client-") {
+		if seen[key] || strings.HasPrefix(key, "/assets/client-") || strings.HasPrefix(key, "/assets/boot-") {
 			return
 		}
 		seen[key] = true
-		b, err := fs.ReadFile(d, strings.TrimPrefix(key, "/"))
+		c, err := fs.ReadFile(d, strings.TrimPrefix(key, "/"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, imp := range chunkImport.FindAllStringSubmatch(string(b), -1) {
+		for _, imp := range chunkImport.FindAllStringSubmatch(string(c), -1) {
 			walk("/assets/" + imp[1])
 		}
 	}
 	for _, id := range islands {
-		chunk := regexp.MustCompile(`\./(` + regexp.QuoteMeta(id) + `-[\w-]+\.js)`).FindStringSubmatch(string(runtime))
+		chunk := regexp.MustCompile(`\./(` + regexp.QuoteMeta(id) + `-[\w-]+\.js)`).FindStringSubmatch(string(b))
 		if chunk == nil {
-			t.Fatalf("the page's runtime %s registers no chunk for the island %s", entry[1], id)
+			t.Fatalf("the runtime %s registers no chunk for the island %s", runtime, id)
 		}
 		walk("/assets/" + chunk[1])
 	}
-	n := 0
+	var out []string
 	for key := range seen {
-		n += brotliSize(t, d, m, key)
+		out = append(out, key)
 	}
-	return n
+	return out
 }

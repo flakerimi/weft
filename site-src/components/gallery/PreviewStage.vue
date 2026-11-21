@@ -86,14 +86,17 @@ const canvasStyle = computed(() => (view.value.width ? { inlineSize: `${view.val
       </div>
     </div>
     <div class="gallery-stage__viewport">
+      <!-- The example's links name pages of an app that is not here: not prefetched. -->
       <div
         class="gallery-canvas"
+        data-weft-no-prefetch
         :data-theme="view.theme"
         :data-weft-scheme="view.scheme"
         :data-width="view.width"
         :style="canvasStyle"
       >
-        <WeftProvider :input="view.input" :surface="view.surface">
+        <!-- inset: a Page or an AppShell in the example is a preview, not this page's main or h1. -->
+        <WeftProvider :input="view.input" :surface="view.surface" inset>
           <div class="gallery-example"><slot /></div>
         </WeftProvider>
       </div>

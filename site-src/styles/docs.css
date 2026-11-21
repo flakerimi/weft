@@ -29,7 +29,7 @@
 /* A Section's heading spans the text, so its rule does (the For agents page). */
 .docs-prose .weft-section__heading { flex: 1; }
 .docs-prose li + li { margin-block-start: 0.35em; }
-.docs-prose :not(pre) > code:not(.copy-command__text) { font-size: 0.875em; padding: 0.1em 0.35em; border-radius: 4px; background: color-mix(in srgb, currentColor 7%, transparent); }
+.docs-prose :not(pre) > code:not(.copy-command__text) { font-size: 0.875em; padding: 0.1em 0.35em; border-radius: 4px; background: color-mix(in srgb, currentColor 7%, transparent); overflow-wrap: anywhere; }
 .docs-prose pre { font-size: 0.875rem; line-height: 1.6; }
 .docs-table { overflow-x: auto; }
 .docs-prose table { border-collapse: collapse; font-size: 0.9375rem; }

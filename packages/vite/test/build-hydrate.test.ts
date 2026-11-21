@@ -45,6 +45,15 @@ describe('an island with CSS modules, built and hydrated', () => {
     expect(css).toMatch(new RegExp(`\\.${after[2]}\\s*\\{\\s*font-weight:\\s*700`))
   })
 
+  it('preloads the runtime beside the loader, since the island starts on load', () => {
+    const html = readFileSync(join(out, 'pages/index/index.html'), 'utf8')
+    const entry = /<script type="module" src="\/([^"]+)"/.exec(html)![1]!
+    const runtime = /data-weft-runtime="([^"]+)"/.exec(html)![1]!
+    expect(html).toContain(`<link rel="modulepreload" href="/assets/${runtime}">`)
+    const manifest = JSON.parse(readFileSync(join(out, 'manifest.json'), 'utf8')) as { hints: Record<string, string[]> }
+    expect(manifest.hints['/']).toEqual([`</${entry}>; rel=modulepreload`, `</assets/${runtime}>; rel=modulepreload`])
+  })
+
   it('ships no stylesheet for them: their CSS is inlined in the page', () => {
     const all = readdirSync(out, { recursive: true }) as string[]
     expect(all.filter((f) => /\.css(\.br|\.gz)?$/.test(f))).toEqual([])

@@ -1,5 +1,6 @@
 #!/bin/sh
-# Build release binaries into site/releases/<version>/. Does not tag or publish.
+# Build release binaries into site/releases/<version>/, and name it in
+# site/releases/latest. Does not tag, publish or list it in site/releases.txt.
 # Usage: scripts/release.sh <version>
 set -eu
 
@@ -27,4 +28,4 @@ for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64; do
 done
 (cd "$out" && if command -v sha256sum >/dev/null; then sha256sum weft_*.tar.gz; else shasum -a 256 weft_*.tar.gz; fi) >"$out/SHA256SUMS"
 printf '%s\n' "$version" >site/releases/latest
-echo "release $version ready in $out"
+echo "release $version ready in $out, and named in site/releases/latest: a local build; site/releases.txt lists it only once a publish of it is verified live"

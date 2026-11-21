@@ -1,7 +1,8 @@
 #!/bin/sh
 # Build a release and publish weft.base.al on the Lisa server: the pages Weft
-# builds from site-src, the installer and every real release, all served by the
-# Weft binary (site-src/main.go). The pushed tree has a Dockerfile, so the
+# builds from site-src, the installer, every published release (those
+# site/releases.txt lists) and the new one, all served by the Weft binary
+# (site-src/main.go). The pushed tree has a Dockerfile, so the
 # server compiles that binary, which embeds the pages, and runs it as a
 # container whose /data/releases holds the installer and the releases.
 # Usage: scripts/publish-site.sh [--dry-run] <version>
@@ -62,8 +63,8 @@ scripts/release.sh "$version"
 scripts/site.sh build
 
 # The push tree: the weft package, the site's main package and its build, the
-# installer and every real release, and a Dockerfile that compiles the binary
-# on an empty image beside the releases. It is made where it will be kept, so
+# installer, every published release and this one, and a Dockerfile that
+# compiles the binary on an empty image beside the releases. It is made where it will be kept, so
 # a release kept before is a hard link to it there; a dry run's goes to TMPDIR.
 if [ -n "$dry" ]; then
 	tmp=${TMPDIR:-/tmp}
@@ -103,6 +104,7 @@ echo "push tree:"
 (cd "$tree" && find . -type f | sort)
 
 if [ -n "$dry" ]; then
+	echo "dry run: built $version into site/releases/$version and named it in site/releases/latest, locally; site/releases.txt does not list it, so no later staging includes it unless $version is the version published."
 	echo "dry run: not pushed; the tree is $tree"
 	exit 0
 fi

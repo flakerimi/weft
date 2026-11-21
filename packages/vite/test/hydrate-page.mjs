@@ -27,7 +27,12 @@ const before = button.className
 const settle = async (done) => {
   for (let i = 0; i < 200 && !done(); i++) await new Promise((r) => setTimeout(r, 10))
 }
-const entry = /<script type="module" src="\/([^"]+)"/.exec(html)[1]
+const [script, entry] = /<script type="module" src="\/([^"]+)"[^>]*>/.exec(html)
+// The page's module script names the runtime the loader imports; a copy that
+// does not run stands in for it, and the loader is imported as the browser would.
+const named = document.createElement('template')
+named.innerHTML = script.replace('type="module"', 'type="text/plain"') + '</script>'
+document.head.append(named.content)
 await import(pathToFileURL(join(dist, entry)).href)
 await settle(() => !island.querySelector('script'))
 const hydrated = !island.querySelector('script')

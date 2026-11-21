@@ -143,6 +143,26 @@ describe('NavigationMenu, horizontal on pointer', () => {
     expect(m.exposed.chosen).toEqual(['sign out', 'Sign out'])
   })
 
+  it('underlines the current page in a bar that is not collapsed, where its link is the entry\'s own child', async () => {
+    history.replaceState(null, '', '/inbox')
+    await cases()
+    const unstyle = loadStyles()
+    try {
+      const underline = Array.from(document.styleSheets)
+        .flatMap((sheet) => Array.from(sheet.cssRules))
+        .filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule && rule.style.getPropertyValue('content') !== '')
+        .flatMap((rule) => rule.selectorText.split(/\s*,\s*/))
+        .filter((selector) => /\[aria-current="page"\]::after$/.test(selector) && selector.includes('[data-orientation="horizontal"]'))
+        .map((selector) => selector.slice(0, -'::after'.length))
+      const underlined = (el: Element) => underline.some((selector) => el.matches(selector))
+      expect(item('Inbox').parentElement!.classList.contains('weft-nav__entry')).toBe(true)
+      expect(underlined(item('Inbox'))).toBe(true)
+      expect(underlined(item('Home'))).toBe(false)
+    } finally {
+      unstyle()
+    }
+  })
+
   it('stays a bar on a narrow pointer screen, scrolling sideways when it overflows', async () => {
     await cases({}, 400)
     expect(nav().dataset.form).toBe('bar')

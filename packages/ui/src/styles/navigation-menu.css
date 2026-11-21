@@ -75,6 +75,8 @@
 .weft-nav .weft-nav__trigger[aria-expanded="true"] { color: var(--weft-color-text, CanvasText); }
 .weft-nav[data-orientation="vertical"] .weft-nav__item[aria-current="page"],
 .weft-nav__panel .weft-nav__item[aria-current="page"] { background: color-mix(in srgb, var(--weft-color-text, CanvasText) 8%, transparent); }
+/* The current page in the bar: its link is the entry's own child, or a collapsed bar's Tooltip trigger's. */
+.weft-nav[data-orientation="horizontal"] > .weft-nav__list > .weft-nav__entry > .weft-nav__item[aria-current="page"]::after,
 .weft-nav[data-orientation="horizontal"] > .weft-nav__list > .weft-nav__entry > .weft-overlay-trigger > .weft-nav__item[aria-current="page"]::after {
   content: '';
   position: absolute;

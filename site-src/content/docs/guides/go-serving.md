@@ -38,7 +38,7 @@ The build stored each text file three times: as it is, brotli and gzip. Serve pi
 
 ### Early Hints
 
-When a page has a linked stylesheet, fonts or island scripts, Serve first sends `103 Early Hints` with their `Link` headers, so the browser starts fetching them while the page is on its way.
+When a page has a linked stylesheet, fonts or island scripts, Serve first sends `103 Early Hints` with their `Link` headers, so the browser starts fetching them while the page is on its way. The island scripts hinted are the loader, and the runtime too only on a page with an island that starts on `load`.
 
 ### Methods
 
