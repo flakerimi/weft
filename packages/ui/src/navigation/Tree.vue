@@ -14,7 +14,7 @@
 // closed. Past 200 visible nodes it renders only those in view (a fixed
 // row height, scrolling inside the tree). On touch each row is at least
 // --weft-hit-min tall.
-import { computed, nextTick, ref, useTemplateRef } from 'vue'
+import { computed, nextTick, onMounted, ref, useTemplateRef } from 'vue'
 import Icon from '../basics/Icon.vue'
 import { useWeft } from '../adaptive/context.ts'
 import { focus, isRtl } from '../headless/dom.ts'
@@ -81,7 +81,12 @@ const chosen = computed(() => {
 
 /** Rows of a fixed height when windowed: the control height, or the hit size on touch. */
 const ROW = { sm: 28, md: 32, lg: 40 } as const
-const rowHeight = computed(() => (weft.input.value === 'touch' ? 44 : ROW[props.size]))
+// Input is known only in the browser: the server's render and the first
+// client render use the pointer height, so a touch page hydrates the same
+// markup, and the touch height follows once mounted.
+const mounted = ref(false)
+onMounted(() => (mounted.value = true))
+const rowHeight = computed(() => (mounted.value && weft.input.value === 'touch' ? 44 : ROW[props.size]))
 const focusKey = ref<string | null>(null)
 const focusIndex = computed(() => {
   const at = focusKey.value === null ? -1 : rows.value.findIndex((r) => r.key === focusKey.value)

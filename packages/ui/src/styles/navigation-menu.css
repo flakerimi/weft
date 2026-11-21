@@ -1,20 +1,37 @@
 /* NavigationMenu. Items are quiet rows (links drawn without an underline),
    a control height tall and at least --weft-hit-min on touch; the current
-   page and the item holding it are in the text colour, on a tint when
-   vertical. Horizontal, the groups sit in a row, the last at the end;
-   vertical, the groups stack with a line between them and children indent
-   under their item, opening with collapsible's height animation. Collapsed,
-   each item is a square icon. */
+   page and the item holding it are in the text colour, on a tint in a
+   column. The bar (data-form="bar") puts its groups in a row, the last at
+   the end, and scrolls sideways when it overflows; a list opened from it
+   (or from a collapsed column) floats on the raised surface, fixed, so no
+   scrolling parent clips it. In a column the groups stack with a line
+   between them and children indent under their item, opening with
+   collapsible's height animation; collapsed, each item is a square icon.
+   The menu button shows in the sheet form. Before mounting there is no
+   data-form, and a narrow touch viewport shows the menu button in place of
+   the bar. */
 .weft-nav { display: flex; min-inline-size: 0; }
-.weft-nav[data-orientation="horizontal"] { align-items: center; gap: var(--weft-space-4, 16px); }
+.weft-nav[data-orientation="horizontal"] {
+  align-items: center;
+  gap: var(--weft-space-4, 16px);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
 .weft-nav[data-orientation="horizontal"] > .weft-nav__list:last-child:not(:first-child) { margin-inline-start: auto; }
 .weft-nav[data-orientation="vertical"] { flex-direction: column; gap: var(--weft-space-2, 8px); }
 .weft-nav[data-orientation="vertical"] > .weft-nav__list + .weft-nav__list { padding-block-start: var(--weft-space-2, 8px); border-block-start: 1px solid var(--weft-color-border, GrayText); }
 
-.weft-nav__list, .weft-nav__children { display: flex; margin: 0; padding: 0; list-style: none; }
-.weft-nav[data-orientation="horizontal"] .weft-nav__list { align-items: center; gap: var(--weft-space-1, 4px); }
+.weft-nav__menu-wrap { display: none; }
+.weft-nav[data-form="sheet"] > .weft-nav__menu-wrap { display: contents; }
+@media (max-width: 639.98px) and (pointer: coarse) {
+  .weft-nav[data-orientation="horizontal"]:not([data-form]) > .weft-nav__list { display: none; }
+  .weft-nav[data-orientation="horizontal"]:not([data-form]) > .weft-nav__menu-wrap { display: contents; }
+}
+
+.weft-nav__list, .weft-nav__children, .weft-nav__panel { display: flex; margin: 0; padding: 0; list-style: none; }
+.weft-nav[data-orientation="horizontal"] > .weft-nav__list { flex: none; align-items: center; gap: var(--weft-space-1, 4px); }
 .weft-nav[data-orientation="vertical"] .weft-nav__list,
-.weft-nav__children { flex-direction: column; gap: 2px; }
+.weft-nav__children, .weft-nav__panel { flex-direction: column; gap: 2px; }
 .weft-nav__entry { display: flex; flex-direction: column; min-inline-size: 0; }
 .weft-nav[data-orientation="horizontal"] .weft-nav__entry[data-type="label"] { display: none; }
 
@@ -50,9 +67,10 @@
 }
 .weft-nav .weft-nav__item[aria-current="page"],
 .weft-nav .weft-nav__item[data-active],
-.weft-nav .weft-nav__item[aria-expanded="true"]:not(.weft-nav__toggle) { color: var(--weft-color-text, CanvasText); }
-.weft-nav[data-orientation="vertical"] .weft-nav__item[aria-current="page"] { background: color-mix(in srgb, var(--weft-color-text, CanvasText) 8%, transparent); }
-.weft-nav[data-orientation="horizontal"] .weft-nav__item[aria-current="page"]::after {
+.weft-nav .weft-nav__trigger[aria-expanded="true"] { color: var(--weft-color-text, CanvasText); }
+.weft-nav[data-orientation="vertical"] .weft-nav__item[aria-current="page"],
+.weft-nav__panel .weft-nav__item[aria-current="page"] { background: color-mix(in srgb, var(--weft-color-text, CanvasText) 8%, transparent); }
+.weft-nav[data-orientation="horizontal"] > .weft-nav__list > .weft-nav__entry > .weft-overlay-trigger > .weft-nav__item[aria-current="page"]::after {
   content: '';
   position: absolute;
   inset-inline: var(--weft-space-2, 8px);
@@ -65,10 +83,28 @@
 .weft-nav .weft-nav__item[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
 .weft-nav__icon { flex: none; inline-size: 18px; block-size: 18px; }
 .weft-nav__label { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
-.weft-nav[data-orientation="horizontal"] .weft-nav__label { flex: none; }
+.weft-nav[data-orientation="horizontal"] > .weft-nav__list .weft-nav__label { flex: none; }
+.weft-nav__text { display: grid; flex: 1; min-inline-size: 0; }
+.weft-nav__description { color: var(--weft-color-text-muted, GrayText); font-size: 0.85em; font-weight: var(--weft-weight-body, 400); white-space: normal; }
 .weft-nav__glyph { flex: none; inline-size: 16px; block-size: 16px; }
 .weft-nav__chevron { color: var(--weft-color-text-muted, GrayText); transition: rotate var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease); }
 .weft-nav .weft-nav__item[aria-expanded="true"] .weft-nav__chevron { rotate: 180deg; }
+
+.weft-nav__panel {
+  z-index: 50;
+  min-inline-size: 12rem;
+  max-inline-size: min(22rem, calc(100vw - 16px));
+  padding: var(--weft-space-1, 4px);
+  border: 1px solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-card, 12px);
+  background: var(--weft-color-surface-raised, Canvas);
+  box-shadow: 0 8px 24px color-mix(in srgb, CanvasText 16%, transparent);
+  transition: opacity var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease);
+  @starting-style { opacity: 0; }
+}
+.weft-nav__panel:not([data-positioned]) { opacity: 0; }
+.weft-nav__panel[hidden] { display: none; }
+.weft-nav__panel .weft-nav__child { font-weight: var(--weft-weight-body, 400); padding-block: var(--weft-space-1, 4px); }
 
 .weft-nav__children {
   padding-inline-start: calc(var(--weft-space-2, 8px) + 18px);
@@ -82,7 +118,8 @@
 .weft-nav__children[hidden] { block-size: 0px; }
 .weft-nav .weft-nav__child { font-weight: var(--weft-weight-body, 400); }
 
-.weft-nav[data-collapsed] .weft-nav__item {
+.weft-nav[data-collapsed] > .weft-nav__list > .weft-nav__entry > .weft-nav__item,
+.weft-nav[data-collapsed] > .weft-nav__list > .weft-nav__entry > .weft-overlay-trigger > .weft-nav__item {
   justify-content: center;
   inline-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
   padding: 0;

@@ -33,5 +33,7 @@ form's input or a scroll position survives switching away.
 
 **Address.** With `hash`, the address's `#fragment` selects the tab whose
 value it names, at mounting and on every `hashchange`, and the selected tab
-is written there (replacing the history entry, not adding one). Off by
-default.
+is written there (replacing the history entry, not adding one). A fragment
+naming a disabled tab, or none, is ignored. Off by default. One Tabs per
+page owns the hash, the first mounted with `hash`; a second warns once and
+leaves the address alone, so give `hash` to one Tabs per page.

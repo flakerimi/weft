@@ -287,7 +287,7 @@ async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssT
     }
     const scripts = page.islands.length > 0 ? client : null
     const file = htmlFile(page.path)
-    await write(file, pageHTML({ body: page.html, head: page.head, css, stylesheet, scripts, rules }))
+    await write(file, pageHTML({ body: page.html, head: page.head, prePaint: page.prePaint, css, stylesheet, scripts, rules }))
 
     const links = [
       ...(stylesheet ? [`<${stylesheet}>; rel=preload; as=style`] : []),
@@ -902,9 +902,23 @@ function headTags({ title, description, image }: PageHead): string[] {
   ]
 }
 
+/**
+ * The page's pre-paint snippets in one blocking inline script, or none.
+ * A snippet that would end the script early is refused in a sentence.
+ */
+function prePaintTag(snippets: string[]): string[] {
+  if (!snippets.length) return []
+  for (const code of snippets) {
+    if (/<\/script|<!--/i.test(code)) throw new Error(`buildSite: a pre-paint snippet holds "</script" or "<!--", which would break the page's <head>: ${code.slice(0, 60)}`)
+  }
+  return [`<script data-weft-prepaint>${snippets.join('\n')}</script>`]
+}
+
 function pageHTML(p: {
   body: string
   head: PageHead
+  /** Pre-paint snippets (usePrePaint), run before the CSS and the first paint. */
+  prePaint: string[]
   css: string
   stylesheet: string | null
   scripts: ClientBuild | null
@@ -917,6 +931,7 @@ function pageHTML(p: {
     '<head>',
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    ...prePaintTag(p.prePaint),
     ...headTags(p.head),
     p.stylesheet === null ? `<style>${p.css}</style>` : `<link rel="stylesheet" href="${p.stylesheet}">`,
     p.rules,

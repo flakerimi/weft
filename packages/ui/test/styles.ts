@@ -35,3 +35,16 @@ export function ruleFor(selector: string): CSSStyleRule | undefined {
   }
   return undefined
 }
+
+/** The rule whose selector is exactly `selector`, inside an @media rule whose condition is exactly `media`. */
+export function mediaRule(media: string, selector: string): CSSStyleRule | undefined {
+  for (const sheet of Array.from(document.styleSheets)) {
+    for (const rule of Array.from(sheet.cssRules)) {
+      if (!(rule instanceof CSSMediaRule) || rule.conditionText !== media) continue
+      for (const inner of Array.from(rule.cssRules)) {
+        if (inner instanceof CSSStyleRule && inner.selectorText.split(/\s*,\s*/).includes(selector)) return inner
+      }
+    }
+  }
+  return undefined
+}

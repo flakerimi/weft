@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import DisclosureCases from '../fixtures/disclosure/DisclosureCases.vue'
 import { mount } from '../mount.ts'
 import { press as pressKey } from '../keyboard.ts'
-import { loadStyles, ruleFor } from '../styles.ts'
+import { loadStyles, mediaRule, ruleFor } from '../styles.ts'
 import { $, $$, active, key, reset, settle } from '../overlays/helpers.ts'
 
 let unmount: (() => void) | undefined
@@ -64,13 +64,16 @@ describe('Collapsible', () => {
     expect(content(button).textContent).toContain('Labelled content')
   })
 
-  it('animates its height with CSS, which reduced motion turns off', async () => {
+  it('animates its height with CSS; under reduced motion base.css sets every transition to 0 ms', async () => {
     const unstyle = loadStyles()
     try {
       await cases()
       const rule = ruleFor('.weft-collapsible__content')!.style
       expect(rule.getPropertyValue('transition-property')).toContain('block-size')
       expect(ruleFor('.weft-collapsible__content[hidden]')!.style.getPropertyValue('block-size')).toBe('0px')
+      const reduced = mediaRule('(prefers-reduced-motion: reduce)', '*')!.style
+      expect(reduced.getPropertyValue('transition-duration')).toBe('0ms')
+      expect(reduced.getPropertyPriority('transition-duration')).toBe('important')
       expect(ruleFor('.weft-collapsible__trigger:focus-visible')!.style.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
     } finally {
       unstyle()

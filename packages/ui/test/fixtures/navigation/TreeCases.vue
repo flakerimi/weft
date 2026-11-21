@@ -5,7 +5,10 @@ import WeftProvider from '../../../src/adaptive/WeftProvider.vue'
 import type { Input } from '../../../src/adaptive/detect.ts'
 import type { TreeItem } from '../../../src/navigation/tree.ts'
 
-const props = defineProps<{ multiple?: boolean; big?: boolean; input?: Input; dir?: 'ltr' | 'rtl' }>()
+const props = withDefaults(
+  defineProps<{ multiple?: boolean; big?: boolean; dupes?: boolean; selectable?: boolean; input?: Input; dir?: 'ltr' | 'rtl' }>(),
+  { selectable: true },
+)
 const selected = ref<string | string[] | null>(props.multiple ? [] : null)
 const expanded = ref<string[]>(['src'])
 const toggled: string[] = []
@@ -26,7 +29,11 @@ const small: TreeItem[] = [
 const big: TreeItem[] = [
   { label: 'rows', value: 'rows', children: Array.from({ length: 500 }, (_, i) => ({ label: `Row ${i + 1}`, value: `r${i + 1}` })) },
 ]
-const items = props.big ? big : small
+const dupes: TreeItem[] = [
+  { label: 'a', children: [{ label: 'index.ts' }, { label: 'index.ts' }] },
+  { label: 'a', children: [{ label: 'index.ts' }] },
+]
+const items = props.big ? big : props.dupes ? dupes : small
 if (props.big) expanded.value = ['rows']
 defineExpose({ selected, expanded, toggled })
 </script>
@@ -39,6 +46,7 @@ defineExpose({ selected, expanded, toggled })
         v-model:expanded="expanded"
         :items="items"
         :multiple="multiple"
+        :selectable="selectable"
         aria-label="Files"
         @toggle="(item, open) => toggled.push(`${item.value}:${open}`)"
       />

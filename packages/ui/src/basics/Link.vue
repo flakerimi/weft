@@ -9,7 +9,7 @@
 // disabled fieldset leaves links alone), so it cannot navigate mid-submit.
 import { computed, onMounted, ref } from 'vue'
 import { useFormState } from '../forms/field.ts'
-import { isExternal as looksExternal, relFor } from './address.ts'
+import { isCurrentPage, isExternal as looksExternal, relFor } from './address.ts'
 import '../styles/base.css'
 import '../styles/link.css'
 
@@ -48,12 +48,9 @@ const mounted = ref(false)
 onMounted(() => {
   mounted.value = true
 })
-const trim = (path: string) => (path.length > 1 ? path.replace(/\/+$/, '') : path)
 const current = computed(() => {
   if (props.active !== undefined) return props.active
-  if (!mounted.value || isExternal.value || !address.value) return false
-  const url = new URL(address.value, location.href)
-  return url.origin === location.origin && trim(url.pathname) === trim(location.pathname)
+  return mounted.value && !isExternal.value && isCurrentPage(address.value)
 })
 
 const form = useFormState()

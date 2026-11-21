@@ -16,5 +16,11 @@ a `menu` slot the middle stays when narrow, and a NavigationMenu there takes
 its own narrow form. `sticky` (on) keeps it at the top while the page
 scrolls.
 
+Before mounting both the middle and the menu button render, and CSS shows
+the menu button on a narrow viewport (`max-width: 639.98px`) when there is a
+menu; once mounted `data-layout` says `compact` or `full` and only that
+form's part renders. When it changes, the sheet closes, and focus in the
+part that goes moves to the menu button, or to the middle's first link.
+
 It is a `<header>`: the page's banner landmark when it is not inside an
 article, aside, main, nav or section.

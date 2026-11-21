@@ -133,3 +133,28 @@
   .weft-app-shell:not([data-layout]) .weft-app-shell__menu { display: none; }
   .weft-app-shell:not([data-layout]) .weft-app-shell__bar { display: block; }
 }
+
+/* Before mounting, the rail a reload left collapsed: the pre-paint script
+   (usePrePaint) sets data-weft-sidebar="collapsed" on <html> from storage,
+   so the sidebar is drawn as icons from the first paint, as it will be once
+   mounted. */
+:root[data-weft-sidebar="collapsed"] .weft-app-shell:not([data-layout]) .weft-app-shell__sidebar { inline-size: var(--weft-app-shell-rail, 4.5rem); align-items: center; }
+:root[data-weft-sidebar="collapsed"] .weft-app-shell:not([data-layout]) .weft-app-shell__brand { padding-inline: 0; }
+:root[data-weft-sidebar="collapsed"] .weft-app-shell:not([data-layout]) .weft-nav__label,
+:root[data-weft-sidebar="collapsed"] .weft-app-shell:not([data-layout]) .weft-app-shell__brand .weft-app-shell__title,
+:root[data-weft-sidebar="collapsed"] .weft-app-shell:not([data-layout]) .weft-nav__heading {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+:root[data-weft-sidebar="collapsed"] .weft-app-shell:not([data-layout]) .weft-app-shell__sidebar .weft-nav__chevron,
+:root[data-weft-sidebar="collapsed"] .weft-app-shell:not([data-layout]) .weft-app-shell__sidebar .weft-badge,
+:root[data-weft-sidebar="collapsed"] .weft-app-shell:not([data-layout]) .weft-app-shell__sidebar .weft-nav__children { display: none; }
+:root[data-weft-sidebar="collapsed"] .weft-app-shell:not([data-layout]) .weft-app-shell__sidebar .weft-nav__item {
+  justify-content: center;
+  inline-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
+  padding: 0;
+}

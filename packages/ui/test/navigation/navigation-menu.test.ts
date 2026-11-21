@@ -2,9 +2,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import NavCases from '../fixtures/navigation/NavCases.vue'
 import { mount } from '../mount.ts'
 import { installResizeObserver } from '../resize-observer.ts'
-import { loadStyles, ruleFor } from '../styles.ts'
+import { loadStyles, mediaRule, ruleFor } from '../styles.ts'
 import { px } from '../forms/helpers.ts'
-import { $, $$, active, key, overlays, reset, settle } from '../overlays/helpers.ts'
+import { $, $$, active, key, moveFocus, overlays, press, reset, settle } from '../overlays/helpers.ts'
 
 let unmount: (() => void) | undefined
 let ro: ReturnType<typeof installResizeObserver> | undefined
@@ -47,25 +47,70 @@ describe('NavigationMenu, horizontal on pointer', () => {
     expect(item('Inbox').querySelector('.weft-badge')!.textContent).toBe('4')
   })
 
-  it('opens an item with children as a dropdown menu of links', async () => {
+  it('opens an item with children as a disclosure (APG Disclosure Navigation): a button over a list of links', async () => {
     const m = await cases()
     const trigger = item('Components')
     expect(trigger.tagName).toBe('BUTTON')
-    expect(trigger.getAttribute('aria-haspopup')).toBe('menu')
+    expect(trigger.hasAttribute('aria-haspopup')).toBe(false)
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    const list = document.getElementById(trigger.getAttribute('aria-controls')!)!
+    expect(list.tagName).toBe('UL')
+    expect(nav().contains(list)).toBe(true)
+    expect(list.hidden).toBe(true)
     trigger.focus()
     trigger.click()
     await settle()
     expect(trigger.getAttribute('aria-expanded')).toBe('true')
-    const menu = $('[role="menu"]', overlays()!)
-    const links = $$('[role="menuitem"]', menu)
+    expect(list.hidden).toBe(false)
+    expect(active()).toBe(trigger) // focus stays on the button
+    expect($('[role="menu"]')).toBeNull()
+    expect($$('[role^="menuitem"]')).toHaveLength(0)
+    const links = $$<HTMLAnchorElement>('a', list)
     expect(links.map((l) => l.getAttribute('href'))).toEqual(['/components/button', '/components/tabs'])
-    expect(active()).toBe(links[0])
     links[1]!.addEventListener('click', (e) => e.preventDefault())
     links[1]!.click()
     await settle()
     expect(m.exposed.chosen).toEqual(['Tabs'])
-    expect($('[role="menu"]')).toBeNull()
+    expect(list.hidden).toBe(true)
+  })
+
+  it('moves into an open list with ArrowDown, through it with the arrows, Home and End; Escape closes it back to its button', async () => {
+    await cases()
+    const trigger = item('Components')
+    trigger.focus()
+    key('ArrowDown')
+    await settle()
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    expect(active()).toBe(item('Button'))
+    key('ArrowDown')
+    expect(active()).toBe(item('Tabs'))
+    key('ArrowDown')
+    expect(active()).toBe(item('Button'))
+    key('End')
+    expect(active()).toBe(item('Tabs'))
+    key('Home')
+    expect(active()).toBe(item('Button'))
+    key('Escape')
+    await settle()
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(active()).toBe(trigger)
+  })
+
+  it('closes an open list when focus leaves it or a press lands outside', async () => {
+    await cases()
+    const trigger = item('Components')
+    trigger.focus()
+    trigger.click()
+    await settle()
+    moveFocus(item('Inbox'))
+    await settle()
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    trigger.focus()
+    trigger.click()
+    await settle()
+    press(document.body)
+    await settle()
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
   })
 
   it('keeps every item in the tab order and moves between them with Left and Right, Home and End', async () => {
@@ -98,17 +143,35 @@ describe('NavigationMenu, horizontal on pointer', () => {
     expect(m.exposed.chosen).toEqual(['sign out', 'Sign out'])
   })
 
-  it('stays a bar on a narrow pointer screen', async () => {
+  it('stays a bar on a narrow pointer screen, scrolling sideways when it overflows', async () => {
     await cases({}, 400)
-    expect(nav().dataset.orientation).toBe('horizontal')
+    expect(nav().dataset.form).toBe('bar')
     expect(item('Home')).toBeDefined()
+    const unstyle = loadStyles()
+    try {
+      expect(getComputedStyle(nav()).overflowX).toBe('auto')
+    } finally {
+      unstyle()
+    }
+  })
+
+  it('before mounting, leaves the form to CSS: the bar, or the menu button on a narrow touch screen', () => {
+    const unstyle = loadStyles()
+    try {
+      const media = '(max-width: 639.98px) and (pointer: coarse)'
+      expect(mediaRule(media, '.weft-nav[data-orientation="horizontal"]:not([data-form]) > .weft-nav__list')?.style.getPropertyValue('display')).toBe('none')
+      expect(mediaRule(media, '.weft-nav[data-orientation="horizontal"]:not([data-form]) > .weft-nav__menu-wrap')?.style.getPropertyValue('display')).toBe('contents')
+      expect(ruleFor('.weft-nav__menu-wrap')!.style.getPropertyValue('display')).toBe('none')
+    } finally {
+      unstyle()
+    }
   })
 })
 
 describe('NavigationMenu on a narrow touch screen', () => {
   it('is one menu button that opens the items as a vertical list in a sheet', async () => {
     const m = await cases({ input: 'touch' }, 400)
-    expect(nav().dataset.orientation).toBe('sheet')
+    expect(nav().dataset.form).toBe('sheet')
     expect($$('.weft-nav__list', nav())).toHaveLength(0)
     const button = $<HTMLButtonElement>('.weft-nav__menu', nav())
     expect(button.getAttribute('aria-label')).toBe('Menu')
@@ -118,7 +181,7 @@ describe('NavigationMenu on a narrow touch screen', () => {
     const sheet = $('[role="dialog"]', overlays()!)
     expect(sheet.dataset.side).toBe('start')
     const inner = $('nav.weft-nav', sheet)
-    expect(inner.dataset.orientation).toBe('vertical')
+    expect(inner.dataset.form).toBe('column')
     expect(item('Components', inner).getAttribute('aria-expanded')).toBe('false')
     // Choosing an item closes the sheet.
     const home = item('Home', inner)
@@ -133,7 +196,43 @@ describe('NavigationMenu on a narrow touch screen', () => {
     const m = await cases({ input: 'touch' }, 400)
     ;(m.exposed as { input: string }).input = 'pointer'
     await settle()
-    expect(nav().dataset.orientation).toBe('horizontal')
+    expect(nav().dataset.form).toBe('bar')
+  })
+
+  it('with the sheet open, turning to pointer closes it and moves focus to the same item in the bar; it does not reopen', async () => {
+    const m = await cases({ input: 'touch' }, 400)
+    $<HTMLButtonElement>('.weft-nav__menu', nav()).click()
+    await settle()
+    const sheet = $('[role="dialog"]', overlays()!)
+    item('Inbox', sheet).focus()
+    ;(m.exposed as { input: string }).input = 'pointer'
+    await settle()
+    await settle()
+    expect($('[role="dialog"]')).toBeNull()
+    expect(nav().dataset.form).toBe('bar')
+    expect(active()).toBe(item('Inbox'))
+    ;(m.exposed as { input: string }).input = 'touch'
+    await settle()
+    await settle()
+    expect(nav().dataset.form).toBe('sheet')
+    expect($('[role="dialog"]')).toBeNull()
+  })
+
+  it('with a list open in the bar, turning to touch closes it and moves focus to the menu button', async () => {
+    const m = await cases({}, 400)
+    item('Components').focus()
+    key('ArrowDown')
+    await settle()
+    expect(active()).toBe(item('Button'))
+    ;(m.exposed as { input: string }).input = 'touch'
+    await settle()
+    await settle()
+    expect(nav().dataset.form).toBe('sheet')
+    expect(active()).toBe($('.weft-nav__menu', nav()))
+    expect($('[role="dialog"]')).toBeNull()
+    ;(m.exposed as { input: string }).input = 'pointer'
+    await settle()
+    expect(item('Components').getAttribute('aria-expanded')).toBe('false')
   })
 
   it('gives every item a 44 px hit area on touch', async () => {
@@ -150,7 +249,7 @@ describe('NavigationMenu on a narrow touch screen', () => {
 describe('NavigationMenu, vertical', () => {
   it('draws children as a disclosure list, hidden until found, and headings over groups', async () => {
     await cases({ orientation: 'vertical' })
-    expect(nav().dataset.orientation).toBe('vertical')
+    expect(nav().dataset.form).toBe('column')
     expect($('.weft-nav__heading', nav()).textContent).toBe('More')
     const toggle = item('Components')
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
@@ -191,10 +290,25 @@ describe('NavigationMenu, vertical', () => {
     const home = item('Home')
     expect(home.querySelector('.weft-nav__label')!.classList.contains('weft-visually-hidden')).toBe(true)
     const trigger = item('Components')
-    expect(trigger.getAttribute('aria-haspopup')).toBe('menu')
+    expect(trigger.hasAttribute('aria-haspopup')).toBe(false)
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
     trigger.click()
     await settle()
-    expect($('[role="menu"]', overlays()!)).not.toBeNull()
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    const list = document.getElementById(trigger.getAttribute('aria-controls')!)!
+    expect(list.hidden).toBe(false)
+    expect(list.dataset.float).toBe('true')
+    expect($('[role="menu"]')).toBeNull()
+  })
+
+  it('opens the group of the current page, by the address after mounting, and follows new items', async () => {
+    history.replaceState(null, '', '/components/tabs')
+    const m = await cases({ orientation: 'vertical' })
+    expect(item('Components').getAttribute('aria-expanded')).toBe('true')
+    const items = m.exposed.items as unknown[][]
+    ;(m.exposed as { items: unknown }).items = [[...items[0]!, { label: 'Guides', defaultOpen: true, children: [{ label: 'Intro', to: '/intro' }] }], items[1]!]
+    await settle()
+    expect(item('Guides').getAttribute('aria-expanded')).toBe('true')
   })
 
   it('shows a focus ring on items', async () => {

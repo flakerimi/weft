@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import TabsCases from '../fixtures/navigation/TabsCases.vue'
 import { mount } from '../mount.ts'
 import { press as pressKey } from '../keyboard.ts'
@@ -160,6 +160,49 @@ describe('Tabs', () => {
     window.dispatchEvent(new HashChangeEvent('hashchange'))
     await settle()
     expect(m.exposed.tab).toBe('account')
+  })
+
+  it('with hash, replaces the history entry rather than adding one', async () => {
+    history.replaceState(null, '', '/')
+    await cases({ hash: true })
+    const before = history.length
+    tab('Team').click()
+    await settle()
+    tab('Password').click()
+    await settle()
+    expect(location.hash).toBe('#password')
+    expect(history.length).toBe(before)
+  })
+
+  it('with hash, ignores a fragment naming a disabled tab, or no tab', async () => {
+    history.replaceState(null, '', '/#billing')
+    const m = await cases({ hash: true })
+    expect(m.exposed.tab).toBe('account')
+    location.hash = '#nothing'
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+    await settle()
+    expect(m.exposed.tab).toBe('account')
+  })
+
+  it('lets one Tabs on the page own the hash: a second one leaves it alone, and says so', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      history.replaceState(null, '', '/#team')
+      const first = await cases({ hash: true })
+      const second = mount(TabsCases, { hash: true })
+      await settle()
+      expect(first.exposed.tab).toBe('team')
+      expect(second.exposed.tab).toBe('account')
+      const tabsOf = (el: Element) => [...el.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
+      tabsOf(second.el)[1]!.click()
+      await settle()
+      expect(location.hash).toBe('#team')
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(String(warn.mock.calls[0]![0])).toContain('hash')
+      second.unmount()
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   it('puts a vertical tab list above its panels when narrow', async () => {

@@ -47,6 +47,12 @@ export interface RenderResult {
    */
   css: string
   head: PageHead
+  /**
+   * The pre-paint snippets the render's components registered with
+   * `usePrePaint` from @weft/ui, each id once, in the order they were
+   * first registered; the build writes them inline at the top of `<head>`.
+   */
+  prePaint: string[]
 }
 
 /**
@@ -86,7 +92,7 @@ export async function renderPage(opts: RenderOptions): Promise<RenderResult> {
     const mod = (await vite.ssrLoadModule(file)) as { default?: unknown }
     if (!mod.default) throw new Error(`renderPage: ${opts.page} has no default export.`)
     // `modules` is filled by @vitejs/plugin-vue: every SFC whose setup ran in this render, relative to root.
-    const ctx: { islands?: string[]; head?: PageHead; modules?: Set<string> } = {}
+    const ctx: { islands?: string[]; head?: PageHead; modules?: Set<string>; prePaint?: Map<string, string> } = {}
     const html = await renderToString(createSSRApp(mod.default as never, opts.props), ctx)
     const islands = [...new Set(ctx.islands ?? [])]
     const modules = await pageModules(vite, file)
@@ -101,6 +107,7 @@ export async function renderPage(opts: RenderOptions): Promise<RenderResult> {
       islandFiles,
       css: await collectCSS(vite, used, new Set(opts.providedCSS)),
       head: ctx.head ?? {},
+      prePaint: [...(ctx.prePaint?.values() ?? [])],
     }
   } finally {
     if (!opts.server) await vite.close()

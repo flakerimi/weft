@@ -5,9 +5,9 @@ import { splitBar } from '../../src/shell/appShell.ts'
 import { mount } from '../mount.ts'
 import { press as pressKey } from '../keyboard.ts'
 import { installResizeObserver } from '../resize-observer.ts'
-import { loadStyles } from '../styles.ts'
+import { loadStyles, mediaRule, ruleFor } from '../styles.ts'
 import { px } from '../forms/helpers.ts'
-import { $, $$, overlays, reset, settle } from '../overlays/helpers.ts'
+import { $, $$, active, overlays, reset, settle } from '../overlays/helpers.ts'
 
 let unmount: (() => void) | undefined
 let ro: ReturnType<typeof installResizeObserver> | undefined
@@ -49,8 +49,9 @@ describe('AppShell, wide', () => {
     const unstyle = loadStyles()
     try {
       expect(getComputedStyle(sidebar()).display).not.toBe('none')
-      expect(getComputedStyle($('.weft-app-shell__bar')).display).toBe('none')
-      expect(getComputedStyle($('.weft-app-shell__menu')).display).toBe('none')
+      // Once mounted, the other layouts' parts are not rendered at all.
+      expect($('.weft-app-shell__bar')).toBeNull()
+      expect($('.weft-app-shell__menu')).toBeNull()
     } finally {
       unstyle()
     }
@@ -58,13 +59,13 @@ describe('AppShell, wide', () => {
 
   it('collapses the sidebar to icons from a toggle button the keyboard reaches', async () => {
     await mountAt(ShellCases, {})
-    expect(toggle().getAttribute('aria-label')).toBe('Collapse sidebar')
+    expect(toggle().getAttribute('aria-label')).toBe('Sidebar')
     expect(toggle().getAttribute('aria-expanded')).toBe('true')
     expect(toggle().getAttribute('aria-controls')).toBe(sidebar().id)
     expect(pressKey(toggle(), 'Enter')).toBe(true)
     await settle()
     expect(shell().dataset.collapsed).toBe('true')
-    expect(toggle().getAttribute('aria-label')).toBe('Expand sidebar')
+    expect(toggle().getAttribute('aria-label')).toBe('Sidebar') // the same name; aria-expanded says the state
     expect(toggle().getAttribute('aria-expanded')).toBe('false')
     expect($('nav.weft-nav', sidebar()).dataset.collapsed).toBe('true')
     expect($('.weft-app-shell__sidebar .user')!.textContent).toBe('A')
@@ -130,9 +131,9 @@ describe('AppShell on a narrow touch screen', () => {
     const unstyle = loadStyles()
     try {
       await mountAt(ShellCases, { input: 'touch' }, 400)
-      expect(getComputedStyle(sidebar()).display).toBe('none')
+      expect(sidebar()).toBeNull() // not rendered once the layout has none
       expect(getComputedStyle($('.weft-app-shell__bar')).display).toBe('block')
-      expect(getComputedStyle(toggle()).display).toBe('none')
+      expect(toggle()).toBeNull()
       expect(px(getComputedStyle(barItems()[0]!).minBlockSize)).toBe(56)
     } finally {
       unstyle()
@@ -176,6 +177,87 @@ describe('AppShell on a narrow pointer screen', () => {
   })
 })
 
+describe('AppShell before mounting', () => {
+  it('draws the collapsed rail when the pre-paint script marked the root', () => {
+    const unstyle = loadStyles()
+    try {
+      const rail = ruleFor(':root[data-weft-sidebar="collapsed"] .weft-app-shell:not([data-layout]) .weft-app-shell__sidebar')
+      expect(rail!.style.getPropertyValue('inline-size')).toBe('var(--weft-app-shell-rail, 4.5rem)')
+      expect(ruleFor(':root[data-weft-sidebar="collapsed"] .weft-app-shell:not([data-layout]) .weft-nav__label')).toBeDefined()
+    } finally {
+      unstyle()
+    }
+  })
+
+  it('writes no script in the browser: the page build writes the pre-paint snippet', async () => {
+    const before = document.head.innerHTML
+    await mountAt(ShellCases, {})
+    expect(document.head.innerHTML).toBe(before)
+    expect(document.querySelector('script')).toBeNull()
+  })
+})
+
+describe('AppShell across a change of layout', () => {
+  it('closes the drawer when the viewport widens, focusing the same item in the sidebar; it does not reopen', async () => {
+    await mountAt(ShellCases, {}, 400)
+    $<HTMLButtonElement>('.weft-app-shell__menu button').click()
+    await settle()
+    const sheet = $('[role="dialog"]', overlays()!)
+    const inbox = $$<HTMLElement>('.weft-nav__item', sheet).find((el) => el.textContent!.includes('Inbox'))!
+    inbox.focus()
+    ro!.report(document.documentElement, 1200)
+    await settle()
+    await settle()
+    expect(shell().dataset.layout).toBe('sidebar')
+    expect($('[role="dialog"]')).toBeNull()
+    expect(active()!.closest('.weft-app-shell__sidebar')).not.toBeNull()
+    expect(active()!.textContent).toContain('Inbox')
+    ro!.report(document.documentElement, 400)
+    await settle()
+    await settle()
+    expect(shell().dataset.layout).toBe('drawer')
+    expect($('[role="dialog"]')).toBeNull()
+  })
+
+  it('closes the More sheet when the input turns to pointer, focusing the menu button', async () => {
+    const m = await mountAt(ShellCases, { input: 'touch' }, 400)
+    const more = barItems().find((b) => b.textContent!.includes('More'))!
+    more.click()
+    await settle()
+    const sheet = $('[role="dialog"]', overlays()!)
+    $$<HTMLElement>('.weft-nav__item', sheet)[0]!.focus()
+    ;(m.exposed as { input: string }).input = 'pointer'
+    await settle()
+    await settle()
+    expect(shell().dataset.layout).toBe('drawer')
+    expect($('[role="dialog"]')).toBeNull()
+    expect(active()).toBe($('.weft-app-shell__menu button'))
+  })
+
+  it('moves focus from the collapse toggle to the menu button when the viewport narrows', async () => {
+    await mountAt(ShellCases, {})
+    toggle().focus()
+    ro!.report(document.documentElement, 400)
+    await settle()
+    await settle()
+    expect(active()).toBe($('.weft-app-shell__menu button'))
+  })
+
+  it('renders the brand, sidebar and footer slots once in the layout drawn, once mounted', async () => {
+    await mountAt(ShellCases, {})
+    expect($$('.weft-app-shell__title')).toHaveLength(1)
+    expect($$('.user')).toHaveLength(1)
+    ro!.report(document.documentElement, 400)
+    await settle()
+    expect(sidebar()).toBeNull()
+    expect($$('.weft-app-shell__title')).toHaveLength(1)
+    $<HTMLButtonElement>('.weft-app-shell__menu button').click()
+    await settle()
+    expect($$('.user')).toHaveLength(1)
+    expect($$('nav.weft-nav')).toHaveLength(1) // the sheet's, the sidebar's gone
+  })
+})
+
 describe('splitBar', () => {
   const link = (label: string) => ({ label, to: `/${label}` })
   it('keeps five links in the bar, and moves the rest of six, or any group, under More', () => {
@@ -209,6 +291,42 @@ describe('Header', () => {
     $('.menu-link', sheet).click()
     await settle()
     expect($('[role="dialog"]')).toBeNull()
+  })
+
+  it('closes its menu when the viewport widens, focusing the middle; it does not reopen', async () => {
+    await mountAt(HeaderCases as typeof ShellCases, { menu: true }, 400)
+    $<HTMLButtonElement>('.weft-header__menu button').click()
+    await settle()
+    $('.menu-link', overlays()!).focus()
+    ro!.report(document.documentElement, 1200)
+    await settle()
+    await settle()
+    expect($('[role="dialog"]')).toBeNull()
+    expect(active()).toBe($('.weft-header__center .center-link'))
+    ro!.report(document.documentElement, 400)
+    await settle()
+    await settle()
+    expect($('[role="dialog"]')).toBeNull()
+  })
+
+  it('moves focus from the middle to the menu button when the viewport narrows', async () => {
+    await mountAt(HeaderCases as typeof ShellCases, { menu: true })
+    $('.weft-header__center .center-link').focus()
+    ro!.report(document.documentElement, 400)
+    await settle()
+    await settle()
+    expect(active()).toBe($('.weft-header__menu button'))
+  })
+
+  it('before mounting, leaves the narrow form to CSS when it has a menu', () => {
+    const unstyle = loadStyles()
+    try {
+      expect(ruleFor('.weft-header__menu')!.style.getPropertyValue('display')).toBe('none')
+      expect(mediaRule('(max-width: 639.98px)', '.weft-header[data-menu]:not([data-layout]) .weft-header__center')?.style.getPropertyValue('display')).toBe('none')
+      expect(mediaRule('(max-width: 639.98px)', '.weft-header[data-menu]:not([data-layout]) .weft-header__menu')?.style.getPropertyValue('display')).toBe('contents')
+    } finally {
+      unstyle()
+    }
   })
 
   it('when narrow without a menu slot, keeps the middle', async () => {

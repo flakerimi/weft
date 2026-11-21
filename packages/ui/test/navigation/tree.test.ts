@@ -134,6 +134,46 @@ describe('Tree', () => {
     expect(m.exposed.expanded).toEqual(expect.arrayContaining(['src', 'components', 'docs']))
   })
 
+  it('moves without choosing on Shift with an arrow when not multiple', async () => {
+    const m = await cases()
+    node('src').focus()
+    await press('ArrowDown', { shiftKey: true })
+    expect(active()).toBe(node('app.ts'))
+    expect(m.exposed.selected).toBeNull()
+    expect(nodes().every((n) => n.getAttribute('aria-selected') === 'false')).toBe(true)
+  })
+
+  it('says nothing of selection, and chooses nothing, when not selectable', async () => {
+    const m = await cases({ selectable: false })
+    expect(nodes().every((n) => !n.hasAttribute('aria-selected'))).toBe(true)
+    node('src').focus()
+    await press('ArrowDown')
+    await press('Enter')
+    await press(' ')
+    expect(m.exposed.selected).toBeNull()
+    node('docs').click()
+    await settle()
+    expect(node('docs').getAttribute('aria-expanded')).toBe('true') // opening still works
+    expect(m.exposed.selected).toBeNull()
+  })
+
+  it('gives siblings with the same label and no value keys of their own', async () => {
+    const m = await cases({ dupes: true })
+    ;(m.exposed as { expanded: string[] }).expanded = []
+    await settle()
+    const [first, second] = nodes()
+    first!.click()
+    await settle()
+    expect(nodes()).toHaveLength(4) // only the first "a" opened
+    expect(second!.getAttribute('aria-expanded')).toBe('false')
+    const kids = nodes().slice(1, 3)
+    kids[1]!.click()
+    await settle()
+    expect(kids[1]!.getAttribute('aria-selected')).toBe('true')
+    expect(kids[0]!.getAttribute('aria-selected')).toBe('false')
+    expect(new Set([m.exposed.selected, ...(m.exposed.expanded as string[])]).size).toBe(2)
+  })
+
   describe('multiple', () => {
     it('says aria-multiselectable; Space toggles a node, Shift+arrows extend, Ctrl+A selects all', async () => {
       const m = await cases({ multiple: true })

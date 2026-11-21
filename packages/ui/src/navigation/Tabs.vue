@@ -8,7 +8,8 @@
 // controls a panel, named by its tab; only the selected one is shown. A
 // panel's content renders while it is selected (lazy), or from its first
 // visit on with `keep-alive`. With `hash`, the address's #fragment names the
-// selected tab, both ways. A vertical list goes above the panels when narrow;
+// selected tab, both ways (a disabled tab or an unknown name is ignored);
+// one Tabs per page owns the hash, the first mounted. A vertical list goes above the panels when narrow;
 // on touch every tab is at least --weft-hit-min tall.
 import { computed, onMounted, onScopeDispose, shallowRef, useAttrs, useTemplateRef, watch } from 'vue'
 import Badge from '../basics/Badge.vue'
@@ -47,7 +48,7 @@ const props = withDefaults(
     content?: boolean
     /** Keep a panel's content mounted, hidden, once it has been shown, so its state survives; by default only the selected panel's content is rendered. */
     keepAlive?: boolean
-    /** Read the selected tab from the address's #fragment, and write it there on a change (without adding history). */
+    /** Read the selected tab from the address's #fragment, and write it there on a change (replacing the history entry, not adding one). One Tabs per page may: a second warns and leaves the hash alone. */
     hash?: boolean
   }>(),
   {
@@ -138,14 +139,27 @@ const fromHash = () => {
   const index = props.items.findIndex((t, i) => String(valueOf(t, i)) === name && !t.disabled)
   if (index >= 0) model.value = valueOf(props.items[index]!, index)
 }
+// One Tabs on a page owns the hash: the first mounted with `hash`.
+const me = {}
+let owns = false
 onMounted(() => {
   if (!props.hash) return
+  if (hashOwner && hashOwner !== me) {
+    console.warn('Tabs: another Tabs on this page already reads and writes the address\'s #hash; this one leaves it alone. Give `hash` to one Tabs per page.')
+    return
+  }
+  hashOwner = me
+  owns = true
   fromHash()
   window.addEventListener('hashchange', fromHash)
 })
-onScopeDispose(() => typeof window !== 'undefined' && window.removeEventListener('hashchange', fromHash))
+onScopeDispose(() => {
+  if (!owns) return
+  window.removeEventListener('hashchange', fromHash)
+  if (hashOwner === me) hashOwner = undefined
+})
 watch(model, (v) => {
-  if (!props.hash || v === undefined || typeof history === 'undefined') return
+  if (!owns || v === undefined) return
   const next = `#${encodeURIComponent(String(v))}`
   if (location.hash !== next) history.replaceState(history.state, '', next)
 })
@@ -156,6 +170,11 @@ const rendered = (item: TabsItem, i: number) => {
   const v = valueOf(item, i)
   return v === model.value || (props.keepAlive && visited.value.includes(v))
 }
+</script>
+
+<script lang="ts">
+/** The Tabs that owns the address's #hash on this page, if any. */
+let hashOwner: object | undefined
 </script>
 
 <template>

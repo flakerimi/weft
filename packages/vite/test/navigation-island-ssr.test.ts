@@ -20,6 +20,10 @@ it('renders an island of every navigation and disclosure component', async () =>
   expect(navigationIsland).toMatch(/role="region"[^>]*hidden="until-found"[^>]*>[\s\S]*?Two days/)
   expect(navigationIsland).toMatch(/class="weft-collapsible__content" hidden="until-found">[\s\S]*?Hidden details/)
   expect(navigationIsland).not.toContain('data-layout')
+  // The forms CSS chooses among before mounting are all there: the bar and its menu button, the bottom bar.
+  expect(navigationIsland).toContain('weft-nav__menu-wrap')
+  expect(navigationIsland).toContain('weft-app-shell__bar')
+  expect(navigationIsland).not.toContain('data-form')
   // The current page and step, as far as the server knows them.
   expect(navigationIsland).toContain('aria-current="step"')
   expect(navigationIsland).toMatch(/aria-label="Page 3"[^>]*aria-current="page"|aria-current="page"[^>]*aria-label="Page 3"/)

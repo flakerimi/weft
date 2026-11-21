@@ -1,6 +1,7 @@
 /* Header: one row, the brand at the start, the middle growing, the actions
    at the end, on the page colour with a line under it. Sticky, it stays at
-   the top while the page scrolls. */
+   the top while the page scrolls. The menu button shows in the compact
+   layout. */
 .weft-header {
   inline-size: 100%;
   border-block-end: 1px solid var(--weft-color-border, GrayText);
@@ -16,7 +17,14 @@
   margin-inline: auto;
   padding: var(--weft-space-2, 8px) var(--weft-space-4, 16px);
 }
-.weft-header__menu { display: contents; }
+.weft-header__menu { display: none; }
+.weft-header[data-layout="compact"] .weft-header__menu { display: contents; }
+/* Before mounting, a narrow viewport shows the menu button in place of the
+   middle, when there is a menu. */
+@media (max-width: 639.98px) {
+  .weft-header[data-menu]:not([data-layout]) .weft-header__center { display: none; }
+  .weft-header[data-menu]:not([data-layout]) .weft-header__menu { display: contents; }
+}
 .weft-header__glyph { inline-size: 20px; block-size: 20px; }
 .weft-header__leading { display: flex; align-items: center; gap: var(--weft-space-2, 8px); flex: none; }
 .weft-header .weft-header__title { color: var(--weft-color-text, CanvasText); font-weight: var(--weft-weight-title, 700); font-size: 1.125em; text-decoration: none; }

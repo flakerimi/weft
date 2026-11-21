@@ -3,10 +3,8 @@ import type { NavItem } from '../navigation/nav.ts'
 
 /** The words AppShell says, for assistive technology; give some or all to translate them. */
 export interface AppShellLabels {
-  /** The sidebar toggle's name while the sidebar is expanded. */
-  collapse: string
-  /** The sidebar toggle's name while the sidebar is collapsed. */
-  expand: string
+  /** The sidebar toggle's name; its aria-expanded says whether the sidebar is expanded. */
+  sidebar: string
   /** The menu button's name on a narrow pointer screen. */
   menu: string
   /** The bottom bar's last button, and the title of the sheet it opens. */
@@ -14,8 +12,7 @@ export interface AppShellLabels {
 }
 
 export const APP_SHELL_LABELS: AppShellLabels = {
-  collapse: 'Collapse sidebar',
-  expand: 'Expand sidebar',
+  sidebar: 'Sidebar',
   menu: 'Menu',
   more: 'More',
 }
@@ -53,4 +50,14 @@ export function splitBar(items: NavItem[]): { shown: NavItem[]; more: NavItem[] 
   if (links.length === items.length && items.length <= BAR_MAX) return { shown: items, more: [] }
   const shown = links.slice(0, BAR_MAX - 1)
   return { shown, more: items.filter((item) => !shown.includes(item)) }
+}
+
+/**
+ * The pre-paint script that copies the collapsed state stored under `key`
+ * to `<html data-weft-sidebar="collapsed">` before the first paint, so CSS
+ * draws the rail before the AppShell mounts. Storage that cannot be read
+ * leaves it unset.
+ */
+export function collapsedSnippet(key: string): string {
+  return `try{if(localStorage.getItem(${JSON.stringify(key)})==="true")document.documentElement.dataset.weftSidebar="collapsed"}catch(e){}`
 }

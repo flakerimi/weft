@@ -1,8 +1,8 @@
 /**
  * The items of a NavigationMenu, and of AppShell's navigation, which draws
- * them with one.
+ * them with one, and how to tell the current page among them.
  */
-import type { MenuItem } from '../overlays/menu.ts'
+import { isCurrentPage } from '../basics/address.ts'
 
 /** A place to go, or a group of them. */
 export interface NavItem {
@@ -24,7 +24,7 @@ export interface NavItem {
   description?: string
   /** `label`: a heading over the items after it (vertical only). */
   type?: 'label'
-  /** Places under this one: a dropdown (horizontal, or a collapsed sidebar) or a list that opens below it (vertical). */
+  /** Places under this one: a list its disclosure button opens, floating (horizontal, or a collapsed sidebar) or below it (vertical). */
   children?: NavItem[]
   /** Vertical: its children start shown. */
   defaultOpen?: boolean
@@ -38,21 +38,10 @@ export function navGroups(items: NavItem[] | NavItem[][]): NavItem[][] {
   return Array.isArray(items[0]) ? (items as NavItem[][]) : [items as NavItem[]]
 }
 
-/** The DropdownMenu items for an item's children; choosing one calls `chosen` too. */
-export function menuOf(item: NavItem, chosen: (child: NavItem, event: Event) => void): MenuItem[] {
-  return (item.children ?? []).map((child) => ({
-    label: child.label,
-    icon: child.icon,
-    description: child.description,
-    to: child.to,
-    target: child.target,
-    disabled: child.disabled,
-    onSelect: (event: Event) => {
-      child.onSelect?.(event)
-      chosen(child, event)
-    },
-  }))
-}
+/** Whether the item is the current page: its `active`, else (once mounted, in the browser) its address against the browser's, as Link has it. */
+export const isCurrent = (item: NavItem, mounted: boolean): boolean =>
+  item.active ?? (mounted && isCurrentPage(item.to))
 
-/** Whether the item, or one of its children, says it is the current page. */
-export const holdsCurrent = (item: NavItem): boolean => !!item.active || !!item.children?.some(holdsCurrent)
+/** Whether the item, or one of its children, is the current page. */
+export const holdsCurrent = (item: NavItem, mounted = false): boolean =>
+  isCurrent(item, mounted) || !!item.children?.some((child) => holdsCurrent(child, mounted))

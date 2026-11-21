@@ -8,7 +8,7 @@
 export interface TreeItem {
   /** What the node says; typing its start moves to it. */
   label: string
-  /** Names the node in `v-model` and `v-model:expanded`; default its labels from the top, joined with `/`. */
+  /** Names the node in `v-model` and `v-model:expanded`; default its labels from the top, joined with `/` (`#2`, `#3`, … after a sibling's same label). */
   value?: string
   /** A Lucide icon before the label. */
   icon?: string
@@ -34,15 +34,29 @@ export interface TreeRow {
   open: boolean
 }
 
-/** The key of `item` under `parentKey` (empty at the top). */
-export const keyOf = (item: TreeItem, parentKey: string) => item.value ?? (parentKey ? `${parentKey}/${item.label}` : item.label)
+/**
+ * The keys of a list of siblings under `parentKey` (empty at the top): a
+ * node's `value`, else its labels from the top joined with `/`. A sibling
+ * whose key an earlier sibling already took gets `#2`, `#3`, … after it, so
+ * nodes with the same label and no value stay apart.
+ */
+export function siblingKeys(list: TreeItem[], parentKey: string): string[] {
+  const seen = new Map<string, number>()
+  return list.map((item) => {
+    const base = item.value ?? (parentKey ? `${parentKey}/${item.label}` : item.label)
+    const n = (seen.get(base) ?? 0) + 1
+    seen.set(base, n)
+    return n === 1 ? base : `${base}#${n}`
+  })
+}
 
 /** The visible rows of `items`, with the nodes whose keys are in `open` opened. */
 export function flatten(items: TreeItem[], open: ReadonlySet<string>): TreeRow[] {
   const rows: TreeRow[] = []
   const walk = (list: TreeItem[], level: number, parent: number, parentKey: string) => {
+    const keys = siblingKeys(list, parentKey)
     list.forEach((item, i) => {
-      const key = keyOf(item, parentKey)
+      const key = keys[i]!
       const branch = !!item.children?.length
       const isOpen = branch && open.has(key)
       rows.push({ item, key, level, setsize: list.length, posinset: i + 1, parent, branch, open: isOpen })
@@ -55,8 +69,9 @@ export function flatten(items: TreeItem[], open: ReadonlySet<string>): TreeRow[]
 
 /** The keys of the nodes marked `defaultExpanded`, at any depth. */
 export function defaultOpen(items: TreeItem[], parentKey = ''): string[] {
-  return items.flatMap((item) => {
-    const key = keyOf(item, parentKey)
+  const keys = siblingKeys(items, parentKey)
+  return items.flatMap((item, i) => {
+    const key = keys[i]!
     const inner = item.children ? defaultOpen(item.children, key) : []
     return item.defaultExpanded && item.children?.length ? [key, ...inner] : inner
   })

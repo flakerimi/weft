@@ -9,7 +9,8 @@ adapts:
   width: It fills its container; labels are cut with an ellipsis.
 ---
 `items` are `{ label, value, icon, children, defaultExpanded, disabled }`.
-A node's key is its `value`, else its labels from the top joined with `/`.
+A node's key is its `value`, else its labels from the top joined with `/`;
+siblings with the same label and no value get `#2`, `#3`, … after it.
 Bind the chosen node's key with `v-model` (`null` when none is; an array
 with `multiple`), and the open nodes' keys with `v-model:expanded`.
 `selectable: false` leaves only opening and closing. It emits `select` and

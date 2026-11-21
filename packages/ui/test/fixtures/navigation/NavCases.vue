@@ -8,7 +8,7 @@ import type { NavItem } from '../../../src/navigation/nav.ts'
 const props = defineProps<{ input?: Input; orientation?: 'horizontal' | 'vertical'; collapsed?: boolean; dir?: 'ltr' | 'rtl' }>()
 const input = ref<Input | undefined>(props.input)
 const chosen: string[] = []
-const items: NavItem[][] = [
+const items = ref<NavItem[][]>([
   [
     { label: 'Home', to: '/', icon: 'house' },
     { label: 'Docs', to: '/docs', active: true },
@@ -27,8 +27,8 @@ const items: NavItem[][] = [
     { label: 'Inbox', to: '/inbox', badge: 4 },
     { label: 'Sign out', onSelect: () => chosen.push('sign out') },
   ],
-]
-defineExpose({ input, chosen })
+])
+defineExpose({ input, chosen, items })
 </script>
 
 <template>
