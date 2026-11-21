@@ -64,6 +64,21 @@ describe('discoverRoutes', () => {
       new Error('pages/docs/blog is a symlink, which Weft does not follow; put the folder itself in pages/.'),
     )
   })
+
+  it('reads [...name] as a catch-all, which must be the last segment', async () => {
+    expect(await discoverRoutes(pagesWith('docs/[...slug].vue', 'docs/index.vue'))).toEqual([
+      { path: '/docs', file: 'docs/index.vue', dynamic: false },
+      { path: '/docs/:...slug', file: 'docs/[...slug].vue', dynamic: true },
+    ])
+    expect(await discoverRoutes(pagesWith('docs/[...slug]/index.vue'))).toEqual([
+      { path: '/docs/:...slug', file: 'docs/[...slug]/index.vue', dynamic: true },
+    ])
+    await expect(discoverRoutes(pagesWith('docs/[...slug]/edit.vue'))).rejects.toThrow(
+      new Error(
+        'page "docs/[...slug]/edit.vue" has the catch-all [...slug] before its last segment; a catch-all takes the rest of the path, so it must come last.',
+      ),
+    )
+  })
 })
 
 describe('expandRoutes', () => {
@@ -112,5 +127,40 @@ describe('expandRoutes', () => {
       getPaths: async () => [{ year: '2026', slug: 'hi' }],
     }))
     expect(out).toEqual([{ path: '/2026/hi', file: '[year]/[slug].vue', params: { year: '2026', slug: 'hi' } }])
+  })
+
+  it('fills a catch-all with several segments, or none for the folder itself', async () => {
+    const routes = await discoverRoutes(pagesWith('docs/[...slug].vue', '[...rest].vue'))
+    const out = await expandRoutes(routes, async (file) => ({
+      getPaths: async () => (file === 'docs/[...slug].vue' ? [{ slug: '' }, { slug: 'guides/islands' }] : [{ rest: '' }, { rest: 'a/b/c' }]),
+    }))
+    expect(out).toEqual([
+      { path: '/', file: '[...rest].vue', params: { rest: '' } },
+      { path: '/a/b/c', file: '[...rest].vue', params: { rest: 'a/b/c' } },
+      { path: '/docs', file: 'docs/[...slug].vue', params: { slug: '' } },
+      { path: '/docs/guides/islands', file: 'docs/[...slug].vue', params: { slug: 'guides/islands' } },
+    ])
+  })
+
+  it('refuses a catch-all value with an empty, . or .. segment', async () => {
+    const routes = await discoverRoutes(pagesWith('docs/[...slug].vue'))
+    for (const slug of ['a//b', '/a', 'a/', 'a/../b', './a']) {
+      await expect(expandRoutes(routes, async () => ({ getPaths: async () => [{ slug }] }))).rejects.toThrow(
+        new Error(
+          `getPaths() of "docs/[...slug].vue" returned ${JSON.stringify(slug)} for slug, which has an empty, . or .. segment; give segments joined by /, or "" for the folder itself.`,
+        ),
+      )
+    }
+  })
+
+  it('refuses a value of a plain param that is not one path segment', async () => {
+    const routes = await discoverRoutes(dir('routes-dynamic'))
+    for (const slug of ['a/b', '', '..']) {
+      await expect(expandRoutes(routes, async () => ({ getPaths: async () => [{ slug }] }))).rejects.toThrow(
+        new Error(
+          `getPaths() of "[slug].vue" returned ${JSON.stringify(slug)} for slug, which is not one path segment; a page named [...slug].vue takes several.`,
+        ),
+      )
+    }
   })
 })

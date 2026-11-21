@@ -40,11 +40,20 @@ async function walk(dir: string, prefix: string, out: string[]): Promise<void> {
  */
 const pathKey = (path: string) => path.normalize('NFC').toLowerCase()
 
+/**
+ * A page file's path: `[name]` is a param (`:name`) that fills one segment,
+ * `[...name]` a catch-all (`:...name`) that fills the rest of the path, or none of it.
+ */
 function toPath(file: string): string {
   const parts = file.slice(0, -'.vue'.length).split('/')
   if (parts[parts.length - 1] === 'index') parts.pop()
-  const path = '/' + parts.map((p) => p.replace(/^\[(.+)\]$/, ':$1')).join('/')
-  return path
+  const rest = parts.findIndex((p) => /^\[\.\.\..+\]$/.test(p))
+  if (rest !== -1 && rest !== parts.length - 1) {
+    throw new Error(
+      `page "${file}" has the catch-all ${parts[rest]} before its last segment; a catch-all takes the rest of the path, so it must come last.`,
+    )
+  }
+  return '/' + parts.map((p) => p.replace(/^\[(.+)\]$/, ':$1')).join('/')
 }
 
 const byOrder = (a: Route, b: Route) =>
@@ -91,14 +100,37 @@ export async function expandRoutes(
     if (typeof getPaths !== 'function') {
       throw new Error(`page "${r.file}" is dynamic but does not export getPaths()`)
     }
-    for (const params of await getPaths()) {
-      const path = r.path.replace(/:([^/]+)/g, (_, name: string) => {
-        const v = params[name]
-        if (v === undefined) throw new Error(`getPaths() of "${r.file}" returned no "${name}"`)
-        return v
-      })
-      add(path, r.file, params)
-    }
+    for (const params of await getPaths()) add(fill(r, params), r.file, params)
   }
   return out
+}
+
+/** A dynamic route's path with `params` in its params' places. */
+function fill(r: Route, params: Record<string, string>): string {
+  const segments = r.path.slice(1).split('/').flatMap((segment) => {
+    const param = /^:(\.\.\.)?(.+)$/.exec(segment)
+    if (!param) return [segment]
+    const rest = param[1] !== undefined
+    const name = param[2]!
+    const v = params[name]
+    if (v === undefined) throw new Error(`getPaths() of "${r.file}" returned no "${name}"`)
+    const bad = (s: string) => s === '' || s === '.' || s === '..'
+    if (!rest) {
+      if (bad(v) || v.includes('/')) {
+        throw new Error(
+          `getPaths() of "${r.file}" returned ${JSON.stringify(v)} for ${name}, which is not one path segment; a page named [...${name}].vue takes several.`,
+        )
+      }
+      return [v]
+    }
+    // A catch-all of "" is the folder itself: /docs for docs/[...slug].vue.
+    if (v === '') return []
+    if (v.split('/').some(bad)) {
+      throw new Error(
+        `getPaths() of "${r.file}" returned ${JSON.stringify(v)} for ${name}, which has an empty, . or .. segment; give segments joined by /, or "" for the folder itself.`,
+      )
+    }
+    return v.split('/')
+  })
+  return '/' + segments.join('/')
 }

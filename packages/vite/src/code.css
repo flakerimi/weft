@@ -1,0 +1,34 @@
+/*
+ * Code blocks from Weft's content pipeline. Shiki highlights them at build time
+ * with CSS variables in place of colours; this sets those variables from the
+ * theme's colours, which change with the colour scheme, so one rendering reads
+ * in light and in dark. Every colour is one the theme makes AA on its surfaces.
+ * Import it from a page that shows content: import '@weft/vite/code.css'.
+ */
+.shiki {
+  --weft-code-foreground: var(--weft-color-text);
+  --weft-code-background: var(--weft-color-surface);
+  --weft-code-token-keyword: var(--weft-color-danger-text);
+  --weft-code-token-function: var(--weft-color-primary-text);
+  --weft-code-token-string: var(--weft-color-success-text);
+  --weft-code-token-string-expression: var(--weft-color-success-text);
+  --weft-code-token-constant: var(--weft-color-warning-text);
+  --weft-code-token-comment: var(--weft-color-text-muted);
+  --weft-code-token-parameter: var(--weft-color-text);
+  --weft-code-token-punctuation: var(--weft-color-text-muted);
+  --weft-code-token-link: var(--weft-color-primary-text);
+  --weft-code-token-inserted: var(--weft-color-success-text);
+  --weft-code-token-deleted: var(--weft-color-danger-text);
+  --weft-code-token-changed: var(--weft-color-warning-text);
+  margin: 0;
+  padding: var(--weft-space-4);
+  overflow-x: auto;
+  border: 1px solid var(--weft-color-border);
+  border-radius: var(--weft-radius-card);
+  font: 0.875em/1.6 var(--weft-font-mono);
+  tab-size: 2;
+}
+.shiki:focus-visible {
+  outline: 2px solid var(--weft-color-focus);
+  outline-offset: 2px;
+}
