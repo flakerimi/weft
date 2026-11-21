@@ -10,3 +10,334 @@
 .weft-icon[data-size="sm"] { inline-size: 16px; block-size: 16px; }
 .weft-icon[data-size="md"] { inline-size: 20px; block-size: 20px; }
 .weft-icon[data-size="lg"] { inline-size: 24px; block-size: 24px; }
+
+/* Tone: a component with data-tone draws from these. --weft-tone is the
+   colour, --weft-tone-fg the text on it, --weft-tone-text the colour as text
+   on the page (pulled toward the text colour, so it reads in both schemes). */
+[data-tone] { --weft-tone-text: color-mix(in srgb, var(--weft-tone, LinkText) 80%, var(--weft-color-text, CanvasText)); }
+[data-tone="neutral"] { --weft-tone: var(--weft-color-text, CanvasText); --weft-tone-fg: var(--weft-color-bg, Canvas); }
+[data-tone="primary"] { --weft-tone: var(--weft-color-primary, LinkText); --weft-tone-fg: var(--weft-color-primary-fg, Canvas); }
+[data-tone="danger"] { --weft-tone: var(--weft-color-danger, #DC2626); --weft-tone-fg: var(--weft-color-danger-fg, #FFFFFF); }
+[data-tone="warning"] { --weft-tone: var(--weft-color-warning, #D97706); --weft-tone-fg: var(--weft-color-warning-fg, #18181B); }
+[data-tone="success"] { --weft-tone: var(--weft-color-success, #16A34A); --weft-tone-fg: var(--weft-color-success-fg, #18181B); }
+
+/* Spinner: a ring with one bright quarter, turning. Under reduced motion it
+   turns slowly rather than freezing, since a still ring reads as stuck. */
+.weft-spinner {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  inline-size: 1.25em;
+  block-size: 1.25em;
+  vertical-align: middle;
+}
+.weft-spinner[data-size="sm"] { inline-size: 16px; block-size: 16px; }
+.weft-spinner[data-size="md"] { inline-size: 20px; block-size: 20px; }
+.weft-spinner[data-size="lg"] { inline-size: 24px; block-size: 24px; }
+.weft-spinner__ring {
+  inline-size: 80%;
+  block-size: 80%;
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-block-start-color: currentColor;
+  border-radius: 50%;
+  animation: weft-spin 0.8s linear infinite;
+}
+@keyframes weft-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) {
+  .weft-spinner__ring { animation-duration: 2.4s !important; }
+}
+
+/* Button. Its drawn height is the theme's control size and does not change
+   with input; ::before is the hit area, at least --weft-hit-min (44 px on
+   touch), centred on the button. */
+.weft-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--weft-space-2, 8px);
+  block-size: var(--weft-control-md, 36px);
+  padding-inline: var(--weft-space-3, 12px);
+  border: 1px solid transparent;
+  border-radius: var(--weft-radius-control, 8px);
+  font: inherit;
+  font-weight: var(--weft-weight-heading, 600);
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition-property: background-color, border-color, color, opacity;
+  transition-duration: var(--weft-duration-control, 150ms);
+  transition-timing-function: var(--weft-ease-standard, ease);
+}
+.weft-button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  inline-size: max(100%, var(--weft-hit-min, 24px));
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  transform: translate(-50%, -50%);
+}
+.weft-button__content { display: inline-flex; align-items: center; gap: inherit; }
+.weft-button[data-size="sm"] {
+  block-size: var(--weft-control-sm, 28px);
+  padding-inline: var(--weft-space-2, 8px);
+  gap: var(--weft-space-1, 4px);
+  font-size: 0.875em;
+}
+.weft-button[data-size="lg"] {
+  block-size: var(--weft-control-lg, 44px);
+  padding-inline: var(--weft-space-4, 16px);
+  font-size: 1.0625em;
+}
+.weft-button[data-square] { aspect-ratio: 1; padding-inline: 0; }
+.weft-button[data-block] { display: flex; inline-size: 100%; }
+
+.weft-button[data-variant="solid"] { background: var(--weft-tone, LinkText); color: var(--weft-tone-fg, Canvas); }
+.weft-button[data-variant="soft"] {
+  background: color-mix(in srgb, var(--weft-tone, LinkText) 14%, transparent);
+  color: var(--weft-tone-text, LinkText);
+}
+.weft-button[data-variant="outline"] {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--weft-tone, LinkText) 45%, transparent);
+  color: var(--weft-tone-text, LinkText);
+}
+.weft-button[data-variant="ghost"] { background: transparent; color: var(--weft-tone-text, LinkText); }
+
+/* Hover only where there is hover: on touch it would stick after a tap. */
+@media (hover: hover) {
+  .weft-button:not(:disabled, [aria-disabled="true"]):hover[data-variant="solid"] {
+    background: color-mix(in srgb, var(--weft-tone, LinkText) 85%, var(--weft-tone-fg, Canvas));
+  }
+  .weft-button:not(:disabled, [aria-disabled="true"]):hover:is([data-variant="soft"]) {
+    background: color-mix(in srgb, var(--weft-tone, LinkText) 22%, transparent);
+  }
+  .weft-button:not(:disabled, [aria-disabled="true"]):hover:is([data-variant="outline"], [data-variant="ghost"]) {
+    background: color-mix(in srgb, var(--weft-tone, LinkText) 10%, transparent);
+  }
+}
+.weft-button:not(:disabled, [aria-disabled="true"]):active[data-variant="solid"] {
+  background: color-mix(in srgb, var(--weft-tone, LinkText) 75%, var(--weft-tone-fg, Canvas));
+}
+
+.weft-button:disabled,
+.weft-button[role="link"][aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+.weft-button[data-loading] { cursor: progress; }
+.weft-button[data-loading] .weft-button__content { visibility: hidden; }
+.weft-button__spinner { position: absolute; inset: 0; display: grid; place-items: center; }
+
+/* Link: text in the primary colour, underlined. Its ::before hit area is at
+   least --weft-hit-min, centred on the text, as a button's is. */
+.weft-link {
+  position: relative;
+  color: var(--weft-color-primary, LinkText);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  border-radius: var(--weft-space-1, 4px);
+  -webkit-tap-highlight-color: transparent;
+}
+.weft-link::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  inline-size: max(100%, var(--weft-hit-min, 24px));
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  transform: translate(-50%, -50%);
+}
+@media (hover: hover) {
+  .weft-link[href]:hover { text-decoration-thickness: 2px; }
+}
+.weft-link[aria-current="page"] {
+  color: var(--weft-color-text, CanvasText);
+  font-weight: var(--weft-weight-heading, 600);
+  text-decoration: none;
+}
+.weft-link[aria-disabled="true"] { color: var(--weft-color-text-muted, GrayText); text-decoration: none; cursor: not-allowed; }
+
+/* Badge: a short label in a tone. Heights follow the control sizes at about
+   two thirds, so a badge sits on a line of text beside a button. */
+.weft-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--weft-space-1, 4px);
+  block-size: 22px;
+  padding-inline: var(--weft-space-2, 8px);
+  border: 1px solid transparent;
+  border-radius: var(--weft-radius-control, 8px);
+  font-size: 0.857em;
+  font-weight: var(--weft-weight-heading, 600);
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.weft-badge[data-size="sm"] { block-size: 18px; padding-inline: var(--weft-space-1, 4px); font-size: 0.75em; }
+.weft-badge[data-size="lg"] { block-size: 26px; padding-inline: var(--weft-space-3, 12px); font-size: 1em; }
+.weft-badge[data-square] { aspect-ratio: 1; padding-inline: 0; justify-content: center; }
+.weft-badge .weft-icon { inline-size: 1.15em; block-size: 1.15em; }
+.weft-badge[data-variant="solid"] { background: var(--weft-tone, LinkText); color: var(--weft-tone-fg, Canvas); }
+.weft-badge[data-variant="soft"] {
+  background: color-mix(in srgb, var(--weft-tone, LinkText) 14%, transparent);
+  color: var(--weft-tone-text, LinkText);
+}
+.weft-badge[data-variant="outline"] {
+  border-color: color-mix(in srgb, var(--weft-tone, LinkText) 45%, transparent);
+  color: var(--weft-tone-text, LinkText);
+}
+.weft-badge[data-variant="ghost"] { color: var(--weft-tone-text, LinkText); }
+
+/* Kbd: a key cap, in the mono font, with a heavier bottom edge. */
+.weft-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15em;
+  min-inline-size: 22px;
+  block-size: 22px;
+  padding-inline: var(--weft-space-1, 4px);
+  border: 1px solid var(--weft-color-border, GrayText);
+  border-block-end-width: 2px;
+  border-radius: var(--weft-space-1, 4px);
+  background: var(--weft-color-surface, Canvas);
+  color: var(--weft-color-text, CanvasText);
+  font-family: var(--weft-font-mono, ui-monospace, monospace);
+  font-size: 0.8em;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.weft-kbd[data-size="sm"] { min-inline-size: 18px; block-size: 18px; font-size: 0.7em; }
+.weft-kbd[data-size="lg"] { min-inline-size: 26px; block-size: 26px; font-size: 0.9em; }
+
+/* Chip: the indicator sits across the chosen corner, or inside it when inset. */
+.weft-chip { position: relative; display: inline-flex; flex-shrink: 0; }
+.weft-chip__indicator {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 8px;
+  block-size: 8px;
+  padding-inline: 0;
+  border-radius: 999px;
+  background: var(--weft-tone, LinkText);
+  color: var(--weft-tone-fg, Canvas);
+  box-shadow: 0 0 0 2px var(--weft-color-bg, Canvas);
+  font-size: 10px;
+  font-weight: var(--weft-weight-heading, 600);
+  line-height: 1;
+  white-space: nowrap;
+  --weft-chip-x: 50%;
+  --weft-chip-y: -50%;
+  transform: translate(var(--weft-chip-x, 50%), var(--weft-chip-y, -50%));
+}
+.weft-chip__indicator[data-text] { min-inline-size: 16px; block-size: 16px; padding-inline: 4px; }
+.weft-chip__indicator[data-size="sm"] { min-inline-size: 6px; block-size: 6px; }
+.weft-chip__indicator[data-size="sm"][data-text] { min-inline-size: 14px; block-size: 14px; font-size: 9px; }
+.weft-chip__indicator[data-size="lg"] { min-inline-size: 10px; block-size: 10px; }
+.weft-chip__indicator[data-size="lg"][data-text] { min-inline-size: 20px; block-size: 20px; font-size: 12px; }
+.weft-chip__indicator[data-position^="top"] { inset-block-start: 0; }
+.weft-chip__indicator[data-position^="bottom"] { inset-block-end: 0; --weft-chip-y: 50%; }
+.weft-chip__indicator[data-position$="end"] { inset-inline-end: 0; }
+.weft-chip__indicator[data-position$="start"] { inset-inline-start: 0; --weft-chip-x: -50%; }
+.weft-chip__indicator[data-position$="end"]:dir(rtl) { --weft-chip-x: -50%; }
+.weft-chip__indicator[data-position$="start"]:dir(rtl) { --weft-chip-x: 50%; }
+.weft-chip__indicator[data-inset] { transform: none; }
+
+/* Progress: a track with a bar whose inline size is the percentage. */
+.weft-progress { display: flex; align-items: center; gap: var(--weft-space-2, 8px); inline-size: 100%; }
+.weft-progress__track {
+  position: relative;
+  flex: 1;
+  block-size: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--weft-tone, LinkText) 16%, transparent);
+}
+.weft-progress[data-size="sm"] .weft-progress__track { block-size: 4px; }
+.weft-progress[data-size="lg"] .weft-progress__track { block-size: 10px; }
+.weft-progress__bar {
+  block-size: 100%;
+  border-radius: inherit;
+  background: var(--weft-tone, LinkText);
+  transition: inline-size var(--weft-duration-layout, 220ms) var(--weft-ease-standard, ease);
+}
+.weft-progress[data-state="indeterminate"] .weft-progress__bar {
+  position: absolute;
+  inset-block: 0;
+  inline-size: 40%;
+  animation: weft-sweep 1.4s var(--weft-ease-standard, ease) infinite;
+}
+.weft-progress__status {
+  min-inline-size: 4ch;
+  color: var(--weft-color-text-muted, GrayText);
+  font-size: 0.857em;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+@keyframes weft-sweep {
+  from { inset-inline-start: -40%; }
+  to { inset-inline-start: 100%; }
+}
+
+/* Skeleton: a muted block that pulses. */
+.weft-skeleton {
+  display: block;
+  inline-size: 100%;
+  block-size: 1em;
+  border-radius: var(--weft-radius-control, 8px);
+  background: color-mix(in srgb, var(--weft-color-text, CanvasText) 10%, transparent);
+  animation: weft-pulse 1.6s var(--weft-ease-standard, ease) infinite;
+}
+.weft-skeleton[data-circle] { border-radius: 50%; }
+@keyframes weft-pulse { 50% { opacity: 0.45; } }
+
+/* Reduced motion: the skeleton stops pulsing; the indeterminate bar stands
+   still at full length, dimmed, so it still reads as under way. */
+@media (prefers-reduced-motion: reduce) {
+  .weft-skeleton { animation: none; }
+  .weft-progress[data-state="indeterminate"] .weft-progress__bar {
+    animation: none;
+    inset-inline-start: 0;
+    inline-size: 100%;
+    opacity: 0.5;
+  }
+}
+
+/* Avatar: a circle holding an image, initials or an icon. */
+.weft-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  inline-size: 32px;
+  block-size: 32px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--weft-color-text, CanvasText) 10%, var(--weft-color-surface, Canvas));
+  color: var(--weft-color-text-muted, GrayText);
+  font-size: 13px;
+  font-weight: var(--weft-weight-heading, 600);
+  line-height: 1;
+  user-select: none;
+  vertical-align: middle;
+}
+.weft-avatar[data-size="sm"] { inline-size: 24px; block-size: 24px; font-size: 10px; }
+.weft-avatar[data-size="lg"] { inline-size: 40px; block-size: 40px; font-size: 16px; }
+.weft-avatar__image { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.weft-avatar .weft-icon { inline-size: 60%; block-size: 60%; }
+
+/* AvatarGroup: each avatar after the first overlaps the one before, ringed in
+   the page colour so the edges read. Logical margins mirror in RTL. */
+.weft-avatar-group { display: inline-flex; align-items: center; }
+.weft-avatar-group > .weft-avatar { box-shadow: 0 0 0 2px var(--weft-color-bg, Canvas); }
+.weft-avatar-group > .weft-avatar + .weft-avatar { margin-inline-start: calc(var(--weft-space-2, 8px) * -1); }
+.weft-avatar-group[data-size="lg"] > .weft-avatar + .weft-avatar { margin-inline-start: calc(var(--weft-space-3, 12px) * -1); }
+.weft-avatar-group__more { color: var(--weft-color-text, CanvasText); }

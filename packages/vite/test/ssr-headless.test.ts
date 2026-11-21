@@ -1,10 +1,12 @@
 // The server halves: a page using every headless composable renders through
-// renderToString (renderPage), and an island drawing an Icon renders the
-// markup icon-island.test.ts hydrates. Node, no DOM.
+// renderToString (renderPage), an island drawing an Icon renders the markup
+// icon-island.test.ts hydrates, and an island of every basic component
+// renders the markup basics-island.test.ts hydrates. Node, no DOM.
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { lucideBody } from '../src/icons.ts'
 import { renderPage } from '../src/render.ts'
+import { basicsIsland } from './fixtures/basics-island/markup.ts'
 import { ratedIsland } from './fixtures/icon-island/markup.ts'
 
 const fixture = (n: string) => fileURLToPath(new URL(`./fixtures/${n}`, import.meta.url))
@@ -21,5 +23,10 @@ describe('server rendering', () => {
   it('renders an island that draws an Icon', async () => {
     const { html } = await renderPage({ root: fixture('icon-island'), page: 'pages/index.vue' })
     expect(html).toContain(ratedIsland(lucideBody('star')!))
+  })
+
+  it('renders an island of every basic component', async () => {
+    const { html } = await renderPage({ root: fixture('basics-island'), page: 'pages/index.vue' })
+    expect(html).toContain(basicsIsland(lucideBody('plus')!))
   })
 })

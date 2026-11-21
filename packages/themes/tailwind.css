@@ -10,8 +10,11 @@
   --color-primary-fg: var(--weft-color-primary-fg, Canvas);
   --color-primary-soft: var(--weft-color-primary-soft, Canvas);
   --color-danger: var(--weft-color-danger, LinkText);
+  --color-danger-fg: var(--weft-color-danger-fg, Canvas);
   --color-warning: var(--weft-color-warning, LinkText);
+  --color-warning-fg: var(--weft-color-warning-fg, CanvasText);
   --color-success: var(--weft-color-success, LinkText);
+  --color-success-fg: var(--weft-color-success-fg, CanvasText);
   --color-info: var(--weft-color-info, LinkText);
   --color-focus: var(--weft-color-focus, Highlight);
   --radius-control: var(--weft-radius-control, 8px);

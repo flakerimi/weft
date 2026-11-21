@@ -1,7 +1,22 @@
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createRenderServer, renderPage } from '../src/render.ts'
+
+afterEach(() => vi.restoreAllMocks())
+
+/**
+ * For a render that must throw: Vue reports the error it rethrows with a
+ * warning ("Unhandled error during execution of …"). Expect those, and only
+ * those, rather than print them.
+ */
+function expectVueErrorWarnings() {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  return () => {
+    expect(warn).toHaveBeenCalled()
+    for (const [message] of warn.mock.calls) expect(String(message)).toMatch(/^\[Vue warn\]: Unhandled error during execution of /)
+  }
+}
 
 const root = fileURLToPath(new URL('./fixtures/site', import.meta.url))
 
@@ -48,9 +63,11 @@ describe('renderPage', () => {
 
   it('refuses a media island without a media query', async () => {
     const bad = fileURLToPath(new URL('./fixtures/bad-island', import.meta.url))
+    const warned = expectVueErrorWarnings()
     await expect(renderPage({ root: bad, page: 'pages/media-without-query.vue' })).rejects.toThrow(
       'Island: when="media" needs a media query in the media prop.',
     )
+    warned()
   })
 
   it('refuses island props that JSON would drop or change, naming the island and the prop', async () => {
@@ -58,6 +75,7 @@ describe('renderPage', () => {
     class Thing {}
     const loop: Record<string, unknown> = {}
     loop.self = loop
+    const warned = expectVueErrorWarnings()
     const sentence = (path: string, what: string) =>
       `Island: prop ${path} of island Counter is ${what}, which JSON cannot carry to the browser; pass only strings, finite numbers, booleans, null, arrays and plain objects.`
     for (const [value, path, what] of [
@@ -77,6 +95,7 @@ describe('renderPage', () => {
         new Error(sentence(path, what)),
       )
     }
+    warned()
     // Plain data, a null-prototype object included, renders.
     const plain = Object.assign(Object.create(null) as object, { a: [1, 'x', true, null, { b: 2 }] })
     const { html } = await renderPage({ root: bad, page: 'pages/props.vue', props: { value: plain } })
@@ -85,8 +104,10 @@ describe('renderPage', () => {
 
   it('refuses an island component without an SFC name', async () => {
     const bad = fileURLToPath(new URL('./fixtures/bad-island', import.meta.url))
+    const warned = expectVueErrorWarnings()
     await expect(renderPage({ root: bad, page: 'pages/unnamed.vue' })).rejects.toThrow(
       'Island: the component has no SFC __name; an island must be a <script setup> single-file component.',
     )
+    warned()
   })
 })

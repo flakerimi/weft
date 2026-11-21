@@ -36,7 +36,11 @@ export interface BuildOptions {
   appDir?: string
   /** The theme stylesheet the pages use. Default `neutral`. */
   theme?: Theme
-  /** A page's CSS up to this many bytes is inlined; more is linked. Default 14 KB. */
+  /**
+   * A page's CSS up to this many bytes, brotli-compressed as it is sent, is
+   * inlined; more is linked. Default 14 KB, about what the first round trip
+   * carries.
+   */
   cssInlineLimit?: number
 }
 
@@ -202,6 +206,17 @@ const fsKey = (p: string) => (foldCase ? p.normalize('NFC').toLowerCase() : p.no
 type Taken = Map<string, { path: string; source: string }>
 const take = (taken: Taken, path: string, source = '') => taken.set(fsKey(path), { path, source })
 
+/** Bytes of brotli at quality 11, as the build compresses what it serves; pages share CSS, so each set is measured once. */
+const sentSizes = new Map<string, number>()
+function sentSize(css: string): number {
+  let size = sentSizes.get(css)
+  if (size === undefined) {
+    size = brotliCompressSync(css, { params: { [zlib.BROTLI_PARAM_QUALITY]: 11 } }).length
+    sentSizes.set(css, size)
+  }
+  return size
+}
+
 /** Write the whole build into `dir`, a fresh folder of its own, and mark it. */
 async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssInlineLimit }: BuildInput): Promise<Manifest> {
   // Every file in the build; none is ever written twice, nor under two names the file system takes for one.
@@ -229,7 +244,7 @@ async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssI
     // The theme, weft.css, the page's component CSS, then view transitions.
     const css = [baseCSS, page.css, VIEW_TRANSITION].filter(Boolean).join('\n') + '\n'
     let stylesheet: string | null = null
-    if (Buffer.byteLength(css) > (cssInlineLimit ?? 14 * 1024)) {
+    if (sentSize(css) > (cssInlineLimit ?? 14 * 1024)) {
       const file = `assets/weft-${sha256(css).slice(0, 8)}.css`
       if (!taken.has(fsKey(file))) await write(file, css)
       immutable.add(file)

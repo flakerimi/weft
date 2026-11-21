@@ -23,7 +23,23 @@ describe('themeToCss', () => {
   it('emits density for input and surface', () => {
     expect(css).toMatch(/\[data-weft-input="touch"\]\s*\{[^}]*--weft-control-height: 44px;/)
     expect(css).toMatch(/\[data-weft-input="pointer"\]\s*\{[^}]*--weft-control-height: 36px;/)
-          })
+  })
+
+  it('emits control sizes that stay the same for pointer and touch', () => {
+    const root = /:root, \[data-weft-scheme="light"\] \{[^}]*\}/.exec(css)![0]
+    expect(root).toContain('--weft-control-sm: 28px;')
+    expect(root).toContain('--weft-control-md: 36px;')
+    expect(root).toContain('--weft-control-lg: 44px;')
+    // A control keeps its drawn size on touch; its hit area grows instead (--weft-hit-min).
+    for (const m of css.matchAll(/data-weft-input[^{]*\{[^}]*\}/g)) expect(m[0]).not.toMatch(/--weft-control-(sm|md|lg)/)
+  })
+
+  it('emits a foreground for every tone, in both schemes', () => {
+    for (const tone of ['danger', 'warning', 'success']) {
+      expect(css).toMatch(new RegExp(`:root, \\[data-weft-scheme="light"\\] \\{[^}]*--weft-color-${tone}-fg: #`))
+      expect(css).toMatch(new RegExp(`\\[data-weft-scheme="dark"\\] \\{[^}]*--weft-color-${tone}-fg: #`))
+    }
+  })
 
   it('sizes for touch from the media query when no provider says otherwise', () => {
     expect(css).toMatch(
@@ -42,6 +58,7 @@ describe('themeToCss', () => {
     ['radius.card', (t: Theme) => { delete (t.radius as Partial<Theme['radius']>).card }],
     ['ease.standard', (t: Theme) => { delete (t.ease as Partial<Theme['ease']>).standard }],
     ['motion', (t: Theme) => { delete (t as Partial<Theme>).motion }],
+    ['control.md', (t: Theme) => { delete (t.control as Partial<Theme['control']>).md }],
   ])('rejects a theme missing %s', (path, remove) => {
     const broken = structuredClone(neutral) as Theme
     remove(broken)

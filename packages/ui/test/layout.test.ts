@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { nextTick } from 'vue'
 import { installResizeObserver } from './resize-observer.ts'
 import { mount } from './mount.ts'
+import { registerIcon } from '../src/basics/icons.ts'
 import LayoutCases from './fixtures/LayoutCases.vue'
+import { loadStyles } from './styles.ts'
+
+registerIcon('star', '<path d="M12 2l3 7h7"></path>')
 
 const first = (c: string, sel: string) => mount(LayoutCases, { case: c }).el.querySelector(sel) as HTMLElement
 
@@ -94,5 +98,63 @@ describe('Divider', () => {
     expect(d.tagName).toBe('DIV')
     expect(d.getAttribute('role')).toBe('separator')
     expect(d.getAttribute('aria-orientation')).toBe('vertical')
+  })
+})
+
+describe('Separator', () => {
+  it('is a horizontal separator line', () => {
+    const s = first('separator', '.weft-separator')
+    expect(s.getAttribute('role')).toBe('separator')
+    expect(s.getAttribute('aria-orientation')).toBe('horizontal')
+    expect(s.dataset.orientation).toBe('horizontal')
+    expect(s.querySelectorAll('.weft-separator__line')).toHaveLength(1)
+    expect(s.querySelector('.weft-separator__content')).toBeNull()
+  })
+
+  it('draws a label and icon between two lines, and is named by the label', () => {
+    const s = first('separator-label', '.weft-separator')
+    expect(s.querySelectorAll('.weft-separator__line')).toHaveLength(2)
+    const content = s.querySelector('.weft-separator__content')!
+    expect(content.textContent).toBe('or')
+    expect(content.querySelector('svg.weft-icon')?.getAttribute('aria-hidden')).toBe('true')
+    expect(s.getAttribute('aria-label')).toBe('or')
+  })
+
+  it('puts its slot in the middle', () => {
+    const s = first('separator-slot', '.weft-separator')
+    expect(s.querySelector('.weft-separator__content .mine')?.textContent).toBe('Today')
+  })
+
+  it('runs vertically', () => {
+    const s = first('separator-vertical', '.weft-separator')
+    expect(s.getAttribute('aria-orientation')).toBe('vertical')
+    expect(s.dataset.orientation).toBe('vertical')
+  })
+
+  it('is hidden from assistive technology when decorative', () => {
+    const s = first('separator-decorative', '.weft-separator')
+    expect(s.getAttribute('role')).toBe('none')
+    expect(s.hasAttribute('aria-orientation')).toBe(false)
+    expect(s.hasAttribute('aria-label')).toBe(false)
+  })
+})
+
+describe('Container', () => {
+  it('is a div holding its content', () => {
+    const c = first('container', '.weft-container')
+    expect(c.tagName).toBe('DIV')
+    expect(c.querySelector('.inside')).not.toBeNull()
+    expect(first('container-as', '.weft-container').tagName).toBe('SECTION')
+  })
+
+  describe('width', () => {
+    let unload: () => void
+    beforeEach(() => { unload = loadStyles() })
+    afterEach(() => unload())
+
+    it('caps its width at the page width on a landing surface, and runs full width in an app', () => {
+      expect(getComputedStyle(first('container-landing', '.weft-container')).maxInlineSize).toBe('1200px')
+      expect(getComputedStyle(first('container-app', '.weft-container')).maxInlineSize).toBe('none')
+    })
   })
 })

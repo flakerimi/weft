@@ -15,6 +15,17 @@ describe('lisa theme', () => {
     expect(theme.motion.control).toBe(150)
   })
 
+  it('takes control sizes from the contract', () => {
+    expect(theme.control).toEqual({ sm: 28, md: 34, lg: 44 })
+  })
+
+  it('draws each tone\'s text in the contract\'s ink that reads best on it', () => {
+    expect(theme.light['danger-fg']).toBe('#F8FAFC')
+    expect(theme.light['warning-fg']).toBe('#0F172A')
+    expect(theme.light['success-fg']).toBe('#0F172A')
+    expect(theme.dark['warning-fg']).toBe(theme.light['warning-fg'])
+  })
+
   it('switches accent', () => {
     expect(lisa(tokens, { accent: 'violet' }).light.primary).toBe(
       tokens.color.accent['accent-violet-500'].value,

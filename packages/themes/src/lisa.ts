@@ -36,9 +36,14 @@ export function lisa(tokens: LisaTokens, opts: { accent?: string } = {}): Theme 
     primary,
     'primary-fg': c('ink', 'warm-white'),
     'primary-soft': c('accent', `accent-${accent}-300`),
+    // Each tone's text is the contract's ink that reads best on it: warm-white
+    // on error (4.2:1, against ink-900's 4.1), ink-900 on warning and success.
     danger: c('semantic', 'error'),
+    'danger-fg': c('ink', 'warm-white'),
     warning: c('semantic', 'warning'),
+    'warning-fg': c('ink', 'ink-900'),
     success: c('semantic', 'success'),
+    'success-fg': c('ink', 'ink-900'),
     info: c('semantic', 'info'),
     focus: primary,
   }
@@ -62,6 +67,8 @@ export function lisa(tokens: LisaTokens, opts: { accent?: string } = {}): Theme 
       weightTitle: pick<number>(tokens.type, 'title-weight', 'type'),
     },
     radius: { control: m('radius-control'), card: m('radius-card'), panel: m('radius-panel') },
+    // A toolbar control, a standard control, a touch target.
+    control: { sm: m('toolbar-control'), md: m('control-min'), lg: m('touch-target') },
     space: { 1: m('space-1'), 2: m('space-2'), 3: m('space-3'), 4: m('space-4'), 6: m('space-6'), 8: m('space-8') },
     motion: {
       control: pick<number>(tokens.motion, 'control', 'motion'),

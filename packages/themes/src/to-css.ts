@@ -3,6 +3,7 @@ import { colorKeys, type Theme } from './tokens.ts'
 const spaceKeys = ['1', '2', '3', '4', '6', '8'] as const
 const radiusKeys = ['control', 'card', 'panel'] as const
 const motionKeys = ['control', 'layout', 'dialog'] as const
+const controlKeys = ['sm', 'md', 'lg'] as const
 
 /** Read a value by dotted path, or throw the one sentence a theme author needs. */
 function need(theme: Theme, path: string): unknown {
@@ -41,6 +42,7 @@ export function themeToCss(theme: Theme): string {
     ...colors(theme, 'light'),
     ...spaceKeys.map((k) => `  --weft-space-${k}: ${need(theme, `space.${k}`)}px;`),
     ...radiusKeys.map((k) => `  --weft-radius-${k}: ${need(theme, `radius.${k}`)}px;`),
+    ...controlKeys.map((k) => `  --weft-control-${k}: ${need(theme, `control.${k}`)}px;`),
     ...motionKeys.map((k) => `  --weft-duration-${k}: ${need(theme, `motion.${k}`)}ms;`),
     `  --weft-ease-standard: ${curve(theme, 'ease.standard')};`,
     `  --weft-ease-emphasized: ${curve(theme, 'ease.emphasized')};`,

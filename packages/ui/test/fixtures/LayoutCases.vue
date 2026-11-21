@@ -1,5 +1,5 @@
 <script setup vapor lang="ts">
-import { Card, Divider, Grid, Page, Section, Stack } from '../../src/index.ts'
+import { Card, Container, Divider, Grid, Page, Section, Separator, Stack, WeftProvider } from '../../src/index.ts'
 defineProps<{ case: string }>()
 </script>
 
@@ -23,4 +23,13 @@ defineProps<{ case: string }>()
   </Card>
   <Divider v-else-if="$props.case === 'divider'" />
   <Divider v-else-if="$props.case === 'divider-vertical'" orientation="vertical" />
+  <Separator v-else-if="$props.case === 'separator'" />
+  <Separator v-else-if="$props.case === 'separator-label'" label="or" icon="star" />
+  <Separator v-else-if="$props.case === 'separator-slot'"><b class="mine">Today</b></Separator>
+  <Separator v-else-if="$props.case === 'separator-vertical'" orientation="vertical" />
+  <Separator v-else-if="$props.case === 'separator-decorative'" decorative label="or" />
+  <Container v-else-if="$props.case === 'container'"><p class="inside">x</p></Container>
+  <Container v-else-if="$props.case === 'container-as'" as="section"><p>x</p></Container>
+  <WeftProvider v-else-if="$props.case === 'container-landing'" surface="landing"><Container>x</Container></WeftProvider>
+  <WeftProvider v-else-if="$props.case === 'container-app'" surface="app"><Container>x</Container></WeftProvider>
 </template>

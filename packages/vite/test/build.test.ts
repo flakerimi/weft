@@ -20,7 +20,7 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { brotliDecompressSync, gunzipSync } from 'node:zlib'
+import { brotliCompressSync, brotliDecompressSync, gunzipSync } from 'node:zlib'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { buildSite, contentType, removeBuilt, type Manifest } from '../src/build.ts'
 import type { RoutesJson } from '../src/routes.ts'
@@ -61,6 +61,23 @@ function snapshot(dir: string): Record<string, string> {
 const leftovers = (parent: string) => readdirSync(parent).filter((n) => n.includes('.weft-'))
 
 /** A copy of a fixture in a temp folder that resolves packages through this package's node_modules. */
+/**
+ * For a build that must fail: Vite reports it ("✗ Build failed in …") and Vue
+ * warns about an error it rethrows. Expect those, and only those, rather than
+ * print them; call the result once the build has failed.
+ */
+function expectFailureLogs() {
+  const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  return () => {
+    for (const [message] of [...error.mock.calls, ...warn.mock.calls]) {
+      expect(String(message)).toMatch(/Build failed in |^\[Vue warn\]: Unhandled error during execution of /)
+    }
+    error.mockRestore()
+    warn.mockRestore()
+  }
+}
+
 function linkedSite(name: string): string {
   const root = join(tempDir(), name)
   cpSync(fixture(name), root, { recursive: true })
@@ -152,8 +169,9 @@ describe('buildSite on a site with islands', () => {
     const index = styleOf(read('pages/index/index.html'))!
     expect(counter).toMatch(/button \{\s*font-variant-numeric: tabular-nums;\s*\}/)
     expect(about).toMatch(/\.badge \{\s*letter-spacing: 0\.02em;\s*\}/)
-    expect(index).not.toContain('tabular-nums')
-    expect(index).not.toContain('.badge')
+    // The rules themselves, not their words: weft.css on every page may use those too.
+    expect(index).not.toMatch(/button \{\s*font-variant-numeric: tabular-nums;/)
+    expect(index).not.toMatch(/\.badge \{\s*letter-spacing/)
     // Component CSS comes before view transitions, after the theme and weft.css.
     expect(about.indexOf('.badge')).toBeGreaterThan(about.indexOf('box-sizing:border-box'))
   })
@@ -352,6 +370,19 @@ describe('buildSite with CSS over the inline limit', () => {
     expect(hrefOf('404')).toBe(href)
     expect(hrefOf('about')).not.toBe(href)
     expect(readFileSync(join(out, hrefOf('about')!), 'utf8')).toMatch(/\.badge \{\s*letter-spacing: 0\.02em;\s*\}/)
+  })
+
+  it('measures the limit in brotli bytes, as the page is sent, not in raw bytes', async () => {
+    const css = readFileSync(join(out, hrefOf('index')!), 'utf8')
+    const raw = Buffer.byteLength(css)
+    const sent = brotliCompressSync(css).length
+    expect(raw).toBeGreaterThan(sent)
+    // A limit between the two: the raw CSS is over it, what is sent is not, so it is inlined.
+    const between = tempDir()
+    await buildSite({ root: fixture('site'), outDir: between, cssInlineLimit: Math.floor((raw + sent) / 2) })
+    const html = readFileSync(join(between, 'pages/index/index.html'), 'utf8')
+    expect(html).toContain('<style>')
+    expect(html).not.toContain('rel="stylesheet"')
   })
 
   it('hints the stylesheet, and keys the not-found page\'s hints "404"', () => {
@@ -568,7 +599,9 @@ describe('buildSite replaces only a folder it built', { timeout: 30_000 }, () =>
     const before = snapshot(out)
     // A page that throws as it renders.
     writeFileSync(join(root, 'pages/boom.vue'), '<script setup vapor lang="ts">\nthrow new Error(\'boom\')\n</script>\n<template><p /></template>\n')
+    let failed = expectFailureLogs()
     await expect(buildSite({ root, outDir: out })).rejects.toThrow('boom')
+    failed()
     rmSync(join(root, 'pages/boom.vue'))
     // An island the client build cannot bundle: it imports a module that does not exist.
     mkdirSync(join(root, 'components'))
@@ -578,9 +611,11 @@ describe('buildSite replaces only a folder it built', { timeout: 30_000 }, () =>
     )
     writeFileSync(
       join(root, 'pages/broken.vue'),
-      "<script setup vapor lang=\"ts\">\nimport { Island } from '@weft/ui'\nimport Broken from '../components/Broken.vue'\n</script>\n<template><Island :component=\"Broken\" /></template>\n",
+      "<script setup vapor lang=\"ts\">\nimport { Island } from '@weft/ui'\nimport Broken from '../components/Broken.vue'\n</script>\n<template><Island when=\"load\" :component=\"Broken\" /></template>\n",
     )
+    failed = expectFailureLogs()
     await expect(buildSite({ root, outDir: out })).rejects.toThrow('weft-no-such-module')
+    failed()
     expect(snapshot(out)).toEqual(before)
     expect(readdirSync(parent)).toEqual(['dist'])
   })
@@ -826,7 +861,9 @@ describe('buildSite with a site config that moves the client build', { timeout: 
         join(root, 'vite.config.ts'),
         `import { defineConfig } from 'vite'\nexport default defineConfig({ build: { rollupOptions: { external: ['weft-test-external'] } }, ${config(owner)} })\n`,
       )
+      const failed = expectFailureLogs()
       await expect(buildSite({ root, outDir: out })).rejects.toThrow(sentence(setting))
+      failed()
       expect(snapshot(owner)).toEqual({ 'keep.txt': Buffer.from('owner').toString('base64'), 'thesis.docx': Buffer.from('owner').toString('base64') })
       expect(snapshot(out)).toEqual(before)
       expect(readdirSync(parent)).toEqual(['dist'])
@@ -863,7 +900,9 @@ describe('buildSite with a plugin that changes the client build late', { timeout
   ] as const) {
     it(`refuses ${name} set in buildStart, and leaves the owner's folder and outDir as they were`, async () => {
       const { root, parent, out, owner, before } = await withPlugin((o) => `{ name: 'late', buildStart() { ${hook(o)} } }`)
+      const failed = expectFailureLogs()
       await expect(buildSite({ root, outDir: out })).rejects.toThrow(new Error(sentence(setting)))
+      failed()
       expect(snapshot(owner)).toEqual({ 'keep.txt': Buffer.from('owner').toString('base64') })
       expect(snapshot(out)).toEqual(before)
       expect(readdirSync(parent).sort()).toEqual(['dist', 'owner'])
