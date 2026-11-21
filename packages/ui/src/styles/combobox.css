@@ -1,0 +1,41 @@
+/* Combobox: an Input box (input.css) whose trailing end holds a clear × and
+   the chevron that opens the list, both small buttons outside the tab order
+   with hit areas of at least --weft-hit-min; or, with trigger="button", a
+   Select's button (select.css). With multiple, the box grows to hold the
+   tags before the text, wrapping them. Its list opens in a Popover drawn as
+   a Select's (select.css). */
+.weft-combobox { display: contents; }
+.weft-combobox__button {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  inline-size: 20px;
+  block-size: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--weft-color-text-muted, GrayText);
+  cursor: pointer;
+}
+.weft-combobox__button::before {
+  content: '';
+  position: absolute;
+  inset: 50% auto auto 50%;
+  inline-size: max(100%, var(--weft-hit-min, 24px));
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  transform: translate(-50%, -50%);
+}
+.weft-combobox__button:hover { color: var(--weft-color-text, CanvasText); }
+.weft-combobox__button svg { inline-size: 16px; block-size: 16px; }
+.weft-combobox[data-open] .weft-combobox__toggle .weft-select__chevron { rotate: 180deg; }
+.weft-combobox[data-multiple] > .weft-input {
+  flex-wrap: wrap;
+  block-size: auto;
+  min-block-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
+  padding-block: 3px;
+  row-gap: 4px;
+}
+.weft-combobox[data-multiple] > .weft-input > .weft-input__leading { display: contents; }
+.weft-combobox[data-multiple] .weft-input__field { flex: 1 1 4rem; block-size: auto; min-block-size: 24px; }

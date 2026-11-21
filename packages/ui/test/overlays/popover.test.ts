@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import AnchoredPopover from '../fixtures/overlays/AnchoredPopover.vue'
 import PopoverCases from '../fixtures/overlays/PopoverCases.vue'
 import { mount } from '../mount.ts'
 import { press as pressKey } from '../keyboard.ts'
@@ -48,6 +49,19 @@ describe('Popover', () => {
     expect(active()).toBe($('.field'))
     expect(locked()).toBe(false)
     expect($('.weft-overlay-backdrop')).toBeNull()
+  })
+
+  it('takes a press on its anchor element as no press outside, for the anchor owner to handle', async () => {
+    const m = mount(AnchoredPopover)
+    unmount = m.unmount
+    await settle()
+    expect(panel()).not.toBeNull()
+    press($('.field'))
+    await settle()
+    expect(m.exposed.open).toBe(true)
+    press($('.after'))
+    await settle()
+    expect(m.exposed.open).toBe(false)
   })
 
   it('opens from its trigger by Enter and by Space', async () => {

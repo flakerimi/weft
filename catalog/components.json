@@ -805,6 +805,635 @@
       ]
     },
     {
+      "name": "Combobox",
+      "group": "selection",
+      "file": "packages/ui/src/selection/Combobox.vue",
+      "purpose": "A text field that searches a list as you type and chooses from it, one value or several, with items given, created or loaded.",
+      "use": "For a choice from a list people search (a person, a city, a tag), from many options or ones loaded from the server, or where a typed value may become a new option; Nuxt UI's InputMenu, and as a button its SelectMenu.",
+      "avoid": "For a short list nobody searches, use Select; for free text with no list, Input; for running commands, CommandPalette.",
+      "adapts": {
+        "input": "On pointer the list floats under the field, focus staying in it. On touch the field only opens the list (it is read-only there, so no keyboard opens for it) as a modal bottom sheet with a search field at the top, which takes focus and filters; options are 48 px tall. The input can change while it is open; the search and the active option stay, and focus moves between the field and the sheet's search field.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "The field fills its container's width, growing taller to hold tags with multiple; the floating list stays within the room left; the sheet is the viewport's width."
+      },
+      "props": [
+        {
+          "name": "items",
+          "type": "SelectItem[] | SelectItem[][]",
+          "required": false,
+          "default": null,
+          "description": "The options: values, or objects with `label`, `description`, `icon`, `disabled`, `type: 'label' | 'separator'`; or groups of them."
+        },
+        {
+          "name": "modelValue",
+          "type": "unknown",
+          "required": false,
+          "default": "undefined",
+          "description": "The chosen value, bound with `v-model`; an array with `multiple`; the text in autocomplete mode."
+        },
+        {
+          "name": "defaultValue",
+          "type": "unknown",
+          "required": false,
+          "default": "undefined",
+          "description": "The value it starts with when `v-model` is not bound."
+        },
+        {
+          "name": "multiple",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Choose several: `v-model` is an array, shown as tags, and the list stays open."
+        },
+        {
+          "name": "valueKey",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Read an object's value at this key; without it the object itself is the value."
+        },
+        {
+          "name": "labelKey",
+          "type": "string",
+          "required": false,
+          "default": "'label'",
+          "description": "Read an object's label at this key."
+        },
+        {
+          "name": "descriptionKey",
+          "type": "string",
+          "required": false,
+          "default": "'description'",
+          "description": "Read an object's description at this key."
+        },
+        {
+          "name": "by",
+          "type": "string | ((a: unknown, b: unknown) => boolean)",
+          "required": false,
+          "default": null,
+          "description": "Compare values by this key, or with this function; by default in depth."
+        },
+        {
+          "name": "trigger",
+          "type": "'input' | 'button'",
+          "required": false,
+          "default": "'input'",
+          "description": "`input`: the field is the search (Nuxt UI's InputMenu). `button`: a button, with the search at the top of the list (its SelectMenu)."
+        },
+        {
+          "name": "mode",
+          "type": "'combobox' | 'autocomplete'",
+          "required": false,
+          "default": "'combobox'",
+          "description": "`combobox`: `v-model` is the chosen item's value. `autocomplete`: it is the text, which the list completes."
+        },
+        {
+          "name": "searchTerm",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "The search, bound with `v-model:search-term`."
+        },
+        {
+          "name": "placeholder",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Shown in the empty field, or on the button while nothing is chosen."
+        },
+        {
+          "name": "searchPlaceholder",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The search field's placeholder, at the top of the list (a button's, and on touch)."
+        },
+        {
+          "name": "filterFields",
+          "type": "string[]",
+          "required": false,
+          "default": null,
+          "description": "Search these keys of each item; by default its label."
+        },
+        {
+          "name": "ignoreFilter",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Show the items as given while searching: the app filters them (async search with `v-model:search-term`)."
+        },
+        {
+          "name": "createItem",
+          "type": "boolean | 'always' | { position?: 'top' | 'bottom'; when?: 'empty' | 'always' }",
+          "required": false,
+          "default": null,
+          "description": "Offer what was typed as a new item (emits `create`): when nothing matches, or `'always'`; `{ position: 'top' }` puts it first."
+        },
+        {
+          "name": "load",
+          "type": "(term: string, context: { signal: AbortSignal }) => Promise<SelectItems>",
+          "required": false,
+          "default": null,
+          "description": "Load the items for a search (when the list opens, and as you type, after `debounce` ms); the latest answer is shown as given, and the signal aborts a superseded one."
+        },
+        {
+          "name": "debounce",
+          "type": "number",
+          "required": false,
+          "default": "200",
+          "description": "ms of quiet typing before `load` runs."
+        },
+        {
+          "name": "loading",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Items are on their way: a spinner in the field, aria-busy, and \"Loading…\" in place of an empty list."
+        },
+        {
+          "name": "clear",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "A clear button while there is a value."
+        },
+        {
+          "name": "resetModelValueOnClear",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Emptying the text clears the value too."
+        },
+        {
+          "name": "resetSearchTermOnBlur",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Leaving the field puts back the chosen label (and a closed list forgets its search)."
+        },
+        {
+          "name": "resetSearchTermOnSelect",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Choosing forgets the search."
+        },
+        {
+          "name": "openOnFocus",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Open the list when the field takes focus."
+        },
+        {
+          "name": "openOnClick",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Open the list on a press in the field."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": null,
+          "description": "`sm`, `md` or `lg`; a FieldGroup's or FormField's size applies when not set. md is 44 px tall on touch."
+        },
+        {
+          "name": "icon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon before the text. The leading slot replaces it."
+        },
+        {
+          "name": "trailingIcon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon in place of the chevron."
+        },
+        {
+          "name": "selectedIcon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon marking chosen options, in place of the drawn check."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Cannot be opened or changed."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The form field name its value submits under; a FormField's name applies when not set."
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The field's id; inside a FormField the field's id is used, so its label points here."
+        },
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "Open or closed, bound with `v-model:open`."
+        },
+        {
+          "name": "defaultOpen",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "Whether it starts open when `v-model:open` is not bound."
+        },
+        {
+          "name": "placement",
+          "type": "Placement",
+          "required": false,
+          "default": "'bottom-start'",
+          "description": "Where the list floats on pointer (start and end follow the text direction)."
+        },
+        {
+          "name": "loop",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "The arrows wrap round at the ends."
+        },
+        {
+          "name": "virtualize",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "Draw only the rows in view; by default past 200 options."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:modelValue",
+          "payload": "[value: unknown]",
+          "description": "Chosen: the value, the array of values with `multiple`, or the text in autocomplete mode."
+        },
+        {
+          "name": "update:open",
+          "payload": "[open: boolean]",
+          "description": "Opened or closed."
+        },
+        {
+          "name": "update:searchTerm",
+          "payload": "[term: string]",
+          "description": "The search changed."
+        },
+        {
+          "name": "change",
+          "payload": "[value: unknown]",
+          "description": "The value changed by a choice, a tag's removal or the clear button."
+        },
+        {
+          "name": "create",
+          "payload": "[term: string]",
+          "description": "The create option was chosen, with what was typed."
+        },
+        {
+          "name": "clear",
+          "payload": "[]",
+          "description": "The clear button was pressed."
+        },
+        {
+          "name": "remove-tag",
+          "payload": "[value: unknown]",
+          "description": "A tag was removed (multiple), with its value."
+        },
+        {
+          "name": "highlight",
+          "payload": "[item: SelectItem | undefined]",
+          "description": "The active option changed: its item, or undefined."
+        },
+        {
+          "name": "error",
+          "payload": "[error: unknown]",
+          "description": "`load` failed (not when aborted)."
+        },
+        {
+          "name": "blur",
+          "payload": "[event: FocusEvent]",
+          "description": "Focus left the field and its list."
+        },
+        {
+          "name": "focus",
+          "payload": "[event: FocusEvent]",
+          "description": "The field took focus."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [
+            "modelValue",
+            "item",
+            "open"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "leading",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "trailing",
+          "props": [
+            "open"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "tag",
+          "props": [
+            "item",
+            "value"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "item",
+          "props": [
+            "item",
+            "index",
+            "selected"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "item-leading",
+          "props": [
+            "item",
+            "index"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "item-label",
+          "props": [
+            "item",
+            "index"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "item-trailing",
+          "props": [
+            "item",
+            "index",
+            "selected"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "create-item-label",
+          "props": [
+            "item"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "empty",
+          "props": [
+            "searchTerm"
+          ],
+          "dynamic": false
+        }
+      ],
+      "notes": "`items` are values or objects (`{ label, description, icon, disabled }`), or\ngroups of them, as in Listbox; without `value-key` an object is itself the\nvalue. Bind the choice with `v-model` (an array with `multiple`), the search\nwith `v-model:search-term` and the list with `v-model:open`.\n\nIt follows the WAI-ARIA APG Combobox pattern with a listbox popup and list\nautocomplete: the field has `role=\"combobox\"`, `aria-autocomplete=\"list\"`,\n`aria-expanded`, and, while open, `aria-controls` and\n`aria-activedescendant`. Inside a FormField the label is `for` the field\nand names the list. The field's text is the search, so it submits nothing;\nwith a `name` (or its FormField's) the value submits in hidden inputs.\n\n**Keyboard.** Typing opens the list and filters it, the first match active.\nArrowDown opens it on the chosen option (Alt+ArrowDown without moving),\nArrowUp on the last; open, the arrows and Page Up and Page Down move,\nskipping disabled options. Enter chooses (and does not submit the form),\nEscape closes, and a second Escape clears the text and the value;\nAlt+ArrowUp and Tab close. Home and End move the caret. Leaving the field\nputs back the chosen label. With `multiple` the chosen values are tags\nbefore the text, each with a × (named \"Remove …\"); Backspace in the empty\nfield removes the last, and the list stays open as you choose.\n\n**Searching.** The list keeps the options whose label (or `filter-fields`)\ncontains the search, ignoring case and accents, the closest first; the\n`empty` slot shows when none does, by default \"No results\". `create-item`\noffers what was typed as an option, emitting `create`: when nothing matches,\nor `'always'` unless an option is the search, at the `bottom` or `top`.\n\n**Async.** `load(term, { signal })` returns the items for a search: it runs\nwhen the list opens and, `debounce` ms (200) after typing stops, for each\nnew search; the latest answer is shown as given, an older one arriving late\nis dropped, and the signal aborts it. Meanwhile the field shows a spinner,\nthe list is `aria-busy` and says \"Loading…\" in place of an empty list; a\nfailure emits `error`. Or filter yourself: bind `v-model:search-term`, set\n`ignore-filter` and `loading`, and pass the items (Nuxt UI's way).\n\n`trigger=\"button\"` makes it a button (Nuxt UI's SelectMenu) showing the\nchoice, whose list has the search field at the top: the button has\n`aria-haspopup=\"dialog\"`, the search takes focus as the list opens, and\nchoosing returns focus to the button. `mode=\"autocomplete\"` binds the text\nitself, the list suggesting completions. `clear` adds a clear button while\nthere is a value (emits `clear`); `open-on-focus` and `open-on-click` open\nthe list sooner. `disabled` blocks typing, the chevron and every key.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Combobox/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Combobox, FormField } from '@weft/ui'\n\nconst person = ref<{ id: number; label: string } | undefined>()\nconst people = [\n  { id: 1, label: 'Ada Lovelace', description: 'Analyst' },\n  { id: 2, label: 'Grace Hopper', description: 'Rear admiral' },\n  { id: 3, label: 'Alan Turing', description: 'Mathematician' },\n  { id: 4, label: 'Katherine Johnson', description: 'Orbital mechanics' },\n  { id: 5, label: 'Edsger Dijkstra', description: 'Shortest paths' },\n]\n</script>\n\n<template>\n  <!-- Type to filter; on touch the list opens as a bottom sheet with its own search field. -->\n  <FormField label=\"Assignee\">\n    <Combobox v-model=\"person\" :items=\"people\" by=\"id\" placeholder=\"Search people\" clear />\n  </FormField>\n</template>\n"
+        },
+        {
+          "name": "as-button",
+          "title": "As button",
+          "file": "packages/ui/examples/Combobox/as-button.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Combobox, FormField } from '@weft/ui'\n\n// Nuxt UI's SelectMenu: a button showing the choice, its list searched from a field at the top.\nconst timezone = ref('Europe/Belgrade')\nconst zones = ['Africa/Lagos', 'America/New_York', 'America/Sao_Paulo', 'Asia/Tokyo', 'Australia/Sydney', 'Europe/Belgrade', 'Europe/London', 'Pacific/Auckland']\n</script>\n\n<template>\n  <FormField label=\"Time zone\">\n    <Combobox v-model=\"timezone\" :items=\"zones\" trigger=\"button\" search-placeholder=\"Find a zone…\" />\n  </FormField>\n</template>\n"
+        },
+        {
+          "name": "async",
+          "title": "Async",
+          "file": "packages/ui/examples/Combobox/async.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Combobox, FormField, type SelectItems } from '@weft/ui'\n\nconst city = ref<{ label: string; country: string } | undefined>()\nconst cities = [\n  ['Amsterdam', 'Netherlands'], ['Athens', 'Greece'], ['Berlin', 'Germany'], ['Lisbon', 'Portugal'],\n  ['Ljubljana', 'Slovenia'], ['Madrid', 'Spain'], ['Oslo', 'Norway'], ['Paris', 'France'],\n  ['Prishtina', 'Kosovo'], ['Rome', 'Italy'], ['Tirana', 'Albania'], ['Vienna', 'Austria'],\n].map(([label, country]) => ({ label: label!, country: country!, description: country }))\n\n// A stand-in for a server search: answers after a moment, and stops when the signal aborts it.\nfunction load(term: string, { signal }: { signal: AbortSignal }): Promise<SelectItems> {\n  return new Promise((resolve, reject) => {\n    const timer = setTimeout(() => {\n      const t = term.toLowerCase()\n      resolve(cities.filter((c) => c.label.toLowerCase().includes(t) || c.country.toLowerCase().includes(t)))\n    }, 400)\n    signal.addEventListener('abort', () => {\n      clearTimeout(timer)\n      reject(signal.reason)\n    })\n  })\n}\n</script>\n\n<template>\n  <FormField label=\"City\" description=\"Searched on the server as you type.\">\n    <Combobox v-model=\"city\" :load=\"load\" by=\"label\" placeholder=\"Search cities\" />\n  </FormField>\n</template>\n"
+        },
+        {
+          "name": "multiple-and-create",
+          "title": "Multiple and create",
+          "file": "packages/ui/examples/Combobox/multiple-and-create.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Combobox, FormField } from '@weft/ui'\n\nconst labels = ref(['bug', 'docs', 'feature', 'help wanted', 'question'])\nconst chosen = ref<string[]>(['bug'])\n\n// What was typed becomes a label, chosen at once.\nfunction create(label: string) {\n  labels.value = [...labels.value, label]\n  chosen.value = [...chosen.value, label]\n}\n</script>\n\n<template>\n  <FormField label=\"Labels\" hint=\"Backspace removes the last\">\n    <Combobox v-model=\"chosen\" :items=\"labels\" multiple create-item placeholder=\"Add labels\" @create=\"create\" />\n  </FormField>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "CommandPalette",
+      "group": "selection",
+      "file": "packages/ui/src/selection/CommandPalette.vue",
+      "purpose": "A search field over grouped commands, found by fuzzy matching and run from the keyboard, with recent commands and pages of sub-commands.",
+      "use": "For a Cmd+K launcher in a Dialog, or a search-first menu of everything an app can do or go to.",
+      "avoid": "For a value in a form, use Combobox; for a handful of actions on one thing, DropdownMenu.",
+      "adapts": {
+        "input": "Commands are at least --weft-hit-min tall, so 44 px on touch; inside a Dialog it is full-screen when narrow, as the Dialog is.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "It fills its container (a Dialog's body); the list scrolls past 24rem, or 60% of the viewport's height."
+      },
+      "props": [
+        {
+          "name": "groups",
+          "type": "CommandGroup[]",
+          "required": false,
+          "default": "() => []",
+          "description": "The commands, in groups: `{ id, label, items, ignoreFilter?, postFilter? }`."
+        },
+        {
+          "name": "searchTerm",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "The search, bound with `v-model:search-term`."
+        },
+        {
+          "name": "placeholder",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The search field's placeholder; a page of children shows its command's `placeholder`."
+        },
+        {
+          "name": "limit",
+          "type": "number",
+          "required": false,
+          "default": "12",
+          "description": "At most this many matches per group while searching."
+        },
+        {
+          "name": "preserveGroupOrder",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Keep the groups in their order while searching, instead of best match first."
+        },
+        {
+          "name": "recent",
+          "type": "boolean | number",
+          "required": false,
+          "default": null,
+          "description": "List the commands run last first while the search is empty: true keeps 5, a number that many."
+        },
+        {
+          "name": "recentKey",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Keep the recent commands in localStorage under this key (`weft:recent:<key>`), so they outlast the page."
+        },
+        {
+          "name": "recentLabel",
+          "type": "string",
+          "required": false,
+          "default": "'Recent'",
+          "description": "The recent group's heading."
+        },
+        {
+          "name": "loading",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Results are on their way: a spinner in the field, aria-busy on the list."
+        },
+        {
+          "name": "close",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "A close button in the field (emits `update:open` with false), for a palette in a Dialog."
+        },
+        {
+          "name": "back",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "A back button in a page of children."
+        },
+        {
+          "name": "autofocus",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Focus the search field once mounted."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Nothing can be run."
+        },
+        {
+          "name": "loop",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "The arrows wrap round at the ends."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": "'md'",
+          "description": "`sm`, `md` or `lg`."
+        },
+        {
+          "name": "virtualize",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "Draw only the rows in view; by default past 200 commands."
+        }
+      ],
+      "emits": [
+        {
+          "name": "select",
+          "payload": "[item: CommandItem, event: Event]",
+          "description": "A command was run (after its own `onSelect`)."
+        },
+        {
+          "name": "update:searchTerm",
+          "payload": "[term: string]",
+          "description": "The search changed."
+        },
+        {
+          "name": "update:open",
+          "payload": "[open: boolean]",
+          "description": "The close button was pressed: false."
+        },
+        {
+          "name": "highlight",
+          "payload": "[item: CommandItem | undefined]",
+          "description": "The active command changed, or undefined."
+        }
+      ],
+      "slots": [
+        {
+          "name": "item-label",
+          "props": [
+            "item"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "item-trailing",
+          "props": [
+            "item"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "empty",
+          "props": [
+            "searchTerm"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "footer",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "`groups` are `{ id, label, items }`; a command has `label`, and may have\n`id`, `icon`, `prefix`, `suffix`, `description`, `keywords`, `kbds` (its\nshortcut, shown with Kbd; shown, not bound), `disabled`, `loading`, `to` and\n`target`, `children` and `onSelect(event)`. Running a command calls its\n`onSelect`, then emits `select`, then follows `to` unless `onSelect`\nprevented the event's default. A command with `children` opens them as a\npage of their own, headed by its label, its `placeholder` in the field, with\na back button; Backspace in the empty field goes back.\n\n**Search.** Typing matches fuzzily: each word's letters in order, gaps\nallowed, ignoring case and accents, word starts and runs of letters scoring\nhigher; descriptions, suffixes and keywords count for half. The matched\nletters of each label are marked. Matches come best first, at most `limit`\n(12) per group, and the groups by their best match unless\n`preserve-group-order`. A group with `ignoreFilter` shows its items whatever\nthe search, and `postFilter(term, items)` has the last word on a group. When\nnothing matches the `empty` slot shows, by default \"No results\".\n\n**Keyboard.** The field keeps focus (`role=\"combobox\"`, its list always\nshown, `aria-activedescendant` naming the active command, which is also the\nselected one): ArrowDown and ArrowUp move across groups, Page Down and Page\nUp move ten, skipping disabled and loading commands; Enter runs the active\ncommand; Home and End stay with the text.\n\n**Recent.** With `recent` (5, or a number) the commands run last are listed\nfirst, under `recent-label`, while the search is empty; with `recent-key`\nthey are kept in localStorage (`weft:recent:<key>`), read once mounted.\n\n**In a Dialog.** Put it in a Dialog's `body` slot: the Dialog's focus trap\nmoves focus into the field when it opens, Escape closes the Dialog and focus\nreturns to its opener; close the Dialog on `select`. `close` adds a close\nbutton to the field, emitting `update:open` with false. The example\n`in-dialog` opens one with Cmd+K or Ctrl+K.\n\nThe slots `item-label` and `item-trailing` replace or add to a command's\nparts, and `footer` goes under the list.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/CommandPalette/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { CommandPalette, type CommandGroup } from '@weft/ui'\n\nconst last = ref('')\nconst run = (what: string) => () => (last.value = what)\nconst groups: CommandGroup[] = [\n  {\n    id: 'actions',\n    label: 'Actions',\n    items: [\n      { id: 'new', label: 'New document', icon: 'file-plus', kbds: ['command', 'n'], onSelect: run('New document') },\n      {\n        id: 'theme',\n        label: 'Change theme',\n        icon: 'palette',\n        placeholder: 'Choose a theme…',\n        children: [\n          { id: 'light', label: 'Light', icon: 'sun', onSelect: run('Light theme') },\n          { id: 'dark', label: 'Dark', icon: 'moon', onSelect: run('Dark theme') },\n        ],\n      },\n      { id: 'settings', label: 'Settings', icon: 'settings', suffix: 'Account and workspace', onSelect: run('Settings') },\n    ],\n  },\n  {\n    id: 'people',\n    label: 'People',\n    items: [\n      { id: 'ada', label: 'Ada Lovelace', icon: 'user', keywords: ['analyst'], onSelect: run('Ada') },\n      { id: 'grace', label: 'Grace Hopper', icon: 'user', keywords: ['compiler'], onSelect: run('Grace') },\n    ],\n  },\n]\n</script>\n\n<template>\n  <CommandPalette :groups=\"groups\" recent aria-label=\"Commands\" />\n  <p>Last run: {{ last || 'nothing yet' }}</p>\n</template>\n"
+        },
+        {
+          "name": "in-dialog",
+          "title": "In dialog",
+          "file": "packages/ui/examples/CommandPalette/in-dialog.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { onMounted, onScopeDispose, ref } from 'vue'\nimport { Button, CommandPalette, Dialog, Kbd, type CommandGroup, type CommandItem } from '@weft/ui'\n\n// A Cmd+K (Ctrl+K) launcher: the shortcut toggles a Dialog holding the\n// palette. The Dialog's focus trap puts focus in the search field, Escape\n// closes it, and running a command closes it too, focus going back to the\n// button that opened it.\nconst open = ref(false)\nconst last = ref('')\nconst groups: CommandGroup[] = [\n  {\n    id: 'go',\n    label: 'Go to',\n    items: [\n      { id: 'home', label: 'Home', icon: 'house' },\n      { id: 'projects', label: 'Projects', icon: 'folder' },\n      { id: 'billing', label: 'Billing', icon: 'credit-card' },\n    ],\n  },\n  {\n    id: 'actions',\n    label: 'Actions',\n    items: [\n      { id: 'invite', label: 'Invite a teammate', icon: 'user-plus', kbds: ['command', 'i'] },\n      { id: 'sign-out', label: 'Sign out', icon: 'log-out' },\n    ],\n  },\n]\n\nfunction onSelect(item: CommandItem) {\n  last.value = item.label\n  open.value = false\n}\n\nfunction onKey(event: KeyboardEvent) {\n  if (event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {\n    event.preventDefault()\n    open.value = !open.value\n  }\n}\nonMounted(() => document.addEventListener('keydown', onKey))\nonScopeDispose(() => {\n  if (typeof document !== 'undefined') document.removeEventListener('keydown', onKey)\n})\n</script>\n\n<template>\n  <Dialog v-model:open=\"open\" title=\"Search\">\n    <Button variant=\"outline\" tone=\"neutral\" icon=\"search\">\n      Search <Kbd value=\"command\" size=\"sm\" /><Kbd value=\"K\" size=\"sm\" />\n    </Button>\n    <template #body>\n      <CommandPalette :groups=\"groups\" recent recent-key=\"example-launcher\" @select=\"onSelect\" />\n    </template>\n  </Dialog>\n  <p>Last run: {{ last || 'nothing yet' }}</p>\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "ConfirmDialog",
       "group": "overlays",
       "file": "packages/ui/src/overlays/ConfirmDialog.vue",
@@ -2075,6 +2704,213 @@
       ]
     },
     {
+      "name": "InputTags",
+      "group": "selection",
+      "file": "packages/ui/src/selection/InputTags.vue",
+      "purpose": "A text field that turns what is typed into tags, each with a ×, for a list of short free values.",
+      "use": "For keywords, email addresses, labels: values typed rather than chosen from a list, several of them.",
+      "avoid": "When the values come from a known list, use Combobox with multiple; for one value, Input.",
+      "adapts": {
+        "input": "The field is at least max(--weft-control-md, --weft-hit-min) tall, so 44 px on touch, and each × has a hit area of at least --weft-hit-min.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "It fills its container's width and grows taller as tags wrap onto more lines."
+      },
+      "props": [
+        {
+          "name": "modelValue",
+          "type": "unknown[]",
+          "required": false,
+          "default": "undefined",
+          "description": "The tags, bound with `v-model`."
+        },
+        {
+          "name": "defaultValue",
+          "type": "unknown[]",
+          "required": false,
+          "default": "undefined",
+          "description": "The tags it starts with when `v-model` is not bound."
+        },
+        {
+          "name": "placeholder",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Shown in the empty field."
+        },
+        {
+          "name": "delimiter",
+          "type": "string | RegExp",
+          "required": false,
+          "default": "','",
+          "description": "Typing this adds the text before it as a tag; a string or a pattern."
+        },
+        {
+          "name": "addOnPaste",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "A paste is split at the delimiter into tags."
+        },
+        {
+          "name": "addOnTab",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Tab adds the text as a tag (and stays)."
+        },
+        {
+          "name": "addOnBlur",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Leaving the field adds the text as a tag."
+        },
+        {
+          "name": "duplicate",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "The same tag may be added twice."
+        },
+        {
+          "name": "max",
+          "type": "number",
+          "required": false,
+          "default": null,
+          "description": "At most this many tags."
+        },
+        {
+          "name": "maxLength",
+          "type": "number",
+          "required": false,
+          "default": null,
+          "description": "At most this many characters in a tag."
+        },
+        {
+          "name": "convertValue",
+          "type": "(text: string) => unknown",
+          "required": false,
+          "default": null,
+          "description": "Turn the typed text into the tag's value."
+        },
+        {
+          "name": "displayValue",
+          "type": "(value: unknown) => string",
+          "required": false,
+          "default": null,
+          "description": "The text a tag shows for its value."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": null,
+          "description": "`sm`, `md` or `lg`; a FieldGroup's or FormField's size applies when not set."
+        },
+        {
+          "name": "icon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon before the tags. The leading slot replaces it."
+        },
+        {
+          "name": "loading",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Work in progress: a spinner at the end, and aria-busy."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Tags cannot be added or taken out."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The form field name its tags submit under; a FormField's name applies when not set."
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The text field's id; inside a FormField the field's id is used."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:modelValue",
+          "payload": "[value: unknown[]]",
+          "description": "The tags changed."
+        },
+        {
+          "name": "addTag",
+          "payload": "[value: unknown]",
+          "description": "A tag was added, with its value."
+        },
+        {
+          "name": "removeTag",
+          "payload": "[value: unknown]",
+          "description": "A tag was taken out, with its value."
+        },
+        {
+          "name": "invalid",
+          "payload": "[value: unknown]",
+          "description": "A tag was refused (a duplicate, or past `max`), with its value."
+        },
+        {
+          "name": "change",
+          "payload": "[value: unknown[]]",
+          "description": "The tags changed by an addition or a removal."
+        },
+        {
+          "name": "blur",
+          "payload": "[event: FocusEvent]",
+          "description": "Focus left the field and its tags."
+        },
+        {
+          "name": "focus",
+          "payload": "[event: FocusEvent]",
+          "description": "The field took focus."
+        }
+      ],
+      "slots": [
+        {
+          "name": "leading",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "trailing",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "item-text",
+          "props": [
+            "item",
+            "index"
+          ],
+          "dynamic": false
+        }
+      ],
+      "notes": "Bind the tags with `v-model` (an array). Enter adds the typed text, trimmed,\nas a tag (and does not submit the form; Enter in an empty field does), and\nso does typing the `delimiter` (a comma; a pattern works). `add-on-paste`\nsplits a paste into tags, `add-on-tab` adds on Tab, `add-on-blur` when focus\nleaves. A duplicate is refused unless `duplicate`, and so is a tag past\n`max`: both emit `invalid` and the text stays. `convert-value` turns the text\ninto the tag's value and `display-value` the value into the tag's text.\n\nThe tags are a list (`role=\"list\"`) before the text, each a list item with a\n× button named \"Remove …\", outside the tab order. Backspace in the empty\nfield, or ArrowLeft at its start (ArrowRight right to left), moves focus onto\nthe last tag; the arrows move between tags and back to the field; Backspace\nor Delete takes out the focused tag, focus going to its neighbour or the\nfield. Inside a FormField the text field takes the field's id, description,\nerror and required mark; with a `name` (or its FormField's) the tags submit\nin hidden inputs, one each. `disabled` blocks typing and removing.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/InputTags/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, InputTags } from '@weft/ui'\n\nconst keywords = ref(['vapor', 'islands'])\n</script>\n\n<template>\n  <FormField label=\"Keywords\" hint=\"Enter or comma\" name=\"keywords\">\n    <InputTags v-model=\"keywords\" placeholder=\"Add a keyword\" add-on-paste add-on-blur :max=\"8\" />\n  </FormField>\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "Island",
       "group": "islands",
       "file": "packages/ui/src/islands/Island.vue",
@@ -2271,6 +3107,269 @@
           "title": "Current page",
           "file": "packages/ui/examples/Link/current-page.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { Link, Stack } from '@weft/ui'\n</script>\n\n<template>\n  <!-- In the browser a Link marks itself when it is the current page; active says so on the server too. -->\n  <nav aria-label=\"Account\">\n    <Stack direction=\"row\" :gap=\"4\">\n      <Link standalone to=\"/account\" active>Profile</Link>\n      <Link standalone to=\"/account/billing\">Billing</Link>\n      <Link standalone to=\"/account/team\" disabled>Team</Link>\n    </Stack>\n  </nav>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "Listbox",
+      "group": "selection",
+      "file": "packages/ui/src/selection/Listbox.vue",
+      "purpose": "A list of options always shown, to choose one or several from, with an optional filter field above it.",
+      "use": "For a choice that deserves the room of a visible list (a few to a few thousand options), in a form or a side panel; with `filter` when the list is long.",
+      "avoid": "When the list should open from a field, use Select or Combobox; for two to five options, RadioGroup or CheckboxGroup; for actions, DropdownMenu or CommandPalette.",
+      "adapts": {
+        "input": "Options are at least --weft-hit-min tall on pointer and 48 px on touch, with larger text; the pointer highlights the option under it.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "It fills the width of its container and scrolls past 18rem tall; labels and descriptions are cut with an ellipsis."
+      },
+      "props": [
+        {
+          "name": "items",
+          "type": "SelectItem[] | SelectItem[][]",
+          "required": false,
+          "default": null,
+          "description": "The options: values, or objects with `label`, `value`, `description`, `icon`, `disabled`, `type: 'label' | 'separator'`; or groups of them."
+        },
+        {
+          "name": "modelValue",
+          "type": "unknown",
+          "required": false,
+          "default": "undefined",
+          "description": "The chosen value, bound with `v-model`; an array with `multiple`."
+        },
+        {
+          "name": "defaultValue",
+          "type": "unknown",
+          "required": false,
+          "default": "undefined",
+          "description": "The value it starts with when `v-model` is not bound."
+        },
+        {
+          "name": "multiple",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Choose several: `v-model` is an array, and choosing toggles."
+        },
+        {
+          "name": "valueKey",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Read an object's value at this key; without it the object itself is the value."
+        },
+        {
+          "name": "labelKey",
+          "type": "string",
+          "required": false,
+          "default": "'label'",
+          "description": "Read an object's label at this key."
+        },
+        {
+          "name": "descriptionKey",
+          "type": "string",
+          "required": false,
+          "default": "'description'",
+          "description": "Read an object's description at this key."
+        },
+        {
+          "name": "by",
+          "type": "string | ((a: unknown, b: unknown) => boolean)",
+          "required": false,
+          "default": null,
+          "description": "Compare values by this key, or with this function; by default in depth."
+        },
+        {
+          "name": "filter",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "A search field above the list that filters it."
+        },
+        {
+          "name": "searchTerm",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "The filter's text, bound with `v-model:search-term`."
+        },
+        {
+          "name": "placeholder",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The filter's placeholder."
+        },
+        {
+          "name": "filterFields",
+          "type": "string[]",
+          "required": false,
+          "default": null,
+          "description": "Search these keys of each item; by default its label."
+        },
+        {
+          "name": "ignoreFilter",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Show the items as given while searching: the app filters them (async search)."
+        },
+        {
+          "name": "createItem",
+          "type": "boolean | 'always' | { position?: 'top' | 'bottom'; when?: 'empty' | 'always' }",
+          "required": false,
+          "default": null,
+          "description": "Offer the search as a new item (emits `create`): when nothing matches, or `'always'`; `{ position: 'top' }` puts it first."
+        },
+        {
+          "name": "loading",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Items are on their way: `aria-busy`, and a spinner in place of an empty list."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Nothing can be chosen, and it takes no focus."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": null,
+          "description": "`sm`, `md` or `lg`; a FieldGroup's or FormField's size applies when not set."
+        },
+        {
+          "name": "loop",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "The arrows wrap round at the ends."
+        },
+        {
+          "name": "virtualize",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "Draw only the rows in view; by default past 200 options."
+        },
+        {
+          "name": "selectedIcon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon marking chosen options, in place of the drawn check."
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The list's id; inside a FormField the field's id is used."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The form field name its value submits under; a FormField's name applies when not set."
+        },
+        {
+          "name": "required",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "A value is required (aria-required)."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:modelValue",
+          "payload": "[value: unknown]",
+          "description": "Chosen: the value, or the array of values with `multiple`."
+        },
+        {
+          "name": "update:searchTerm",
+          "payload": "[term: string]",
+          "description": "The filter's text changed."
+        },
+        {
+          "name": "create",
+          "payload": "[term: string]",
+          "description": "The create option was chosen, with the search as the new item's label."
+        },
+        {
+          "name": "highlight",
+          "payload": "[item: SelectItem | undefined]",
+          "description": "The active option changed: its item, or undefined when none is active."
+        }
+      ],
+      "slots": [
+        {
+          "name": "item",
+          "props": [
+            "item",
+            "index",
+            "selected"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "item-leading",
+          "props": [
+            "item",
+            "index"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "item-label",
+          "props": [
+            "item",
+            "index"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "item-trailing",
+          "props": [
+            "item",
+            "index",
+            "selected"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "create-item-label",
+          "props": [
+            "item"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "empty",
+          "props": [
+            "searchTerm"
+          ],
+          "dynamic": false
+        }
+      ],
+      "notes": "`items` are values (`'Apple'`) or objects (`{ label, value, description,\nicon, disabled }`), or groups of them (an array of arrays), drawn with\nseparators between; an object with `type: 'label'` is its group's heading\nand `type: 'separator'` a line. Without `value-key` an object is itself the\nvalue; `label-key` and `description-key` read other keys (dotted paths\nwork), and `by` compares values by a key or a function. Bind the choice with\n`v-model` (an array with `multiple`).\n\nIt follows the WAI-ARIA APG Listbox pattern. The list is one tab stop and\nkeeps focus; `aria-activedescendant` names the active option, drawn\nhighlighted. Inside a FormField the list is named by the label\n(`aria-labelledby`) and described by the description and error.\n\n**Keyboard.** ArrowDown and ArrowUp move (with `loop` they wrap), Home and\nEnd go to the ends, Page Down and Page Up move ten, typing jumps to the\noption whose label starts so; disabled options are skipped. Enter and Space\nchoose; with `multiple` they toggle. Focusing the list makes the chosen\noption active, else the first.\n\n**Filter.** With `filter` a search field above the list takes focus instead\n(`role=\"combobox\"`, controlling the list); typing filters by label (or\n`filter-fields`), ignoring case and accents, the closest matches first, and\nthe arrows and Enter work from the field. `v-model:search-term` binds the\nsearch; `ignore-filter` leaves the filtering to the app. `create-item` offers\nwhat was typed as a new option, emitting `create`. When nothing is (or\nmatches) the `empty` slot shows, by default \"No results\", in a status that\nassistive technology announces; `loading` shows a spinner there and sets\n`aria-busy`.\n\n**Long lists.** Past 200 options only the rows in view are drawn (each of a\nfixed height, from the size), over a spacer as tall as the list; options\ncarry `aria-setsize` and `aria-posinset`, and the active option is always\ndrawn, so `aria-activedescendant` never names a missing element.\n`virtualize` forces it either way.\n\nWith a `name` (or its FormField's) the value submits in hidden inputs, one\nper value. The slots `item`, `item-leading`, `item-label`, `item-trailing`\nand `create-item-label` replace parts of an option. Select, Combobox and\nCommandPalette draw their lists with it.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Listbox/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, Listbox } from '@weft/ui'\n\nconst plan = ref('team')\nconst plans = [\n  { label: 'Hobby', value: 'hobby', description: 'One project, community support' },\n  { label: 'Team', value: 'team', description: 'Unlimited projects, five seats' },\n  { label: 'Business', value: 'business', description: 'Single sign-on and audit logs' },\n  { label: 'Enterprise', value: 'enterprise', description: 'Talk to us', disabled: true },\n]\n</script>\n\n<template>\n  <FormField label=\"Plan\" name=\"plan\">\n    <Listbox v-model=\"plan\" :items=\"plans\" value-key=\"value\" />\n  </FormField>\n</template>\n"
+        },
+        {
+          "name": "filter-and-multiple",
+          "title": "Filter and multiple",
+          "file": "packages/ui/examples/Listbox/filter-and-multiple.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, Listbox, type SelectItems } from '@weft/ui'\n\nconst chosen = ref<string[]>(['Rust'])\n// Two groups, each under a heading.\nconst languages: SelectItems = [\n  [{ type: 'label', label: 'Systems' }, 'C', 'C++', 'Go', 'Rust', 'Zig'],\n  [{ type: 'label', label: 'Scripting' }, 'JavaScript', 'Lua', 'Python', 'Ruby'],\n]\n</script>\n\n<template>\n  <FormField label=\"Languages\" description=\"Pick as many as you use.\">\n    <Listbox v-model=\"chosen\" :items=\"languages\" multiple filter placeholder=\"Filter languages…\" />\n  </FormField>\n</template>\n"
         }
       ]
     },
@@ -2678,7 +3777,7 @@
           "dynamic": false
         }
       ],
-      "notes": "The default slot is the trigger, one element (a Button); a press on it\ntoggles the popover, and it carries `aria-haspopup=\"dialog\"`,\n`aria-expanded` and `aria-controls`. The `content` slot is what it shows,\nand gets `close()`. Bind `v-model:open` to open it from code; `anchor`\npositions it against another element or a point.\n\nThe content renders into `#weft-overlays` at the end of the body (created\nwhen first needed), only once mounted, so the server renders none of it. It\nis a `role=\"dialog\"` named by `title` (or an `aria-label`); attributes go to\nit.\n\n**Focus.** On open, focus moves to the first tabbable element inside, or to\nthe content itself (`auto-focus=\"false\"` keeps it where it is, as a combobox\ndoes). On pointer it is not modal: Tab can leave, and focus leaving closes it\n(unless it went to an overlay opened from inside). With `modal`, or on touch,\nfocus is trapped and the page does not scroll.\n\n**Closing.** Escape and a press outside close it (`dismissible=\"false\"`\nturns both off); a press on its trigger toggles it shut. Focus returns to\nthe trigger, except after a press outside, which put the user's attention\nelsewhere. On touch a press on the backdrop closes it and does return focus.\n\n**Hover mode.** `mode=\"hover\"` opens it too while the pointer is over the\ntrigger or the content (after `open-delay`, 100 ms) and closes it when the\npointer has left both (after `close-delay`, 200 ms), without moving focus;\na press still toggles it, and on touch it is pressed as ever. `arrow` draws\nan arrow pointing at the trigger. When it starts open (`default-open`) it\ndoes not take focus, so a page that hydrates keeps its own. Modal, the page\nbehind is inert. It fades out when it closes, unless motion is reduced.\n\n`placement` is a floating-ui placement (`bottom`, `top-start`, …); `start`\nand `end` follow the text direction.",
+      "notes": "The default slot is the trigger, one element (a Button); a press on it\ntoggles the popover, and it carries `aria-haspopup=\"dialog\"`,\n`aria-expanded` and `aria-controls`. The `content` slot is what it shows,\nand gets `close()`. Bind `v-model:open` to open it from code; `anchor`\npositions it against another element or a point. A press on an anchor\nelement is not a press outside, so the component that owns that element\n(a Select's button, a Combobox's field) decides what it does.\n\nThe content renders into `#weft-overlays` at the end of the body (created\nwhen first needed), only once mounted, so the server renders none of it. It\nis a `role=\"dialog\"` named by `title` (or an `aria-label`); attributes go to\nit.\n\n**Focus.** On open, focus moves to the first tabbable element inside, or to\nthe content itself (`auto-focus=\"false\"` keeps it where it is, as a combobox\ndoes). On pointer it is not modal: Tab can leave, and focus leaving closes it\n(unless it went to an overlay opened from inside). With `modal`, or on touch,\nfocus is trapped and the page does not scroll.\n\n**Closing.** Escape and a press outside close it (`dismissible=\"false\"`\nturns both off); a press on its trigger toggles it shut. Focus returns to\nthe trigger, except after a press outside, which put the user's attention\nelsewhere. On touch a press on the backdrop closes it and does return focus.\n\n**Hover mode.** `mode=\"hover\"` opens it too while the pointer is over the\ntrigger or the content (after `open-delay`, 100 ms) and closes it when the\npointer has left both (after `close-delay`, 200 ms), without moving focus;\na press still toggles it, and on touch it is pressed as ever. `arrow` draws\nan arrow pointing at the trigger. When it starts open (`default-open`) it\ndoes not take focus, so a page that hydrates keeps its own. Modal, the page\nbehind is inert. It fades out when it closes, unless motion is reduced.\n\n`placement` is a floating-ui placement (`bottom`, `top-start`, …); `start`\nand `end` follow the text direction.",
       "examples": [
         {
           "name": "basic",
@@ -2918,6 +4017,304 @@
           "title": "Basic",
           "file": "packages/ui/examples/Section/basic.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { Section } from '@weft/ui'\n</script>\n\n<template>\n  <Section title=\"Billing\" description=\"How and when you pay.\">\n    <template #actions><button type=\"button\">Edit</button></template>\n    <p>Visa ending 4242, renews on 1 December.</p>\n  </Section>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "Select",
+      "group": "selection",
+      "file": "packages/ui/src/selection/Select.vue",
+      "purpose": "A button showing the chosen value that opens a list to choose one, or several, from.",
+      "use": "For a choice from a known list in a form (a country, a status, a size), where the list is too long for radio buttons and nobody needs to type to find an option.",
+      "avoid": "When people search the list or type their own value, use Combobox; for two to five options always in view, RadioGroup; for actions, DropdownMenu.",
+      "adapts": {
+        "input": "On pointer the list floats under the button, at least as wide, focus staying on the button. On touch it is a modal bottom sheet (focus trapped, the page behind inert) with the field's label as its title and a search field at the top, which takes focus and filters; options are 48 px tall. The input can change while it is open; the active option and the choice stay, and focus moves to the button or the search field.",
+        "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
+        "width": "The button fills its container's width; the floating list stays within the room left, flipping above when there is none below; the sheet is the viewport's width."
+      },
+      "props": [
+        {
+          "name": "items",
+          "type": "SelectItem[] | SelectItem[][]",
+          "required": false,
+          "default": null,
+          "description": "The options: values, or objects with `label`, `value`, `description`, `icon`, `disabled`, `type: 'label' | 'separator'`; or groups of them."
+        },
+        {
+          "name": "modelValue",
+          "type": "unknown",
+          "required": false,
+          "default": "undefined",
+          "description": "The chosen value, bound with `v-model`; an array with `multiple`."
+        },
+        {
+          "name": "defaultValue",
+          "type": "unknown",
+          "required": false,
+          "default": "undefined",
+          "description": "The value it starts with when `v-model` is not bound."
+        },
+        {
+          "name": "multiple",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Choose several: `v-model` is an array, choosing toggles, and the list stays open."
+        },
+        {
+          "name": "valueKey",
+          "type": "string",
+          "required": false,
+          "default": "'value'",
+          "description": "Read an object's value at this key; an empty string makes the object itself the value."
+        },
+        {
+          "name": "labelKey",
+          "type": "string",
+          "required": false,
+          "default": "'label'",
+          "description": "Read an object's label at this key."
+        },
+        {
+          "name": "descriptionKey",
+          "type": "string",
+          "required": false,
+          "default": "'description'",
+          "description": "Read an object's description at this key."
+        },
+        {
+          "name": "by",
+          "type": "string | ((a: unknown, b: unknown) => boolean)",
+          "required": false,
+          "default": null,
+          "description": "Compare values by this key, or with this function; by default in depth."
+        },
+        {
+          "name": "placeholder",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Shown while nothing is chosen."
+        },
+        {
+          "name": "searchPlaceholder",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The search field's placeholder, in the touch sheet."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": null,
+          "description": "`sm`, `md` or `lg`; a FieldGroup's or FormField's size applies when not set. md is 44 px tall on touch."
+        },
+        {
+          "name": "icon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon before the value. The leading slot replaces it."
+        },
+        {
+          "name": "trailingIcon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon in place of the chevron."
+        },
+        {
+          "name": "selectedIcon",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A Lucide icon marking chosen options, in place of the drawn check."
+        },
+        {
+          "name": "loading",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Work in progress: a spinner in place of the chevron, and aria-busy."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "Cannot be opened or changed."
+        },
+        {
+          "name": "required",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "A value is required (aria-required)."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The form field name its value submits under; a FormField's name applies when not set."
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The button's id; inside a FormField the field's id is used, so its label points here."
+        },
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "Open or closed, bound with `v-model:open`."
+        },
+        {
+          "name": "defaultOpen",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "Whether it starts open when `v-model:open` is not bound."
+        },
+        {
+          "name": "placement",
+          "type": "Placement",
+          "required": false,
+          "default": "'bottom-start'",
+          "description": "Where the list floats on pointer (start and end follow the text direction)."
+        },
+        {
+          "name": "loop",
+          "type": "boolean",
+          "required": false,
+          "default": null,
+          "description": "The arrows wrap round at the ends."
+        },
+        {
+          "name": "virtualize",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "Draw only the rows in view; by default past 200 options."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:modelValue",
+          "payload": "[value: unknown]",
+          "description": "Chosen: the value, or the array of values with `multiple`."
+        },
+        {
+          "name": "update:open",
+          "payload": "[open: boolean]",
+          "description": "Opened or closed."
+        },
+        {
+          "name": "change",
+          "payload": "[value: unknown]",
+          "description": "The value changed by a choice."
+        },
+        {
+          "name": "blur",
+          "payload": "[event: FocusEvent]",
+          "description": "Focus left the button and its list."
+        },
+        {
+          "name": "focus",
+          "payload": "[event: FocusEvent]",
+          "description": "The button took focus."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [
+            "modelValue",
+            "item",
+            "open"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "leading",
+          "props": [
+            "modelValue",
+            "open"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "trailing",
+          "props": [
+            "open"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "item",
+          "props": [
+            "item",
+            "index",
+            "selected"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "item-leading",
+          "props": [
+            "item",
+            "index"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "item-label",
+          "props": [
+            "item",
+            "index"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "item-trailing",
+          "props": [
+            "item",
+            "index",
+            "selected"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "empty",
+          "props": [
+            "searchTerm"
+          ],
+          "dynamic": false
+        }
+      ],
+      "notes": "`items` are values or objects (`{ label, value, description, icon,\ndisabled }`), or groups of them, with `type: 'label'` headings and\n`type: 'separator'` lines, as in Listbox. An object's value is read at\n`value` (`value-key` names another key; `value-key=\"\"` makes the object\nitself the value). Bind the choice with `v-model` (an array with `multiple`,\nwhich shows the chosen labels joined by commas and keeps the list open),\nand the list with `v-model:open`.\n\nIt follows the WAI-ARIA APG Select-Only Combobox pattern: a `button` with\n`role=\"combobox\"`, `aria-haspopup=\"listbox\"`, `aria-expanded` and, while\nopen, `aria-controls` and `aria-activedescendant`. Inside a FormField the\nlabel is `for` the button and names the list; the description and error\ndescribe the button, and an error marks it `aria-invalid`.\n\n**Keyboard.** Closed: ArrowDown, ArrowUp, Enter and Space open the list on the\nchosen option (else the first), Home and End on the first and the last, and\ntyping opens it on the option whose label starts so. Open: the arrows,\nHome, End, Page Up and Page Down move, skipping disabled options; typing\njumps; Enter and Space choose and close (with `multiple` they toggle);\nAlt+ArrowUp chooses and closes; Tab chooses and moves on; Escape closes\nwithout choosing. Focus stays on the button throughout (on touch, on the\nsheet's search field, and back on the button when it closes).\n\nA press on the button toggles the list; a press outside closes it, and so\ndoes focus leaving. `disabled` blocks the press and every key (the button is\nnatively disabled); `loading` draws a spinner in place of the chevron and\nsets `aria-busy`. With a `name` (or its FormField's) the value submits in\nhidden inputs. Past 200 options only the rows in view are drawn, the active\none always. The `default` slot draws the value on the button, `leading`\nand `trailing` its ends, and `item`, `item-leading`, `item-label`,\n`item-trailing` and `empty` the list's parts.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Select/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, Select } from '@weft/ui'\n\nconst status = ref('open')\nconst statuses = [\n  { label: 'Open', value: 'open' },\n  { label: 'In progress', value: 'doing' },\n  { label: 'Blocked', value: 'blocked', description: 'Waiting on someone else' },\n  { label: 'Done', value: 'done' },\n]\n</script>\n\n<template>\n  <!-- On touch the list opens as a bottom sheet with a search field at the top. -->\n  <FormField label=\"Status\" name=\"status\">\n    <Select v-model=\"status\" :items=\"statuses\" placeholder=\"Choose a status\" />\n  </FormField>\n</template>\n"
+        },
+        {
+          "name": "long-list",
+          "title": "Long list",
+          "file": "packages/ui/examples/Select/long-list.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, Select } from '@weft/ui'\n\n// 10,000 options: only the rows in view are drawn, and the keyboard still\n// reaches every one (End goes to the last, typing jumps).\nconst row = ref(5_000)\nconst rows = Array.from({ length: 10_000 }, (_, i) => ({ label: `Row ${i + 1}`, value: i }))\n</script>\n\n<template>\n  <FormField label=\"Row\">\n    <Select v-model=\"row\" :items=\"rows\" />\n  </FormField>\n</template>\n"
+        },
+        {
+          "name": "multiple-and-groups",
+          "title": "Multiple and groups",
+          "file": "packages/ui/examples/Select/multiple-and-groups.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { FormField, Select, type SelectItems } from '@weft/ui'\n\nconst days = ref<string[]>(['mon', 'wed'])\nconst week: SelectItems = [\n  [\n    { type: 'label', label: 'Weekdays' },\n    { label: 'Monday', value: 'mon' },\n    { label: 'Tuesday', value: 'tue' },\n    { label: 'Wednesday', value: 'wed' },\n    { label: 'Thursday', value: 'thu' },\n    { label: 'Friday', value: 'fri' },\n  ],\n  [\n    { type: 'label', label: 'Weekend' },\n    { label: 'Saturday', value: 'sat' },\n    { label: 'Sunday', value: 'sun' },\n  ],\n]\n</script>\n\n<template>\n  <FormField label=\"Office days\" hint=\"Several\">\n    <Select v-model=\"days\" :items=\"week\" multiple placeholder=\"No days\" />\n  </FormField>\n</template>\n"
         }
       ]
     },

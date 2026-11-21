@@ -40,6 +40,7 @@ export {
   useRovingFocus,
   useScrollLock,
   useTypeahead,
+  useVirtualList,
   type DismissOptions,
   type DismissReason,
   type Floating,
@@ -55,11 +56,13 @@ export {
   type Swipe,
   type SwipeDirection,
   type Typeahead,
+  type VirtualList,
+  type VirtualListOptions,
 } from './headless/index.ts'
 export { default as Input } from './forms/Input.vue'
 export { default as FormField } from './forms/FormField.vue'
 export { validateField, validateFields, type FieldRule, type FieldSchema } from './forms/schema.ts'
-export { useControlAttrs, useField, type ControlProps, type Field, type FieldContext } from './forms/field.ts'
+export { shareField, useControlAttrs, useField, type ControlProps, type Field, type FieldContext } from './forms/field.ts'
 export { default as Checkbox } from './forms/Checkbox.vue'
 export { default as CheckboxGroup } from './forms/CheckboxGroup.vue'
 export { default as RadioGroup } from './forms/RadioGroup.vue'
@@ -86,3 +89,11 @@ export { default as DropdownMenu } from './overlays/DropdownMenu.vue'
 export { default as ContextMenu } from './overlays/ContextMenu.vue'
 export type { MenuItem } from './overlays/menu.ts'
 export { OVERLAY_ROOT_ID, overlayRoot, type Anchor } from './overlays/overlay.ts'
+export { default as Listbox } from './selection/Listbox.vue'
+export { default as Select } from './selection/Select.vue'
+export { default as Combobox } from './selection/Combobox.vue'
+export { default as InputTags } from './selection/InputTags.vue'
+export { default as CommandPalette } from './selection/CommandPalette.vue'
+export type { By, SelectItem, SelectItems, SelectOption } from './selection/items.ts'
+export type { CreateItem } from './selection/listbox.ts'
+export type { CommandGroup, CommandItem } from './selection/command.ts'

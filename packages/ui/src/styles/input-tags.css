@@ -1,0 +1,15 @@
+/* InputTags: an Input box (input.css) that grows to hold its tags (tag.css)
+   before the text, wrapping them, at least as tall as an Input. */
+.weft-input.weft-input-tags {
+  flex-wrap: wrap;
+  block-size: auto;
+  min-block-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
+  padding-block: 3px;
+  row-gap: 4px;
+}
+.weft-input.weft-input-tags[data-size="sm"] { min-block-size: var(--weft-control-sm, 28px); }
+.weft-input.weft-input-tags[data-size="lg"] { min-block-size: var(--weft-control-lg, 44px); }
+.weft-input-tags > .weft-input__leading,
+.weft-input-tags__list { display: contents; }
+.weft-input-tags__start:empty { display: none; }
+.weft-input-tags .weft-input__field { flex: 1 1 4rem; block-size: auto; min-block-size: 24px; }

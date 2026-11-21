@@ -1,0 +1,45 @@
+/* Tag: a chosen value drawn as a small chip inside a field, with a × that
+   removes it (Combobox with multiple, InputTags). The × is drawn small, its
+   hit area at least --weft-hit-min. A tag with focus (InputTags moves focus
+   onto them with the arrows) shows the focus ring. */
+.weft-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-inline-size: 100%;
+  min-block-size: 22px;
+  padding-inline: var(--weft-space-2, 8px) 2px;
+  border-radius: calc(var(--weft-radius-control, 8px) - 3px);
+  background: color-mix(in srgb, var(--weft-color-text, CanvasText) 9%, transparent);
+  color: var(--weft-color-text, CanvasText);
+  font-size: 0.875em;
+  line-height: 1.4;
+  outline: none;
+}
+.weft-tag[data-size="sm"] { min-block-size: 18px; font-size: 0.8em; }
+.weft-tag:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: 1px; }
+.weft-tag__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weft-tag__remove {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  inline-size: 18px;
+  block-size: 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--weft-color-text-muted, GrayText);
+  cursor: pointer;
+}
+.weft-tag__remove::before {
+  content: '';
+  position: absolute;
+  inset: 50% auto auto 50%;
+  inline-size: max(100%, var(--weft-hit-min, 24px));
+  block-size: max(100%, var(--weft-hit-min, 24px));
+  transform: translate(-50%, -50%);
+}
+.weft-tag__remove:hover { color: var(--weft-color-text, CanvasText); }
+.weft-tag__remove svg { inline-size: 12px; block-size: 12px; }

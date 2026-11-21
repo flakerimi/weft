@@ -1,0 +1,41 @@
+/* Select: the button is drawn as an Input box (input.css: height, border,
+   focus ring, invalid and disabled), holding the value or the placeholder
+   and a chevron that turns while open. Its list opens in a Popover: floating
+   (data-form="floating") it is at least as wide as the button, with a little
+   padding; as a touch sheet it holds the search field above the list. */
+.weft-select { display: contents; }
+.weft-input.weft-select__trigger {
+  margin: 0;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.weft-input.weft-select__trigger:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: -1px; }
+.weft-input.weft-select__trigger[data-disabled] { cursor: not-allowed; }
+.weft-select__value {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.weft-select__value[data-placeholder] { color: var(--weft-color-text-muted, GrayText); }
+.weft-select__chevron,
+.weft-select__glyph { inline-size: 16px; block-size: 16px; flex: none; }
+.weft-select__chevron { transition: rotate var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease); }
+.weft-select__trigger[data-open] .weft-select__chevron { rotate: 180deg; }
+
+.weft-popover.weft-select__popup[data-form="floating"] {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: max(8rem, var(--weft-floating-reference-width, 0px));
+  max-block-size: min(20rem, var(--weft-floating-available-height, 70vh));
+  padding: var(--weft-space-1, 4px);
+  overflow: hidden;
+}
+.weft-popover.weft-select__popup[data-form="sheet"] { padding: var(--weft-space-3, 12px); gap: var(--weft-space-2, 8px); overflow: hidden; }
+.weft-select__popup .weft-listbox { flex: 1; min-block-size: 0; }
+.weft-select__popup .weft-listbox__list { max-block-size: none; }
+.weft-select__search { flex: none; }
+.weft-select__glyph { color: var(--weft-color-text-muted, GrayText); }

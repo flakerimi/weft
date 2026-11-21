@@ -12,7 +12,9 @@ The default slot is the trigger, one element (a Button); a press on it
 toggles the popover, and it carries `aria-haspopup="dialog"`,
 `aria-expanded` and `aria-controls`. The `content` slot is what it shows,
 and gets `close()`. Bind `v-model:open` to open it from code; `anchor`
-positions it against another element or a point.
+positions it against another element or a point. A press on an anchor
+element is not a press outside, so the component that owns that element
+(a Select's button, a Combobox's field) decides what it does.
 
 The content renders into `#weft-overlays` at the end of the body (created
 when first needed), only once mounted, so the server renders none of it. It

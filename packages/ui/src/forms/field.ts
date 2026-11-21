@@ -77,6 +77,18 @@ export function useFormState(): { disabled: () => boolean; busy: () => boolean }
  */
 export const hideField = () => provide(fieldKey, null as unknown as FieldContext)
 
+/**
+ * For a control built around an Input whose text is not its value (a
+ * Combobox's search, the draft of an InputTags), during setup: the Input
+ * takes the field's id, description and error, as the control's focusable
+ * element, but no name (the control submits its value itself) and reports
+ * no blur or change (the control reports them, when its value changes and
+ * when focus leaves the whole control).
+ */
+export function shareField(field: FieldContext | null): void {
+  if (field) provideField({ ...field, name: () => undefined, blur() {}, input() {}, namedByLabel() {} })
+}
+
 /** What a control's own props say, which win over what its field and group say. */
 export interface ControlProps {
   id?: string

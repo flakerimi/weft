@@ -21,7 +21,7 @@ import { useFocusTrap } from '../headless/useFocusTrap.ts'
 import { useId } from '../headless/useId.ts'
 import { useInert } from '../headless/useInert.ts'
 import { useScrollLock } from '../headless/useScrollLock.ts'
-import { isTouch, overlayRoot, useMounted, useOverlayContext, usePresence, useTrigger, type Anchor } from './overlay.ts'
+import { elementOf, isTouch, overlayRoot, useMounted, useOverlayContext, usePresence, useTrigger, type Anchor } from './overlay.ts'
 import '../styles/base.css'
 import '../styles/overlay.css'
 import '../styles/sheet.css'
@@ -128,7 +128,8 @@ useDismiss(live, {
   onDismiss: close,
   escape: () => props.dismissible,
   outside: () => props.dismissible,
-  ignore: () => [wrap.value, backdrop.value],
+  // A press on the element it is anchored to is not outside it, as for the trigger.
+  ignore: () => [wrap.value, backdrop.value, elementOf(props.anchor)],
   returnTo: () => trigger.el.value,
 })
 // A trap that ends because the popover became a floating one (touch to
