@@ -41,9 +41,9 @@
   overflow-x: auto;
   min-block-size: 8rem;
   padding: 32px 24px;
-  background: var(--weft-color-bg);
+  background: var(--weft-color-surface-raised);
   border: 1px solid var(--weft-color-border);
-  border-radius: 12px;
+  border-radius: 16px;
 }
 .gallery-preview > *, .gallery-preview > weft-island > * { max-inline-size: 100%; }
 

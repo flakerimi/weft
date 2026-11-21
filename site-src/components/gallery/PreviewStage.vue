@@ -3,7 +3,9 @@
 // a WeftProvider, under a toolbar that sets the input, surface, theme, scheme
 // and width the example is shown with. It is an island (the gallery plugin's
 // Stage_<Name>.vue wraps it round the example), and keeps its view in the
-// URL query (stage.ts), so a link reproduces it.
+// URL query (stage.ts), so a link reproduces it. The toolbar is one row:
+// input, surface and scheme, then a button whose Popover holds the theme
+// and the width, its label saying which are set.
 //
 // The server draws the default view: the example as an app shows it, filling
 // the column, in the page's scheme. Without JavaScript that stays, and the
@@ -11,7 +13,7 @@
 // (its input, its scheme) and the toolbar comes alive. Widths resize a
 // container, not an iframe, so the example's useWidth sees them.
 import { computed, onMounted, ref } from 'vue'
-import { ToggleGroup, WeftProvider, detectInput, type ToggleGroupItem } from '@weft/ui'
+import { Button, Popover, ToggleGroup, WeftProvider, detectInput, type ToggleGroupItem } from '@weft/ui'
 import { formatView, parseView, DEFAULT_VIEW, type StageView } from './stage.ts'
 import '/.gallery/stage-themes.css'
 import '../../styles/stage.css'
@@ -59,6 +61,11 @@ const input = computed(() => view.value.input ?? deviceInput.value)
 const scheme = computed(() => view.value.scheme ?? pageScheme.value)
 const width = computed(() => view.value.width ?? 'fit')
 const canvasStyle = computed(() => (view.value.width ? { inlineSize: `${view.value.width}px` } : undefined))
+/** The More button's label: the theme and width when either is set, else what it holds. */
+const more = computed(() => {
+  const set = [view.value.theme === 'neutral' ? null : themes.find((t) => t.value === view.value.theme)?.label, view.value.width ? `${view.value.width} px` : null].filter(Boolean)
+  return set.length ? set.join(' · ') : 'Theme and width'
+})
 </script>
 
 <template>
@@ -73,17 +80,24 @@ const canvasStyle = computed(() => (view.value.width ? { inlineSize: `${view.val
         <ToggleGroup :items="surfaces" :model-value="view.surface" size="sm" attached aria-label="Surface" @update:model-value="set('surface', $event)" />
       </div>
       <div class="gallery-toolbar__axis">
-        <span class="gallery-toolbar__name" aria-hidden="true">Theme</span>
-        <ToggleGroup :items="themes" :model-value="view.theme" size="sm" attached aria-label="Theme" @update:model-value="set('theme', $event)" />
-      </div>
-      <div class="gallery-toolbar__axis">
         <span class="gallery-toolbar__name" aria-hidden="true">Scheme</span>
         <ToggleGroup :items="schemes" :model-value="scheme" size="sm" attached aria-label="Scheme" @update:model-value="set('scheme', $event)" />
       </div>
-      <div class="gallery-toolbar__axis">
-        <span class="gallery-toolbar__name" aria-hidden="true">Width</span>
-        <ToggleGroup :items="widths" :model-value="width" size="sm" attached aria-label="Width" @update:model-value="set('width', $event)" />
-      </div>
+      <Popover title="Theme and width" placement="bottom-end">
+        <Button class="gallery-toolbar__more" size="sm" variant="outline" tone="neutral" :label="more" trailing-icon="chevron-down" />
+        <template #content>
+          <div class="gallery-toolbar__more-axes">
+            <div class="gallery-toolbar__axis">
+              <span class="gallery-toolbar__name" aria-hidden="true">Theme</span>
+              <ToggleGroup :items="themes" :model-value="view.theme" size="sm" attached aria-label="Theme" @update:model-value="set('theme', $event)" />
+            </div>
+            <div class="gallery-toolbar__axis">
+              <span class="gallery-toolbar__name" aria-hidden="true">Width</span>
+              <ToggleGroup :items="widths" :model-value="width" size="sm" attached aria-label="Width" @update:model-value="set('width', $event)" />
+            </div>
+          </div>
+        </template>
+      </Popover>
     </div>
     <div class="gallery-stage__viewport">
       <!-- The example's links name pages of an app that is not here: not prefetched. -->

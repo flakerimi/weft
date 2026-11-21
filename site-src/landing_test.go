@@ -16,7 +16,7 @@ import (
 // The landing page, /, as the build made it from pages/index.vue and the
 // approved design's second pass (docs/design/site-2026-11-21-v2/): the night
 // hero with one app drawn twice by the real components (a desktop and a
-// phone), the bento of screens, a taste of the gallery, the adaptive demo,
+// phone), the bento of screens, the adaptive demo,
 // the benchmark bars from bench/results/, and the agents section from the
 // catalogue.
 

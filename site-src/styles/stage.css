@@ -2,18 +2,20 @@
    box the example is drawn in with the theme, scheme and width the toolbar
    picks. The canvas carries the stage's theme (stage-themes.css, made by the
    gallery plugin, scopes neutral and lisa to it), so it sets the type and
-   ground the page's <html> would. */
+   ground the page's <html> would. It is as tall as the example, and at
+   least 240 px: no large empty box. */
 .gallery-stage {
   border: 1px solid var(--weft-color-border);
   border-radius: 16px;
-  background: var(--weft-color-surface);
+  background: var(--weft-color-surface-raised);
   overflow: hidden;
 }
 .gallery-toolbar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px 20px;
-  padding: 10px 14px;
+  padding: 8px 10px 8px 14px;
   border-block-end: 1px solid var(--weft-color-border);
   transition: opacity var(--weft-duration-control) var(--weft-ease-standard);
 }
@@ -21,14 +23,19 @@
 .gallery-toolbar:not([data-ready]) { opacity: 0.5; }
 .gallery-toolbar__axis { display: flex; align-items: center; gap: 8px; }
 .gallery-toolbar__name { font-size: 0.8125rem; color: var(--weft-color-text-muted); }
+.gallery-toolbar__more { margin-inline-start: auto; }
+.gallery-toolbar__more-axes { display: grid; gap: 12px; justify-items: end; }
 
-.gallery-stage__viewport { overflow-x: auto; padding: 20px; }
+.gallery-stage__viewport { overflow-x: auto; }
 .gallery-canvas {
   box-sizing: border-box;
+  display: grid;
+  align-content: center;
   max-inline-size: none;
   min-inline-size: 240px;
+  min-block-size: 240px;
   margin-inline: auto;
-  padding: 40px 24px;
+  padding: 36px 24px;
   /* Drag its corner to try any width in between; useWidth follows. */
   resize: horizontal;
   overflow: auto;
@@ -38,13 +45,11 @@
   line-height: 1.5;
   color: var(--weft-color-text);
   background: var(--weft-color-bg);
-  border: 1px solid var(--weft-color-border);
-  border-radius: 12px;
 }
-.gallery-example {
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  min-block-size: 10rem;
-}
+/* At a device's width it is a framed box on the stage. */
+.gallery-canvas[data-width] { margin-block: 20px; border: 1px solid var(--weft-color-border); border-radius: 12px; }
+.gallery-example { display: grid; justify-items: center; }
 .gallery-example > * { max-inline-size: 100%; }
+/* A table takes the stage's width, as it takes a page's: centred, it would
+   shrink to its content, measure narrow and draw its cards at every width. */
+.gallery-example > .weft-table { justify-self: stretch; }
