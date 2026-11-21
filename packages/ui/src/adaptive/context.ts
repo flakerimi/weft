@@ -1,4 +1,4 @@
-import { computed, hasInjectionContext, inject, onMounted, provide, readonly, ref, shallowRef, type InjectionKey, type Ref } from 'vue'
+import { computed, getCurrentScope, hasInjectionContext, inject, onMounted, provide, readonly, ref, shallowRef, type InjectionKey, type Ref } from 'vue'
 import { sharedInput, type Input, type Surface } from './detect.ts'
 
 export interface WeftContext {
@@ -22,12 +22,19 @@ const noLocale = readonly(ref<string | undefined>(undefined))
  * pointer form, so a phone hydrates that same markup and switches once
  * mounted. The context is provided on, so a part created later (a dialog's
  * body, a branch shown on click) reads the detected input at once.
+ *
+ * Outside a component (a router guard, app code in `app.runWithContext`) there
+ * is nothing to hydrate, so it returns the live detection. A component's setup
+ * always runs in an effect scope; plain `runWithContext` code does not. Code in
+ * another effect scope that is not a component (a Pinia setup store) cannot be
+ * told apart from a component in Vue 3.6, so it should read `detectInput()`
+ * instead of calling `useWeft()`.
  */
 export function useWeft(): WeftContext {
   const given = inject(weftKey, null)
   if (given) return given
   // Outside a component's setup there is nothing to hydrate: the detection as it is.
-  if (!hasInjectionContext()) return { input: sharedInput(), surface: appSurface, locale: noLocale }
+  if (!hasInjectionContext() || !getCurrentScope()) return { input: sharedInput(), surface: appSurface, locale: noLocale }
   const mounted = shallowRef(false)
   onMounted(() => (mounted.value = true))
   const detected = sharedInput()
