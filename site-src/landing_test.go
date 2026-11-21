@@ -331,7 +331,7 @@ func TestLandingBudgets(t *testing.T) {
 		}
 		later := map[string]bool{}
 		staticImports(t, d, runtime, later)
-		for _, key := range landingIslandChunks(t, d, runtime, p.Islands) {
+		for _, key := range islandChunks(t, d, runtime, p.Islands) {
 			later[key] = true
 		}
 		// What first view already fetched is not fetched again.
@@ -344,7 +344,7 @@ func TestLandingBudgets(t *testing.T) {
 			}
 		}
 		copyChunks := 0
-		for _, key := range landingIslandChunks(t, d, runtime, []string{"CopyCommand"}) {
+		for _, key := range islandChunks(t, d, runtime, []string{"CopyCommand"}) {
 			copyChunks += brotliSize(t, d, m, key)
 		}
 		t.Logf("landing, brotli: first view %d B; then the runtime and islands %d B (copy button %d B, runtime %d B); total %d B",
@@ -380,43 +380,4 @@ func TestLandingBudgets(t *testing.T) {
 		return
 	}
 	t.Fatal("routes.json has no page at /")
-}
-
-// landingIslandChunks is the islands' chunks the runtime registers, and the
-// chunks they import, the loader and the runtime aside: a site with several
-// runtimes builds an island once for each, and the page loads only its
-// runtime's.
-func landingIslandChunks(t *testing.T, d fs.FS, runtime string, islands []string) []string {
-	t.Helper()
-	b, err := fs.ReadFile(d, strings.TrimPrefix(runtime, "/"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	seen := map[string]bool{}
-	var walk func(key string)
-	walk = func(key string) {
-		if seen[key] || strings.HasPrefix(key, "/assets/client-") || strings.HasPrefix(key, "/assets/boot-") {
-			return
-		}
-		seen[key] = true
-		c, err := fs.ReadFile(d, strings.TrimPrefix(key, "/"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, imp := range chunkImport.FindAllStringSubmatch(string(c), -1) {
-			walk("/assets/" + imp[1])
-		}
-	}
-	for _, id := range islands {
-		chunk := regexp.MustCompile(`\./(` + regexp.QuoteMeta(id) + `-[\w-]+\.js)`).FindStringSubmatch(string(b))
-		if chunk == nil {
-			t.Fatalf("the runtime %s registers no chunk for the island %s", runtime, id)
-		}
-		walk("/assets/" + chunk[1])
-	}
-	var out []string
-	for key := range seen {
-		out = append(out, key)
-	}
-	return out
 }

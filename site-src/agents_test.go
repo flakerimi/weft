@@ -128,7 +128,7 @@ func TestSkillPages(t *testing.T) {
 		}
 	}
 	size := brotliSize(t, d, m, "/pages/skills/index.html")
-	for _, chunk := range islandChunks(t, d, m, islandsOf(t, r, "/skills")) {
+	for _, chunk := range islandChunks(t, d, pageRuntime(t, d, index), islandsOf(t, r, "/skills")) {
 		size += brotliSize(t, d, m, chunk)
 	}
 	t.Logf("/skills: %d B brotli", size)

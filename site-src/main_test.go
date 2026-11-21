@@ -82,8 +82,8 @@ var (
 	// runtime (client-*.js: Vue, the registry, the hydration) the script
 	// names when the first island is due.
 	runtimeName = regexp.MustCompile(`<script type="module" src="/assets/boot-[\w-]+\.js" data-weft-runtime="(client-[\w-]+\.js)">`)
-	hintURL       = regexp.MustCompile(`^<([^>]+)>; rel=(modulepreload|preload; as=style)`)
-	loadIsland    = regexp.MustCompile(`<weft-island\b[^>]*>`)
+	hintURL     = regexp.MustCompile(`^<([^>]+)>; rel=(modulepreload|preload; as=style)`)
+	loadIsland  = regexp.MustCompile(`<weft-island\b[^>]*>`)
 )
 
 // pageRuntime is the runtime the page's loader imports, or "" for a page with no loader.
@@ -533,10 +533,19 @@ func contentDocs(t *testing.T) []doc {
 var chunkImport = regexp.MustCompile(`(?:from|import)\s*"\./([^"]+\.js)"`)
 
 // islandChunks are the scripts a page loads for its islands, the shared
-// loader (boot-*.js) and runtime (client-*.js) aside: each island's chunk,
-// /assets/<id>-<hash>.js, and the chunks it imports.
-func islandChunks(t *testing.T, d fs.FS, m builtFiles, islands []string) []string {
+// loader (boot-*.js) and the runtime (client-*.js) aside: each island's
+// chunk as the page's runtime registers it, and the chunks it imports. A
+// site with several runtimes builds an island once for each, and the page
+// loads only its runtime's.
+func islandChunks(t *testing.T, d fs.FS, runtime string, islands []string) []string {
 	t.Helper()
+	if len(islands) == 0 {
+		return nil
+	}
+	b, err := fs.ReadFile(d, strings.TrimPrefix(runtime, "/"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	seen := map[string]bool{}
 	var walk func(key string)
 	walk = func(key string) {
@@ -544,25 +553,20 @@ func islandChunks(t *testing.T, d fs.FS, m builtFiles, islands []string) []strin
 			return
 		}
 		seen[key] = true
-		b, err := fs.ReadFile(d, strings.TrimPrefix(key, "/"))
+		c, err := fs.ReadFile(d, strings.TrimPrefix(key, "/"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, imp := range chunkImport.FindAllStringSubmatch(string(b), -1) {
+		for _, imp := range chunkImport.FindAllStringSubmatch(string(c), -1) {
 			walk("/assets/" + imp[1])
 		}
 	}
 	for _, id := range islands {
-		found := false
-		for key := range m.Files {
-			if strings.HasPrefix(key, "/assets/"+id+"-") && strings.HasSuffix(key, ".js") {
-				walk(key)
-				found = true
-			}
+		chunk := regexp.MustCompile(`\./(` + regexp.QuoteMeta(id) + `-[\w-]+\.js)`).FindStringSubmatch(string(b))
+		if chunk == nil {
+			t.Fatalf("the runtime %s registers no chunk for the island %s", runtime, id)
 		}
-		if !found {
-			t.Fatalf("the build has no chunk for the island %s", id)
-		}
+		walk("/assets/" + chunk[1])
 	}
 	var out []string
 	for key := range seen {
@@ -600,7 +604,7 @@ func TestDocsPageBudgets(t *testing.T) {
 		}
 		html := string(b)
 		size := firstView(t, d, m, path, file, html)
-		for _, chunk := range islandChunks(t, d, m, islands[path]) {
+		for _, chunk := range islandChunks(t, d, pageRuntime(t, d, html), islands[path]) {
 			size += brotliSize(t, d, m, chunk)
 		}
 		t.Logf("%s: %d B brotli", path, size)
@@ -753,7 +757,7 @@ func TestWordmarkIsTheOwners(t *testing.T) {
 // so light, dark and data-weft-scheme follow the theme.
 func TestSiteStylesUseTokens(t *testing.T) {
 	colour := regexp.MustCompile(`#[0-9A-Fa-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|lab)\(`)
-	for _, name := range []string{"styles/site.css", "styles/shell.css", "styles/docs.css", "styles/gallery.css", "styles/gallery-index.css", "styles/stage.css", "styles/landing.css", "styles/not-found.css", "components/CopyCode.vue", "components/landing/AdaptiveDemo.vue"} {
+	for _, name := range []string{"styles/site.css", "styles/shell.css", "styles/docs.css", "styles/gallery.css", "styles/gallery-index.css", "styles/stage.css", "styles/landing.css", "styles/not-found.css", "components/CopyCommand.vue", "components/landing/AdaptiveDemo.vue"} {
 		b, err := os.ReadFile(name)
 		if err != nil {
 			t.Fatal(err)

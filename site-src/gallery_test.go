@@ -258,7 +258,7 @@ func TestComponentPages(t *testing.T) {
 }
 
 // The copy button's rule, as the build minifies it (the / escaped).
-var copyHidden = regexp.MustCompile(`weft-island:has\(>script\[type=application\\/json\]\)>\.copy-code\{visibility:hidden\}`)
+var copyHidden = regexp.MustCompile(`weft-island:has\(>script\[type=application\\/json\]\) \.copy-button\{visibility:hidden\}`)
 
 // Without JavaScript the gallery reads: every example is drawn by the
 // server and shown, the controls are inert (the stage's toolbar, the
@@ -288,7 +288,7 @@ func TestGalleryWithoutJavaScript(t *testing.T) {
 			}
 		}
 		// Each copy button is hidden until its island takes the props script out.
-		if n := strings.Count(html, `data-id="CopyCode"`); n != len(c.Examples) {
+		if n := strings.Count(html, `data-id="CopyCommand"`); n != len(c.Examples) {
 			t.Errorf("%s: %d copy buttons for %d examples", c.Name, n, len(c.Examples))
 		}
 		if !copyHidden.MatchString(html) {
@@ -333,7 +333,7 @@ func TestGalleryBudgets(t *testing.T) {
 		case p.Path == "/components":
 			size := static(p.Path, html, p.HTML)
 			limit := 14*1024 + 300*len(entries)
-			t.Logf("/components: first view %d B brotli (limit %d B); island chunks %d B", size, limit, chunkBytes(t, d, m, p.Islands))
+			t.Logf("/components: first view %d B brotli (limit %d B); island chunks %d B", size, limit, chunkBytes(t, d, m, html, p.Islands))
 			if size > limit {
 				t.Errorf("/components's first view is %d B brotli, over %d B", size, limit)
 			}
@@ -360,11 +360,11 @@ func TestGalleryBudgets(t *testing.T) {
 	}
 }
 
-// chunkBytes is the brotli bytes of the islands' chunks and the chunks they import, the runtime aside.
-func chunkBytes(t *testing.T, d fs.FS, m builtFiles, islands []string) int {
+// chunkBytes is the brotli bytes of the islands' chunks, as the page's runtime registers them, and the chunks they import, the runtime aside.
+func chunkBytes(t *testing.T, d fs.FS, m builtFiles, html string, islands []string) int {
 	t.Helper()
 	n := 0
-	for _, c := range islandChunks(t, d, m, islands) {
+	for _, c := range islandChunks(t, d, pageRuntime(t, d, html), islands) {
 		n += brotliSize(t, d, m, c)
 	}
 	return n

@@ -97,7 +97,7 @@
 .landing-after { margin: 14px 0 0; font-size: 15px; color: var(--weft-color-text-muted); }
 .landing-after code { font-size: 14px; color: var(--weft-color-text); }
 
-/* The install command: CopyCommand, in the design's dark bar with a saffron button. */
+/* The install command: CopyCommand, in the design's dark bar with its saffron (warning) button. */
 .landing-install { max-inline-size: 620px; color: var(--weft-color-text); }
 .landing-install .copy-command {
   align-items: stretch;
@@ -116,16 +116,18 @@
   overflow-x: auto;
 }
 .landing-install .copy-command__text::before { content: "$ "; font-weight: 600; color: var(--site-saffron); }
-.landing-install .copy-command__button {
-  padding: 0 22px;
+/* Its Button, drawn in the warning tone (saffron) and as tall as the bar. */
+.landing-install .copy-command .copy-button {
+  --weft-tone: var(--weft-color-warning);
+  --weft-tone-hover: var(--weft-color-warning-hover);
+  --weft-tone-active: var(--weft-color-warning-active);
+  --weft-tone-fg: var(--weft-color-warning-fg);
+  block-size: auto;
+  padding-inline: 22px;
   font-size: 16px;
-  color: var(--weft-color-warning-fg);
-  background: var(--weft-color-warning);
+  border: 0;
   border-radius: 0;
 }
-.landing-install .copy-command__button:hover { filter: none; background: var(--weft-color-warning-hover); }
-/* The island runtime takes the props script out as the island starts: until then, and without JavaScript, the button is not offered. */
-.landing-install weft-island:has(> script[type="application/json"]) .copy-command__button { visibility: hidden; }
 
 /* A band: it starts where a weft thread crosses the warp, edge to edge. */
 .landing-band { padding-block: 96px 40px; }

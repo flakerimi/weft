@@ -336,7 +336,7 @@ func TestGalleryExampleHeadingsKeepTheirOwnLook(t *testing.T) {
 		b.open(srv.URL + path)
 		var got struct {
 			Own, Examples int
-			Ruled          []string
+			Ruled         []string
 		}
 		b.eval(`(() => {
 			const ruled = (h) => getComputedStyle(h).borderTopStyle !== 'none' && parseFloat(getComputedStyle(h).borderTopWidth) > 0
@@ -444,5 +444,58 @@ func TestOverlayLinksFromAnExampleAreNotPrefetched(t *testing.T) {
 	settle()
 	if got("/settings") {
 		t.Errorf("hovering the Settings link in the stage's Sheet prefetched /settings, a page of the example's app that is not here")
+	}
+}
+
+// click presses and releases the mouse on the middle of the first element
+// matching selector, as a person does: a user activation, which the
+// clipboard needs.
+func (b *browser) click(selector string) {
+	b.t.Helper()
+	var at struct{ X, Y float64 }
+	b.eval(`(() => {
+		const e = document.querySelector(`+jsString(selector)+`)
+		e.scrollIntoView({ block: 'center' })
+		const r = e.getBoundingClientRect()
+		return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+	})()`, &at)
+	for _, kind := range []string{"mousePressed", "mouseReleased"} {
+		b.call(b.session, "Input.dispatchMouseEvent", map[string]any{"type": kind, "x": at.X, "y": at.Y, "button": "left", "clickCount": 1})
+	}
+}
+
+// The site's copy button is Weft's Button, one island for both its uses: a
+// command it shows (the docs, the skills, the landing page) and a code block
+// it names by id (the gallery). Pressed, it puts that text on the clipboard
+// and says so.
+func TestCopyButtonsCopy(t *testing.T) {
+	dist(t)
+	b := startBrowser(t)
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
+	defer srv.Close()
+	b.call("", "Browser.grantPermissions", map[string]any{"origin": srv.URL, "permissions": []string{"clipboardReadWrite", "clipboardSanitizedWrite"}})
+	b.doing, b.deadline = "emulating 1280 px", time.Now().Add(pageTimeout)
+	b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 1280, "height": 900, "deviceScaleFactor": 1, "mobile": false})
+	for _, c := range []struct{ path, button, text string }{
+		{"/docs/getting-started/install", ".copy-command .copy-button", `document.querySelector('.copy-command__text').textContent`},
+		{"/", ".landing-install .copy-button", `document.querySelector('.landing-install .copy-command__text').textContent`},
+		{"/components/button", ".copy-code .copy-button", `document.getElementById(document.querySelector('.copy-code .copy-button').getAttribute('aria-controls')).textContent`},
+	} {
+		b.open(srv.URL + c.path)
+		b.doing, b.deadline = "copying on "+c.path, time.Now().Add(pageTimeout)
+		// The island has started once its props script is gone.
+		b.until(`!document.querySelector('weft-island[data-id="CopyCommand"] > script')`)
+		var isButton bool
+		b.eval(`document.querySelector(`+jsString(c.button)+`).matches('button.weft-button')`, &isButton)
+		if !isButton {
+			t.Errorf("%s: the copy button is not Weft's Button", c.path)
+		}
+		b.click(c.button)
+		b.until(`document.querySelector(` + jsString(c.button) + `).textContent.trim() === 'Copied'`)
+		var got struct{ Copied, Want string }
+		b.eval(`navigator.clipboard.readText().then((copied) => ({ copied, want: `+c.text+` }))`, &got)
+		if got.Want == "" || got.Copied != got.Want {
+			t.Errorf("%s: the clipboard has %q, want %q", c.path, got.Copied, got.Want)
+		}
 	}
 }

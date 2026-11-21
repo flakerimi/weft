@@ -33,13 +33,14 @@ describe('import { Button } from "@weft/ui"', () => {
       'src/basics/Spinner.vue',
       'src/basics/address.ts',
       'src/basics/icons.ts',
-      'src/forms/field.ts',
+      'src/forms/form-state.ts',
     ])
     expect(js).toContain('weft-button')
   })
 
   it('holds no Dialog, no Table, no overlay stack and no default overlay icon', () => {
-    for (const file of ['Dialog.vue', 'Table.vue', 'overlayStack.ts', 'overlay.ts', 'CloseButton.vue', 'DropdownMenu.vue']) {
+    // field.ts is the form controls' wiring: Button reads only the Form's state (form-state.ts).
+    for (const file of ['Dialog.vue', 'Table.vue', 'overlayStack.ts', 'overlay.ts', 'CloseButton.vue', 'DropdownMenu.vue', 'forms/field.ts']) {
       expect(built.modules.some((m) => m.includes(file)), file).toBe(false)
     }
     for (const trace of ['weft-dialog', 'weft-table', 'weft-overlays', 'weft-close-button', 'weft-menu']) expect(js, trace).not.toContain(trace)

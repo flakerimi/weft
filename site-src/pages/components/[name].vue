@@ -19,7 +19,7 @@ import '../../styles/shell.css'
 import '../../styles/gallery.css'
 import { componentBySlug } from '../../gallery/catalog.ts'
 import { groupLabel, inlineHTML, neighbours } from '../../gallery/model.ts'
-import CopyCode from '../../components/CopyCode.vue'
+import CopyCommand from '../../components/CopyCommand.vue'
 import GalleryNav from '../../components/gallery/GalleryNav.vue'
 import SiteFooter from '../../components/SiteFooter.vue'
 import SiteHeader from '../../components/SiteHeader.vue'
@@ -65,7 +65,7 @@ const codeId = (example: string) => `code-${example}`
           <figure class="gallery-code">
             <figcaption>
               <span>{{ first.file.replace('packages/ui/', '') }}</span>
-              <Island when="idle" :component="CopyCode" :props="{ from: codeId(first.name) }" />
+              <Island when="idle" :component="CopyCommand" :props="{ from: codeId(first.name) }" />
             </figcaption>
             <div :id="codeId(first.name)" v-html="first.html" />
           </figure>
@@ -143,7 +143,7 @@ const codeId = (example: string) => `code-${example}`
             <figure class="gallery-code">
               <figcaption>
                 <span>{{ e.file.replace('packages/ui/', '') }}</span>
-                <Island when="idle" :component="CopyCode" :props="{ from: codeId(e.name) }" />
+                <Island when="idle" :component="CopyCommand" :props="{ from: codeId(e.name) }" />
               </figcaption>
               <div :id="codeId(e.name)" v-html="e.html" />
             </figure>
