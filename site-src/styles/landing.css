@@ -182,14 +182,14 @@
   padding: 18px;
   font-size: 15px;
   background: var(--weft-color-surface);
-  border: 1px solid var(--site-warp);
+  border: 1px solid var(--weft-color-border);
   border-radius: 12px;
 }
 .landing-preview .weft-provider { display: contents; }
 .landing-popover {
   padding: 12px;
   background: var(--weft-color-bg);
-  border: 1px solid var(--site-warp);
+  border: 1px solid var(--weft-color-border);
   border-radius: 10px;
   box-shadow: 0 12px 30px -14px color-mix(in srgb, var(--weft-color-text) 35%, transparent);
 }
@@ -202,7 +202,7 @@
   border-radius: 16px 16px 10px 10px;
   box-shadow: 0 -10px 24px -16px color-mix(in srgb, var(--weft-color-text) 50%, transparent);
 }
-.landing-sheet__grab { display: block; inline-size: 34px; block-size: 4px; margin: 0 auto 8px; border-radius: 2px; background: var(--site-warp); }
+.landing-sheet__grab { display: block; inline-size: 34px; block-size: 4px; margin: 0 auto 8px; border-radius: 2px; background: var(--weft-color-border); }
 .landing-sheet__title { margin: 0 0 6px; font-weight: 600; text-align: center; }
 /* The touch calendar is 44 px a date, 322 px with the sheet's edges: in a
    phone narrower than that, the picture is drawn smaller. */
@@ -221,7 +221,7 @@
   min-block-size: 168px;
   padding: 18px;
   background: var(--weft-color-surface);
-  border: 1px solid var(--site-warp);
+  border: 1px solid var(--weft-color-border);
   border-radius: 12px;
 }
 /* On touch its controls are 44 px tall. */
@@ -236,7 +236,7 @@
 .landing-bench__row { display: grid; grid-template-columns: 220px 1fr 7.5ch; gap: 22px; align-items: center; }
 .landing-bench__who { font-size: 16px; }
 .landing-bench__who small { display: block; font-size: 13.5px; color: var(--weft-color-text-muted); }
-.landing-bench__bar { position: relative; block-size: 9px; border-radius: 5px; background: var(--site-warp); }
+.landing-bench__bar { position: relative; block-size: 9px; border-radius: 5px; background: var(--weft-color-border); }
 .landing-bench__bar i { position: absolute; inset: 0 auto 0 0; border-radius: 5px; background: var(--weft-color-primary); }
 .landing-bench__bar[data-ours] i { background: var(--site-saffron); }
 .landing-bench__n { font: 600 16px var(--weft-font-mono); text-align: end; }
@@ -248,7 +248,7 @@
 /* For agents. */
 .landing-agents { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 36px; align-items: start; }
 .landing-agents ul { margin: 0; padding: 0; list-style: none; }
-.landing-agents li { padding-block: 14px; border-block-start: 1px solid var(--site-warp); }
+.landing-agents li { padding-block: 14px; border-block-start: 1px solid var(--weft-color-border); }
 .landing-agents li strong { display: block; }
 .landing-agents li span { font-size: 16px; color: var(--weft-color-text-muted); }
 .landing-agents .shiki { white-space: pre-wrap; overflow-wrap: anywhere; }

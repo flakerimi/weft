@@ -1,23 +1,17 @@
-/* weft.base.al's look, from the approved design (docs/design/site-2026-11-21):
-   the weft theme's colours on a ground of thin vertical threads (the warp),
-   saffron for the thread that crosses them. Every page imports this. */
-/* The warp is the theme's line colour in light and its raised surface in dark,
-   keyed on the theme's own scheme selectors, so data-weft-scheme follows too.
-   The thread is the theme's warning tone: saffron in both schemes. */
-:where(:root, [data-weft-scheme="light"]) { --site-warp: var(--weft-color-border); }
-:where([data-weft-scheme="dark"]) { --site-warp: var(--weft-color-surface-raised); }
-@media (prefers-color-scheme: dark) {
-  :where(:root:not([data-weft-scheme="light"])) { --site-warp: var(--weft-color-surface-raised); }
-}
+/* weft.base.al's look, from the approved designs (docs/design/site-2026-11-21
+   and its second pass, site-2026-11-21-v2): the weft theme's colours, white
+   surfaces on the ground, saffron for the thread. The warp, the thin vertical
+   threads, lies only in the landing page's night band. Every page imports this. */
 .site {
   --site-saffron: var(--weft-color-warning);
   --site-mark-height: 26px;
   min-height: 100vh;
   font-optical-sizing: auto;
-  background-color: var(--weft-color-bg);
-  background-image: repeating-linear-gradient(90deg, var(--site-warp) 0 1px, transparent 1px 28px);
-  background-attachment: fixed;
+  background: var(--weft-color-bg);
 }
+/* Headings are a little narrower and tighter than text (Bricolage's width
+   axis), except in a picture of a component, which keeps its own look. */
+.site :is(h1, h2):not([data-weft-no-prefetch] *) { font-stretch: 90%; letter-spacing: -0.03em; }
 /* Skip to the content: off screen until the keyboard reaches it. */
 .site-skip { position: absolute; inset-inline-start: 16px; inset-block-start: -64px; z-index: 50; padding: 8px 16px; border-radius: var(--weft-radius-control); background: var(--weft-color-surface); }
 .site-skip:focus { inset-block-start: 8px; }
@@ -25,7 +19,7 @@
 .site code, .site kbd, .site pre { font-family: var(--weft-font-mono); font-variant-ligatures: none; }
 
 /* The header: the wordmark, then the site's sections. */
-.site .weft-header { background: var(--weft-color-bg); border-block-end-color: var(--site-warp); }
+.site .weft-header { background: var(--weft-color-bg); }
 .site .weft-header__inner { max-inline-size: 1280px; padding-inline: 24px; }
 /* The wordmark: public/weft.svg as a mask, twice. Its letters end above 86 %
    of its height and its thread starts below, so the top part is drawn in the
