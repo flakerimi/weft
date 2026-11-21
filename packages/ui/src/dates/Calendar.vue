@@ -14,8 +14,8 @@
 // the WeftProvider's, else en-US). On touch every date is at least 44 px a
 // side and a swipe changes the month. With type="month" or "year" it picks
 // months or years instead, in the same grids. With no value and no focused
-// date to say which month to show, it draws an empty, busy grid until it is
-// mounted, then today's month: the server, at build or at request time,
+// date to say which month (or year) to show, it draws an empty, busy grid,
+// in every view, until it is mounted, then today's: the server, at build or at request time,
 // cannot know the day the browser will hydrate on.
 import { computed, nextTick, onMounted, shallowRef, useTemplateRef, watch } from 'vue'
 import { endOfMonth, endOfWeek, endOfYear, getLocalTimeZone, isSameMonth, startOfMonth, startOfWeek, startOfYear, today } from '@internationalized/date'
@@ -306,14 +306,22 @@ function clear(a: CalendarDate, b: CalendarDate): boolean {
 
 /** When a swipe last changed the month: the click the lifted finger then sends chooses nothing. */
 let swipedAt = -Infinity
+/**
+ * When a pointer last went down on the dates. A press there moves focus with
+ * the month it shows, though Safari and Firefox on macOS focus no button
+ * when it is clicked; a script's choice of a date leaves focus alone.
+ */
+let pressedAt = -Infinity
 function choose(d: CalendarDate, event?: MouseEvent) {
   // A pointer's click (detail > 0) just after a swipe; a key's click always counts.
   if (event && event.detail > 0 && Date.now() - swipedAt < 500) return
   if (props.disabled) return
   // A date of another month: its month shows, and focus goes with it.
   const shown = unit.value !== 'day' || (d.compare(start.value) >= 0 && d.compare(endOfMonth(start.value.add({ months: months.value.length - 1 }))) <= 0)
+  const pressed = Date.now() - pressedAt < 1000
+  pressedAt = -Infinity
   setFocused(d)
-  if (!shown) focusStop()
+  if (!shown && (pressed || root.value?.contains(document.activeElement))) focusStop(true)
   if (props.readonly || blockedUnit(d)) return
   if (props.range) {
     const p = pending.value
@@ -491,6 +499,7 @@ const towardsEnd = createSwipe(() => ({ axis: 'x', sign: 1 }))
 const towardsStart = createSwipe(() => ({ axis: 'x', sign: -1 }))
 const SWIPE = 40
 function onPointerdown(event: PointerEvent) {
+  pressedAt = Date.now()
   if (!touch.value || event.pointerType === 'mouse' || view.value !== 'day' || props.disabled) return
   towardsEnd.start(event)
   towardsStart.start(event)
@@ -646,6 +655,13 @@ defineExpose({
           </table>
         </div>
       </template>
+      <table v-else-if="!ready" class="weft-calendar__grid" role="grid" aria-busy="true" :data-view="view" :aria-labelledby="headingId">
+        <tbody>
+          <tr v-for="r in 4" :key="r">
+            <td v-for="c in 3" :key="c" role="gridcell"><span class="weft-calendar__blank"></span></td>
+          </tr>
+        </tbody>
+      </table>
       <table v-else class="weft-calendar__grid" role="grid" :data-view="view" :aria-labelledby="headingId" :aria-disabled="disabled ? 'true' : undefined">
         <tbody>
           <tr v-for="(row, ri) in view === 'month' ? monthRows : yearRows" :key="ri">

@@ -208,6 +208,28 @@ describe('Calendar', () => {
     expect((active() as HTMLElement).dataset.outside).toBeUndefined()
   })
 
+  it('moves focus with an outside day pressed even when the press focuses nothing (Safari, Firefox on macOS)', async () => {
+    await cases()
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    expect(active()).toBe(document.body)
+    const dec = $<HTMLButtonElement>('.weft-calendar__day[data-date="2026-12-02"]')
+    dec.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'mouse', pointerId: 1 }))
+    dec.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }))
+    await settle()
+    expect(heading()).toBe('December 2026')
+    expect(active()).toBe(day('2026-12-02'))
+  })
+
+  it('leaves focus where it is when a script chooses an outside day', async () => {
+    await cases()
+    const outsideButton = $<HTMLButtonElement>('.after')
+    outsideButton.focus()
+    $<HTMLButtonElement>('.weft-calendar__day[data-date="2026-12-02"]').click()
+    await settle()
+    expect(heading()).toBe('December 2026')
+    expect(active()).toBe(outsideButton)
+  })
+
   it('binds CalendarDate objects with value-format="object"', async () => {
     const e = await cases({ valueFormat: 'object', initial: new CalendarDate(2026, 11, 21) })
     expect(tabStop()).toEqual([day('2026-11-21')])

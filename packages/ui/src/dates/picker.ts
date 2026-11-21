@@ -148,24 +148,28 @@ export function useTypedDate(opts: TypedDateOptions) {
  * useFormReset(box, fields): when the form around `box` resets, each typed
  * field shows its bound date again, marked valid. A reset puts a form's
  * inputs back to their default text after its event, so this runs then and
- * writes the text into each input too. (A parent setting the value it
+ * writes the text into each input too; a reset cancelled (preventDefault)
+ * changes nothing. (A parent setting the value it
  * already has, null again say, is no change Vue can see: the form's reset,
  * or a value that changes, is what clears a field.)
  */
 export function useFormReset(box: () => HTMLElement | null | undefined, fields: () => { typed: { reset(): void; text: Ref<string> }; el: HTMLInputElement | null | undefined }[]): void {
   const onReset = (event: Event) => {
     const el = box()
-    if (!el || !(event.target as Node).contains(el)) return
+    if (!el || event.defaultPrevented || !(event.target as Node).contains(el)) return
     setTimeout(() => {
+      // A listener after this one may still have cancelled it.
+      if (event.defaultPrevented) return
       for (const f of fields()) {
         f.typed.reset()
         if (f.el) f.el.value = f.typed.text.value
       }
     }, 0)
   }
-  onMounted(() => document.addEventListener('reset', onReset, true))
+  // Bubbling, so the form's own listeners have had their say: a cancelled reset resets nothing.
+  onMounted(() => document.addEventListener('reset', onReset))
   onScopeDispose(() => {
-    if (typeof document !== 'undefined') document.removeEventListener('reset', onReset, true)
+    if (typeof document !== 'undefined') document.removeEventListener('reset', onReset)
   })
 }
 

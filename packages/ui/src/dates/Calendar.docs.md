@@ -16,7 +16,9 @@ range, the pointer or the focus previews it, a second press ends it, in
 either order; a range cannot span a disabled date, so a press past one
 starts again from it). A single date is chosen as a radio is: pressing it
 again keeps it. A press on a day of the next or previous month shows that
-month, focus going with it.
+month, focus going with it (whether or not the browser focused the button
+it pressed: Safari and Firefox on macOS do not); a script choosing one leaves
+focus where it is.
 
 `type="month"` chooses a month instead (bound as its first day,
 `2026-03-01`) from a grid of twelve, the heading switching to the years and
@@ -30,7 +32,9 @@ today's, which only the browser knows (a page built last week, or served
 from another time zone, would draw another month and hydrate with a
 mismatch). So until it is mounted it draws an empty grid, `aria-busy="true"`,
 its cells the size of dates and its weekday headers in place, the same on
-the server and while hydrating; then today's month. Give it a value or a
+the server and while hydrating; then today's month. With `type="month"` or
+`"year"` the empty grid is twelve blank cells, then this year's months, or
+the page of years holding it. Give it a value or a
 `focused-date` to draw dates on the server. Every computation goes through `@internationalized/date`;
 dates are Gregorian.
 

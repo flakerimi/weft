@@ -37,4 +37,12 @@ it('renders a Calendar with no value the same whatever day it is built on: an em
   const loose = /<div class="weft-calendar loose"[\s\S]*?<\/table>/.exec(datesIsland)![0]
   expect(loose).toContain('aria-busy="true"')
   expect(loose).not.toContain('weft-calendar__day')
+  // The month and year pickers the same: a busy grid of blank cells, no tab stop, no year.
+  for (const cls of ['loose-month', 'loose-year']) {
+    const picker = new RegExp(`<div class="weft-calendar ${cls}"[\\s\\S]*?</table>`).exec(datesIsland)![0]
+    expect(picker, cls).toContain('aria-busy="true"')
+    expect(picker, cls).not.toContain('weft-calendar__cell')
+    expect(picker, cls).not.toContain('tabindex="0"')
+    expect(picker, cls).not.toContain('2000')
+  }
 })

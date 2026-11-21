@@ -93,6 +93,17 @@ describe('DatePicker', () => {
       expect($('.weft-date-picker').dataset.invalid).toBeUndefined()
     })
 
+    it('keeps invalid text when the form’s reset is cancelled', async () => {
+      await cases({ locale: 'en-GB', initial: null })
+      const form = field().form!
+      form.addEventListener('reset', (event) => event.preventDefault())
+      await typeIn('soon')
+      form.reset()
+      await settle()
+      expect(field().value).toBe('soon')
+      expect(field().getAttribute('aria-invalid')).toBe('true')
+    })
+
     it('commits on Enter, before the form hears it', async () => {
       const e = await cases({ locale: 'en-GB' })
       field().focus()

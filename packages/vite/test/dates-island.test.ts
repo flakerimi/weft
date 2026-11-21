@@ -42,6 +42,15 @@ it('hydrates every date and file component inside an island, then each works', a
   expect(loose.querySelector('[role="grid"]')!.hasAttribute('aria-busy')).toBe(false)
   expect(loose.querySelector<HTMLElement>('.weft-calendar__day[tabindex="0"]')!.dataset.date).toBe('2025-01-10')
   expect(loose.querySelector('[aria-current="date"]')!.getAttribute('data-date')).toBe('2025-01-10')
+  // The month and year pickers show this year once mounted, its month or itself the tab stop.
+  const monthPicker = island.querySelector('.weft-calendar.loose-month')!
+  expect(monthPicker.querySelector('.weft-calendar__heading')!.textContent!.trim()).toBe('2025')
+  expect(monthPicker.querySelector('[aria-busy]')).toBeNull()
+  expect(monthPicker.querySelector('.weft-calendar__cell[tabindex="0"]')!.textContent!.trim()).toBe('Jan')
+  const yearPicker = island.querySelector('.weft-calendar.loose-year')!
+  expect(yearPicker.querySelector('.weft-calendar__heading')!.textContent!.replace(/\s*–\s*/, '–').trim()).toBe('2016–2027')
+  expect(yearPicker.querySelector('[aria-busy]')).toBeNull()
+  expect(yearPicker.querySelector('.weft-calendar__cell[tabindex="0"]')!.textContent!.trim()).toBe('2025')
   const out = island.querySelector('output')!
   expect(out.textContent).toBe('2024-02-14|2024-03-01|2024-04-02–2024-04-05|09:30|0')
 

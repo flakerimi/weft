@@ -23,7 +23,8 @@ calendar allows is bound and written back the locale's way; empty text binds
 null; anything else (no such date, before `min`, after `max`, disabled)
 binds null, keeps the text and marks the field invalid (`aria-invalid`,
 `data-invalid`), so it can be corrected. The form's reset clears the text
-back to the bound date, nothing invalid.
+back to the bound date, nothing invalid (a reset cancelled with
+`preventDefault` changes nothing).
 
 **Calendar.** It follows the WAI-ARIA APG Date Picker Dialog: the button
 (`aria-haspopup="dialog"`, `aria-expanded`, named "Choose date, 21 November

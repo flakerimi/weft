@@ -83,6 +83,19 @@ describe('DateRangePicker', () => {
       expect(active()).toBe($('.weft-date-picker__trigger'))
     })
 
+    it('shows the bound range again, nothing invalid, when its form resets', async () => {
+      await cases({ locale: 'en-GB' })
+      const [start, end] = fields()
+      await typeIn(end!, 'soon')
+      expect(end!.getAttribute('aria-invalid')).toBe('true')
+      start!.form!.reset()
+      await settle()
+      await settle()
+      expect(fields().map((f) => f.value)).toEqual(['21/11/2026', ''])
+      expect(fields().some((f) => f.hasAttribute('aria-invalid'))).toBe(false)
+      expect($('.weft-date-picker').dataset.invalid).toBeUndefined()
+    })
+
     it('opens two months side by side on the start, and chooses a range in two presses', async () => {
       const e = await cases()
       await openWithButton()

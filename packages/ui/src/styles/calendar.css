@@ -132,12 +132,13 @@ tbody .weft-calendar__week { padding: 0 var(--weft-space-1, 4px); font-size: 0.7
 }
 .weft-calendar__day[data-range="middle"],
 .weft-calendar__cell[data-range="middle"] { color: var(--weft-tone-text, LinkText); }
-/* Until mounted, with no date to show: empty cells the size of dates, so nothing moves when they come. */
+/* Until mounted, with no date to show: empty cells the size of dates (of months and years), so nothing moves when they come. */
 .weft-calendar__blank {
   display: block;
   min-inline-size: max(var(--weft-calendar-day), var(--weft-hit-min, 24px));
   min-block-size: max(var(--weft-calendar-day), var(--weft-hit-min, 24px));
 }
+.weft-calendar__grid[data-view] .weft-calendar__blank { min-inline-size: max(4.5em, var(--weft-hit-min, 24px)); }
 
 .weft-calendar__grid[data-view] td { padding: var(--weft-space-1, 4px); }
 .weft-calendar__cell {

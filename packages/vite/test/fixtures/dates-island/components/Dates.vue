@@ -20,6 +20,8 @@ const files = ref<File[]>([])
     <div class="dates">
       <Calendar v-model="day" aria-label="Day" />
       <Calendar class="loose" aria-label="Any day" />
+      <Calendar class="loose-month" type="month" aria-label="Any month" />
+      <Calendar class="loose-year" type="year" aria-label="Any year" />
       <FormField label="Due" name="due"><DatePicker v-model="due" /></FormField>
       <FormField label="Stay" name="stay"><DateRangePicker v-model="stay" /></FormField>
       <FormField label="At" name="at"><InputTime v-model="at" /></FormField>
