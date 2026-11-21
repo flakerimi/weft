@@ -3,6 +3,7 @@ import { computed, provide } from 'vue'
 import { useWeft, weftKey } from './context.ts'
 import type { Input, Surface } from './detect.ts'
 import '../styles/base.css'
+import '../styles/weft-provider.css'
 
 const props = withDefaults(defineProps<{
   /** Force `pointer` or `touch` for everything inside; unset passes on the detected or outer input. */

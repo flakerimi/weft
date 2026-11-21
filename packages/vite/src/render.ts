@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module'
 import { join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { createServer, isCSSRequest, type EnvironmentModuleNode, type ViteDevServer } from 'vite'
+import { createServer, isCSSRequest, normalizePath, type EnvironmentModuleNode, type ViteDevServer } from 'vite'
 import { siteConfig } from './config.ts'
 import { sfcName } from './plugin.ts'
 
@@ -16,6 +16,12 @@ export interface RenderOptions {
   server?: ViteDevServer
   /** Absolute paths of stylesheets the caller already includes; left out of `css`. */
   providedCSS?: string[]
+  /**
+   * Absolute paths of stylesheets that bundle every Weft component's CSS (weft.css and
+   * its group sheets). A page that imports one is refused in a sentence: its CSS would
+   * repeat the rules each component brings.
+   */
+  bundleCSS?: string[]
 }
 
 /** What the page set with `useHead` from @weft/ui. */
@@ -36,7 +42,8 @@ export interface RenderResult {
    * `<style>` blocks of the page, of each component the server render used, of
    * the components those import, and of the modules (not components) they
    * import. A component the page only imports, through an index such as
-   * @weft/ui's, and never renders adds nothing.
+   * @weft/ui's, and never renders adds nothing. An island brings the CSS of
+   * everything its file imports, rendered or not, since the browser may draw it.
    */
   css: string
   head: PageHead
@@ -83,12 +90,16 @@ export async function renderPage(opts: RenderOptions): Promise<RenderResult> {
     const html = await renderToString(createSSRApp(mod.default as never, opts.props), ctx)
     const islands = [...new Set(ctx.islands ?? [])]
     const modules = await pageModules(vite, file)
-    const rendered = new Set([...(ctx.modules ?? [])].map((m) => resolve(root, m)))
+    const islandFiles = findIslandFiles(modules, root, file, islands)
+    // Vite's module files are posix paths, on Windows too.
+    const rendered = new Set([...(ctx.modules ?? [])].map((m) => normalizePath(resolve(root, m))))
+    const used = await pageModules(vite, file, { rendered, islands: new Set(Object.values(islandFiles).map(normalizePath)) })
+    refuseBundles(used, opts.bundleCSS ?? [], root, opts.page)
     return {
       html,
       islands,
-      islandFiles: findIslandFiles(modules, root, file, islands),
-      css: await collectCSS(vite, await pageModules(vite, file, rendered), new Set(opts.providedCSS)),
+      islandFiles,
+      css: await collectCSS(vite, used, new Set(opts.providedCSS)),
       head: ctx.head ?? {},
     }
   } finally {
@@ -101,26 +112,58 @@ const isSFC = (mod: EnvironmentModuleNode) => !!mod.id && mod.id.endsWith('.vue'
 
 /**
  * Every module the page imports, directly or not, in load order (a module
- * after its imports). With `rendered`, the components (absolute `.vue` paths)
- * the server render used: then only what those need. A component is followed
- * when it was rendered, or when a followed component imports it directly (it
- * may draw it later, as a Button draws its Spinner once loading); one reached
- * only through other modules, such as an index re-exporting every component,
- * is left out with what it imports.
+ * after its imports). With `only`, just what the page's CSS needs:
+ * - a component (a `.vue` file) is followed when the server render used it
+ *   (`rendered`, absolute posix paths), or when a followed component imports it
+ *   directly (it may draw it later, as a Button draws its Spinner once loading);
+ * - one reached only through other modules, such as an index re-exporting
+ *   every component, is left out with what it imports;
+ * - under an island's file (`islands`), everything is followed, since the
+ *   browser may draw any of it.
  */
-async function pageModules(vite: ViteDevServer, page: string, rendered?: Set<string>): Promise<EnvironmentModuleNode[]> {
+async function pageModules(
+  vite: ViteDevServer,
+  page: string,
+  only?: { rendered: Set<string>; islands: Set<string> },
+): Promise<EnvironmentModuleNode[]> {
   const order: EnvironmentModuleNode[] = []
+  const placed = new Set<EnvironmentModuleNode>()
+  // Visited at all, and visited with everything under it followed (a module
+  // first reached outside an island is visited again from inside one).
   const seen = new Set<EnvironmentModuleNode>()
-  const visit = (mod: EnvironmentModuleNode, fromSFC: boolean) => {
-    if (seen.has(mod)) return
-    if (rendered && isSFC(mod) && !fromSFC && !rendered.has(mod.file ?? '')) return
+  const seenWhole = new Set<EnvironmentModuleNode>()
+  const visit = (mod: EnvironmentModuleNode, fromSFC: boolean, whole: boolean) => {
+    const file = mod.file ? normalizePath(mod.file) : ''
+    whole ||= !only || (isSFC(mod) && only.islands.has(file))
+    if (whole) {
+      if (seenWhole.has(mod)) return
+      seenWhole.add(mod)
+    } else {
+      if (seen.has(mod)) return
+      if (isSFC(mod) && !fromSFC && !only!.rendered.has(file)) return
+    }
     seen.add(mod)
-    for (const dep of mod.importedModules) visit(dep, isSFC(mod))
-    order.push(mod)
+    for (const dep of mod.importedModules) visit(dep, isSFC(mod), whole)
+    if (!placed.has(mod)) {
+      placed.add(mod)
+      order.push(mod)
+    }
   }
   const start = await vite.environments.ssr.moduleGraph.getModuleByUrl(page)
-  if (start) visit(start, true)
+  if (start) visit(start, true, false)
   return order
+}
+
+/** Refuse a page whose CSS would take in one of the stylesheets that bundle every component's CSS. */
+function refuseBundles(modules: EnvironmentModuleNode[], bundles: string[], root: string, page: string) {
+  const refused = new Set(bundles.map(normalizePath))
+  for (const mod of modules) {
+    if (!mod.file || !refused.has(normalizePath(mod.file)) || !isCSSRequest(mod.url)) continue
+    const name = relative(root, resolve(root, page)).split('\\').join('/')
+    throw new Error(
+      `renderPage: ${name} imports ${relative(root, mod.file).split('\\').join('/')}, which holds every Weft component's CSS; a page gets the CSS of the components it renders, so remove the import.`,
+    )
+  }
 }
 
 /**

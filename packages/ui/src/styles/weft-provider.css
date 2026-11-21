@@ -1,0 +1,2 @@
+/* WeftProvider: no box of its own; the text size follows its surface. */
+.weft-provider { display: contents; font-size: var(--weft-text-base, 0.875rem); }

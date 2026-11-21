@@ -1,5 +1,5 @@
 <script setup vapor lang="ts">
-import '@weft/ui/weft.css'
+import '@weft/ui/styles/base.css'
 import { Island, useHead } from '@weft/ui'
 import Badge from '../components/Badge.vue'
 import Lazy from '../components/Lazy.vue'

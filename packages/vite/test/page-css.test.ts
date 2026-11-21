@@ -2,15 +2,20 @@
 // theme, then base.css, then the stylesheets of the components it renders
 // (and those they import), each once.
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { buildSite } from '../src/build.ts'
+import { createRenderServer, renderPage } from '../src/render.ts'
 
 const root = fileURLToPath(new URL('./fixtures/css-site', import.meta.url))
+const pages = ['button', 'field', 'island', 'barrel-island', 'link', 'plain']
 let parent: string
 let out: string
+/** Each page's CSS before minifying, which could merge a rule given twice: the theme, base.css, then the render's. */
+const unminified: Record<string, string> = {}
 const styleOf = (page: string) =>
   /<style>([\s\S]*?)<\/style>/.exec(readFileSync(join(out, 'pages', page, 'index.html'), 'utf8'))![1]!
 
@@ -49,6 +54,19 @@ beforeAll(async () => {
   parent = mkdtempSync(join(tmpdir(), 'weft-page-css-'))
   out = join(parent, 'dist')
   await buildSite({ root, outDir: out })
+
+  const require = createRequire(join(root, 'package.json'))
+  const base = require.resolve('@weft/ui/styles/base.css')
+  const theme = createRequire(base).resolve('@weft/themes/neutral.css')
+  const server = await createRenderServer(root, 'production')
+  try {
+    for (const page of pages) {
+      const { css } = await renderPage({ root, page: `pages/${page}.vue`, server, providedCSS: [theme, base] })
+      unminified[page] = [theme, base].map((f) => readFileSync(f, 'utf8')).join('\n') + '\n' + css
+    }
+  } finally {
+    await server.close()
+  }
 }, 120_000)
 afterAll(() => rmSync(parent, { recursive: true, force: true }))
 
@@ -79,13 +97,13 @@ describe('per-page CSS', () => {
   })
 
   it('starts with the theme, then base.css, then the components', () => {
-    for (const page of ['button', 'field', 'island', 'plain']) {
+    for (const page of pages) {
       const css = styleOf(page)
       const theme = css.indexOf('--weft-color-bg:')
       const base = css.search(/box-sizing:\s*border-box/)
       expect(theme, page).toBeGreaterThanOrEqual(0)
       expect(base, page).toBeGreaterThan(theme)
-      const component = css.search(/\.weft-(button|input|badge|form-field)\b/)
+      const component = css.search(/\.weft-(?!visually-hidden|provider)[a-z]/)
       if (page !== 'plain') expect(component, page).toBeGreaterThan(base)
     }
   })
@@ -96,9 +114,10 @@ describe('per-page CSS', () => {
     expect(css).not.toMatch(/\.weft-(button|input|badge|stack|card|icon)\b/)
   })
 
-  it('has no rule twice', () => {
-    for (const page of ['button', 'field', 'island', 'plain']) {
-      const all = rules(styleOf(page))
+  it('has no rule twice, before minifying', () => {
+    for (const page of pages) {
+      const all = rules(unminified[page]!)
+      expect(all.length, page).toBeGreaterThan(10)
       const twice = all.filter((r, i) => all.indexOf(r) !== i)
       expect(twice, page).toEqual([])
     }
@@ -109,6 +128,24 @@ describe('per-page CSS', () => {
     expect(css.match(/\.tally\s*\{/g)).toHaveLength(1)
     expect(css.match(/\.weft-badge\s*\{/g)).toHaveLength(1)
     expect(css.match(/\.weft-button\s*\{/g)).toHaveLength(1)
+    // Drawn only once hydrated, never on the server.
+    expect(css.match(/\.weft-kbd\s*\{/g)).toHaveLength(1)
+    // Imported by path, so nothing else of @weft/ui comes with them.
+    expect(css).not.toContain('.weft-slider')
+  })
+
+  it('inlines, once, what an island draws only after hydrating, even through the @weft/ui index', () => {
+    const css = styleOf('barrel-island')
+    // The rule for the track itself, not those for a track inside a switch in some state.
+    expect(css.match(/\}\.weft-switch__track\{/g)).toHaveLength(1)
+    // The index brings every component's stylesheet: why islands import components by path.
+    expect(css).toMatch(/\.weft-slider\s*\{/)
+  })
+
+  it('keeps what the browser targets need when minifying', () => {
+    // Safari before 18 needs the prefix; a text-decoration shorthand with a thickness is not valid there.
+    expect(styleOf('button')).toMatch(/-webkit-user-select:\s*none/)
+    expect(styleOf('link')).toMatch(/text-decoration-thickness:\s*1px/)
   })
 
   it('orders a stylesheet after those of the components it draws with', () => {

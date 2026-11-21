@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { brotliCompressSync, constants as zlib, gzipSync } from 'node:zlib'
-import { transform as transformCSS } from 'lightningcss'
+import { transform as transformCSS, type Targets } from 'lightningcss'
 import { build, isCSSRequest, mergeConfig, type Plugin, type ResolvedConfig, type Rolldown } from 'vite'
 import { siteConfig } from './config.ts'
 import { weft } from './plugin.ts'
@@ -135,7 +135,7 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
       `buildSite: appPrefix is ${app.prefix} but ${join(appDir, 'index.html')} is missing; build the app into ${appDir} first, or set appDir.`,
     )
   }
-  const { css: baseCSS, files: baseFiles } = await readStyles(root, theme)
+  const { css: baseCSS, files: baseFiles, bundles } = await readStyles(root, theme)
   const routes = await discoverRoutes(pagesDir)
 
   // A production build, as `vite build` makes one: the first Vite server sets
@@ -146,11 +146,14 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
   const pages: (ExpandedRoute & RenderResult)[] = []
   const server = await createRenderServer(root, 'production')
   const vueFiles: string[] = []
+  let cssTarget: Targets | undefined
   try {
+    // The pages' CSS is minified for the browsers the site's Vite config targets.
+    cssTarget = cssTargets(server.config.build.cssTarget)
     const load = (file: string) => server.ssrLoadModule(`/pages/${file}`) as Promise<PageModule>
     for (const route of await expandRoutes(routes, load)) {
       const page = join('pages', route.file)
-      const rendered = await renderPage({ root, page, props: route.params, server, providedCSS: baseFiles })
+      const rendered = await renderPage({ root, page, props: route.params, server, providedCSS: baseFiles, bundleCSS: bundles })
       pages.push({ ...route, ...rendered })
     }
     for (const mod of server.environments.ssr.moduleGraph.idToModuleMap.values()) {
@@ -170,7 +173,7 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
   // It becomes outDir: a folder anyone may read, not mkdtemp's owner-only one.
   await chmod(staging, 0o755)
   try {
-    const manifest = await writeBuild(staging, { root, app, appDir, pages, baseCSS, cssInlineLimit: opts.cssInlineLimit })
+    const manifest = await writeBuild(staging, { root, app, appDir, pages, baseCSS, cssTarget, cssInlineLimit: opts.cssInlineLimit })
     await swap(staging, outDir)
     return manifest
   } catch (e) {
@@ -187,6 +190,7 @@ interface BuildInput {
   appDir: string | null
   pages: (ExpandedRoute & RenderResult)[]
   baseCSS: string
+  cssTarget: Targets | undefined
   cssInlineLimit: number | undefined
 }
 
@@ -224,17 +228,18 @@ function sentSizes(): (css: string) => number {
 }
 
 /**
- * A page's CSS minified with Lightning CSS, the minifier Vite uses: comments
- * and spaces go; with no browser targets given, nothing is rewritten for older
- * browsers. Pages share CSS, so within one build each set is minified once.
+ * A page's CSS minified with Lightning CSS, as Vite minifies the CSS it
+ * builds: for the site's browser targets (`build.cssTarget`), so it keeps or
+ * adds what they need (`-webkit-user-select`, `:dir()` lowered). Pages share
+ * CSS, so within one build each set is minified once.
  */
-function minifier(): (css: string, page: string) => string {
+function minifier(targets: Targets | undefined): (css: string, page: string) => string {
   const done = new Map<string, string>()
   return (css, page) => {
     let out = done.get(css)
     if (out === undefined) {
       try {
-        out = transformCSS({ filename: 'page.css', code: Buffer.from(css), minify: true }).code.toString()
+        out = transformCSS({ filename: 'page.css', code: Buffer.from(css), minify: true, targets }).code.toString()
       } catch (e) {
         const why = e instanceof Error ? e.message : String(e)
         throw new Error(`buildSite: the CSS of ${page} does not parse (${why}).`)
@@ -246,7 +251,7 @@ function minifier(): (css: string, page: string) => string {
 }
 
 /** Write the whole build into `dir`, a fresh folder of its own, and mark it. */
-async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssInlineLimit }: BuildInput): Promise<Manifest> {
+async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssTarget, cssInlineLimit }: BuildInput): Promise<Manifest> {
   // Every file in the build; none is ever written twice, nor under two names the file system takes for one.
   const taken: Taken = new Map()
   take(taken, 'manifest.json')
@@ -269,7 +274,7 @@ async function writeBuild(dir: string, { root, app, appDir, pages, baseCSS, cssI
   const routesJson: RoutesJson = { pages: [], notFound: null, app }
   const rules = speculationRules(app)
   const sentSize = sentSizes()
-  const minify = minifier()
+  const minify = minifier(cssTarget)
   for (const page of pages) {
     // The theme, base.css, the CSS of what the page renders, then view transitions.
     const css = minify([baseCSS, page.css, VIEW_TRANSITION].filter(Boolean).join('\n'), `pages/${page.file}`) + '\n'
@@ -656,11 +661,12 @@ function appRoute(prefix: string): NonNullable<RoutesJson['app']> {
 
 /**
  * The CSS every page starts with: the theme stylesheet, then @weft/ui's
- * base.css. Each component brings its own stylesheet, collected per page.
- * `files` are those two and @weft/ui's weft.css, all-in-one, which a page may
- * import but whose rules come per component instead: the render leaves them out.
+ * base.css, and their files. Each component brings its own stylesheet,
+ * collected per page. `bundles` are the stylesheets that hold every
+ * component's CSS (weft.css, built and source, and the group sheets of
+ * @imports it is made of), which a page may not import.
  */
-async function readStyles(root: string, theme: Theme): Promise<{ css: string; files: string[] }> {
+async function readStyles(root: string, theme: Theme): Promise<{ css: string; files: string[]; bundles: string[] }> {
   const read = async (from: string, spec: string, fix: string) => {
     try {
       const file = createRequire(from).resolve(spec)
@@ -673,13 +679,44 @@ async function readStyles(root: string, theme: Theme): Promise<{ css: string; fi
   const [baseFile, base] = await read(join(root, 'package.json'), '@weft/ui/styles/base.css', 'add @weft/ui to the site\'s dependencies')
   // The theme comes from @weft/ui's own @weft/themes, the version its components expect.
   const [themeFile, themeCss] = await read(baseFile, `@weft/themes/${theme}.css`, 'run pnpm --filter @weft/themes build')
-  const files = [themeFile, baseFile]
-  try {
-    files.push(createRequire(baseFile).resolve('@weft/ui/weft.css'))
-  } catch {
-    // Not built: then no page imports it either.
+  const styles = dirname(baseFile)
+  const bundles: string[] = []
+  for (const name of (await readdir(styles)).filter((n) => n.endsWith('.css')).sort()) {
+    const text = await readFile(join(styles, name), 'utf8')
+    if (text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/@import\s+'[^']*';/g, '').trim() === '') bundles.push(join(styles, name))
   }
-  return { css: `${themeCss}\n${base}`, files }
+  try {
+    bundles.push(createRequire(baseFile).resolve('@weft/ui/weft.css'))
+  } catch {
+    // Not built: then no page can import it either.
+  }
+  return { css: `${themeCss}\n${base}`, files: [themeFile, baseFile], bundles }
+}
+
+/**
+ * Vite's `build.cssTarget` (browser versions such as `safari16.4`, as Vite
+ * resolves it) as Lightning CSS targets, as Vite converts it when it minifies
+ * CSS. `false` or `esnext` is no targets.
+ */
+export function cssTargets(target: string | string[] | false | undefined): Targets | undefined {
+  if (!target) return undefined
+  const names: Record<string, keyof Targets | false> = {
+    chrome: 'chrome', edge: 'edge', firefox: 'firefox', ie: 'ie', ios: 'ios_saf', opera: 'opera', safari: 'safari',
+    hermes: false, node: false, rhino: false,
+  }
+  const targets: Targets = {}
+  for (const entry of Array.isArray(target) ? target : [target]) {
+    if (entry === 'esnext') continue
+    const m = /^([a-z]+)(\d+)(?:\.(\d+))?/.exec(entry)
+    const browser = m ? names[m[1]!] : undefined
+    if (browser === false) continue
+    if (!m || !browser) {
+      throw new Error(`buildSite: build.cssTarget "${entry}" is not a browser version; name browsers, like "safari16.4".`)
+    }
+    const version = (Number(m[2]) << 16) | (Number(m[3] ?? 0) << 8)
+    if (targets[browser] === undefined || version < targets[browser]!) targets[browser] = version
+  }
+  return Object.keys(targets).length ? targets : undefined
 }
 
 /** `/` → `pages/index/index.html`, `/blog/a` → `pages/blog/a/index.html`. */

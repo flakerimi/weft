@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { brotliCompressSync, brotliDecompressSync, gunzipSync } from 'node:zlib'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { buildSite, contentType, removeBuilt, type Manifest } from '../src/build.ts'
+import { buildSite, contentType, cssTargets, removeBuilt, type Manifest } from '../src/build.ts'
 import type { RoutesJson } from '../src/routes.ts'
 
 const fixture = (n: string) => fileURLToPath(new URL(`./fixtures/${n}`, import.meta.url))
@@ -152,6 +152,7 @@ describe('buildSite on a site with islands', () => {
   })
 
   it('inlines a stylesheet a page imports itself only once', () => {
+    // about.vue imports @weft/ui's base.css, which every page has anyway.
     const about = styleOf(read('pages/about/index.html'))!
     expect(about.split('box-sizing:border-box').length - 1).toBe(1)
   })
@@ -1211,5 +1212,38 @@ describe('bin/weft-build-pages.mjs', () => {
         'weft-build-pages: --out is required.\n' +
         'usage: weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa]\n',
     })
+  })
+})
+
+describe('buildSite on a page that imports weft.css', () => {
+  it('refuses it in one sentence: a page gets the CSS of what it renders', async () => {
+    const out = tempDir()
+    const error = await buildSite({ root: fixture('weft-css-import'), outDir: join(out, 'dist') }).catch((e: Error) => e)
+    expect(error).toBeInstanceOf(Error)
+    const message = (error as Error).message
+    expect(message).toMatch(/^renderPage: pages\/index\.vue imports .*weft\.css, which holds every Weft component's CSS; /)
+    expect(message).toContain('remove the import')
+    expect(message.trim().split(/(?<=\.) /)).toHaveLength(1)
+    expect(existsSync(join(out, 'dist'))).toBe(false)
+  })
+})
+
+describe('cssTargets', () => {
+  it("converts Vite's build.cssTarget to Lightning CSS targets as Vite does", () => {
+    expect(cssTargets(['chrome111', 'edge111', 'firefox114', 'safari16.4', 'ios16.4'])).toEqual({
+      chrome: 111 << 16,
+      edge: 111 << 16,
+      firefox: 114 << 16,
+      safari: (16 << 16) | (4 << 8),
+      ios_saf: (16 << 16) | (4 << 8),
+    })
+    expect(cssTargets(['safari15', 'safari16.4'])).toEqual({ safari: 15 << 16 })
+    expect(cssTargets(false)).toBeUndefined()
+    expect(cssTargets('esnext')).toBeUndefined()
+    expect(cssTargets(['node20', 'chrome120'])).toEqual({ chrome: 120 << 16 })
+  })
+
+  it('refuses a target that names no browser, in one sentence', () => {
+    expect(() => cssTargets('es2020')).toThrow(/^buildSite: build\.cssTarget "es2020" is not a browser version; name browsers, like "safari16\.4"\.$/)
   })
 })

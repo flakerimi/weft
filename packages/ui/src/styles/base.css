@@ -22,16 +22,24 @@
    - A component that renders another imports it, and so gets its CSS through
      the import; its own stylesheet comes after, so its rules about the inner
      one (.weft-badge .weft-icon) win ties.
+   - The order between sheets that do not import each other differs from page
+     to page. So a sheet never sets, at the same specificity, a property that
+     the sheet of a component it does not import sets on the same element:
+     raise the specificity (.weft-field-group > .weft-input) or import that
+     component.
+   - A component with no stylesheet of its own says so in its docs ("It has
+     no stylesheet of its own"), as Island does.
    - Every stylesheet is also imported by its group's sheet (layout.css,
      basics.css, forms.css: only @imports, in the order the components import
      them), and weft.css, the all-in-one bundle, imports base.css and each
      group. A new group adds its sheet to weft.css. test/stylesheets.test.ts
      checks all of this.
    The page build (@weft/vite) inlines, per page: the theme, this file, then
-   the stylesheets imported by the components the page renders, in import
-   order. A component an island imports from @weft/ui but draws only after
-   hydrating (never in the server render) is not on the page: the island
-   imports its stylesheet itself, `import '@weft/ui/styles/badge.css'`. */
+   the stylesheets of the components the page renders (and those they import),
+   in import order; for an island, of every component its file imports, drawn
+   on the server or not. An island that imports the @weft/ui index so carries
+   every component's sheet: islands import components by path
+   (`@weft/ui/basics/Button.vue`). */
 *, *::before, *::after { box-sizing: border-box; }
 
 html {
@@ -57,8 +65,6 @@ p { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; }
 }
-
-.weft-provider { display: contents; font-size: var(--weft-text-base, 0.875rem); }
 
 /* Read by assistive technology, not drawn: a spinner's label, a key's name. */
 .weft-visually-hidden {

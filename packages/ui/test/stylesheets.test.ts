@@ -57,6 +57,13 @@ describe('stylesheets', () => {
     for (const name of own) expect(sheets).toContain(name)
   })
 
+  it.each(components)('%s has a stylesheet of its own, or its docs say it has none', (file) => {
+    const own = importsOf(file).filter((s) => s !== 'base.css')
+    const docs = readFileSync(join(src, file.replace(/\.vue$/, '.docs.md')), 'utf8')
+    if (own.length === 0) expect(docs).toMatch(/^It has no stylesheet of its own\b/m)
+    else expect(docs).not.toMatch(/^It has no stylesheet of its own\b/m)
+  })
+
   it('are each imported by some component', () => {
     const used = new Set(components.flatMap(importsOf))
     expect(sheets.filter((s) => !used.has(s))).toEqual([])

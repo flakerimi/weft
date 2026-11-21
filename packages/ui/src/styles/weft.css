@@ -1,7 +1,9 @@
 /* Every Weft stylesheet, for an app that loads them all at once. Components
    import their own (see base.css), so an app built with Vite has the CSS of
-   the components it uses without this; the page build never inlines it. */
+   the components it uses without this. The page build refuses a page that
+   imports it: a page gets the CSS of what it renders. */
 @import './base.css';
+@import './weft-provider.css';
 @import './layout.css';
 @import './basics.css';
 @import './forms.css';

@@ -19,3 +19,14 @@ Ids are counted by the island's position among the page's islands, the
 same on the server (render order) and in the browser (document order). So an
 island inside a `<Teleport>`, whose markup lands elsewhere in the document,
 is not supported: its position, and so its ids, would differ.
+
+The page inlines the CSS of everything the island's component imports, not
+only what it draws on the server, since the browser may draw the rest later
+(a menu that opens, a field that appears). So an island that imports the
+`@weft/ui` index, `import { Button } from '@weft/ui'`, carries the stylesheet
+of every Weft component. Import components by path in an island instead:
+`import Button from '@weft/ui/basics/Button.vue'` (the path is the
+component's file under `src/`). Outside islands it makes no difference: the
+page carries only the CSS of the components it renders.
+
+It has no stylesheet of its own: `<weft-island>` is an unstyled element around the component.
