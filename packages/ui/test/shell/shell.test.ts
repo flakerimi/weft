@@ -90,6 +90,18 @@ describe('AppShell, wide', () => {
     expect(shell().dataset.collapsed).toBe('true')
   })
 
+  it('inside a WeftProvider marked inset (a preview), neither keeps nor reads the collapsed state', async () => {
+    await mountAt(ShellCases, { inset: true })
+    toggle().click()
+    await settle()
+    expect(shell().dataset.collapsed).toBe('true')
+    expect(localStorage.length).toBe(0)
+    unmount!()
+    localStorage.setItem('test:collapsed', 'true')
+    await mountAt(ShellCases, { inset: true })
+    expect(shell().dataset.collapsed).not.toBe('true')
+  })
+
   it('keeps nothing with persist false, and survives storage that throws', async () => {
     await mountAt(ShellCases, { persist: false })
     toggle().click()

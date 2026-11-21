@@ -28,5 +28,5 @@ so the server renders what the browser hydrates.
 `inset` says everything inside is a preview of a page, drawn inside another
 (a gallery's stage or thumbnail, a screenshot frame): a Page or an AppShell
 in it renders no `<main>` landmark, and a Page's title is an `h2`, so the
-page around keeps one main and one h1. An inset provider makes every one
-inside it inset too.
+page around keeps one main and one h1. An AppShell in it keeps no collapsed
+state in localStorage. An inset provider makes every one inside it inset too.

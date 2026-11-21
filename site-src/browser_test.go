@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http/httptest"
@@ -17,7 +18,8 @@ import (
 // Tests that need a browser: headless Chrome, driven over the DevTools
 // protocol on a pipe (--remote-debugging-pipe), so the standard library is
 // enough. Chrome is $CHROME_PATH, or the first found where it is usually
-// installed; without one these tests are skipped and say so.
+// installed; without one these tests are skipped and say so, except in CI
+// ($CI set), where they fail: a browser test that never runs proves nothing.
 
 // chromePath is the Chrome to run, or "".
 func chromePath() string {
@@ -44,12 +46,19 @@ func chromePath() string {
 type browser struct {
 	t       *testing.T
 	in      io.WriteCloser
-	out     *bufio.Reader
+	msgs    chan cdpMessage
+	failed  chan error
 	cmd     *exec.Cmd
 	next    int
 	session string
 	events  []cdpMessage
+	// What is being waited for, and until when: a page that hangs fails with its path.
+	doing    string
+	deadline time.Time
 }
+
+// pageTimeout is how long one page may take, from navigating to its last answer.
+const pageTimeout = 20 * time.Second
 
 type cdpMessage struct {
 	ID        int             `json:"id"`
@@ -66,6 +75,9 @@ func startBrowser(t *testing.T) *browser {
 	t.Helper()
 	path := chromePath()
 	if path == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("no Chrome found, and CI is set: install Chrome or set CHROME_PATH, so the browser tests run")
+		}
 		t.Skip("no Chrome found; set CHROME_PATH to run the browser tests")
 	}
 	toChrome, in, err := os.Pipe()
@@ -89,7 +101,25 @@ func startBrowser(t *testing.T) *browser {
 	}
 	toChrome.Close()
 	fromChrome.Close()
-	b := &browser{t: t, in: in, out: bufio.NewReader(out), cmd: cmd}
+	b := &browser{t: t, in: in, msgs: make(chan cdpMessage), failed: make(chan error, 1), cmd: cmd,
+		doing: "starting Chrome", deadline: time.Now().Add(pageTimeout)}
+	// Chrome's messages, each ending with a NUL, read where a wait can give up on them.
+	go func() {
+		r := bufio.NewReader(out)
+		for {
+			line, err := r.ReadBytes(0)
+			if err != nil {
+				b.failed <- err
+				return
+			}
+			var m cdpMessage
+			if err := json.Unmarshal(line[:len(line)-1], &m); err != nil {
+				b.failed <- fmt.Errorf("Chrome sent %q: %v", line, err)
+				return
+			}
+			b.msgs <- m
+		}
+	}()
 	t.Cleanup(func() {
 		in.Close()
 		done := make(chan struct{})
@@ -122,18 +152,21 @@ func (b *browser) decode(raw json.RawMessage, v any) {
 	}
 }
 
-// read is the next message from Chrome; each ends with a NUL.
+// read is the next message from Chrome, or a failure naming what was being
+// done once the deadline passes.
 func (b *browser) read() cdpMessage {
 	b.t.Helper()
-	line, err := b.out.ReadBytes(0)
-	if err != nil {
-		b.t.Fatalf("reading from Chrome: %v", err)
+	timer := time.NewTimer(time.Until(b.deadline))
+	defer timer.Stop()
+	select {
+	case m := <-b.msgs:
+		return m
+	case err := <-b.failed:
+		b.t.Fatalf("%s: reading from Chrome: %v", b.doing, err)
+	case <-timer.C:
+		b.t.Fatalf("%s: no answer from Chrome within %v", b.doing, pageTimeout)
 	}
-	var m cdpMessage
-	if err := json.Unmarshal(line[:len(line)-1], &m); err != nil {
-		b.t.Fatalf("Chrome sent %q: %v", line, err)
-	}
-	return m
+	return cdpMessage{}
 }
 
 // call sends one command and waits for its result, keeping the events that come first.
@@ -202,6 +235,7 @@ func (b *browser) eval(expr string, v any) {
 // open loads the page at url and waits for it, and for its islands to settle.
 func (b *browser) open(url string) {
 	b.t.Helper()
+	b.doing, b.deadline = "loading "+url, time.Now().Add(pageTimeout)
 	b.events = nil
 	b.call(b.session, "Page.navigate", map[string]any{"url": url})
 	b.wait("Page.loadEventFired")
@@ -232,6 +266,7 @@ func TestNoPageScrollsSideways(t *testing.T) {
 	defer srv.Close()
 	pages := allPages(t, d)
 	for _, width := range []int{320, 390, 768} {
+		b.doing, b.deadline = fmt.Sprintf("emulating %d px", width), time.Now().Add(pageTimeout)
 		b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": width, "height": 800, "deviceScaleFactor": 1, "mobile": width < 700})
 		for _, path := range pages {
 			b.open(srv.URL + path)
@@ -276,5 +311,51 @@ func TestSiteCSSDoesNotClipTheRoot(t *testing.T) {
 		if root.Match(b) {
 			t.Errorf("styles/%s clips overflow on the root, which hides it rather than prevents it", e.Name())
 		}
+	}
+}
+
+// The gallery's own headings (a group's on the index, a section's on a
+// component's page) have a saffron rule above them; a heading inside an
+// example (a thumbnail, the stage, a preview) keeps its component's look,
+// with no rule of the gallery's.
+func TestGalleryExampleHeadingsKeepTheirOwnLook(t *testing.T) {
+	d := dist(t)
+	b := startBrowser(t)
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
+	defer srv.Close()
+	b.doing, b.deadline = "emulating 1280 px", time.Now().Add(pageTimeout)
+	b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 1280, "height": 900, "deviceScaleFactor": 1, "mobile": false})
+	examples := 0
+	for _, path := range allPages(t, d) {
+		if path != "/components" && !strings.HasPrefix(path, "/components/") {
+			continue
+		}
+		b.open(srv.URL + path)
+		var got struct {
+			Own, Examples int
+			Ruled          []string
+		}
+		b.eval(`(() => {
+			const ruled = (h) => getComputedStyle(h).borderTopStyle !== 'none' && parseFloat(getComputedStyle(h).borderTopWidth) > 0
+			const inExample = (h) => !!h.closest('.gallery-thumb, .gallery-canvas, .gallery-preview')
+			const all = [...document.querySelectorAll('main h2, main h3')]
+			const own = all.filter((h) => !inExample(h) && h.tagName === 'H2')
+			const examples = all.filter(inExample)
+			return {
+				own: own.filter(ruled).length - own.length,
+				examples: examples.length,
+				ruled: examples.filter(ruled).slice(0, 3).map((h) => h.tagName.toLowerCase() + ' "' + h.textContent.trim().slice(0, 30) + '"'),
+			}
+		})()`, &got)
+		examples += got.Examples
+		if got.Own != 0 {
+			t.Errorf("%s: %d of the page's own h2 have no rule above them", path, -got.Own)
+		}
+		if len(got.Ruled) > 0 {
+			t.Errorf("%s: headings inside examples take the gallery's rule: %s", path, strings.Join(got.Ruled, ", "))
+		}
+	}
+	if examples == 0 {
+		t.Fatal("no example on a gallery page has a heading")
 	}
 }

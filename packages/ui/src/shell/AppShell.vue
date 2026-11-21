@@ -57,7 +57,7 @@ const props = withDefaults(
     collapsed?: boolean
     /** Whether the sidebar starts collapsed when `v-model:collapsed` is not bound and nothing is stored. */
     defaultCollapsed?: boolean
-    /** The localStorage key the collapsed state is kept under; false keeps nothing. */
+    /** The localStorage key the collapsed state is kept under; false keeps nothing (nor does a WeftProvider marked inset). */
     persist?: string | false
     /** The name of the navigation landmarks. */
     label?: string
@@ -91,13 +91,16 @@ defineSlots<{
 
 const t = computed<AppShellLabels>(() => ({ ...APP_SHELL_LABELS, ...props.labels }))
 const weft = useWeft()
-// A preview of an app, inside a page (WeftProvider inset), draws no <main> of its own.
+// A preview of an app, inside a page (WeftProvider inset), draws no <main> of
+// its own, and keeps nothing: a sidebar collapsed in a preview must not
+// collapse the next one drawn.
 const inset = weft.inset.value
+const persist = inset ? false : props.persist
 const id = useId('app-shell')
 const sidebarId = `${id}-sidebar`
 const collapsed = useControllable(props, 'collapsed', emit, () => props.defaultCollapsed)
 const root = useTemplateRef<HTMLElement>('root')
-if (props.persist) usePrePaint(`app-shell:${props.persist}`, collapsedSnippet(props.persist))
+if (persist) usePrePaint(`app-shell:${persist}`, collapsedSnippet(persist))
 
 // Narrow is the viewport's width: the root element's.
 const viewport = shallowRef<HTMLElement | null>(null)
@@ -105,12 +108,12 @@ const mounted = shallowRef(false)
 onMounted(() => {
   viewport.value = document.documentElement
   mounted.value = true
-  if (props.persist) {
-    const stored = readCollapsed(props.persist)
+  if (persist) {
+    const stored = readCollapsed(persist)
     if (stored !== undefined) collapsed.value = stored
   }
 })
-watch(collapsed, (on) => props.persist && mounted.value && writeCollapsed(props.persist, on))
+watch(collapsed, (on) => persist && mounted.value && writeCollapsed(persist, on))
 const width = useWidth(viewport)
 /** Unset until mounted: CSS picks from the viewport. */
 const layout = computed(() => {

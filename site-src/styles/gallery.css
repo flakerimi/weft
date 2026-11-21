@@ -11,9 +11,10 @@
 .gallery-when dd { margin: 4px 0 0; color: var(--weft-color-text-muted); }
 /* One column no wider than the page's, whatever its tables and examples need: they scroll in their own frames. */
 .gallery-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-block-start: 24px; }
-.gallery-section h2 { font-size: 1.5rem; padding-block-start: 0.5em; border-block-start: 2px solid var(--site-saffron); }
-.gallery-section h3 { font-size: 1.125rem; margin-block-start: 8px; }
-.gallery-section :is(h2, h3) { scroll-margin-block-start: 88px; }
+/* The page's own headings, not those inside an example's preview. */
+.gallery-section > h2 { font-size: 1.5rem; padding-block-start: 0.5em; border-block-start: 2px solid var(--site-saffron); }
+:is(.gallery-section, .gallery-more) > h3 { font-size: 1.125rem; margin-block-start: 8px; }
+.gallery-section > h2, :is(.gallery-section, .gallery-more) > h3 { scroll-margin-block-start: 88px; }
 .gallery-page :not(pre) > code { font-size: 0.875em; padding: 0.1em 0.35em; border-radius: 4px; background: color-mix(in srgb, currentColor 7%, transparent); }
 
 .gallery-code { margin: 0; border: 1px solid var(--weft-color-border); border-radius: 12px; overflow: hidden; }
@@ -48,10 +49,11 @@
 
 /* A table scrolls on its own when it is wider than the column, so the page never does. */
 .gallery-table { max-inline-size: 100%; overflow-x: auto; }
-.gallery-page table { border-collapse: collapse; inline-size: 100%; font-size: 0.9375rem; }
-.gallery-page :is(th, td) { text-align: start; vertical-align: top; padding: 8px 12px; border-block-end: 1px solid var(--weft-color-border); }
-.gallery-page thead th { font-size: 0.8125rem; color: var(--weft-color-text-muted); }
-.gallery-page tbody th { font-weight: 600; white-space: nowrap; }
+/* The page's own tables, not a Table example's. */
+.gallery-table table { border-collapse: collapse; inline-size: 100%; font-size: 0.9375rem; }
+.gallery-table :is(th, td) { text-align: start; vertical-align: top; padding: 8px 12px; border-block-end: 1px solid var(--weft-color-border); }
+.gallery-table thead th { font-size: 0.8125rem; color: var(--weft-color-text-muted); }
+.gallery-table tbody th { font-weight: 600; white-space: nowrap; }
 .gallery-api td:nth-child(2) code { overflow-wrap: anywhere; }
 .gallery-api td code + code { margin-inline-start: 8px; }
 .gallery-required { font-size: 0.8125rem; font-weight: 400; color: var(--weft-color-danger-text); }

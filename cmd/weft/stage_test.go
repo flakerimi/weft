@@ -191,6 +191,41 @@ func TestStageReleasesStagesOnlyListedReleases(t *testing.T) {
 	}
 }
 
+// The release the site serves now (--live), when site/releases.txt missed it
+// (its publish went live, but was not verified in time to be listed), is
+// staged beside the listed ones and the new one, so its users keep it; a
+// leftover that is neither listed, live nor new still is not.
+func TestStageReleasesKeepsTheLiveRelease(t *testing.T) {
+	skipWindows(t)
+	site := fakeSite(t, "", "0.0.1", "0.0.2")
+	for _, v := range []string{"0.0.3", "0.0.4", "0.0.9-leftover"} {
+		os.MkdirAll(filepath.Join(site, "releases", v), 0o755)
+		os.WriteFile(filepath.Join(site, "releases", v, "SHA256SUMS"), []byte(v), 0o644)
+	}
+	if msg, err := stageReleases("--live", "0.0.3", "--check", site, "0.0.4"); err != nil {
+		t.Fatalf("check: %v: %s", err, msg)
+	}
+	out := filepath.Join(t.TempDir(), "releases")
+	if msg, err := stageReleases("--live", "0.0.3", site, out, "0.0.4"); err != nil {
+		t.Fatalf("%v: %s", err, msg)
+	}
+	if got := files(t, out); got != "install,releases/0.0.1/SHA256SUMS,releases/0.0.2/SHA256SUMS,releases/0.0.3/SHA256SUMS,releases/0.0.4/SHA256SUMS,releases/latest" {
+		t.Fatalf("staged %s, want the listed, the live and the new release", got)
+	}
+	if b, _ := os.ReadFile(filepath.Join(out, "releases/latest")); string(b) != "0.0.4\n" {
+		t.Fatalf("latest %q", b)
+	}
+	// A live release site/releases does not have is refused, and nothing is staged.
+	fresh := filepath.Join(t.TempDir(), "releases")
+	msg, err := stageReleases("--live", "0.0.7", site, fresh, "0.0.4")
+	if err == nil || strings.TrimSpace(msg) != "stage-releases: "+site+"/releases/0.0.7, the release the site serves now, does not exist or is a test build" {
+		t.Fatalf("a live release that is missing: err %v, output %q", err, msg)
+	}
+	if _, err := os.Stat(fresh); err == nil {
+		t.Fatal("staged something after refusing")
+	}
+}
+
 // Without site/releases.txt nothing says which releases are published, so nothing is staged.
 func TestStageReleasesNeedsTheList(t *testing.T) {
 	skipWindows(t)
@@ -688,6 +723,37 @@ func TestPublishSiteDryRunPushesNothing(t *testing.T) {
 	}
 	if got := files(t, filepath.Join(trees[0], "site-src/releases")); got != "install,releases/0.0.1/SHA256SUMS,releases/0.0.1/weft_linux_amd64.tar.gz,releases/0.0.2/SHA256SUMS,releases/0.0.2/weft_linux_amd64.tar.gz,releases/0.0.3/SHA256SUMS,releases/0.0.3/weft_linux_amd64.tar.gz,releases/latest" {
 		t.Fatalf("the dry run's tree stages %s", got)
+	}
+}
+
+// A publish keeps the release the site serves now, even when site/releases.txt
+// missed it (its publish went live after wait-live gave up), says so, and
+// lists it once the new one is verified live; a leftover folder that is
+// neither listed, live nor new is not pushed.
+func TestPublishSiteKeepsALiveUnlistedRelease(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	for _, v := range []string{"0.0.3", "0.0.9-leftover"} {
+		os.MkdirAll(filepath.Join(r.root, "site/releases", v), 0o755)
+		os.WriteFile(filepath.Join(r.root, "site/releases", v, "SHA256SUMS"), []byte("sums of "+v+"\n"), 0o644)
+	}
+	os.WriteFile(filepath.Join(r.fake, "latest"), []byte("0.0.3\n"), 0o644)
+	out, err := r.run("publish-site.sh", "0.0.4")
+	if err != nil {
+		t.Fatalf("publish: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "publish: https://weft.base.al serves 0.0.3, which site/releases.txt does not list; it is staged so its users keep it, and listed once 0.0.4 is verified live") {
+		t.Fatalf("the publish does not say 0.0.3 was missing from site/releases.txt:\n%s", out)
+	}
+	pushed, _ := os.ReadFile(filepath.Join(r.fake, "pushed-files"))
+	if !strings.Contains(string(pushed), "./site-src/releases/releases/0.0.3/SHA256SUMS") {
+		t.Fatalf("the live release 0.0.3 was not pushed:\n%s", pushed)
+	}
+	if strings.Contains(string(pushed), "0.0.9-leftover") {
+		t.Fatalf("the leftover was pushed:\n%s", pushed)
+	}
+	if got := r.read("site/releases.txt"); got != "0.0.1\n0.0.2\n0.0.3\n0.0.4\n" {
+		t.Fatalf("releases.txt %q", got)
 	}
 }
 

@@ -17,7 +17,8 @@ const props = withDefaults(defineProps<{
   /**
    * Everything inside is a preview of a page, drawn inside another (a
    * gallery's stage or thumbnail): a Page or an AppShell in it draws no
-   * `<main>` landmark, and a Page's title is an h2. An outer inset provider
+   * `<main>` landmark, a Page's title is an h2, and an AppShell keeps no
+   * collapsed state. An outer inset provider
    * makes every one inside it inset too.
    */
   inset?: boolean

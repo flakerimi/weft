@@ -44,20 +44,27 @@ grep -qxF "$version" site/releases.txt 2>/dev/null &&
 
 # A push replaces the whole site: every release it has published must be staged again.
 scripts/published-releases.sh check site || exit 1
-# And as a verified push served it: checked now, before anything is built or a tree made.
-store=site/pushed/releases
-scripts/stage-releases.sh --link-from "$store" --check site || exit 1
 
-# The release the site serves now must be staged too, even if the list missed it.
+# The release the site serves now must be staged too, even if the list missed
+# it: a publish that went live after wait-live gave up was never listed.
 live=$(curl -fsSL "$url/releases/latest" 2>/dev/null | tr -d ' \r\n') || live=
+unlisted=
 if scripts/version.sh "$live"; then
 	[ "$live" = "$version" ] || [ -f "site/releases/$live/SHA256SUMS" ] ||
 		fail "$url serves release $live, which site/releases does not have; fetch it (SHA256SUMS and the files it lists, from $url/releases/$live/) before publishing"
+	if [ "$live" != "$version" ] && ! grep -qxF "$live" site/releases.txt; then
+		unlisted=$live
+		echo "publish: $url serves $live, which site/releases.txt does not list; it is staged so its users keep it, and listed once $version is verified live." >&2
+	fi
 elif [ -n "$dry" ]; then
 	echo "publish: cannot read the live release from $url/releases/latest; not checked in a dry run" >&2
 else
 	fail "cannot read the live release from $url/releases/latest, so cannot check that it is kept"
 fi
+
+# And as a verified push served them: checked now, before anything is built or a tree made.
+store=site/pushed/releases
+scripts/stage-releases.sh --link-from "$store" ${unlisted:+--live "$unlisted"} --check site || exit 1
 
 scripts/release.sh "$version"
 scripts/site.sh build
@@ -81,7 +88,7 @@ done
 mkdir "$tree/site-src"
 cp site-src/main.go "$tree/site-src/"
 cp -R site-src/dist "$tree/site-src/dist"
-scripts/stage-releases.sh --link-from "$store" site "$tree/site-src/releases" "$version"
+scripts/stage-releases.sh --link-from "$store" ${unlisted:+--live "$unlisted"} site "$tree/site-src/releases" "$version"
 cat >"$tree/Dockerfile" <<EOF
 FROM golang:1.26 AS build
 WORKDIR /src
@@ -139,5 +146,7 @@ keep_releases() {
 }
 keep_releases ||
 	echo "publish: $kept holds every release it served, but not all could be kept once in $store; the next publish copies those again." >&2
+# The live release the list missed was served by this push too: list it first.
+[ -z "$unlisted" ] || scripts/published-releases.sh add site "$unlisted"
 scripts/published-releases.sh add site "$version"
 echo "published weft $version at $url; listed in site/releases.txt (commit it); its tree is $kept"

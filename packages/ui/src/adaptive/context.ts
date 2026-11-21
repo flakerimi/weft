@@ -9,8 +9,9 @@ export interface WeftContext {
   /**
    * Whether this part of the page is a preview of a page inside another (a
    * gallery's stage or thumbnail): a WeftProvider marked `inset` said so.
-   * Page and AppShell then draw no `<main>` landmark, and Page's title is an
-   * h2, so the page around keeps one main and one h1.
+   * Page and AppShell then draw no `<main>` landmark, Page's title is an h2
+   * and AppShell keeps no collapsed state, so the page around keeps one main
+   * and one h1, and a preview leaves nothing behind for the next.
    */
   inset: Readonly<Ref<boolean>>
 }

@@ -19,15 +19,24 @@
 # every tree.
 # A release holding a dot-named file (Finder's .DS_Store) is refused: the
 # site's server refuses to start with one.
+# With --live LIVE, the release the site serves now is staged too, though
+# SITE/releases.txt may not list it (its publish went live, but was not
+# verified in time to be listed): its users keep it. It must be in
+# SITE/releases.
 # With --check, only check, and stage nothing; OUT_DIR is then not given.
-# Usage: scripts/stage-releases.sh [--link-from KEPT] [--check] SITE_DIR [OUT_DIR] [LATEST_VERSION]
+# Usage: scripts/stage-releases.sh [--link-from KEPT] [--live LIVE] [--check] SITE_DIR [OUT_DIR] [LATEST_VERSION]
 set -eu
 kept=
 check=
+live=
 while :; do
 	case "${1:-}" in
 	--link-from)
 		kept="$2"
+		shift 2
+		;;
+	--live)
+		live="$2"
 		shift 2
 		;;
 	--check)
@@ -56,7 +65,11 @@ real() {
 if [ -n "$latest" ]; then
 	real "$latest" || fail "$site/releases/$latest does not exist or is a test build"
 fi
-# The releases to stage: the published ones, then the one being published.
+if [ -n "$live" ]; then
+	real "$live" || fail "$site/releases/$live, the release the site serves now, does not exist or is a test build"
+fi
+# The releases to stage: the published ones, the one the site serves now,
+# then the one being published. No other folder in SITE/releases.
 list="$site/releases.txt"
 [ -f "$list" ] || fail "$list does not exist; it lists the releases the site has published, the ones staged"
 versions=
@@ -70,7 +83,9 @@ while IFS= read -r v || [ -n "$v" ]; do
 		echo "stage-releases: $list lists $v, which $site/releases does not have (or is a test build); not staged" >&2
 	fi
 done <"$list"
-case " $versions " in *" $latest "*) ;; *) versions="$versions${latest:+ $latest}" ;; esac
+for v in $live $latest; do
+	case " $versions " in *" $v "*) ;; *) versions="$versions $v" ;; esac
+done
 staged() {
 	case " $versions " in *" $1 "*) return 0 ;; esac
 	return 1
@@ -84,7 +99,7 @@ done
 for dir in ${out:+"$out"/releases/*/}; do
 	[ -d "$dir" ] || continue
 	v=$(basename "$dir")
-	staged "$v" || fail "$out/releases/$v is not a release to stage ($list does not list it, and it is not the one being published); remove it by hand"
+	staged "$v" || fail "$out/releases/$v is not a release to stage ($list does not list it, and it is neither live nor the one being published); remove it by hand"
 	diff -r "$site/releases/$v" "$dir" >/dev/null 2>&1 ||
 		fail "$out/releases/$v differs from $site/releases/$v, so staging would merge two releases; remove it by hand"
 done

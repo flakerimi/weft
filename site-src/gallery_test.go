@@ -297,9 +297,12 @@ func TestGalleryWithoutJavaScript(t *testing.T) {
 	}
 }
 
-// The gallery's budgets, brotli: a component page at most 16 KB without its
-// islands (HTML, its CSS inlined, any stylesheet it links); the index at
-// most 14 KB without its filter island plus 300 B for each component it
+// The gallery's budgets, brotli, counted as every page's first view is (the
+// HTML, its CSS inlined, any stylesheet it links, the loader and whatever the
+// page or its Early Hints preload; firstView): a component page at most 17 KB,
+// which is the 16 KB its HTML and CSS had before the loader (boot-*.js,
+// about 0.55 KB) was counted, and 1 KB for that;
+// the index at most 14 KB plus 300 B for each component it
 // shows, since every card draws a live example with its component's CSS
 // (see the Task 4 report: 14 KB alone cannot hold 76 live thumbnails).
 // Island chunks are reported, not budgeted. The gallery's islands load a
@@ -312,13 +315,9 @@ func TestGalleryBudgets(t *testing.T) {
 	readJSON(t, d, "manifest.json", &m)
 	readJSON(t, d, "routes.json", &r)
 	_, entries, _ := readCatalog(t)
-	static := func(html, file string) int {
-		size := brotliSize(t, d, m, "/"+file)
-		for _, link := range stylesheetLink.FindAllStringSubmatch(html, -1) {
-			size += brotliSize(t, d, m, link[1])
-		}
-		return size
-	}
+	// The first view, as for the docs and the landing page: HTML, CSS, the
+	// loader and whatever the page or its Early Hints preload.
+	static := func(path, html, file string) int { return firstView(t, d, m, path, file, html) }
 	runtimeOf := func(html string) string { return pageRuntime(t, d, html) }
 	var home, gallery string
 	largest, largestPath := 0, ""
@@ -332,19 +331,19 @@ func TestGalleryBudgets(t *testing.T) {
 		case p.Path == "/":
 			home = runtimeOf(html)
 		case p.Path == "/components":
-			size := static(html, p.HTML)
+			size := static(p.Path, html, p.HTML)
 			limit := 14*1024 + 300*len(entries)
-			t.Logf("/components: %d B brotli without its filter island (limit %d B); island chunks %d B", size, limit, chunkBytes(t, d, m, p.Islands))
+			t.Logf("/components: first view %d B brotli (limit %d B); island chunks %d B", size, limit, chunkBytes(t, d, m, p.Islands))
 			if size > limit {
-				t.Errorf("/components is %d B brotli without its filter island, over %d B", size, limit)
+				t.Errorf("/components's first view is %d B brotli, over %d B", size, limit)
 			}
 		case strings.HasPrefix(p.Path, "/components/"):
-			size := static(html, p.HTML)
+			size := static(p.Path, html, p.HTML)
 			if size > largest {
 				largest, largestPath = size, p.Path
 			}
-			if size > 16*1024 {
-				t.Errorf("%s is %d B brotli without its islands, over 16 KB", p.Path, size)
+			if size > 17*1024 {
+				t.Errorf("%s's first view is %d B brotli, over 17 KB", p.Path, size)
 			}
 			if rt := runtimeOf(html); gallery == "" {
 				gallery = rt
@@ -353,7 +352,7 @@ func TestGalleryBudgets(t *testing.T) {
 			}
 		}
 	}
-	t.Logf("largest component page: %s, %d B brotli without its islands", largestPath, largest)
+	t.Logf("largest component page: %s, first view %d B brotli", largestPath, largest)
 	if home == "" || gallery == "" || home == gallery {
 		t.Errorf("the gallery's runtime %q is not its own (the home page loads %q)", gallery, home)
 	} else {
@@ -484,5 +483,34 @@ func TestGalleryPagesHaveOneMainAndOneH1(t *testing.T) {
 		if n := len(h1.FindAllString(html, -1)); n != 1 {
 			t.Errorf("%s has %d h1, want 1", p.Path, n)
 		}
+	}
+}
+
+// Nor does an AppShell in an example remember its collapsed sidebar: in a
+// preview (WeftProvider inset) it keeps nothing in localStorage, and no
+// gallery page has the pre-paint that would collapse every AppShell drawn
+// after one was collapsed in a stage.
+func TestGalleryAppShellsAreNotRemembered(t *testing.T) {
+	d := dist(t)
+	var r builtRoutes
+	readJSON(t, d, "routes.json", &r)
+	shells := 0
+	for _, p := range r.Pages {
+		if p.Path != "/components" && !strings.HasPrefix(p.Path, "/components/") {
+			continue
+		}
+		b, err := fs.ReadFile(d, p.HTML)
+		if err != nil {
+			t.Fatal(err)
+		}
+		html := string(b)
+		shells += strings.Count(html, `class="weft-app-shell"`)
+		// The pre-paint, not the props table, which names the default key.
+		if pre := regexp.MustCompile(`<script data-weft-prepaint>[^<]*`).FindString(html); strings.Contains(pre, "weft:app-shell:collapsed") {
+			t.Errorf("%s remembers a collapsed AppShell (weft:app-shell:collapsed in its pre-paint)", p.Path)
+		}
+	}
+	if shells == 0 {
+		t.Fatal("no gallery page draws an AppShell")
 	}
 }
