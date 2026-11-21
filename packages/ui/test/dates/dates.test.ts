@@ -2,7 +2,7 @@
 // The date helpers under Node (no DOM): values, grids, names and typed dates in a locale.
 import { CalendarDate, CalendarDateTime, toCalendar, BuddhistCalendar } from '@internationalized/date'
 import { describe, expect, it } from 'vitest'
-import { clamp, dayOfWeek, fromDate, isoWeek, monthWeeks, parseLocalDate, pattern, toDate, weekdays } from '../../src/dates/dates.ts'
+import { clamp, dayOfWeek, formatRange, fromDate, isoWeek, monthWeeks, parseLocalDate, pattern, toDate, weekdays } from '../../src/dates/dates.ts'
 
 const ref = new CalendarDate(2026, 11, 21)
 const iso = (d: CalendarDate | null) => d?.toString() ?? null
@@ -105,5 +105,16 @@ describe('typed dates', () => {
     expect(pattern('en-US')).toBe('mm/dd/yyyy')
     expect(pattern('en-GB')).toBe('dd/mm/yyyy')
     expect(pattern('de-DE')).toBe('dd.mm.yyyy')
+  })
+})
+
+describe('ranges written out', () => {
+  // ICU versions differ in the spaces round a range's dash: Node's writes thin
+  // spaces where a browser may write plain ones, and the server's text must be
+  // the browser's, or the hydration does not match.
+  it('use plain spaces, whichever ICU wrote them', () => {
+    const text = formatRange('en-US', { month: 'long', year: 'numeric' }, new CalendarDate(2026, 12, 1), new CalendarDate(2027, 1, 1))
+    expect(text).toBe('December 2026 – January 2027')
+    expect(formatRange('en-US', { year: 'numeric', month: 'long', day: 'numeric' }, new CalendarDate(2026, 12, 20), new CalendarDate(2026, 12, 27))).not.toMatch(/[\u2009\u202f]/)
   })
 })

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "weft-build-pages --root . --out dist --theme weft",
+    "build": "weft-build-pages --root . --out dist --theme weft --separate-runtime /components",
+    "test": "vitest run",
     "typecheck": "vue-tsc -p tsconfig.json"
   },
   "dependencies": {
@@ -14,10 +15,12 @@
     "vue": "3.6.0-rc.16"
   },
   "devDependencies": {
+    "@types/node": "^26.6.6",
     "@vitejs/plugin-vue": "^6.0.11",
     "@weft/vite": "workspace:*",
     "typescript": "~6.0.3",
     "vite": "^8.3.8",
+    "vitest": "^5.1.1",
     "vue-tsc": "^3.3.14"
   }
 }

@@ -24,7 +24,7 @@ import { focus, isRtl } from '../headless/dom.ts'
 import { useControllable } from '../headless/useControllable.ts'
 import { useId } from '../headless/useId.ts'
 import { createSwipe } from '../headless/swipe.ts'
-import { CalendarDate, clamp, dayOfWeek, format, formatter, fromDate, isoWeek, monthWeeks, sameDay, toDate, utc, weekdays, type CalendarLabels, type CalendarModel, type DateInput, type ValueFormat } from './dates.ts'
+import { CalendarDate, clamp, dayOfWeek, format, formatRange, fromDate, isoWeek, monthWeeks, sameDay, toDate, utc, weekdays, type CalendarLabels, type CalendarModel, type DateInput, type ValueFormat } from './dates.ts'
 import { useLocale } from '../adaptive/locale.ts'
 import type { Size, Tone } from '../types.ts'
 import '../styles/base.css'
@@ -215,12 +215,11 @@ const headingText = computed(() => {
   if (!ready.value) return ''
   if (view.value === 'month') return fmt(focused.value, { year: 'numeric' })
   if (view.value === 'year') {
-    const f = formatter(locale.value, { year: 'numeric' })
-    return f.formatRange(utc(new CalendarDate(yearStart.value, 1, 1)), utc(new CalendarDate(yearStart.value + 11, 1, 1)))
+    return formatRange(locale.value, { year: 'numeric' }, new CalendarDate(yearStart.value, 1, 1), new CalendarDate(yearStart.value + 11, 1, 1))
   }
   const n = months.value.length
   if (n === 1) return months.value[0]!.label
-  return formatter(locale.value, { month: 'long', year: 'numeric' }).formatRange(utc(start.value), utc(start.value.add({ months: n - 1 })))
+  return formatRange(locale.value, { month: 'long', year: 'numeric' }, start.value, start.value.add({ months: n - 1 }))
 })
 const headingId = `${id}-heading`
 

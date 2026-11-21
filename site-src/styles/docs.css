@@ -1,42 +1,6 @@
-/* The docs layout: the sidebar, the page, and "On this page" beside it on a
-   wide screen (above the text on a narrower one). Under 768 px the sidebar is
-   a drawer from the start side, a popover the header's Menu button opens. */
-.docs {
-  display: grid;
-  grid-template-columns: 15rem minmax(0, 1fr);
-  gap: 48px;
-  max-inline-size: 1280px;
-  margin-inline: auto;
-  padding-inline: 24px;
-  /* The sidebar's column lies on a plain ground, top to bottom, so its text does not sit on the warp. */
-  background: linear-gradient(90deg, var(--weft-color-bg) calc(24px + 15rem), transparent 0);
-}
-
-/* The sidebar: in the page's flow on a wide screen, whatever the popover
-   attribute would make of it. */
-.docs-nav[popover] {
-  position: sticky;
-  inset: 72px auto auto;
-  display: block;
-  align-self: start;
-  max-block-size: calc(100vh - 72px);
-  overflow: auto;
-  inline-size: auto;
-  block-size: auto;
-  margin: 0;
-  padding: 32px 16px;
-  color: inherit;
-  /* A plain ground, so its text does not sit on the warp. */
-  background: var(--weft-color-bg);
-  border: 0;
-}
-.docs-nav .weft-nav__heading { font-size: 0.8125rem; letter-spacing: 0.04em; text-transform: uppercase; }
-
-/* The page lies on a plain ground, so the warp does not run behind the text. */
-.docs-page.weft-page { max-inline-size: none; padding: 32px 32px 64px; gap: 32px; background: var(--weft-color-bg); border-inline: 1px solid var(--site-warp); }
-.docs-page .weft-page__heading { display: grid; gap: 12px; max-inline-size: 46rem; }
-.docs-title { font-size: clamp(2rem, 4vw, 2.75rem); line-height: 1.08; letter-spacing: -0.02em; }
-.docs-lead { font-size: 1.1875rem; color: var(--weft-color-text-muted); }
+/* The docs: their layout (shell.css), and "On this page" beside the text on
+   a wide screen (above it on a narrower one). */
+@import './shell.css';
 
 .docs-body {
   display: grid;
@@ -68,46 +32,8 @@
 .docs-prose img { max-inline-size: 100%; block-size: auto; border-radius: 12px; }
 
 
-/* Previous and next. */
-.docs-pager { grid-area: pager; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-block-start: 56px; }
-.docs-pager a.weft-link {
-  display: grid;
-  padding: 16px 20px;
-  border: 1px solid var(--weft-color-border);
-  border-radius: 12px;
-  background: var(--weft-color-surface);
-  color: var(--weft-color-text);
-  font-weight: 600;
-  text-decoration: none;
-}
-.docs-pager a.weft-link:hover { border-color: var(--weft-color-primary); }
-.docs-pager [rel="next"] { grid-column: 2; text-align: end; }
-.docs-pager span { font-size: 0.875rem; font-weight: 400; color: var(--weft-color-text-muted); }
-
 @media (max-width: 1099.98px) {
   .docs-body { grid-template: "toc" "text" "pager" / minmax(0, 46rem); }
   .docs-toc { position: static; margin-block-end: 32px; }
 }
 
-@media (max-width: 767.98px) {
-  .docs { display: block; padding-inline: 0; background: none; }
-  .docs-page.weft-page { padding-inline: 16px; border: 0; }
-  /* The drawer: shut, the popover attribute hides it; open, it comes in from the start side. */
-  .docs-nav[popover] {
-    position: fixed;
-    inset-block: 0;
-    inset-inline: 0 auto;
-    display: none;
-    inline-size: min(20rem, 85vw);
-    block-size: 100%;
-    max-block-size: none;
-    padding: 24px 16px;
-    background: var(--weft-color-surface);
-    border-inline-end: 1px solid var(--weft-color-border);
-  }
-  .docs-nav:popover-open { display: block; }
-  .docs-nav .docs-close { margin: 0 0 8px auto; display: flex; }
-  .docs-nav::backdrop { background: color-mix(in srgb, var(--weft-color-text) 32%, transparent); }
-  .docs-pager { grid-template-columns: 1fr; }
-  .docs-pager [rel="next"] { grid-column: auto; }
-}

@@ -1,5 +1,5 @@
 <script setup vapor lang="ts">
-import { provide, useSSRContext, type Component } from 'vue'
+import { inject, provide, useSSRContext, type Component } from 'vue'
 import { ID_SCOPE, type IdScope } from '../headless/useId.ts'
 import '../styles/base.css'
 
@@ -18,7 +18,11 @@ const p = defineProps<{
 
 // The page is rendered on the server only; in the browser the island runtime
 // hydrates <weft-island> on its own, so this component renders nothing there.
-const server = import.meta.env.SSR
+// Inside another island (whose id scope it finds, on the server and in the
+// browser alike) it is no island of its own: it draws its component in
+// place, and the outer island hydrates that with the rest of itself.
+const nested = inject<IdScope | null>(ID_SCOPE, null) !== null
+const server = import.meta.env.SSR && !nested
 
 /**
  * What `value` is when JSON would drop or change it on the way to the browser,
@@ -104,4 +108,5 @@ if (server) {
     <component is="script" type="application/json" :innerHTML="json" />
     <component :is="component" v-bind="p.props" />
   </component>
+  <component :is="component" v-else-if="nested" v-bind="p.props" />
 </template>

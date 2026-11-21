@@ -57,9 +57,9 @@ describe('every @weft/ui example, server-rendered in an island', () => {
     expect(Object.keys(examples).length).toBeGreaterThan(100)
   })
 
-  // An island does not go inside another: the page's islands are hydrated one by one, each on its
-  // own. Island's example is a page with an island; island.test.ts and the page build cover it.
-  const islands = Object.keys(examples).filter((f) => !f.startsWith('Island/')).sort()
+  // Island's own example has an island inside: inside another island it is drawn in place, and
+  // the outer island hydrates it, as the gallery's preview stage does.
+  const islands = Object.keys(examples).sort()
 
   const cases = islands.flatMap((file) => [
     [file, 'pointer'],

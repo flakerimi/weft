@@ -22,6 +22,10 @@ same on the server (render order) and in the browser (document order). So an
 island inside a `<Teleport>`, whose markup lands elsewhere in the document,
 is not supported: its position, and so its ids, would differ.
 
+An island inside another island (a component that uses one, shown in an
+island) is not an island of its own: it draws its component in place, and
+the outer island hydrates it with the rest of itself.
+
 The page inlines the CSS of everything the island's component uses, not
 only what it draws on the server, since the browser may draw the rest later
 (a menu that opens, a field that appears). A name taken from the `@weft/ui`

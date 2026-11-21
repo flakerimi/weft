@@ -576,6 +576,21 @@ function highlight(shiki: Highlighter | null, code: string, lang: string): strin
   return shiki!.codeToHtml(code.replace(/\n$/, ''), { lang: PLAIN.has(lang) ? 'text' : LANGS.get(lang)!, theme: 'weft' })
 }
 
+/**
+ * Source a page reads itself (an example's file, say), highlighted as the
+ * content's code blocks are: by Shiki at build time, with the colours as
+ * `--weft-code-*` variables that `code.css` sets. `lang` is a Shiki language
+ * id or alias in any case, or `text`; one it does not know is refused.
+ */
+export async function highlightCode(code: string, lang: string): Promise<string> {
+  const known = lang.toLowerCase()
+  if (!PLAIN.has(known) && !LANGS.has(known)) {
+    throw new Error(`highlightCode: the language ${lang} is not one Shiki knows; use one of its language ids, or text.`)
+  }
+  const id = PLAIN.has(known) ? 'text' : LANGS.get(known)!
+  return highlight(await highlighter([id]), code, id)
+}
+
 const contentId = 'virtual:weft/content'
 const resolvedContentId = '\0' + contentId
 /** An absolute file path as Vite takes it in an import, on every OS. */
@@ -586,7 +601,8 @@ const fsImport = (file: string) => {
 
 /**
  * Serves `virtual:weft/content` to pages on the server: `useContent`,
- * `useCollection` and `contentPaths`, over the site's content loaded once, with
+ * `useCollection` and `contentPaths`, and `highlightCode` for source a page
+ * reads itself, over the site's content loaded once, with
  * `content.config.ts` (when the site has one) as its config. An island runs in
  * the browser, where there is no content to read, so it is refused there.
  */
@@ -608,11 +624,12 @@ export function weftContent(): Plugin {
       const config = join(root, 'content.config.ts')
       return [
         existsSync(config) ? `import config from ${JSON.stringify(fsImport(config))}` : 'const config = undefined',
-        `import { loadContent } from ${JSON.stringify(fsImport(fileURLToPath(import.meta.url)))}`,
+        `import { loadContent, highlightCode } from ${JSON.stringify(fsImport(fileURLToPath(import.meta.url)))}`,
         `const content = await loadContent(${JSON.stringify(root)}, config)`,
         'export const useContent = (collection, slug) => content.page(collection, slug)',
         'export const useCollection = (collection) => content.list(collection)',
         'export const contentPaths = (collection, param) => content.paths(collection, param)',
+        'export { highlightCode }',
         // For buildSite, which copies the images the pages show into the build.
         'export const contentAssets = () => content.assets()',
         '',

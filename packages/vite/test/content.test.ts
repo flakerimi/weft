@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { loadContent, type ContentConfig } from '../src/content.ts'
+import { highlightCode, loadContent, type ContentConfig } from '../src/content.ts'
 
 const temps: string[] = []
 afterAll(() => {
@@ -444,6 +444,25 @@ describe('collections', () => {
     )
     expect(await failure({ 'content/docs/intro.md': page('A') }, { docs: { sheme: {} } })).toBe(
       'content.config.ts: the docs collection has sheme, which a collection does not take; it takes base and schema.',
+    )
+  })
+})
+
+describe('highlightCode', () => {
+  it('highlights source a page reads itself, as code blocks are, by language id or alias', async () => {
+    const html = await highlightCode('<script setup lang="ts">\nconst a = 1\n</script>\n', 'vue')
+    expect(html).toMatch(/^<pre class="shiki weft"/)
+    expect(html).toContain('style="color:var(--weft-code-token-keyword)">const</span>')
+    expect(html).not.toMatch(/#[0-9a-f]{6}/i)
+    // The last newline is not an empty line.
+    expect(html).not.toMatch(/<span class="line"><\/span><\/code>/)
+    expect(await highlightCode('a & b', 'TXT')).toContain('<span>a &#x26; b</span>')
+    expect(await highlightCode('{"a": 1}', 'JSON')).toContain('var(--weft-code-token-')
+  })
+
+  it('refuses a language Shiki does not know, in one sentence', async () => {
+    await expect(highlightCode('x', 'klingon')).rejects.toThrow(
+      'highlightCode: the language klingon is not one Shiki knows; use one of its language ids, or text.',
     )
   })
 })

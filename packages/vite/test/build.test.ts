@@ -1410,6 +1410,19 @@ describe('contentType', () => {
     ])
     expect(contentType('a.unknown')).toBe('application/octet-stream')
   })
+
+  it('serves Markdown as text, compressed like the other text files', async () => {
+    expect(contentType('SKILL.md')).toBe('text/markdown; charset=utf-8')
+    const root = linkedSite('files-site')
+    writeFileSync(
+      join(root, 'pages/index.vue'),
+      `<script setup vapor lang="ts">\nimport { useFile } from 'virtual:weft/files'\nuseFile('/notes.md', '# Notes\\n')\n</script>\n\n<template><p>x</p></template>\n`,
+    )
+    const out = join(tempDir(), 'dist')
+    const manifest = await buildSite({ root, outDir: out })
+    expect(manifest.files['/notes.md']).toMatchObject({ type: 'text/markdown; charset=utf-8', br: true, gz: true })
+    expect(readFileSync(join(out, 'notes.md'), 'utf8')).toBe('# Notes\n')
+  }, 30_000)
 })
 
 describe('bin/weft-build-pages.mjs', () => {
@@ -1451,7 +1464,16 @@ describe('bin/weft-build-pages.mjs', () => {
       code: 1,
       stderr:
         'weft-build-pages: --out is required.\n' +
-        'usage: weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa|weft] [--preload-font <file.woff2>]...\n',
+        'usage: weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa|weft] [--preload-font <file.woff2>]... [--separate-runtime <section path>]...\n',
+    })
+  })
+
+  it('passes each --separate-runtime on to the build', async () => {
+    const bin = fileURLToPath(new URL('../bin/weft-build-pages.mjs', import.meta.url))
+    const args = [bin, '--root', fixture('site'), '--out', join(tempDir(), 'dist'), '--separate-runtime', '/counter', '--separate-runtime', 'about']
+    await expect(promisify(execFile)(process.execPath, args)).rejects.toMatchObject({
+      code: 1,
+      stderr: 'weft-build-pages: buildSite: separateRuntimes has "about"; give a section\'s path, like "/components".\n',
     })
   })
 })
@@ -1504,5 +1526,132 @@ describe('cssTargets', () => {
     const manifest = await buildSite({ root, outDir: out })
     expect(existsSync(join(out, 'pages', 'index', 'index.html'))).toBe(true)
     expect(Object.keys(manifest).length).toBeGreaterThan(0)
+  })
+})
+
+describe('buildSite with files its pages write', { timeout: 30_000 }, () => {
+  let out: string
+  let manifest: Manifest
+  beforeAll(async () => {
+    out = tempDir()
+    manifest = await buildSite({ root: fixture('files-site'), outDir: out })
+  })
+
+  it('writes each file at its path, compressed and in the manifest, revalidated', () => {
+    expect(readFileSync(join(out, 'catalog.json'), 'utf8')).toBe('{"items":["a","b"]}\n')
+    expect(readFileSync(join(out, 'items/a.json'), 'utf8')).toBe('{"id":"a"}')
+    expect(readFileSync(join(out, 'items/b.json'), 'utf8')).toBe('{"id":"b"}')
+    expect(brotliDecompressSync(readFileSync(join(out, 'catalog.json.br'))).toString()).toBe('{"items":["a","b"]}\n')
+    expect(manifest.files['/catalog.json']).toEqual({
+      etag: etagOf(Buffer.from('{"items":["a","b"]}\n')),
+      type: 'application/json',
+      br: true,
+      gz: true,
+      immutable: false,
+    })
+    expect(manifest.files['/items/a.json']?.type).toBe('application/json')
+  })
+
+  it('writes a file several pages give with the same bytes once', () => {
+    expect(readFileSync(join(out, 'shared.txt'), 'utf8')).toBe('one text\n')
+    expect(manifest.files['/shared.txt']?.type).toBe('text/plain; charset=utf-8')
+  })
+
+  it('highlights code a page reads itself, at build time', () => {
+    const html = readFileSync(join(out, 'pages/index/index.html'), 'utf8')
+    expect(html).toContain('<pre class="shiki weft"')
+    expect(html).toContain('var(--weft-code-token-keyword)')
+  })
+})
+
+describe('buildSite refuses a file a page writes', { timeout: 30_000 }, () => {
+  /** The files-site with its index page writing `call` instead. */
+  async function failure(call: string, extra: Record<string, string> = {}): Promise<string> {
+    const root = linkedSite('files-site')
+    writeFileSync(
+      join(root, 'pages/index.vue'),
+      `<script setup vapor lang="ts">\nimport { useFile } from 'virtual:weft/files'\n${call}\n</script>\n\n<template><p>x</p></template>\n`,
+    )
+    for (const [path, text] of Object.entries(extra)) writeFileSync(join(root, path), text)
+    try {
+      await buildSite({ root, outDir: join(tempDir(), 'dist') })
+    } catch (e) {
+      return (e as Error).message
+    }
+    throw new Error('the build did not fail')
+  }
+
+  it('that two pages give with different bytes, naming both', async () => {
+    expect(await failure(`useFile('/shared.txt', 'other text')`)).toBe(
+      'buildSite: pages/index.vue and pages/items/[id].vue both write /shared.txt, with different bytes; give each file one page, or the same bytes.',
+    )
+  })
+
+  it.each([
+    ['items.json', 'does not start with /'],
+    ['/a/../b.json', 'has an empty, . or .. segment'],
+    ['/a//b.json', 'has an empty, . or .. segment'],
+    ['/docs/', 'has an empty, . or .. segment'],
+    ['/pages/x.json', 'is under /pages/, where the built pages are'],
+    ['/assets/x.json', 'is under /assets/, where the build puts its hashed files'],
+    ['/routes.json', "is one of the build's own files"],
+    ['/manifest.json', "is one of the build's own files"],
+    ['/a\\b.json', 'has a backslash or NUL'],
+  ])('at %s', async (path, why) => {
+    expect(await failure(`useFile(${JSON.stringify(path)}, 'x')`)).toBe(
+      `buildSite: pages/index.vue writes ${path}, which ${why}; give a path from the site root, like /catalog.json.`,
+    )
+  })
+
+  it('that a public file has, naming both', async () => {
+    expect(await failure(`useFile('/robots.txt', 'x')`)).toBe(
+      'buildSite: public/robots.txt would overwrite robots.txt from pages/index.vue; rename or move it.',
+    )
+  })
+
+  it('that is not text', async () => {
+    expect(await failure(`useFile('/a.json', 1 as unknown as string)`)).toBe(
+      'useFile: the body of /a.json is not a string; give the file\'s text.',
+    )
+  })
+})
+
+describe('buildSite with a section of its own runtime', { timeout: 60_000 }, () => {
+  let out: string
+  let manifest: Manifest
+  const read = (p: string) => readFileSync(join(out, p), 'utf8')
+  const entryOf = (page: string) => /<script type="module" src="([^"]+)">/.exec(read(`pages/${page}/index.html`))?.[1]
+
+  beforeAll(async () => {
+    out = tempDir()
+    manifest = await buildSite({ root: fixture('site'), outDir: out, separateRuntimes: ['/counter'] })
+  })
+
+  it("gives the section's pages a runtime of their own, which registers only its islands", () => {
+    const own = entryOf('counter')!
+    const rest = entryOf('about')!
+    expect(own).toMatch(/^\/assets\/client-[\w-]+\.js$/)
+    expect(rest).toMatch(/^\/assets\/client-[\w-]+\.js$/)
+    expect(own).not.toBe(rest)
+    expect(entryOf('escape')).toBe(rest)
+    const registry = (entry: string) => read(entry.slice(1)) + read(entry.slice(1)).match(/\.\/[\w-]+\.js/g)!.join(' ')
+    expect(registry(own)).toMatch(/Counter-[\w-]+\.js/)
+    expect(registry(own)).not.toMatch(/Lazy-[\w-]+\.js/)
+    expect(registry(rest)).toMatch(/Lazy-[\w-]+\.js/)
+    expect(registry(rest)).toMatch(/Counter-[\w-]+\.js/)
+    for (const entry of [own, rest]) expect(manifest.files[entry]).toMatchObject({ immutable: true, br: true })
+  })
+
+  it("hints each page its own runtime's modules", () => {
+    expect(manifest.hints['/counter']).toContain(`<${entryOf('counter')}>; rel=modulepreload`)
+    expect(manifest.hints['/about']).toContain(`<${entryOf('about')}>; rel=modulepreload`)
+  })
+})
+
+describe('buildSite refuses a separate runtime that names no section', () => {
+  it.each(['counter', '/counter/', '/', '/a b'])('%s', async (prefix) => {
+    await expect(buildSite({ root: fixture('site'), outDir: join(tempDir(), 'dist'), separateRuntimes: [prefix] })).rejects.toThrow(
+      `buildSite: separateRuntimes has "${prefix}"; give a section's path, like "/components".`,
+    )
   })
 })

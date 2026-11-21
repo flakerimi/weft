@@ -1,6 +1,7 @@
 import vue from '@vitejs/plugin-vue'
 import { loadConfigFromFile, mergeConfig, type ConfigEnv, type InlineConfig, type Plugin, type PluginOption } from 'vite'
 import { weftContent } from './content.ts'
+import { weftFiles } from './files.ts'
 import { weftIcons } from './icons.ts'
 
 async function flatten(option: PluginOption, out: Plugin[] = []): Promise<Plugin[]> {
@@ -15,7 +16,8 @@ async function flatten(option: PluginOption, out: Plugin[] = []): Promise<Plugin
  * if it has one, with `ours` merged over it. `vue()` is added unless the site's
  * config already has it, since two would compile every SFC twice;
  * `weftIcons()` unless it already has that, so pages and islands draw their
- * icons; and `weftContent()` likewise, so pages read the site's Markdown.
+ * icons; `weftContent()` likewise, so pages read the site's Markdown; and
+ * `weftFiles()`, so pages write files beside them.
  */
 export async function siteConfig(root: string, env: ConfigEnv, ours: InlineConfig): Promise<InlineConfig> {
   const loaded = await loadConfigFromFile(env, undefined, root, 'error')
@@ -25,6 +27,7 @@ export async function siteConfig(root: string, env: ConfigEnv, ours: InlineConfi
     ...(names.has('vite:vue') ? [] : [vue()]),
     ...(names.has('weft:icons') ? [] : weftIcons()),
     ...(names.has('weft:content') ? [] : [weftContent()]),
+    ...(names.has('weft:files') ? [] : [weftFiles()]),
   ]
   const merged = mergeConfig(site, { ...ours, plugins: [...added, ...(ours.plugins ?? [])] })
   return { ...merged, root, configFile: false, mode: env.mode }

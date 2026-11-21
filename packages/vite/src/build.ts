@@ -53,6 +53,15 @@ export interface BuildOptions {
    * or covers Basic Latin.
    */
   preloadFonts?: string[]
+  /**
+   * Sections of the site, by path (`/components`), whose pages' islands get a
+   * client build of their own: their own runtime chunk, with Vue tree-shaken
+   * for their islands alone. By default every page with an island loads one
+   * runtime, which holds every Vue feature any island on the site uses; a
+   * section of heavy islands (overlays, transitions) would grow it for every
+   * page. A page is in the longest section its path is in or under.
+   */
+  separateRuntimes?: string[]
 }
 
 /** One served file in `manifest.json`. */
@@ -98,6 +107,7 @@ const TYPES: Record<string, string> = {
   '.webmanifest': 'application/manifest+json',
   '.svg': 'image/svg+xml',
   '.txt': 'text/plain; charset=utf-8',
+  '.md': 'text/markdown; charset=utf-8',
   '.xml': 'application/xml',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
@@ -112,7 +122,7 @@ const TYPES: Record<string, string> = {
   '.ico': 'image/x-icon',
 }
 /** Files stored with .br and .gz siblings. */
-const TEXT = new Set(['.html', '.css', '.js', '.mjs', '.json', '.webmanifest', '.svg', '.txt', '.xml'])
+const TEXT = new Set(['.html', '.css', '.js', '.mjs', '.json', '.webmanifest', '.svg', '.txt', '.md', '.xml'])
 
 /** The Content-Type a file is served with, from its extension. */
 export const contentType = (file: string) => TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream'
@@ -131,6 +141,7 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
   const theme = opts.theme ?? 'neutral'
   if (!THEMES.includes(theme)) throw new Error(`buildSite: unknown theme "${theme}"; use ${THEMES.slice(0, -1).join(', ')} or ${THEMES.at(-1)}.`)
   const app = opts.appPrefix === undefined ? null : appRoute(opts.appPrefix)
+  const sections = (opts.separateRuntimes ?? []).map(sectionPath)
   const appDir = app ? resolve(opts.appDir ?? join(root, 'app-dist')) : null
   checkOutDir(outDir, root, appDir)
   const pagesDir = join(root, 'pages')
@@ -200,6 +211,7 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
       cssInlineLimit: opts.cssInlineLimit,
       outDir,
       preloadFonts: opts.preloadFonts ?? [],
+      sections,
     })
     await swap(staging, outDir)
     return manifest
@@ -224,7 +236,21 @@ interface BuildInput {
   /** Where the build goes: the CSS may not name a file in it. */
   outDir: string
   preloadFonts: string[]
+  /** The sections with a runtime of their own (BuildOptions.separateRuntimes). */
+  sections: string[]
 }
+
+/** A section of separateRuntimes, checked: a path such as /components, not ending in /. */
+function sectionPath(path: string): string {
+  if (!/^(\/[A-Za-z0-9._~-]+)+$/.test(path)) {
+    throw new Error(`buildSite: separateRuntimes has "${path}"; give a section's path, like "/components".`)
+  }
+  return path
+}
+
+/** The section of `sections` a page's path is in: the longest it is or is under, '' for none. */
+const sectionOf = (sections: string[], path: string) =>
+  sections.filter((s) => path === s || path.startsWith(s + '/')).sort((a, b) => b.length - a.length)[0] ?? ''
 
 /** The marker of a folder Weft built: every other file in it, with its size and SHA-256. */
 const MARKER = '.weft-build'
@@ -445,7 +471,7 @@ function preloads(baseCSS: string, pageCSS: string, files: CSSFile[], optIn: str
 /** Write the whole build into `dir`, a fresh folder of its own, and mark it. */
 async function writeBuild(
   dir: string,
-  { root, app, appDir, pages, contentAssets, baseCSS, cssTarget, cssInlineLimit, outDir, preloadFonts }: BuildInput,
+  { root, app, appDir, pages, contentAssets, baseCSS, cssTarget, cssInlineLimit, outDir, preloadFonts, sections }: BuildInput,
 ): Promise<Manifest> {
   // Every file in the build; none is ever written twice, nor under two names the file system takes for one.
   const taken: Taken = new Map()
@@ -458,11 +484,17 @@ async function writeBuild(
     take(taken, file)
   }
 
-  const islandFiles = [...new Set(pages.flatMap((p) => Object.values(p.islandFiles)))]
-  const client = islandFiles.length ? await buildClient(root, dir, islandFiles) : null
-  for (const file of client?.files ?? []) {
-    take(taken, file)
-    immutable.add(file)
+  // One client build for the pages of each section with a runtime of its own, one for the rest.
+  const clients = new Map<string, ClientBuild>()
+  for (const section of ['', ...sections]) {
+    const islandFiles = [...new Set(pages.filter((p) => sectionOf(sections, p.path) === section).flatMap((p) => Object.values(p.islandFiles)))]
+    if (!islandFiles.length) continue
+    const client = await buildClient(root, dir, islandFiles)
+    clients.set(section, client)
+    for (const file of client.files) {
+      take(taken, file)
+      immutable.add(file)
+    }
   }
 
   const hints: Manifest['hints'] = {}
@@ -490,7 +522,7 @@ async function writeBuild(
       immutable.add(file)
       stylesheet = '/' + file
     }
-    const scripts = page.islands.length > 0 ? client : null
+    const scripts = page.islands.length > 0 ? clients.get(sectionOf(sections, page.path))! : null
     const file = htmlFile(page.path)
     await write(file, pageHTML({ body: page.html, head: page.head, prePaint: page.prePaint, fonts, css, stylesheet, scripts, rules }))
 
@@ -503,6 +535,25 @@ async function writeBuild(
     if (links.length) hints[notFound ? '404' : page.path] = links
     if (notFound) routesJson.notFound = file
     else routesJson.pages.push({ path: page.path, html: file, islands: page.islands })
+  }
+  // The files the pages wrote with useFile, each once.
+  const given = new Map<string, { path: string; body: string; page: string }>()
+  for (const page of pages) {
+    const name = `pages/${page.file}`
+    for (const { path, body } of page.files) {
+      const file = pageFilePath(path, name)
+      const key = fsKey(file)
+      const other = given.get(key)
+      if (other) {
+        if (other.path === path && other.body === body) continue
+        const pair = other.page === name ? `${name} writes ${path} twice` : `${other.page} and ${name} both write ${path}`
+        throw new Error(`buildSite: ${pair}, with different bytes; give each file one page, or the same bytes.`)
+      }
+      given.set(key, { path, body, page: name })
+      await mkdir(dirname(join(dir, file)), { recursive: true })
+      await writeFile(join(dir, file), body, { flag: 'wx' })
+      take(taken, file, name)
+    }
   }
   // Named by a hash of their bytes, so cached forever.
   for (const asset of contentAssets) {
@@ -569,6 +620,36 @@ async function writeBuild(
   marked.sort((a, b) => (a.path < b.path ? -1 : 1))
   await writeFile(join(dir, MARKER), JSON.stringify({ weft: 1, files: marked }, null, 2) + '\n', { flag: 'wx' })
   return manifest
+}
+
+/** The build's own files, at its root; a page may not write one. */
+const OWN_FILES = new Set(['manifest.json', 'routes.json', MARKER])
+
+/**
+ * Where in the build a file a page wrote with `useFile` goes: `path` from the
+ * site root without its `/`. One that does not start with `/`, has an empty,
+ * `.` or `..` segment, a backslash or NUL, is under /pages/ or /assets/ (the
+ * build's pages and hashed files) or is one of the build's own files is
+ * refused in one sentence naming `page`.
+ */
+function pageFilePath(path: string, page: string): string {
+  const segments = path.slice(1).split('/')
+  const first = segments[0]!.toLowerCase()
+  const why = !path.startsWith('/')
+    ? 'does not start with /'
+    : /[\\\0]/.test(path)
+      ? 'has a backslash or NUL'
+      : segments.some((s) => s === '' || s === '.' || s === '..')
+        ? 'has an empty, . or .. segment'
+        : segments.length > 1 && first === 'pages'
+          ? 'is under /pages/, where the built pages are'
+          : segments.length > 1 && first === 'assets'
+            ? 'is under /assets/, where the build puts its hashed files'
+            : segments.length === 1 && OWN_FILES.has(first)
+              ? "is one of the build's own files"
+              : null
+  if (why) throw new Error(`buildSite: ${page} writes ${path}, which ${why}; give a path from the site root, like /catalog.json.`)
+  return segments.join('/')
 }
 
 /**

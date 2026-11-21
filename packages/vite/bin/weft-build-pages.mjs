@@ -12,7 +12,7 @@ if (!process.features.typescript) {
 const { buildSite } = await import('../src/build.ts')
 
 const usage =
-  'usage: weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa|weft] [--preload-font <file.woff2>]...'
+  'usage: weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa|weft] [--preload-font <file.woff2>]... [--separate-runtime <section path>]...'
 
 function fail(message) {
   process.stderr.write(`weft-build-pages: ${message}\n${usage}\n`)
@@ -29,6 +29,7 @@ try {
       'app-dir': { type: 'string' },
       theme: { type: 'string' },
       'preload-font': { type: 'string', multiple: true },
+      'separate-runtime': { type: 'string', multiple: true },
     },
   }))
 } catch (e) {
@@ -45,6 +46,7 @@ try {
     appDir: values['app-dir'],
     theme: values.theme,
     preloadFonts: values['preload-font'],
+    separateRuntimes: values['separate-runtime'],
   })
   const pages = Object.keys(manifest.files).filter((f) => /^\/pages\/.*\/index\.html$/.test(f)).length
   process.stdout.write(`weft: built ${pages} ${pages === 1 ? 'page' : 'pages'} into ${values.out}\n`)

@@ -21,7 +21,7 @@ import { useControlAttrs, useField } from '../forms/field.ts'
 import { joinIds, pressFocuses } from '../forms/dom.ts'
 import Popover from '../overlays/Popover.vue'
 import Calendar from './Calendar.vue'
-import { formatter, fromDate, pattern, toDate, utc, type CalendarDate, type DateInput, type DateRange, type ValueFormat } from './dates.ts'
+import { formatRange, fromDate, pattern, toDate, type CalendarDate, type DateInput, type DateRange, type ValueFormat } from './dates.ts'
 import { cycleTab, keepFocusOnSwitch, openingDay, useFormReset, usePicker, useTypedDate, type DateRangePickerLabels } from './picker.ts'
 import type { Size } from '../types.ts'
 import '../styles/base.css'
@@ -166,7 +166,7 @@ const buttonLabel = computed(() => {
   const s = startDate.value
   const e = endDate.value
   if (!s || !e) return t.value.choose
-  return `${t.value.choose}, ${formatter(locale.value, { year: 'numeric', month: 'long', day: 'numeric' }).formatRange(utc(s), utc(e))}`
+  return `${t.value.choose}, ${formatRange(locale.value, { year: 'numeric', month: 'long', day: 'numeric' }, s, e)}`
 })
 const dialogTitle = computed(() => (open.value ? picker.title(t.value.choose) : undefined))
 const months = computed(() => props.numberOfMonths ?? (touch.value ? 1 : 2))

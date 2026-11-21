@@ -3,13 +3,17 @@
   "compilerOptions": {
     "types": [
       "vite/client",
-      "@weft/vite/virtual"
+      "@weft/vite/virtual",
+      "node"
     ]
   },
   "include": [
     "pages",
     "components",
+    "gallery",
+    "test",
     "content.config.ts",
-    "env.d.ts"
+    "env.d.ts",
+    "vite.config.ts"
   ]
 }

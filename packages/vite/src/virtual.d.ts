@@ -13,4 +13,15 @@ declare module 'virtual:weft/content' {
   export function useCollection(collection: string): ContentLink[]
   /** A collection's slugs for a dynamic page's `getPaths()`, each under `param` (default `slug`). */
   export function contentPaths(collection: string, param?: string): Record<string, string>[]
+  /** Source highlighted as the content's code blocks are, at build time, by a Shiki language id or alias (or `text`). */
+  export function highlightCode(code: string, lang: string): Promise<string>
+}
+
+declare module 'virtual:weft/files' {
+  /**
+   * Write a file beside the pages, at `path` from the site root (`/catalog.json`):
+   * the page build writes it, compressed and in the manifest. Call it in a
+   * page's setup; several pages may give one file with the same bytes.
+   */
+  export function useFile(path: string, body: string): void
 }

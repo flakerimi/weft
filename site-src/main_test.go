@@ -74,10 +74,12 @@ var (
 )
 
 // The home page has one island, the copy button. Brotli, its HTML and CSS are
-// at most 6 KB; with every script the client build made (the island runtime,
-// Vue's Vapor runtime and the island's chunk) at most 26 KB. The CSS is the
-// theme, base.css and the stylesheets of the components the page renders,
-// so adding components to @weft/ui does not grow it.
+// at most 6 KB; with every script it loads (the island runtime with Vue's
+// Vapor runtime, the chunks that imports, and the island's chunk) at most
+// 26 KB. The CSS is the theme, base.css and the stylesheets of the
+// components the page renders, so adding components to @weft/ui does not
+// grow it; nor do the gallery's islands grow its runtime, which they do not
+// share (the gallery has a runtime of its own, --separate-runtime).
 func TestHomePageBudgets(t *testing.T) {
 	d := dist(t)
 	var m builtFiles
@@ -109,10 +111,8 @@ func TestHomePageBudgets(t *testing.T) {
 			static += brotliSize(t, d, m, link[1])
 		}
 		scripts := 0
-		for key := range m.Files {
-			if strings.HasSuffix(key, ".js") {
-				scripts += brotliSize(t, d, m, key)
-			}
+		for _, key := range pageScripts(t, d, m, html, p.Islands) {
+			scripts += brotliSize(t, d, m, key)
 		}
 		t.Logf("home page, brotli: HTML+CSS %d B, scripts %d B, total %d B", static, scripts, static+scripts)
 		if static > 6*1024 {
@@ -125,6 +125,31 @@ func TestHomePageBudgets(t *testing.T) {
 	if html == "" {
 		t.Fatal("routes.json has no page at /")
 	}
+}
+
+var modulePreload = regexp.MustCompile(`<link rel="modulepreload" href="([^"]+)">`)
+
+// pageScripts are every script a page loads: its module script (the runtime
+// entry), the modules it preloads (what the entry imports), and its
+// islands' chunks with the chunks they import.
+func pageScripts(t *testing.T, d fs.FS, m builtFiles, html string, islands []string) []string {
+	t.Helper()
+	seen := map[string]bool{}
+	for _, s := range moduleScript.FindAllStringSubmatch(html, -1) {
+		seen[s[1]] = true
+	}
+	for _, s := range modulePreload.FindAllStringSubmatch(html, -1) {
+		seen[s[1]] = true
+	}
+	for _, c := range islandChunks(t, d, m, islands) {
+		seen[c] = true
+	}
+	var out []string
+	for k := range seen {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // A page with no island loads no JavaScript; JSON script types are allowed.
@@ -299,9 +324,20 @@ func TestBinaryHoldsNoReleases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("site binary: %.1f MB", float64(fi.Size())/(1<<20))
-	if fi.Size() >= 15<<20 {
-		t.Fatalf("the site binary is %.1f MB, not under 15 MB", float64(fi.Size())/(1<<20))
+	// The binary is the Go program (about 6 MB) and the build it embeds, which
+	// grows with the site's pages; a release in it would show as more.
+	var built int64
+	fs.WalkDir(dist(t), ".", func(p string, e fs.DirEntry, err error) error {
+		if err == nil && !e.IsDir() {
+			if info, err := e.Info(); err == nil {
+				built += info.Size()
+			}
+		}
+		return nil
+	})
+	t.Logf("site binary: %.1f MB, of which the build %.1f MB", float64(fi.Size())/(1<<20), float64(built)/(1<<20))
+	if fi.Size()-built >= 8<<20 {
+		t.Fatalf("the site binary is %.1f MB, %.1f MB more than the build it embeds, not under 8 MB", float64(fi.Size())/(1<<20), float64(fi.Size()-built)/(1<<20))
 	}
 }
 
@@ -618,7 +654,7 @@ func TestWordmarkIsTheOwners(t *testing.T) {
 // so light, dark and data-weft-scheme follow the theme.
 func TestSiteStylesUseTokens(t *testing.T) {
 	colour := regexp.MustCompile(`#[0-9A-Fa-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|lab)\(`)
-	for _, name := range []string{"styles/site.css", "styles/docs.css"} {
+	for _, name := range []string{"styles/site.css", "styles/shell.css", "styles/docs.css", "styles/gallery.css", "styles/gallery-index.css", "styles/stage.css", "components/CopyCode.vue"} {
 		b, err := os.ReadFile(name)
 		if err != nil {
 			t.Fatal(err)

@@ -54,6 +54,14 @@ export interface RenderResult {
    * first registered; the build writes them inline at the top of `<head>`.
    */
   prePaint: string[]
+  /** The files the page wrote with `useFile` from `virtual:weft/files`, in the order it wrote them. */
+  files: PageFile[]
+}
+
+/** A file a page writes beside the pages: its path from the site root and its text. */
+export interface PageFile {
+  path: string
+  body: string
 }
 
 /**
@@ -93,7 +101,7 @@ export async function renderPage(opts: RenderOptions): Promise<RenderResult> {
     const mod = (await vite.ssrLoadModule(file)) as { default?: unknown }
     if (!mod.default) throw new Error(`renderPage: ${opts.page} has no default export.`)
     // `modules` is filled by @vitejs/plugin-vue: every SFC whose setup ran in this render, relative to root.
-    const ctx: { islands?: string[]; head?: PageHead; modules?: Set<string>; prePaint?: Map<string, string> } = {}
+    const ctx: { islands?: string[]; head?: PageHead; modules?: Set<string>; prePaint?: Map<string, string>; files?: PageFile[] } = {}
     const html = await renderToString(createSSRApp(mod.default as never, opts.props), ctx)
     const islands = [...new Set(ctx.islands ?? [])]
     const modules = await pageModules(vite, file)
@@ -109,6 +117,7 @@ export async function renderPage(opts: RenderOptions): Promise<RenderResult> {
       css: await collectCSS(vite, used, new Set(opts.providedCSS)),
       head: ctx.head ?? {},
       prePaint: [...(ctx.prePaint?.values() ?? [])],
+      files: ctx.files ?? [],
     }
   } finally {
     if (!opts.server) await vite.close()
