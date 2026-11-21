@@ -1,17 +1,22 @@
 <script setup vapor lang="ts">
 // A strip across the top of a page or an app for news that concerns
 // everyone (maintenance, a new feature): an icon, a title, actions, a close
-// button, in a tone. With `to` the title is a link. With an `id` a closed
-// banner stays closed on later visits (localStorage, read once mounted, so
-// the server always draws it). On touch the close button's hit area is at
+// button, in a tone. With `to` the title is a link. Closed from its button,
+// focus moves on to what follows it. With an `id` a closed banner stays
+// closed on later visits: localStorage, read once mounted (the server always
+// draws it), and before the first paint by a pre-paint snippet, so a reload
+// does not flash it. On touch the close button's hit area is at
 // least --weft-hit-min; when narrow the actions wrap under the title.
-import { onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref, useTemplateRef } from 'vue'
 import Button from '../basics/Button.vue'
 import Icon from '../basics/Icon.vue'
 import Link from '../basics/Link.vue'
 import CloseButton from '../overlays/CloseButton.vue'
 import type { Tone } from '../types.ts'
-import type { ActionItem } from './actions.ts'
+import { usePrePaint } from '../head/usePrePaint.ts'
+import { focus } from '../headless/dom.ts'
+import { focusAfter, type ActionItem } from './actions.ts'
+import { bannerKey, bannerSnippet } from './banner.ts'
 import '../styles/base.css'
 import '../styles/tone.css'
 import '../styles/banner.css'
@@ -52,7 +57,9 @@ defineSlots<{
   actions?: () => unknown
 }>()
 
-const storeKey = () => `weft-banner:${props.id}`
+const storeKey = () => bannerKey(props.id!)
+if (props.id && props.close) usePrePaint(bannerKey(props.id), bannerSnippet(props.id))
+const root = useTemplateRef<HTMLElement>('root')
 const shown = ref(true)
 onMounted(() => {
   if (!props.id) return
@@ -62,7 +69,9 @@ onMounted(() => {
     // Storage refused (private mode, a sandbox): it shows.
   }
 })
-function dismiss() {
+async function dismiss() {
+  const el = root.value
+  const to = el && el.contains(document.activeElement) ? focusAfter(el) : null
   shown.value = false
   if (props.id) {
     try {
@@ -72,11 +81,13 @@ function dismiss() {
     }
   }
   emit('close')
+  await nextTick()
+  if (to?.isConnected) focus(to)
 }
 </script>
 
 <template>
-  <div v-if="shown" class="weft-banner" :data-tone="tone" :data-id="id">
+  <div v-if="shown" ref="root" class="weft-banner" :data-tone="tone" :data-id="id">
     <div class="weft-banner__inner">
       <span v-if="$slots.leading || icon" class="weft-banner__leading"><slot name="leading"><Icon v-if="icon" :name="icon" /></slot></span>
       <Link v-if="to" class="weft-banner__title" :to="to"><slot>{{ title }}</slot></Link>

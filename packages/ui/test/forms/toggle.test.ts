@@ -5,6 +5,9 @@ import { press } from '../keyboard.ts'
 import { loadStyles } from '../styles.ts'
 import { px } from './helpers.ts'
 import { $, $$, active, key, reset, settle } from '../overlays/helpers.ts'
+import { registerIcon } from '../../src/basics/icons.ts'
+
+for (const name of ['align-left']) registerIcon(name, '<circle cx="12" cy="12" r="10"></circle>')
 
 let unmount: (() => void) | undefined
 afterEach(() => {
@@ -158,6 +161,19 @@ describe('ToggleGroup', () => {
     item('Justify').click()
     await settle()
     expect(posted('align')).toEqual(['justify'])
+  })
+
+  it('makes each button at least 44 px tall on touch', async () => {
+    const unstyle = loadStyles()
+    try {
+      await cases({ input: 'touch' })
+      for (const b of $$('button', group())) expect(px(getComputedStyle(b).blockSize)).toBe(44)
+      unmount!()
+      await cases({ input: 'pointer' })
+      expect(px(getComputedStyle(item('Left')).blockSize)).toBeLessThan(44)
+    } finally {
+      unstyle()
+    }
   })
 
   it('disables every item when disabled', async () => {

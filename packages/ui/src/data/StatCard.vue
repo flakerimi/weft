@@ -54,10 +54,12 @@ const t = computed<StatLabels>(() => ({ ...STAT_LABELS, ...props.labels }))
 // A fixed fallback locale, so the server and the browser format alike.
 const locale = computed(() => weft.locale.value ?? 'en-US')
 const shown = computed(() => (typeof props.value === 'number' ? new Intl.NumberFormat(locale.value).format(props.value) : (props.value ?? '')))
+/** The delta as shown, to two places: its direction is read from this, so 0.004 is no change, not "+0%". */
+const rounded = computed(() => (props.delta === undefined ? undefined : Math.round(props.delta * 100) / 100))
 const amount = computed(() =>
-  props.delta === undefined ? '' : `${new Intl.NumberFormat(locale.value, { maximumFractionDigits: 2 }).format(Math.abs(props.delta))}${props.deltaUnit}`,
+  rounded.value === undefined ? '' : `${new Intl.NumberFormat(locale.value, { maximumFractionDigits: 2 }).format(Math.abs(rounded.value))}${props.deltaUnit}`,
 )
-const direction = computed(() => (props.delta === undefined ? undefined : props.delta > 0 ? 'up' : props.delta < 0 ? 'down' : 'flat'))
+const direction = computed(() => (rounded.value === undefined ? undefined : rounded.value > 0 ? 'up' : rounded.value < 0 ? 'down' : 'flat'))
 const tone = computed(() => {
   if (direction.value === 'flat') return 'neutral'
   return (direction.value === 'up') !== props.invert ? 'success' : 'danger'

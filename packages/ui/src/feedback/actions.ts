@@ -1,4 +1,5 @@
 // The buttons an Alert, a Banner, an EmptyState or an ErrorState offers.
+import { tabbables } from '../headless/dom.ts'
 import type { Tone, Variant } from '../types.ts'
 
 /** A button given as data: `{ label, onClick }`, or a link with `to`. */
@@ -35,4 +36,16 @@ export function errorText(error: unknown): { message?: string; code?: string } {
     }
   }
   return { message: String(error) }
+}
+
+/**
+ * Where focus goes when `el` leaves the page with focus inside it (an Alert
+ * or a Banner closed from its own button): the first element Tab reaches
+ * after it, else the last one before it, else nothing (focus stays where
+ * the browser puts it). Call it before `el` goes.
+ */
+export function focusAfter(el: Element): HTMLElement | null {
+  const all = tabbables(el.ownerDocument.body).filter((t) => !el.contains(t))
+  const next = all.find((t) => el.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_FOLLOWING)
+  return next ?? all.filter((t) => el.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_PRECEDING).pop() ?? null
 }

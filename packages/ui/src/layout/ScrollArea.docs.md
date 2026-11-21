@@ -15,12 +15,17 @@ page. The scrollbars are thin and drawn in the theme's border colour
 where those are missing).
 
 `orientation` is `vertical` (default), `horizontal` or `both`. Give it a
-height from outside, or `max-height`. While its content overflows it is a
+height from outside, or `max-height`: its viewport fills it. While its content overflows it is a
 tab stop (`tabindex="0"`), so a keyboard alone can scroll it with the
 arrows, Page Up and Down, Home, End and Space; once it fits it leaves the
 tab order. With `label` it is a named region, which assistive technology
 lists; give one whenever it is a tab stop.
 
-`shadow` fades the edges with more content beyond them (a mask, mirrored
-right to left). Rows that must render only while in view belong in Table
-or Listbox, which window long lists themselves.
+`shadow` fades each edge with more content beyond it: the block edges when
+vertical, the inline edges when horizontal (mirrored right to left), all
+four with `both`. A fade is an overlay over the content, not a mask, so the
+scrollbars (whose thickness it measures) and the focus ring stay clear; it
+runs from `--weft-scroll-fade-color` (the page background by default; set
+it to a card's surface when the area sits on one) to transparent. Rows that
+must render only while in view belong in Table or Listbox, which window long
+lists themselves.

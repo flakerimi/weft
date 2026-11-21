@@ -24,20 +24,26 @@ Go `weft.Resource`. It asks once mounted (the server draws skeleton rows),
 again whenever the page or the sort changes, ignores an answer a newer query
 overtook, and shows a message with a Try again button (and emits `error`)
 when the promise rejects; `refresh()` asks again. `rowKey` (a property name
-or a function; default the row's `id`, else its place) keys the rows.
+or a function; default the row's `id`, else its place) keys the rows. The
+data source is `useTableData`, exported for a view of its own.
 
 **Sorting.** A sortable header holds a button: ascending, descending, then
 as given. The sort is `v-model:sort` in the wire format. On the client it is
 stable (equal rows keep their order both ways), numbers and dates by amount,
-text numeric-aware and case-blind, empty values last. A new sort goes back
-to page 1. The sorted header says `aria-sort`; the others say nothing (APG
+text numeric-aware and case-blind, empty values last. A press on a header
+goes back to page 1; a parent that sets the page and the sort together keeps
+its page. The sorted header says `aria-sort`; the others say nothing (APG
 sortable table).
 
 **Selection.** `selectable` adds a checkbox per row and one in the header,
 bound with `v-model:selected` (the rows' keys). The header box is ticked
 when every row shown is chosen, indeterminate when some are; it chooses or
 clears the rows shown (on this page). Shift+click on a row's box sets every
-row from the last one clicked to it, in the order shown.
+row from the last one clicked to it, in the order shown. Keys persist
+across pages and sorts: a row chosen on page 1 stays chosen on page 3 and
+after a new sort. So rows from `fetch` that can be chosen need keys of their
+own, an `id` or `rowKey`; without one a row's key is its place on its page,
+and development builds warn once.
 
 **Paging.** `per-page` pages the rows with a Pagination under the table
 (`v-model:page`), shown when there is more than one page; with `fetch` it
@@ -48,21 +54,33 @@ from assistive technology, a status saying Loading) until there are rows;
 rows it already has stay, dimmed. With no rows the `empty` slot (or
 `empty`, default "Nothing to show.") fills the body.
 
-**Sticky header and windowing.** The rows scroll inside the table's own box
-under a sticky header (`sticky`, on by default) when `height` limits it.
-Past 200 rows on a page it renders only the rows in view between two spacer
-rows (`useVirtualList`): every row is then `row-height` px (default by size,
-at least 44 on touch), its text on one line, the box 30rem tall unless
-`height` says otherwise, and the table states `aria-rowcount` and each row
-`aria-rowindex`. The narrow cards are not windowed; page long lists.
+**Sticky header.** With `sticky` (on by default) the header stays in view.
+With a `height` (or once windowed) the rows scroll inside the table's box
+and the header sticks at its top. Without one the box clips rather than
+scrolls once mounted, so the header sticks against the page as it scrolls,
+below `--weft-table-sticky-top` (set it to a sticky page header's height);
+but a table wider than its box must scroll sideways, and then its header
+sticks only inside it: give it a `height`. Before it mounts (and on a page
+with no island) the box scrolls, so a wide table is never cut off.
+
+**Windowing.** Past 200 rows on a page it renders only the rows in view,
+spacer rows standing for the rest (`useVirtualList`): every row is then
+`row-height` px (default by size, at least 44 on touch), its text on one
+line, the box 30rem tall unless `height` says otherwise, and the table
+states `aria-rowcount` and each row `aria-rowindex`. The narrow cards are
+not windowed; page long lists.
 
 **Keyboard.** By default it is a plain `<table>` (caption, `th scope`), and
 each control in it (sort buttons, checkboxes, controls in cells) is its own
-tab stop. With `keyboard` it is an APG grid: one tab stop; arrows move
-between cells (mirrored right to left), Home and End along the row,
-Ctrl+Home and Ctrl+End to the first and last cell; a sort button or a
-checkbox stands in for its cell; Enter or F2 moves into a cell's control and
-Escape back to the cell, and keys pressed in that control are its own.
-Controls in cells stay in the tab order. `caption` names the table (and the
+tab stop. With `keyboard` it is an APG grid, one tab stop, so Tab enters and
+leaves it in one step: arrows move between cells (mirrored right to left)
+and stop at the edges, Home and End go along the row, Ctrl+Home to the first
+header cell and Ctrl+End to the last cell of the last row, windowed or not.
+The focused cell scrolls into view, and a windowed table keeps its row drawn
+when the pointer scrolls it away, so focus is never lost. A sort button or a
+checkbox stands in for its cell. Controls a cell slot draws leave the tab
+order (`tabindex="-1"`); Enter or F2 on the cell gives them back and focuses
+the first, keys pressed in it are its own, and Escape, or focus leaving the
+cell, takes them out again. `caption` names the table (and the
 list of cards); `hide-caption` keeps it for assistive technology only.
 `labels` translate its words.

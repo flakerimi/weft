@@ -1,10 +1,27 @@
-/* ScrollArea: the browser's own scrolling, its scrollbars thin and in the
-   theme's border colour (the standard properties; the WebKit pseudo-
-   elements where those are missing). Focus rings it inside its edge. With
-   shadow, a mask fades each edge that has content beyond it. */
+/* ScrollArea: a box holding a viewport that scrolls natively, its
+   scrollbars thin and in the theme's border colour (the standard
+   properties; the WebKit pseudo-elements where those are missing). The
+   viewport fills the box, so a height or max-height on the box limits it.
+   Focus rings the viewport with base.css's ring, outside its edge.
+
+   With shadow, a fade is an overlay over each edge that has content beyond
+   it, from --weft-scroll-fade-color (the page background by default; set it
+   on a card or panel) to transparent. The overlays stop short of the
+   scrollbars, whose thickness the component measures into
+   --weft-scroll-bar-inline and --weft-scroll-bar-block, take no pointer
+   events and sit inside the box, so the focus ring outside it stays clear.
+   Inline edges are logical, so they mirror right to left. */
 .weft-scroll-area {
   --weft-scroll-fade: 24px;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  min-inline-size: 0;
+  border-radius: inherit;
+}
+.weft-scroll-area__viewport {
+  flex: 1 1 auto;
   min-block-size: 0;
   min-inline-size: 0;
   overscroll-behavior: contain;
@@ -12,26 +29,54 @@
   scrollbar-color: var(--weft-color-border, GrayText) transparent;
   border-radius: inherit;
 }
-.weft-scroll-area[data-orientation="vertical"] { overflow-x: hidden; overflow-y: auto; }
-.weft-scroll-area[data-orientation="horizontal"] { overflow-x: auto; overflow-y: hidden; }
-.weft-scroll-area[data-orientation="both"] { overflow: auto; }
-.weft-scroll-area[data-orientation="horizontal"] > .weft-scroll-area__content { inline-size: max-content; min-inline-size: 100%; }
-.weft-scroll-area[data-orientation="both"] > .weft-scroll-area__content { inline-size: max-content; min-inline-size: 100%; }
-.weft-scroll-area:focus-visible { outline-offset: -2px; }
+.weft-scroll-area[data-orientation="vertical"] > .weft-scroll-area__viewport { overflow-x: hidden; overflow-y: auto; }
+.weft-scroll-area[data-orientation="horizontal"] > .weft-scroll-area__viewport { overflow-x: auto; overflow-y: hidden; }
+.weft-scroll-area[data-orientation="both"] > .weft-scroll-area__viewport { overflow: auto; }
+.weft-scroll-area:not([data-orientation="vertical"]) .weft-scroll-area__content { inline-size: max-content; min-inline-size: 100%; }
 @supports not (scrollbar-color: auto) {
-  .weft-scroll-area::-webkit-scrollbar { inline-size: 8px; block-size: 8px; }
-  .weft-scroll-area::-webkit-scrollbar-thumb { border-radius: 4px; background: var(--weft-color-border, GrayText); }
-  .weft-scroll-area::-webkit-scrollbar-track { background: transparent; }
+  .weft-scroll-area__viewport::-webkit-scrollbar { inline-size: 8px; block-size: 8px; }
+  .weft-scroll-area__viewport::-webkit-scrollbar-thumb { border-radius: 4px; background: var(--weft-color-border, GrayText); }
+  .weft-scroll-area__viewport::-webkit-scrollbar-track { background: transparent; }
 }
-.weft-scroll-area[data-fade-start][data-orientation="vertical"] { mask-image: linear-gradient(to bottom, transparent, #000 var(--weft-scroll-fade)); }
-.weft-scroll-area[data-fade-end][data-orientation="vertical"] { mask-image: linear-gradient(to top, transparent, #000 var(--weft-scroll-fade)); }
-.weft-scroll-area[data-fade-start][data-fade-end][data-orientation="vertical"] {
-  mask-image: linear-gradient(to bottom, transparent, #000 var(--weft-scroll-fade), #000 calc(100% - var(--weft-scroll-fade)), transparent);
+
+.weft-scroll-area__fade {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease);
+  --weft-scroll-fade-from: var(--weft-scroll-fade-color, var(--weft-color-bg, Canvas));
 }
-.weft-scroll-area[data-fade-start][data-orientation="horizontal"] { mask-image: linear-gradient(to right, transparent, #000 var(--weft-scroll-fade)); }
-.weft-scroll-area[data-fade-end][data-orientation="horizontal"] { mask-image: linear-gradient(to left, transparent, #000 var(--weft-scroll-fade)); }
-.weft-scroll-area[data-fade-start][data-fade-end][data-orientation="horizontal"] {
-  mask-image: linear-gradient(to right, transparent, #000 var(--weft-scroll-fade), #000 calc(100% - var(--weft-scroll-fade)), transparent);
+.weft-scroll-area__fade[data-edge="block-start"] {
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  inset-inline-end: var(--weft-scroll-bar-inline, 0px);
+  block-size: var(--weft-scroll-fade);
+  background: linear-gradient(to bottom, var(--weft-scroll-fade-from), transparent);
 }
-[dir="rtl"] .weft-scroll-area[data-fade-start][data-orientation="horizontal"] { mask-image: linear-gradient(to left, transparent, #000 var(--weft-scroll-fade)); }
-[dir="rtl"] .weft-scroll-area[data-fade-end][data-orientation="horizontal"] { mask-image: linear-gradient(to right, transparent, #000 var(--weft-scroll-fade)); }
+.weft-scroll-area__fade[data-edge="block-end"] {
+  inset-block-end: var(--weft-scroll-bar-block, 0px);
+  inset-inline-start: 0;
+  inset-inline-end: var(--weft-scroll-bar-inline, 0px);
+  block-size: var(--weft-scroll-fade);
+  background: linear-gradient(to top, var(--weft-scroll-fade-from), transparent);
+}
+.weft-scroll-area__fade[data-edge="inline-start"] {
+  inset-inline-start: 0;
+  inset-block-start: 0;
+  inset-block-end: var(--weft-scroll-bar-block, 0px);
+  inline-size: var(--weft-scroll-fade);
+  background: linear-gradient(to right, var(--weft-scroll-fade-from), transparent);
+}
+.weft-scroll-area__fade[data-edge="inline-end"] {
+  inset-inline-end: var(--weft-scroll-bar-inline, 0px);
+  inset-block-start: 0;
+  inset-block-end: var(--weft-scroll-bar-block, 0px);
+  inline-size: var(--weft-scroll-fade);
+  background: linear-gradient(to left, var(--weft-scroll-fade-from), transparent);
+}
+[dir="rtl"] .weft-scroll-area__fade[data-edge="inline-start"] { background: linear-gradient(to left, var(--weft-scroll-fade-from), transparent); }
+[dir="rtl"] .weft-scroll-area__fade[data-edge="inline-end"] { background: linear-gradient(to right, var(--weft-scroll-fade-from), transparent); }
+.weft-scroll-area[data-fade-block-start] > .weft-scroll-area__fade[data-edge="block-start"],
+.weft-scroll-area[data-fade-block-end] > .weft-scroll-area__fade[data-edge="block-end"],
+.weft-scroll-area[data-fade-inline-start] > .weft-scroll-area__fade[data-edge="inline-start"],
+.weft-scroll-area[data-fade-inline-end] > .weft-scroll-area__fade[data-edge="inline-end"] { opacity: 1; }

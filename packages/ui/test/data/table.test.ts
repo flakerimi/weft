@@ -6,7 +6,8 @@ import { mount } from '../mount.ts'
 import { installResizeObserver } from '../resize-observer.ts'
 import { loadStyles, ruleFor } from '../styles.ts'
 import { px } from '../forms/helpers.ts'
-import { $, $$, active, key, reset, settle } from '../overlays/helpers.ts'
+import { $, $$, active, key, moveFocus, reset, settle } from '../overlays/helpers.ts'
+import { tabbables } from '../../src/headless/dom.ts'
 
 let unmount: (() => void) | undefined
 let ro: ReturnType<typeof installResizeObserver> | undefined
@@ -143,6 +144,20 @@ describe('Table', () => {
     await settle()
     expect(names()).toEqual(['Ada', 'Barbara', 'Alan', 'Grace', 'Linus'])
     expect($$('.weft-table th[aria-sort]')).toEqual([header('Age')])
+  })
+
+  it('keeps a page and a sort its parent sets together; only a press on a header goes back to page 1', async () => {
+    const m = await cases({ perPage: 2 })
+    const exposed = m.exposed as { sort: string | null; page: number }
+    exposed.sort = 'name'
+    exposed.page = 2
+    await settle()
+    expect(exposed.page).toBe(2)
+    expect(names()).toEqual(['Barbara', 'Grace'])
+    click(sortButton('Name'))
+    await settle()
+    expect(exposed.page).toBe(1)
+    expect(exposed.sort).toBe('-name')
   })
 
   it('follows a bound sort', async () => {
@@ -342,9 +357,10 @@ describe('Table', () => {
       expect($$<HTMLButtonElement>('.weft-table__toolbar .weft-table__sort')[0]!.textContent).toContain('sorted ascending')
     })
 
-    it('shows the empty text in place of the cards', async () => {
+    it('shows the empty text in place of the cards, in a block that can hold any content', async () => {
       await narrow({ rows: [] })
       expect($('.weft-table__empty').textContent!.trim()).toBe('Nothing to show.')
+      expect($('.weft-table__empty').tagName).toBe('DIV')
     })
   })
 
@@ -380,20 +396,124 @@ describe('Table', () => {
       expect(active()).toBe(sortButton('Age'))
     })
 
-    it('moves into a cell with Enter and back out with Escape', async () => {
-      await cases({ keyboard: true, slots: true, columns: [{ key: 'name', label: 'Name' }, { key: 'city', label: 'City' }] })
-      const cells = $$('tbody td')
-      // A cell whose slot holds a control: Enter moves into it.
-      const cell = cells[1]!
-      const edit = document.createElement('button')
-      edit.className = 'inner'
-      edit.textContent = 'Edit'
-      cell.append(edit)
+    it('takes the controls in cells out of the tab order: one tab stop, Enter or F2 moves in, Escape or leaving moves out', async () => {
+      await cases({ keyboard: true, controls: true })
+      const table = $('table.weft-table__table')
+      const edits = $$<HTMLButtonElement>('button.edit', table)
+      expect(edits).toHaveLength(5)
+      for (const b of edits) expect(b.getAttribute('tabindex')).toBe('-1')
+      // Tab reaches one element in the whole grid, so the next Tab leaves the table.
+      expect(tabbables(table)).toEqual([sortButton('Name')])
+      const cell = edits[0]!.closest('td')!
       cell.focus()
       key('Enter')
-      expect(active()!.className).toBe('inner')
+      expect(active()).toBe(edits[0])
+      expect(edits[0]!.hasAttribute('tabindex')).toBe(false)
+      // Keys pressed in the control are its own.
+      expect(key('ArrowDown').defaultPrevented).toBe(false)
+      expect(active()).toBe(edits[0])
       key('Escape')
       expect(active()).toBe(cell)
+      expect(edits[0]!.getAttribute('tabindex')).toBe('-1')
+      // F2 moves in too; focus leaving the cell takes the control out again.
+      key('F2')
+      expect(active()).toBe(edits[0])
+      moveFocus(sortButton('Name'))
+      expect(edits[0]!.getAttribute('tabindex')).toBe('-1')
+      // Rows drawn later have their controls taken out as well.
+      unmount!()
+      await cases({ keyboard: true, controls: true, perPage: 2 })
+      click($('[aria-label="Next page"]'))
+      await settle()
+      for (const b of $$('button.edit', $('table'))) expect(b.getAttribute('tabindex')).toBe('-1')
+    })
+
+    it('leaves the controls in cells alone without the prop', async () => {
+      await cases({ controls: true })
+      for (const b of $$('button.edit')) expect(b.hasAttribute('tabindex')).toBe(false)
+    })
+
+    it('stops at the ends of a row, and goes to the first and last cell with Ctrl+Home and Ctrl+End', async () => {
+      await cases({ keyboard: true })
+      const city = (name: string) => bodyRows().find((r) => r.textContent!.includes(name))!.querySelectorAll('td')[1]!
+      city('Grace').focus()
+      key('ArrowRight')
+      expect(active()).toBe(city('Grace'))
+      key('End', { ctrlKey: true })
+      expect(active()).toBe(city('Alan'))
+      key('Home', { ctrlKey: true })
+      expect(active()).toBe(sortButton('Name'))
+    })
+
+    it('scrolls the focused cell into view', async () => {
+      const into = vi.fn()
+      const original = Element.prototype.scrollIntoView
+      Element.prototype.scrollIntoView = into
+      try {
+        await cases({ keyboard: true })
+        sortButton('Name').focus()
+        key('ArrowDown')
+        expect(active()!.textContent!.trim()).toBe('Grace')
+        expect(into).toHaveBeenLastCalledWith({ block: 'nearest', inline: 'nearest' })
+        expect(into.mock.contexts.at(-1)).toBe(active())
+      } finally {
+        Element.prototype.scrollIntoView = original
+      }
+    })
+
+    describe('windowed, past 200 rows', () => {
+      const many: Person[] = Array.from({ length: 1000 }, (_, i) => ({ id: i + 1, name: `Person ${i + 1}`, age: i % 90, city: `Town ${i + 1}` }))
+      const rowOf = (el: Element | null) => Number(el?.closest('tr')?.getAttribute('aria-rowindex')) - 2
+      const press = async (k: string, init: KeyboardEventInit = {}) => {
+        key(k, init)
+        await settle()
+        expect(active()).not.toBe(document.body)
+        expect($('table').contains(active())).toBe(true)
+      }
+
+      it('moves through every row to the last and back, scrolling, focus never lost', async () => {
+        await cases({ rows: many, rowHeight: 40, keyboard: true })
+        const scroller = $('.weft-table__scroller')
+        Object.defineProperty(scroller, 'clientHeight', { configurable: true, get: () => 400 })
+        // As a browser does once laid out: the list reads the box's height.
+        scroller.dispatchEvent(new Event('scroll'))
+        sortButton('Name').focus()
+        for (let i = 0; i < 40; i++) await press('ArrowDown')
+        expect(rowOf(active())).toBe(39)
+        expect(active()!.textContent!.trim()).toBe('Person 40')
+        expect(scroller.scrollTop).toBeGreaterThan(0)
+        await press('End', { ctrlKey: true })
+        expect(rowOf(active())).toBe(999)
+        expect(active()!.textContent!.trim()).toBe('Town 1000')
+        expect(scroller.scrollTop).toBe(1000 * 40 - 400)
+        for (let i = 0; i < 5; i++) await press('ArrowUp')
+        expect(rowOf(active())).toBe(994)
+        await press('Home', { ctrlKey: true })
+        expect(active()).toBe(sortButton('Name'))
+        expect(scroller.scrollTop).toBe(0)
+        await press('ArrowDown')
+        expect(active()!.textContent!.trim()).toBe('Person 1')
+      })
+
+      it('keeps the focused row rendered when the pointer scrolls it away', async () => {
+        await cases({ rows: many, rowHeight: 40, keyboard: true })
+        const scroller = $('.weft-table__scroller')
+        Object.defineProperty(scroller, 'clientHeight', { configurable: true, get: () => 400 })
+        sortButton('Name').focus()
+        await press('ArrowDown')
+        const cell = active()
+        scroller.scrollTop = 20_000
+        scroller.dispatchEvent(new Event('scroll'))
+        await settle()
+        expect(cell!.isConnected).toBe(true)
+        expect(active()).toBe(cell)
+        expect(names()).toContain('Person 501')
+        // The rows keep their places: the spacers add up to every row not drawn.
+        const spacers = $$('tbody tr.weft-table__spacer td').reduce((sum, td) => sum + px(td.style.blockSize), 0)
+        expect(spacers + bodyRows().length * 40).toBe(1000 * 40)
+        await press('ArrowDown')
+        expect(active()!.textContent!.trim()).toBe('Person 2')
+      })
     })
 
     it('is a plain table without the prop', async () => {
@@ -448,6 +568,19 @@ describe('Table', () => {
       expect(names()[0]).toBe('P45')
     })
 
+    it('asks exactly once for a sort pressed on page 2 under a bound page', async () => {
+      const { fetch, calls } = server()
+      const m = await cases({ rows: undefined, fetch: fn(fetch), perPage: 10 })
+      click($('.weft-table [aria-label="Page 2"]'))
+      await settle()
+      expect(m.exposed.page).toBe(2)
+      const before = calls.length
+      click(sortButton('Name'))
+      await settle()
+      await settle()
+      expect(calls.slice(before)).toEqual([{ page: 1, perPage: 10, sort: 'name' }])
+    })
+
     it('ignores an answer that a newer query overtook', async () => {
       const answers: ((r: TableResult<Person>) => void)[] = []
       const fetch = (_q: TableQuery) => new Promise<TableResult<Person>>((resolve) => answers.push(resolve))
@@ -481,6 +614,34 @@ describe('Table', () => {
       // refresh() asks again.
       await m.exposed.table.refresh()
       expect(fetch).toHaveBeenCalledTimes(3)
+    })
+  })
+
+  describe('sticky header', () => {
+    it('sticks against the page when the table has no height: its box clips rather than scrolls', async () => {
+      const unstyle = loadStyles()
+      ro = installResizeObserver()
+      try {
+        await cases()
+        const scroller = $('.weft-table__scroller')
+        expect(scroller.dataset.scroll).toBeUndefined()
+        expect(ruleFor('.weft-table__scroller')!.style.getPropertyValue('overflow')).toBe('clip')
+        expect(ruleFor('.weft-table__scroller[data-scroll]')!.style.getPropertyValue('overflow')).toBe('auto')
+        // Wider than its box, it must scroll sideways, and the header sticks inside it.
+        Object.defineProperty(scroller, 'clientWidth', { configurable: true, get: () => 300 })
+        Object.defineProperty($('table', scroller), 'scrollWidth', { configurable: true, get: () => 800 })
+        ro.report(scroller, 300)
+        await settle()
+        expect(scroller.dataset.scroll).toBe('true')
+      } finally {
+        unstyle()
+      }
+    })
+
+    it('sticks inside the table when it has a height', async () => {
+      await cases({ height: '20rem' })
+      expect($('.weft-table__scroller').dataset.scroll).toBe('true')
+      expect($('.weft-table__scroller').style.maxBlockSize).toBe('20rem')
     })
   })
 

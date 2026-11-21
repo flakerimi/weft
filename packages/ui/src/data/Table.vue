@@ -5,43 +5,33 @@
 // (stable, on the client; through `fetch`, on the server), and says so with
 // aria-sort. `selectable` adds a checkbox per row, named by the row, under a
 // header checkbox that shows none, some (indeterminate) or all of the rows
-// shown, with Shift+click choosing a range. The header stays in view while
-// the rows scroll inside the table. While loading it is aria-busy, drawing
+// shown, with Shift+click choosing a range. The header stays in view: inside
+// the table when it scrolls (a height, windowed, or wider than its box),
+// else against the page. While loading it is aria-busy, drawing
 // skeleton rows until it has rows; with no rows it shows the `empty` slot.
 // `perPage` pages the rows on the client with a Pagination; `fetch(query)`
 // asks a server for each page instead, in the wire format's `page`,
 // `perPage` and `sort`. Past 200 rows on one page it renders only the rows
 // in view, each a fixed height. When its own box is narrow, each row is a
 // card (a list item of label–value pairs) from the same columns, with the
-// same selection and sorting. With `keyboard` it is an APG grid: one tab
-// stop, arrows between cells, Enter into a cell's control, Escape back out.
-import { computed, onMounted, ref, shallowRef, useTemplateRef, watch } from 'vue'
+// same selection and sorting. With `keyboard` it is an APG grid
+// (useTableGrid): one tab stop, arrows between cells over every row, windowed
+// or not, the focused cell scrolled into view and its row kept drawn; the
+// controls in cells leave the tab order until Enter or F2 moves in.
+import { computed, onMounted, onScopeDispose, ref, useTemplateRef, watch } from 'vue'
 import Skeleton from '../basics/Skeleton.vue'
 import Button from '../basics/Button.vue'
 import Checkbox from '../forms/Checkbox.vue'
 import Pagination from '../navigation/Pagination.vue'
 import { useWeft } from '../adaptive/context.ts'
 import { useWidth } from '../adaptive/useWidth.ts'
-import { focus, tabbables } from '../headless/dom.ts'
 import { useControllable } from '../headless/useControllable.ts'
 import { useRovingFocus } from '../headless/useRovingFocus.ts'
 import { useVirtualList } from '../headless/useVirtualList.ts'
 import type { Size } from '../types.ts'
-import {
-  keyOf,
-  nextSort,
-  parseSort,
-  selectRange,
-  sortRows,
-  TABLE_LABELS,
-  textOf,
-  valueOf,
-  type RowKey,
-  type TableColumn,
-  type TableFetch,
-  type TableLabels,
-  type TableQuery,
-} from './table.ts'
+import { nextSort, parseSort, selectRange, TABLE_LABELS, textOf, valueOf, type RowKey, type TableColumn, type TableFetch, type TableLabels } from './table.ts'
+import { useTableGrid } from './tableGrid.ts'
+import { useTableData } from './useTableData.ts'
 import '../styles/base.css'
 import '../styles/table.css'
 
@@ -136,63 +126,24 @@ const cards = computed(() => width.value === 'narrow')
 const sort = useControllable(props, 'sort', emit, () => props.defaultSort)
 const selected = useControllable(props, 'selected', emit, () => props.defaultSelected ?? [])
 const page = useControllable(props, 'page', emit, () => props.defaultPage)
-watch(sort, () => (page.value = 1))
 
-// Through fetch: the server's answer to the latest query.
-const remote = shallowRef<{ items: T[]; total: number } | null>(null)
-const fetching = ref(false)
-const failed = shallowRef<unknown>(null)
 const mounted = ref(false)
 onMounted(() => (mounted.value = true))
-const perPage = computed(() => props.perPage ?? (props.fetch ? 20 : undefined))
-const query = computed<TableQuery>(() => {
-  const q: TableQuery = { page: page.value, perPage: perPage.value! }
-  if (sort.value) q.sort = sort.value
-  return q
+const data = useTableData<T>({
+  rows: () => props.rows,
+  fetch: () => props.fetch,
+  columns: () => props.columns,
+  rowKey: () => props.rowKey,
+  sort,
+  page,
+  perPage: () => props.perPage,
+  loading: () => !!props.loading,
+  active: () => mounted.value,
+  needKeys: () => !!props.selectable,
+  onError: (error) => emit('error', error),
 })
-let asked = 0
-async function load() {
-  const fetch = props.fetch
-  if (!fetch) return
-  const mine = ++asked
-  fetching.value = true
-  failed.value = null
-  try {
-    const answer = await fetch(query.value)
-    if (mine !== asked) return
-    remote.value = { items: answer.items, total: answer.total }
-  } catch (error) {
-    if (mine !== asked) return
-    failed.value = error
-    emit('error', error)
-  } finally {
-    if (mine === asked) fetching.value = false
-  }
-}
-watch([mounted, query, () => props.fetch], ([on]) => on && load())
+const { shown, total, perPage, pageCount, currentPage, busy, failed, load } = data
 
-interface Entry {
-  row: T
-  key: RowKey
-}
-const total = computed(() => (props.fetch ? (remote.value?.total ?? 0) : (props.rows?.length ?? 0)))
-const pageCount = computed(() => (perPage.value ? Math.ceil(total.value / Math.max(1, perPage.value)) : 1))
-const currentPage = computed(() => (props.fetch ? page.value : Math.min(Math.max(1, page.value), Math.max(1, pageCount.value))))
-/** The rows shown: sorted and sliced to the page on the client, or the server's page. */
-const shown = computed<Entry[]>(() => {
-  if (props.fetch) {
-    const p = currentPage.value
-    return (remote.value?.items ?? []).map((row, i) => ({ row, key: keyOf(row, props.rowKey, `${p}:${i}`) }))
-  }
-  const entries = (props.rows ?? []).map((row, i) => ({ row, key: keyOf(row, props.rowKey, i) }))
-  const byEntry: TableColumn<Entry>[] = props.columns.map((c) => ({ key: c.key, accessor: (e) => valueOf(c, e.row) }))
-  const sorted = sortRows(entries, byEntry, sort.value)
-  if (!perPage.value) return sorted
-  const start = (currentPage.value - 1) * perPage.value
-  return sorted.slice(start, start + perPage.value)
-})
-
-const busy = computed(() => !!props.loading || (!!props.fetch && (fetching.value || (!remote.value && !failed.value))))
 const skeletons = computed(() => (busy.value && shown.value.length === 0 ? Array.from({ length: perPage.value ?? 5 }, (_, i) => i) : []))
 const isEmpty = computed(() => !busy.value && !failed.value && shown.value.length === 0)
 const span = computed(() => props.columns.length + (props.selectable ? 1 : 0))
@@ -201,9 +152,11 @@ const ariaSort = (column: TableColumn<T>) =>
   current.value?.key === column.key ? (current.value.desc ? 'descending' : 'ascending') : undefined
 const label = (column: TableColumn<T>) => column.label ?? column.key
 
+/** A press on a sortable header: the next sort, from page 1. A parent setting both keeps its page. */
 function toggleSort(column: TableColumn<T>) {
   if (!column.sortable) return
   sort.value = nextSort(sort.value, column.key)
+  page.value = 1
 }
 
 // Selection: over the rows shown; a Shift+click chooses from the last row clicked.
@@ -232,43 +185,76 @@ const noteShift = (event: MouseEvent) => (shift = event.shiftKey)
 const nameCol = computed(() => props.columns.find((c) => c.rowHeader) ?? props.columns[0])
 const rowName = (row: T) => (nameCol.value ? textOf(nameCol.value, row) : '')
 
-// Windowed past 200 rows: fixed-height rows between two spacer rows.
+// The grid: one tab stop over the cells (a sort button or a checkbox stands for its cell).
+const grid = computed(() => !!props.keyboard && !cards.value)
+const gridEl = computed(() => (grid.value ? table.value : null))
+// Windowed past 200 rows: fixed-height rows, the focused one pinned, spacer rows for the rest.
 const ROW = { sm: 36, md: 44, lg: 52 } as const
 const rowPx = computed(() => props.rowHeight ?? (weft.input.value === 'touch' ? Math.max(44, ROW[props.size]) : ROW[props.size]))
+let pinned = (): number => -1
 const list = useVirtualList(scroller, {
   count: () => shown.value.length,
   itemHeight: () => rowPx.value,
   enabled: () => !cards.value && shown.value.length > 200,
+  pinned: () => (grid.value ? pinned() : -1),
 })
 const windowed = computed(() => list.virtual.value)
-const visible = computed(() => list.indices.value)
-const before = computed(() => (windowed.value && visible.value.length ? list.offset(visible.value[0]!) : 0))
-const after = computed(() => (windowed.value && visible.value.length ? list.total.value - list.offset(visible.value[visible.value.length - 1]! + 1) : 0))
-const maxHeight = computed(() => props.height ?? (windowed.value ? '30rem' : undefined))
-
-// The grid: one tab stop over the cells (a cell's own control, a sort button or a checkbox, stands for it).
-const grid = computed(() => !!props.keyboard && !cards.value)
-const gridEl = computed(() => (grid.value ? table.value : null))
-useRovingFocus(gridEl, { orientation: 'grid', columns: () => span.value, inner: 'ignore' })
+// Heard first (capture), so the roving focus below only keeps the tab stop.
+const gridKeys = useTableGrid(gridEl, {
+  rows: () => shown.value.length,
+  columns: () => span.value,
+  windowed: () => windowed.value,
+  scrollTo: (index) => list.scrollTo(index),
+})
+pinned = () => gridKeys.focusRow.value
+useRovingFocus(gridEl, { orientation: 'grid', columns: () => span.value, loop: false, inner: 'ignore' })
 const item = computed(() => (grid.value ? '' : undefined))
-const CELL = 'td[data-weft-item], th[data-weft-item]'
-function onGridKeydown(event: KeyboardEvent) {
-  if (!grid.value || event.defaultPrevented) return
-  const target = event.target as HTMLElement
-  if ((event.key === 'Enter' || event.key === 'F2') && target.matches(CELL)) {
-    const inner = tabbables(target)[0]
-    if (inner) {
-      event.preventDefault()
-      focus(inner)
-    }
-  } else if (event.key === 'Escape') {
-    const cell = target.closest<HTMLElement>(CELL)
-    if (cell && cell !== target) {
-      event.preventDefault()
-      focus(cell)
-    }
+const col = (index: number) => (grid.value ? index : undefined)
+
+/** The rows to draw, in order, with a spacer row for each run of rows not drawn. */
+type Part = { spacer: number; key: string } | { spacer?: undefined; key: RowKey; i: number }
+const parts = computed<Part[]>(() => {
+  const indices = list.indices.value
+  if (!windowed.value) return indices.map((i) => ({ key: shown.value[i]!.key, i }))
+  const out: Part[] = []
+  let next = 0
+  for (const i of indices) {
+    const gap = list.offset(i) - list.offset(next)
+    if (gap > 0) out.push({ spacer: gap, key: `gap:${i}` })
+    out.push({ key: shown.value[i]!.key, i })
+    next = i + 1
   }
+  const tail = list.total.value - list.offset(next)
+  if (tail > 0) out.push({ spacer: tail, key: 'gap:end' })
+  return out
+})
+
+// The box: it scrolls when it has a height, is windowed, or the table is wider than it; else it
+// clips, so the sticky header sticks against the page. Until measured (and on the server) it scrolls.
+const maxHeight = computed(() => props.height ?? (windowed.value ? '30rem' : undefined))
+const wide = ref(true)
+const scrolls = computed(() => !!maxHeight.value || wide.value)
+let sizes: ResizeObserver | undefined
+const measure = () => {
+  const box = scroller.value
+  const inner = table.value
+  if (box && inner) wide.value = inner.scrollWidth > box.clientWidth + 1
 }
+watch(
+  [scroller, table],
+  ([box, inner]) => {
+    sizes?.disconnect()
+    sizes = undefined
+    if (!box || !inner) return
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    sizes = new ResizeObserver(measure)
+    sizes.observe(box)
+    sizes.observe(inner)
+  },
+  { flush: 'post' },
+)
+onScopeDispose(() => sizes?.disconnect())
 
 defineExpose({
   /** Ask `fetch` again for the page shown. */
@@ -288,14 +274,13 @@ defineExpose({
     :style="{ '--weft-table-row': `${rowPx}px` }"
   >
     <span class="weft-visually-hidden" role="status">{{ busy ? t.loading : '' }}</span>
-    <div v-if="!cards" ref="scroller" class="weft-table__scroller" :style="maxHeight ? { maxBlockSize: maxHeight } : undefined">
+    <div v-if="!cards" ref="scroller" class="weft-table__scroller" :data-scroll="scrolls ? 'true' : undefined" :style="maxHeight ? { maxBlockSize: maxHeight } : undefined">
       <table
         ref="table"
         class="weft-table__table"
         :role="grid ? 'grid' : undefined"
         :aria-busy="busy ? 'true' : undefined"
         :aria-rowcount="windowed ? shown.length + 1 : undefined"
-        @keydown="onGridKeydown"
       >
         <caption v-if="caption" :class="hideCaption ? 'weft-visually-hidden' : 'weft-table__caption'">{{ caption }}</caption>
         <thead>
@@ -306,19 +291,21 @@ defineExpose({
                 :aria-label="t.selectAll"
                 :disabled="shown.length === 0 || undefined"
                 :data-weft-item="item"
+                :data-col="col(0)"
                 @update:model-value="toggleAll"
               />
             </th>
             <th
-              v-for="column in columns"
+              v-for="(column, c) in columns"
               :key="column.key"
               scope="col"
               :aria-sort="ariaSort(column)"
               :data-align="column.align"
               :data-weft-item="column.sortable ? undefined : item"
+              :data-col="column.sortable ? undefined : col(c + (selectable ? 1 : 0))"
               :style="column.width ? { inlineSize: column.width } : undefined"
             >
-              <button v-if="column.sortable" type="button" class="weft-table__sort" :data-weft-item="item" @click="toggleSort(column)">
+              <button v-if="column.sortable" type="button" class="weft-table__sort" :data-weft-item="item" :data-col="col(c + (selectable ? 1 : 0))" @click="toggleSort(column)">
                 <slot :name="`${column.key}-header`" :column="column">{{ label(column) }}</slot>
                 <svg class="weft-table__arrow" :data-dir="ariaSort(column)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path v-if="ariaSort(column) === 'descending'" d="m6 9 6 6 6-6" />
@@ -346,35 +333,37 @@ defineExpose({
           <tr v-if="isEmpty">
             <td class="weft-table__empty" :colspan="span"><slot name="empty">{{ empty ?? t.empty }}</slot></td>
           </tr>
-          <tr v-if="before > 0" class="weft-table__spacer" aria-hidden="true"><td :colspan="span" :style="{ blockSize: `${before}px` }"></td></tr>
-          <tr
-            v-for="i in visible"
-            :key="shown[i]!.key"
-            :data-index="i"
-            :aria-rowindex="windowed ? i + 2 : undefined"
-            :aria-selected="grid && selectable ? (chosen.has(shown[i]!.key) ? 'true' : 'false') : undefined"
-            :data-selected="chosen.has(shown[i]!.key) ? 'true' : undefined"
-          >
-            <td v-if="selectable" class="weft-table__select" @click="noteShift">
-              <Checkbox
-                :model-value="chosen.has(shown[i]!.key)"
-                :aria-label="t.selectRow(rowName(shown[i]!.row))"
-                :data-weft-item="item"
-                @update:model-value="toggleRow(shown[i]!.key, $event)"
-              />
-            </td>
-            <component
-              :is="column.rowHeader ? 'th' : 'td'"
-              v-for="column in columns"
-              :key="column.key"
-              :scope="column.rowHeader ? 'row' : undefined"
-              :data-align="column.align"
-              :data-weft-item="item"
+          <template v-for="part in parts" :key="part.key">
+            <tr v-if="part.spacer !== undefined" class="weft-table__spacer" aria-hidden="true"><td :colspan="span" :style="{ blockSize: `${part.spacer}px` }"></td></tr>
+            <tr
+              v-else
+              :data-index="part.i"
+              :aria-rowindex="windowed ? part.i + 2 : undefined"
+              :aria-selected="grid && selectable ? (chosen.has(part.key) ? 'true' : 'false') : undefined"
+              :data-selected="chosen.has(part.key) ? 'true' : undefined"
             >
-              <slot :name="`${column.key}-cell`" :row="shown[i]!.row" :value="valueOf(column, shown[i]!.row)" :index="i" :column="column">{{ textOf(column, shown[i]!.row) }}</slot>
-            </component>
-          </tr>
-          <tr v-if="after > 0" class="weft-table__spacer" aria-hidden="true"><td :colspan="span" :style="{ blockSize: `${after}px` }"></td></tr>
+              <td v-if="selectable" class="weft-table__select" @click="noteShift">
+                <Checkbox
+                  :model-value="chosen.has(part.key)"
+                  :aria-label="t.selectRow(rowName(shown[part.i]!.row))"
+                  :data-weft-item="item"
+                  :data-col="col(0)"
+                  @update:model-value="toggleRow(part.key, $event)"
+                />
+              </td>
+              <component
+                :is="column.rowHeader ? 'th' : 'td'"
+                v-for="(column, c) in columns"
+                :key="column.key"
+                :scope="column.rowHeader ? 'row' : undefined"
+                :data-align="column.align"
+                :data-weft-item="item"
+                :data-col="col(c + (selectable ? 1 : 0))"
+              >
+                <slot :name="`${column.key}-cell`" :row="shown[part.i]!.row" :value="valueOf(column, shown[part.i]!.row)" :index="part.i" :column="column">{{ textOf(column, shown[part.i]!.row) }}</slot>
+              </component>
+            </tr>
+          </template>
         </tbody>
       </table>
     </div>
@@ -398,7 +387,7 @@ defineExpose({
         <span>{{ t.error }}</span>
         <Button :label="t.retry" variant="outline" tone="neutral" size="sm" @click="load()" />
       </div>
-      <p v-if="isEmpty" class="weft-table__empty"><slot name="empty">{{ empty ?? t.empty }}</slot></p>
+      <div v-if="isEmpty" class="weft-table__empty"><slot name="empty">{{ empty ?? t.empty }}</slot></div>
       <ul class="weft-table__cards" :aria-label="caption">
         <li v-for="n in skeletons" :key="`s${n}`" class="weft-table__card weft-table__skeleton" aria-hidden="true">
           <Skeleton v-for="column in columns" :key="column.key" />

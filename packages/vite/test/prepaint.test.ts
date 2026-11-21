@@ -53,6 +53,30 @@ describe('pre-paint snippets', () => {
     expect(run(() => { throw new Error('denied') })).toBeUndefined()
   })
 
+  it('come from a closable Banner with an id, and from no other Banner', () => {
+    const h = head('banner')
+    expect(snippets(h)).toHaveLength(1)
+    expect(h.indexOf('data-weft-prepaint')).toBeLessThan(h.indexOf('<style>'))
+    expect(snippets(h)[0]).toContain('weft-banner:news-1')
+    expect(page('banner-unkept')).not.toContain('data-weft-prepaint')
+  })
+
+  it('hide a Banner closed on an earlier visit before paint, and survive storage that throws', () => {
+    const code = snippets(head('banner'))[0]!
+    const run = (getItem: (key: string) => string | null) => {
+      const added: { textContent: string }[] = []
+      const document = {
+        createElement: () => ({ textContent: '' }),
+        head: { appendChild: (el: { textContent: string }) => added.push(el) },
+      }
+      new Function('localStorage', 'document', code)({ getItem }, document)
+      return added.map((s) => s.textContent)
+    }
+    expect(run((k) => (k === 'weft-banner:news-1' ? 'closed' : null))).toEqual(['.weft-banner[data-id="news-1"]{display:none}'])
+    expect(run(() => null)).toEqual([])
+    expect(run(() => { throw new Error('denied') })).toEqual([])
+  })
+
   it('reach renderPage as prePaint, and nothing else of the page changes', async () => {
     const { html, prePaint } = await renderPage({ root, page: 'pages/shell.vue' })
     expect(prePaint).toHaveLength(1)

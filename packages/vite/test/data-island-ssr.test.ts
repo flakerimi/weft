@@ -23,6 +23,7 @@ it('renders an island of every feedback and data component', async () => {
   expect(dataIsland).toContain('<output>|[]|0|false|left|true|0</output>')
   expect(dataIsland).toContain('role="alert"')
   expect(dataIsland).toContain('aria-current="step"')
-  // The scroll area is a tab stop until it is measured.
-  expect(dataIsland).toMatch(/class="weft-scroll-area"[^>]*tabindex="0"/)
+  // The scroll area is a tab stop, and the tables' boxes scroll, until they are measured.
+  expect(dataIsland).toMatch(/class="weft-scroll-area__viewport"[^>]*tabindex="0"/)
+  expect(dataIsland).toMatch(/class="weft-table__scroller" data-scroll="true"/)
 })

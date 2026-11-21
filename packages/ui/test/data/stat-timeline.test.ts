@@ -4,6 +4,9 @@ import { mount } from '../mount.ts'
 import { installResizeObserver } from '../resize-observer.ts'
 import { loadStyles } from '../styles.ts'
 import { $, $$, reset, settle } from '../overlays/helpers.ts'
+import { registerIcon } from '../../src/basics/icons.ts'
+
+for (const name of ['banknote', 'shopping-cart']) registerIcon(name, '<circle cx="12" cy="12" r="10"></circle>')
 
 let unmount: (() => void) | undefined
 let ro: ReturnType<typeof installResizeObserver> | undefined
@@ -59,6 +62,19 @@ describe('StatCard', () => {
     await cases({ delta: 0 })
     expect(delta().dataset.tone).toBe('neutral')
     expect($('.weft-visually-hidden', delta()).textContent).toBe('no change')
+  })
+
+  it('reads the direction from the amount it shows: a delta that rounds to 0 is no change, never "+0%"', async () => {
+    await cases({ delta: 0.004 })
+    expect(delta().dataset.tone).toBe('neutral')
+    expect($('.weft-stat-card__change', delta()).textContent).toBe('0%')
+    expect($('.weft-visually-hidden', delta()).textContent).toBe('no change')
+    unmount!()
+    await cases({ delta: -0.004 })
+    expect($('.weft-stat-card__change', delta()).textContent).toBe('0%')
+    unmount!()
+    await cases({ delta: 0.006 })
+    expect($('.weft-stat-card__change', delta()).textContent).toBe('+0.01%')
   })
 
   it('has no delta when none is given, and a sparkline from its slot, hidden from assistive technology', async () => {

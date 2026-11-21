@@ -12,11 +12,15 @@ adapts:
 before it, `actions` (`{ label, onClick, to }`, or the actions slot) after
 it. `to` makes the title a link. `tone` (`primary`) fills the strip.
 
-`close` adds a close button, which hides the banner and emits `close`. With
-an `id` the banner stays closed on later visits: it records `closed` under
-`weft-banner:<id>` in localStorage and reads it once mounted, so the server
-always draws the banner and a closed one leaves just after the page loads.
-Change the id for new news. Without an id it shows again on the next page.
+`close` adds a close button, which hides the banner and emits `close`;
+focus, which was on that button, moves on to what follows the banner (else
+what precedes it). With an `id` the banner stays closed on later visits: it
+records `closed` under `weft-banner:<id>` in localStorage. The server always
+draws the banner; a pre-paint snippet (`usePrePaint`, written into the
+`<head>` only of pages that render a closable Banner with an id) hides a
+closed one before the first paint, and the Banner leaves the page once
+mounted. Change the id for new news. Without an id it shows again on the
+next page.
 
 It is a plain block, not a landmark or a live region: put it before the
 page's header so it is read first.

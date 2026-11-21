@@ -18,7 +18,8 @@ it is about: `danger` for a failure, `warning`, `success`, `neutral`.
 variant }`, or the actions slot; they sit under the text, or beside it with
 `orientation="horizontal"`. `close` adds a close button (`close-label`,
 "Close"); pressing it sets `v-model:open` to false and the alert leaves the
-page.
+page, focus moving on to what follows it (else what precedes it). Closed by
+its parent, it leaves focus where it is.
 
 It has no live role of its own: a message that is there when the page
 loads is not news, and announcing every alert would drown the important

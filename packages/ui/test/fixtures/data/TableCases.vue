@@ -25,6 +25,7 @@ const props = withDefaults(
     input?: Input
     dir?: 'ltr' | 'rtl'
     slots?: boolean
+    controls?: boolean
     rowHeight?: number
     height?: string
   }>(),
@@ -65,6 +66,7 @@ defineExpose({ sort, selected, page, errors, table })
         @error="errors.push($event)"
       >
         <template v-if="slots" #city-cell="{ value, row }"><em class="city">{{ value }} ({{ row.id }})</em></template>
+        <template v-if="controls" #age-cell="{ value }"><button type="button" class="edit">Edit {{ value }}</button></template>
         <template v-if="slots" #empty><p class="no-people">No people yet</p></template>
       </Table>
     </div>

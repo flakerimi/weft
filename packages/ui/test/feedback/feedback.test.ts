@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import FeedbackCases from '../fixtures/feedback/FeedbackCases.vue'
 import { mount } from '../mount.ts'
-import { loadStyles } from '../styles.ts'
+import { loadStyles, ruleFor } from '../styles.ts'
+import { bannerSnippet } from '../../src/feedback/banner.ts'
+import { registerIcon } from '../../src/basics/icons.ts'
+
+for (const name of ['circle-alert', 'info', 'users']) registerIcon(name, '<circle cx="12" cy="12" r="10"></circle>')
 import { px } from '../forms/helpers.ts'
-import { $, $$, reset, settle } from '../overlays/helpers.ts'
+import { $, $$, active, reset, settle } from '../overlays/helpers.ts'
 
 let unmount: (() => void) | undefined
 afterEach(() => {
@@ -20,6 +24,21 @@ async function cases(props: Record<string, unknown> = {}) {
 }
 const buttonIn = (root: Element, label: string) =>
   $$<HTMLElement>('button, a', root).find((b) => b.textContent!.trim() === label || b.getAttribute('aria-label') === label)!
+
+/**
+ * How large a CloseButton's press area is, as drawn: its ::before is
+ * max(100%, --weft-hit-min) each way. happy-dom computes no pseudo-elements,
+ * so the rule is read and resolved against the button.
+ */
+function hit(el: HTMLElement): number {
+  const before = ruleFor('.weft-close-button::before')!.style
+  expect(before.getPropertyValue('block-size')).toBe('max(100%, var(--weft-hit-min, 24px))')
+  expect(before.getPropertyValue('inline-size')).toBe('max(100%, var(--weft-hit-min, 24px))')
+  // happy-dom does not inherit custom properties into getComputedStyle: read it where it is set.
+  let min = ''
+  for (let at: Element | null = el; at && !min; at = at.parentElement) min = getComputedStyle(at).getPropertyValue('--weft-hit-min')
+  return Math.max(px(getComputedStyle(el).blockSize), px(min || getComputedStyle(document.documentElement).getPropertyValue('--weft-hit-min')))
+}
 
 describe('Alert', () => {
   const alert = () => $('.weft-alert')
@@ -59,6 +78,38 @@ describe('Alert', () => {
     await cases({ orientation: 'horizontal' })
     expect(alert().dataset.orientation).toBe('horizontal')
   })
+
+  it('moves focus on when closed from its button, to what follows it', async () => {
+    const m = await cases()
+    const close = buttonIn(alert(), 'Close')
+    close.focus()
+    close.click()
+    await settle()
+    expect(m.exposed.open).toBe(false)
+    expect(active()).toBe(buttonIn($('.weft-banner'), 'Read more'))
+  })
+
+  it('leaves focus alone when closed from outside', async () => {
+    const m = await cases()
+    const other = buttonIn($('.weft-empty-state'), 'Add customer')
+    other.focus()
+    ;(m.exposed as { open: boolean }).open = false
+    await settle()
+    expect(active()).toBe(other)
+  })
+
+  it('gives its close button a 44 px hit on touch', async () => {
+    const unstyle = loadStyles()
+    try {
+      await cases({ input: 'touch' })
+      expect(hit(buttonIn(alert(), 'Close'))).toBe(44)
+      unmount!()
+      await cases({ input: 'pointer' })
+      expect(hit(buttonIn(alert(), 'Close'))).toBeLessThan(44)
+    } finally {
+      unstyle()
+    }
+  })
 })
 
 describe('Banner', () => {
@@ -97,11 +148,37 @@ describe('Banner', () => {
     const unstyle = loadStyles()
     try {
       await cases({ input: 'touch' })
-      const close = buttonIn(banner(), 'Close')
-      expect(close.classList.contains('weft-close-button')).toBe(true)
+      expect(hit(buttonIn(banner(), 'Close'))).toBe(44)
+      unmount!()
+      await cases({ input: 'pointer' })
+      expect(hit(buttonIn(banner(), 'Close'))).toBeLessThan(44)
     } finally {
       unstyle()
     }
+  })
+
+  it('moves focus on when closed from its button, to what follows it', async () => {
+    await cases()
+    const close = buttonIn(banner(), 'Close')
+    close.focus()
+    close.click()
+    await settle()
+    expect(active()).toBe(buttonIn($('.weft-empty-state'), 'Add customer'))
+  })
+})
+
+describe('bannerSnippet', () => {
+  it('hides the banner with that id before paint when it was closed, and survives storage that throws', () => {
+    const code = bannerSnippet('a"b</script>')
+    expect(code).not.toContain('</script>')
+    const run = (getItem: (k: string) => string | null) => {
+      const added: { textContent: string }[] = []
+      new Function('localStorage', 'document', code)({ getItem }, { createElement: () => ({ textContent: '' }), head: { appendChild: (s: { textContent: string }) => added.push(s) } })
+      return added.map((s) => s.textContent)
+    }
+    expect(run((k) => (k === 'weft-banner:a"b</script>' ? 'closed' : null))).toEqual(['.weft-banner[data-id="a\\"b</script>"]{display:none}'])
+    expect(run(() => 'open')).toEqual([])
+    expect(run(() => { throw new Error('denied') })).toEqual([])
   })
 })
 

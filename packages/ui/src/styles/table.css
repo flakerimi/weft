@@ -16,12 +16,16 @@
 .weft-table[data-size="sm"] { --weft-table-pad-block: var(--weft-space-1, 4px); --weft-table-pad-inline: var(--weft-space-2, 8px); }
 .weft-table[data-size="lg"] { --weft-table-pad-block: var(--weft-space-3, 12px); --weft-table-pad-inline: var(--weft-space-4, 16px); }
 .weft-table__scroller {
-  overflow: auto;
+  overflow: clip;
   overscroll-behavior-inline: contain;
   border: 1px solid var(--weft-color-border, GrayText);
   border-radius: var(--weft-radius-card, 12px);
   background: var(--weft-color-surface, Canvas);
 }
+/* It scrolls when it has a height, is windowed or is wider than its box (and
+   until it is measured); then the header sticks inside it. Else it clips,
+   so the header sticks against the page, under --weft-table-sticky-top. */
+.weft-table__scroller[data-scroll] { overflow: auto; }
 .weft-table__table {
   inline-size: 100%;
   border-collapse: separate;
@@ -52,6 +56,7 @@
   white-space: nowrap;
 }
 .weft-table[data-sticky] .weft-table__table thead th { position: sticky; inset-block-start: 0; z-index: 1; }
+.weft-table[data-sticky] .weft-table__scroller:not([data-scroll]) .weft-table__table thead th { inset-block-start: var(--weft-table-sticky-top, 0px); }
 .weft-table__table [data-align="center"] { text-align: center; }
 .weft-table__table [data-align="end"] { text-align: end; }
 .weft-table__select { inline-size: 1%; }

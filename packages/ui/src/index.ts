@@ -149,6 +149,7 @@ export {
   type TableQuery,
   type TableResult,
 } from './data/table.ts'
+export { useTableData, type TableData, type TableDataOptions, type TableEntry } from './data/useTableData.ts'
 export { default as StatCard } from './data/StatCard.vue'
 export type { StatLabels } from './data/stat.ts'
 export { default as Timeline } from './data/Timeline.vue'

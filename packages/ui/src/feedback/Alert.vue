@@ -4,15 +4,18 @@
 // its own, since a message present when the page loads is not news: give
 // `role="alert"` (urgent) or `role="status"` to one that appears later and
 // must be announced. Closed with its button, it leaves the page through
-// `v-model:open`. Actions sit under the text, or beside it when horizontal;
+// `v-model:open`, focus moving on to what follows it (else what precedes
+// it). Actions sit under the text, or beside it when horizontal;
 // when narrow they wrap under it anyway. On touch the close button's hit
 // area is at least --weft-hit-min.
+import { nextTick, useTemplateRef } from 'vue'
 import Button from '../basics/Button.vue'
 import Icon from '../basics/Icon.vue'
 import CloseButton from '../overlays/CloseButton.vue'
 import { useControllable } from '../headless/useControllable.ts'
 import type { Tone, Variant } from '../types.ts'
-import type { ActionItem } from './actions.ts'
+import { focus } from '../headless/dom.ts'
+import { focusAfter, type ActionItem } from './actions.ts'
 import '../styles/base.css'
 import '../styles/tone.css'
 import '../styles/alert.css'
@@ -60,10 +63,20 @@ defineSlots<{
 }>()
 
 const open = useControllable(props, 'open', emit, true)
+const root = useTemplateRef<HTMLElement>('root')
+
+/** Closed from its button, which leaves with it: focus moves on to what follows. */
+async function dismiss() {
+  const el = root.value
+  const to = el && el.contains(document.activeElement) ? focusAfter(el) : null
+  open.value = false
+  await nextTick()
+  if (to?.isConnected) focus(to)
+}
 </script>
 
 <template>
-  <div v-if="open" class="weft-alert" :data-tone="tone" :data-variant="variant" :data-orientation="orientation">
+  <div v-if="open" ref="root" class="weft-alert" :data-tone="tone" :data-variant="variant" :data-orientation="orientation">
     <span v-if="$slots.leading || icon" class="weft-alert__leading"><slot name="leading"><Icon v-if="icon" :name="icon" /></slot></span>
     <div class="weft-alert__body">
       <div class="weft-alert__text">
@@ -88,6 +101,6 @@ const open = useControllable(props, 'open', emit, true)
         </slot>
       </div>
     </div>
-    <CloseButton v-if="close" class="weft-alert__close" :label="closeLabel" @click="open = false" />
+    <CloseButton v-if="close" class="weft-alert__close" :label="closeLabel" @click="dismiss" />
   </div>
 </template>
