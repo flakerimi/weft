@@ -30,7 +30,7 @@
 - The site's information architecture: `/`, `/components` (gallery), `/components/<name>`, `/docs/...`, `/skills/<name>`, `/catalog.json`, `/llms.txt`. Header navigation shows Docs, Components, For agents, GitHub.
 - **Size budgets (brotli, all bytes):**
   - Landing page without islands ≤ 12 KB (fonts excluded, since they are cached and preloaded).
-  - Each docs page ≤ 10 KB.
+  - Each docs page ≤ 10 KB: HTML, CSS and every page-specific script (its islands' chunks and the chunks they import). The shared Vue runtime chunk (`client-*.js`) is excluded: it is cached once for the whole site and loads only on pages with an island. Fonts are excluded too. (Ruling, Task 3 review.)
   - Landing page with its islands ≤ 30 KB.
 - **No third-party requests at runtime:** no font CDN and no analytics.
 

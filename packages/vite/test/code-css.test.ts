@@ -38,8 +38,8 @@ it('sets every variable the code theme can draw with', () => {
 
 describe.each(['neutral', 'lisa', 'weft'])('code.css on the %s theme', (theme) => {
   const css = read(`../../themes/dist/${theme}.css`)
-  const light = block(css, ':root, [data-weft-scheme="light"]')
-  const schemes = { light, dark: { ...light, ...block(css, '[data-weft-scheme="dark"]') } }
+  const light = block(css, ':where(:root, [data-weft-scheme="light"])')
+  const schemes = { light, dark: { ...light, ...block(css, ':where([data-weft-scheme="dark"])') } }
   /** A code variable's colour in a scheme, through the theme token it names. */
   const colour = (scheme: Record<string, string>, name: string) => {
     const token = /^var\(--([\w-]+)\)$/.exec(vars[name]!)?.[1]

@@ -8,6 +8,8 @@
   max-inline-size: 1280px;
   margin-inline: auto;
   padding-inline: 24px;
+  /* The sidebar's column lies on a plain ground, top to bottom, so its text does not sit on the warp. */
+  background: linear-gradient(90deg, var(--weft-color-bg) calc(24px + 15rem), transparent 0);
 }
 
 /* The sidebar: in the page's flow on a wide screen, whatever the popover
@@ -22,9 +24,10 @@
   inline-size: auto;
   block-size: auto;
   margin: 0;
-  padding: 32px 0;
+  padding: 32px 16px;
   color: inherit;
-  background: none;
+  /* A plain ground, so its text does not sit on the warp. */
+  background: var(--weft-color-bg);
   border: 0;
 }
 .docs-nav .weft-nav__heading { font-size: 0.8125rem; letter-spacing: 0.04em; text-transform: uppercase; }
@@ -59,7 +62,8 @@
 .docs-prose li + li { margin-block-start: 0.35em; }
 .docs-prose :not(pre) > code:not(.copy-command__text) { font-size: 0.875em; padding: 0.1em 0.35em; border-radius: 4px; background: color-mix(in srgb, currentColor 7%, transparent); }
 .docs-prose pre { font-size: 0.875rem; line-height: 1.6; }
-.docs-prose table { display: block; overflow-x: auto; border-collapse: collapse; font-size: 0.9375rem; }
+.docs-table { overflow-x: auto; }
+.docs-prose table { border-collapse: collapse; font-size: 0.9375rem; }
 .docs-prose :is(th, td) { text-align: start; vertical-align: top; padding: 8px 12px; border-block-end: 1px solid var(--weft-color-border); }
 .docs-prose img { max-inline-size: 100%; block-size: auto; border-radius: 12px; }
 
@@ -86,12 +90,13 @@
 }
 
 @media (max-width: 767.98px) {
-  .docs { display: block; padding-inline: 0; }
+  .docs { display: block; padding-inline: 0; background: none; }
   .docs-page.weft-page { padding-inline: 16px; border: 0; }
   /* The drawer: shut, the popover attribute hides it; open, it comes in from the start side. */
   .docs-nav[popover] {
     position: fixed;
-    inset: 0 auto 0 0;
+    inset-block: 0;
+    inset-inline: 0 auto;
     display: none;
     inline-size: min(20rem, 85vw);
     block-size: 100%;
@@ -102,7 +107,7 @@
   }
   .docs-nav:popover-open { display: block; }
   .docs-nav .docs-close { margin: 0 0 8px auto; display: flex; }
-  .docs-nav::backdrop { background: rgb(15 21 48 / 0.4); }
+  .docs-nav::backdrop { background: color-mix(in srgb, var(--weft-color-text) 32%, transparent); }
   .docs-pager { grid-template-columns: 1fr; }
   .docs-pager [rel="next"] { grid-column: auto; }
 }

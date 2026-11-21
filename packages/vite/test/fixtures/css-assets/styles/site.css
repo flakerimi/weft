@@ -1,4 +1,5 @@
-/* Files beside the stylesheet, a font from a package, a public file, a data URL and another site's file. */
+/* Files beside the stylesheet, a font from a package, a public file, a data URL and another site's file.
+   The page uses the Test family; its Latin face is preloaded, its Latin Extended face and the icon font are not. */
 @font-face {
   font-family: 'Test';
   src: url('./fonts/Test.woff2') format('woff2');
@@ -9,7 +10,7 @@
   src: url("./fonts/Test-ext.woff2?v=1#ext") format('woff2');
   unicode-range: U+0100-024F;
 }
-.dot { background: url(./dot.svg) no-repeat; }
+.dot { background: url(./dot.svg) no-repeat; font-family: Test, sans-serif; }
 @font-face { font-family: 'Lucide'; src: url('lucide-static/font/lucide.woff2') format('woff2'); }
 .robots { background: url(/robots.txt); }
 .data { background: url('data:image/gif;base64,R0lGODlhAQABAAAAACw='); }

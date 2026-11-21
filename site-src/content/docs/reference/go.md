@@ -4,7 +4,7 @@ description: The weft package's functions, options and variables.
 order: 31
 ---
 
-This page lists everything the `weft` Go package exports today. Import it as `github.com/flakerimi/weft`. It uses only the standard library. The [Serving from Go](../guides/go-serving.md) guide explains the behaviour in more detail.
+Look up here everything the `weft` Go package exports today, with its signature and what it does. Import it as `github.com/flakerimi/weft`. It uses only the standard library. The [Serving from Go](../guides/go-serving.md) guide explains the behaviour in more detail.
 
 ## Serve
 

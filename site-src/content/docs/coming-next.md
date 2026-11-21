@@ -4,7 +4,7 @@ description: What the design plans and the code does not have yet, by phase.
 order: 40
 ---
 
-This page lists what Weft's design plans and the code does not have yet, so you know what not to look for. Each item names its phase in the design (`docs/superpowers/specs/2026-11-20-weft-design.md`, Phases). Nothing here works today.
+Check here whether something you want is built yet: this is what Weft's design plans and the code does not have, so you know what not to look for. Each item names its phase in the design (`docs/superpowers/specs/2026-11-20-weft-design.md`, Phases). Nothing here works today.
 
 ## Commands
 
@@ -24,7 +24,7 @@ Until then, build sites inside the repository as [Your first site](getting-start
 
 ## Packages in the binary
 
-The `weft` binary will carry Weft's JavaScript packages, and `weft create` will unpack them, so apps need neither npm nor a clone of the repository. This comes with `weft create`, in phase 4.
+The `weft` binary will carry Weft's JavaScript packages, and `weft create` will unpack them, so apps need neither npm nor a clone of the repository. Phase 4, inferred: the design gives this no phase of its own, and `weft create`, which unpacks them, is phase 4.
 
 ## The Go-to-Vue contract
 
@@ -44,7 +44,7 @@ Phase 5:
 
 - `DataTable`, with server-side paging, sorting and filtering over the wire format, and `EntityDialog`, which creates and edits records from a field schema;
 - charts (`LineChart`, `AreaChart`, `BarChart`, `DonutChart`, `Sparkline`) that take live data;
-- `weft.SSE` in Go, and `useLive` and `useLiveSeries` in Vue, for server-sent events.
+- `useLive` and `useLiveSeries` in Vue, for server-sent events, and `weft.SSE` in Go to send them. The design puts `useLive` in phase 5 and gives `weft.SSE` no phase; it is listed here, inferred, because `useLive` reads it.
 
 ## The agent kit
 

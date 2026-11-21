@@ -383,14 +383,64 @@ func contentDocs(t *testing.T) []doc {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sort.Slice(docs, func(i, j int) bool { return docs[i].order < docs[j].order })
+	// As the build orders them: by order, then by slug.
+	sort.SliceStable(docs, func(i, j int) bool {
+		if docs[i].order != docs[j].order {
+			return docs[i].order < docs[j].order
+		}
+		return docs[i].path < docs[j].path
+	})
 	return docs
 }
 
-// Each docs page is at most 10 KB brotli: its HTML, with its CSS inlined, and
-// any stylesheet it links. Fonts are not counted: they are cached and
-// preloaded. A docs page loads no JavaScript, except one with a code block
-// marked copy, whose only island is the copy button.
+var chunkImport = regexp.MustCompile(`(?:from|import)\s*"\./([^"]+\.js)"`)
+
+// islandChunks are the scripts a page loads for its islands, the shared
+// runtime (client-*.js) aside: each island's chunk, /assets/<id>-<hash>.js,
+// and the chunks it imports.
+func islandChunks(t *testing.T, d fs.FS, m builtFiles, islands []string) []string {
+	t.Helper()
+	seen := map[string]bool{}
+	var walk func(key string)
+	walk = func(key string) {
+		if seen[key] || strings.HasPrefix(key, "/assets/client-") {
+			return
+		}
+		seen[key] = true
+		b, err := fs.ReadFile(d, strings.TrimPrefix(key, "/"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, imp := range chunkImport.FindAllStringSubmatch(string(b), -1) {
+			walk("/assets/" + imp[1])
+		}
+	}
+	for _, id := range islands {
+		found := false
+		for key := range m.Files {
+			if strings.HasPrefix(key, "/assets/"+id+"-") && strings.HasSuffix(key, ".js") {
+				walk(key)
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("the build has no chunk for the island %s", id)
+		}
+	}
+	var out []string
+	for key := range seen {
+		out = append(out, key)
+	}
+	return out
+}
+
+// Each docs page is at most 10 KB brotli: its HTML, with its CSS inlined, any
+// stylesheet it links, and the scripts of its own islands (each island's
+// chunk and the chunks it imports). The shared runtime, client-*.js, is not
+// counted: it is cached once for the whole site and loads only on pages with
+// an island. Nor are fonts: they are cached and preloaded. A docs page loads
+// no JavaScript, except one with a command marked copy, whose only island is
+// the copy button.
 func TestDocsPageBudgets(t *testing.T) {
 	d := dist(t)
 	var m builtFiles
@@ -414,6 +464,9 @@ func TestDocsPageBudgets(t *testing.T) {
 		size := brotliSize(t, d, m, "/"+file)
 		for _, link := range stylesheetLink.FindAllStringSubmatch(html, -1) {
 			size += brotliSize(t, d, m, link[1])
+		}
+		for _, chunk := range islandChunks(t, d, m, islands[path]) {
+			size += brotliSize(t, d, m, chunk)
 		}
 		t.Logf("%s: %d B brotli", path, size)
 		if size > 10*1024 {
@@ -487,6 +540,23 @@ func TestDocsLayout(t *testing.T) {
 		if i+1 < len(docs) && !strings.Contains(html, `href="`+docs[i+1].path+`" rel="next"`) {
 			t.Errorf("%s: no link on to %s", doc.path, docs[i+1].path)
 		}
+		// The header marks the docs as the section, and only /docs itself as the page.
+		mark := `aria-current="true"`
+		if doc.path == "/docs" {
+			mark = `aria-current="page"`
+		}
+		header := regexp.MustCompile(`(?s)<nav class="site-nav".*?</nav>`).FindString(html)
+		if !regexp.MustCompile(`<a [^>]*href="/docs"[^>]*` + mark).MatchString(header) {
+			t.Errorf("%s: the header's Docs link is not %s", doc.path, mark)
+		}
+		// A keyboard reaches the text first.
+		if !strings.Contains(html, `<a class="site-skip" href="#main">`) || !regexp.MustCompile(`<main [^>]*id="main"`).MatchString(html) {
+			t.Errorf("%s: no skip link to the main content", doc.path)
+		}
+		// A table keeps its semantics and scrolls inside a container of its own.
+		if strings.Count(html, "<table>") != strings.Count(html, `<div class="docs-table"><table>`) {
+			t.Errorf("%s: a table is not in a scroll container", doc.path)
+		}
 		// The narrow screen's drawer needs no script: the Menu button opens the sidebar as a popover.
 		if !strings.Contains(html, `popovertarget="docs-nav"`) || !strings.Contains(html, `<aside id="docs-nav" class="docs-nav" popover>`) {
 			t.Errorf("%s: the sidebar is not a popover the Menu button opens", doc.path)
@@ -521,8 +591,9 @@ func TestDocsFontsAreSelfHosted(t *testing.T) {
 	if len(fonts) != 2 || !strings.Contains(names[0], "bricolage-grotesque-latin") || !strings.Contains(names[1], "jetbrains-mono-latin") {
 		t.Errorf("the docs preload %v, want Bricolage Grotesque and JetBrains Mono", names)
 	}
-	if regexp.MustCompile(`(?i)(src|href)="https?:|url\(https?:`).MatchString(strings.ReplaceAll(html, `href="https://github.com/flakerimi/weft"`, "")) {
-		t.Error("the docs page loads something from another site")
+	// Nor does it link the repository while that is private (WEFT_REPO_PUBLIC=1 builds the link in).
+	if regexp.MustCompile(`(?i)(src|href)="https?:|url\(https?:`).MatchString(html) {
+		t.Error("the docs page links or loads something on another site")
 	}
 }
 
@@ -539,6 +610,23 @@ func TestWordmarkIsTheOwners(t *testing.T) {
 		}
 		if string(got) != string(want) {
 			t.Errorf("%s is not docs/design/weft-wordmark.svg", name)
+		}
+	}
+}
+
+// The site's stylesheets draw with the theme's tokens: no colour of their own,
+// so light, dark and data-weft-scheme follow the theme.
+func TestSiteStylesUseTokens(t *testing.T) {
+	colour := regexp.MustCompile(`#[0-9A-Fa-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|lab)\(`)
+	for _, name := range []string{"styles/site.css", "styles/docs.css"} {
+		b, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, line := range strings.Split(string(b), "\n") {
+			if colour.MatchString(line) {
+				t.Errorf("%s:%d draws with a colour of its own: %s", name, i+1, strings.TrimSpace(line))
+			}
 		}
 	}
 }

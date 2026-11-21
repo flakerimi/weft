@@ -11,7 +11,7 @@ import { buildSite } from '../src/build.ts'
 import { createRenderServer, renderPage } from '../src/render.ts'
 
 const root = fileURLToPath(new URL('./fixtures/css-site', import.meta.url))
-const pages = ['button', 'field', 'island', 'barrel-island', 'barrel-button-island', 'dialog-island', 'link', 'plain']
+const pages = ['button', 'field', 'island', 'barrel-island', 'barrel-button-island', 'dialog-island', 'link', 'nav', 'plain']
 let parent: string
 let out: string
 /** Each page's CSS before minifying, which could merge a rule given twice: the theme, base.css, then the render's. */
@@ -82,11 +82,20 @@ describe('per-page CSS', () => {
     }
   })
 
-  it("ships what a component draws with: Button's spinner and icon", () => {
+  it("ships what a component draws with, and only what it draws: a still Button's tone, not its spinner", () => {
     const css = styleOf('button')
-    expect(css).toMatch(/\.weft-spinner\s*\{/)
-    expect(css).toMatch(/\.weft-icon\s*\{/)
     expect(css).toMatch(/\[data-tone="?primary"?\]\s*\{/)
+    // Outside an island nothing is drawn later: a Button that is not loading never shows its Spinner.
+    expect(css).not.toMatch(/\.weft-spinner\s*\{/)
+  })
+
+  it('ships no CSS for the forms a NavigationMenu imports but a page without islands never draws', () => {
+    const css = styleOf('nav')
+    expect(css).toMatch(/\.weft-nav\s*\{/)
+    // A rule for the class itself; navigation-menu.css names .weft-overlay-trigger in a selector of its own.
+    for (const other of ['weft-sheet', 'weft-tooltip', 'weft-badge', 'weft-overlay', 'weft-close-button', 'weft-spinner', 'weft-button']) {
+      expect(css, other).not.toMatch(new RegExp(`\\.${other}[\\s{,:[]`))
+    }
   })
 
   it('ships both a field and the control inside it', () => {
@@ -143,11 +152,13 @@ describe('per-page CSS', () => {
     expect(css).not.toMatch(/\.weft-button\s*\{/)
   })
 
-  it('gives an island that takes { Button } from the @weft/ui index the CSS a page drawing a Button gets', () => {
-    // Button's sheet and those of what it draws with (its spinner, its icons, tone), after the theme and base.css.
-    expect(new Set(rules(unminified['barrel-button-island']!))).toEqual(new Set(rules(unminified.button!)))
+  it('gives an island that takes { Button } from the @weft/ui index what a Button may draw, and nothing else', () => {
+    // An island may draw what its components import later (a Button's spinner once loading): more than a still Button.
+    const island = new Set(rules(unminified['barrel-button-island']!))
+    for (const rule of rules(unminified.button!)) expect(island, rule).toContain(rule)
     const css = styleOf('barrel-button-island')
     expect(css.match(/\.weft-button\s*\{/g)).toHaveLength(1)
+    expect(css).toMatch(/\.weft-spinner\s*\{/)
     for (const other of ['.weft-dialog', '.weft-table', '.weft-input', '.weft-switch', '.weft-menu', '.weft-toast', '.weft-calendar']) {
       expect(css, other).not.toContain(other)
     }
@@ -177,7 +188,7 @@ describe('per-page CSS', () => {
 
   it('orders a stylesheet after those of the components it draws with', () => {
     // Button draws a Spinner; its own rules come after the spinner's.
-    const css = styleOf('button')
+    const css = styleOf('dialog-island')
     expect(css.search(/\.weft-button\s*\{/)).toBeGreaterThan(css.search(/\.weft-spinner\s*\{/))
   })
 })

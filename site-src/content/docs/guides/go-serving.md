@@ -32,7 +32,7 @@ The build stored each text file three times: as it is, brotli and gzip. Serve pi
 
 ### Caching
 
-- Every answer has a strong `ETag` from the build. A request whose `If-None-Match` holds it gets `304 Not Modified` with no body.
+- Every page and file of the build, the not-found page included, carries the strong `ETag` the build gave it, with `-br` or `-gz` added for a compressed copy; so does each file `WithFiles` serves. A request whose `If-None-Match` holds it gets `304 Not Modified` with no body. Your API's answers are your own, and a single-page app's files carry no ETag.
 - Files named by a hash of their bytes (the island scripts, linked CSS, fonts, images in Markdown) get `Cache-Control: public, max-age=31536000, immutable`.
 - Everything else, pages included, gets `Cache-Control: no-cache`: the browser keeps it, and asks each time whether it changed.
 

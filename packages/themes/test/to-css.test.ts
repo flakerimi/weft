@@ -17,9 +17,9 @@ describe('themeToCss', () => {
   })
 
   it('emits the dark scheme for the attribute and the system preference', () => {
-    expect(css).toMatch(/\[data-weft-scheme="dark"\]\s*\{[^}]*--weft-color-bg: #09090B;/)
+    expect(css).toMatch(/:where\(\[data-weft-scheme="dark"\]\)\s*\{[^}]*--weft-color-bg: #09090B;/)
     expect(css).toContain('@media (prefers-color-scheme: dark)')
-    expect(css).toContain(':root:not([data-weft-scheme="light"])')
+    expect(css).toContain(':where(:root:not([data-weft-scheme="light"]))')
   })
 
   it('emits the hit area for input: 44 px on touch, 24 px on pointer', () => {
@@ -34,7 +34,7 @@ describe('themeToCss', () => {
   })
 
   it('emits control sizes that stay the same for pointer and touch', () => {
-    const root = /:root, \[data-weft-scheme="light"\] \{[^}]*\}/.exec(css)![0]
+    const root = /:where\(:root, \[data-weft-scheme="light"\]\) \{[^}]*\}/.exec(css)![0]
     expect(root).toContain('--weft-control-sm: 28px;')
     expect(root).toContain('--weft-control-md: 36px;')
     expect(root).toContain('--weft-control-lg: 44px;')
@@ -43,8 +43,8 @@ describe('themeToCss', () => {
   })
 
   it('chooses each tone\'s text at build: the better of the theme\'s two inks, and a tinted text', () => {
-    const light = /:root, \[data-weft-scheme="light"\] \{[^}]*\}/.exec(css)![0]
-    const dark = /\[data-weft-scheme="dark"\] \{[^}]*\}/.exec(css)![0]
+    const light = /:where\(:root, \[data-weft-scheme="light"\]\) \{[^}]*\}/.exec(css)![0]
+    const dark = /:where\(\[data-weft-scheme="dark"\]\) \{[^}]*\}/.exec(css)![0]
     // Light: white-ish ink on blue and red, dark ink on amber and green.
     expect(light).toContain(`--weft-color-primary-fg: ${neutral.dark.text};`)
     expect(light).toContain(`--weft-color-danger-fg: ${neutral.dark.text};`)

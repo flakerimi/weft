@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { constants as fs, existsSync, realpathSync, statSync, type Dirent } from 'node:fs'
+import { constants as fs, existsSync, readFileSync, realpathSync, statSync, type Dirent } from 'node:fs'
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, rmdir, stat, unlink, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
@@ -46,6 +46,13 @@ export interface BuildOptions {
    * carries.
    */
   cssInlineLimit?: number
+  /**
+   * Fonts to preload besides those preloaded by default, by the file name
+   * the CSS gives them (`lucide.woff2`). By default a page preloads a woff2
+   * face of a family its CSS uses when the face's `unicode-range` is absent
+   * or covers Basic Latin.
+   */
+  preloadFonts?: string[]
 }
 
 /** One served file in `manifest.json`. */
@@ -191,6 +198,8 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
       baseCSS,
       cssTarget,
       cssInlineLimit: opts.cssInlineLimit,
+      outDir,
+      preloadFonts: opts.preloadFonts ?? [],
     })
     await swap(staging, outDir)
     return manifest
@@ -212,6 +221,9 @@ interface BuildInput {
   baseCSS: string
   cssTarget: Targets | undefined
   cssInlineLimit: number | undefined
+  /** Where the build goes: the CSS may not name a file in it. */
+  outDir: string
+  preloadFonts: string[]
 }
 
 /** The marker of a folder Weft built: every other file in it, with its size and SHA-256. */
@@ -279,17 +291,29 @@ interface CSSFile {
 }
 
 const CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)\s'"]*))\s*\)/g
+/** A URL with a scheme (`data:`, `https:`) or to another host (`//host`), or a fragment of the document (`#a`). */
+const NOT_A_FILE = /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i
+
+const inside = (dir: string, file: string) => file === dir || file.startsWith(dir.endsWith(sep) ? dir : dir + sep)
+const isFile = (p: string) => existsSync(p) && statSync(p).isFile()
 
 /**
  * The files a page's CSS names with `url()`, as the render server wrote them:
  * a file of the site (`/styles/x.woff2`) or one outside it, such as a
  * package's (`/@fs/…/x.woff2`). Each is copied into the build at
  * `/assets/<name>-<hash><ext>`, named by its bytes so it is cached forever,
- * and the CSS points there, keeping a query or fragment. A path from the site
- * root that is a file of public/, or that is no file at all, a `data:` URL and
- * another site's are left as they are. Within one build each file is read once.
+ * and the CSS points there, keeping a query or fragment. A file of public/,
+ * a `data:` URL, another site's and a fragment are left as they are.
+ *
+ * A file is copied only from the site (not the build's own output folder) or
+ * from a package the site uses, judged by its real path, symlinks followed;
+ * anything else, a URL that names no file and one whose % escapes do not
+ * decode fail the build in one sentence. Within one build each file is read
+ * once.
  */
-function cssFiles(root: string): (css: string) => Promise<{ css: string; files: CSSFile[] }> {
+function cssFiles(root: string, outDir: string): (css: string, page: string) => Promise<{ css: string; files: CSSFile[] }> {
+  const realRoot = realpathSync(root)
+  const realOut = existsSync(outDir) ? realpathSync(outDir) : resolve(outDir)
   const paths = new Map<string, Promise<string>>()
   const pathOf = (file: string) => {
     let path = paths.get(file)
@@ -303,26 +327,66 @@ function cssFiles(root: string): (css: string) => Promise<{ css: string; files: 
     }
     return path
   }
-  const isFile = (p: string) => existsSync(p) && statSync(p).isFile()
-  /** The file a URL of the render server names, or null to leave the URL as it is. */
-  const fileOf = (url: string): string | null => {
-    if (url.startsWith('/@fs/')) {
-      const p = decodeURI(url.slice('/@fs'.length))
-      // /@fs/C:/… on Windows.
-      const file = /^\/[A-Za-z]:\//.test(p) ? p.slice(1) : p
-      return isFile(file) ? file : null
+  /** The folders of the packages the site can import: node_modules/<name> in the root and the folders above it, as Node finds them. */
+  const fromPackage = (real: string): boolean => {
+    for (let dir = dirname(real); dir !== dirname(dir); dir = dirname(dir)) {
+      const manifest = join(dir, 'package.json')
+      if (!isFile(manifest)) continue
+      let name: unknown
+      try {
+        name = (JSON.parse(readFileSync(manifest, 'utf8')) as { name?: unknown }).name
+      } catch {
+        continue
+      }
+      if (typeof name !== 'string' || !name) continue
+      for (let up = root; ; up = dirname(up)) {
+        const candidate = join(up, 'node_modules', name)
+        if (existsSync(candidate) && realpathSync(candidate) === dir) return true
+        if (up === dirname(up)) break
+      }
     }
-    if (!url.startsWith('/') || url.startsWith('//')) return null
-    const p = decodeURI(url)
-    if (isFile(join(root, 'public', p))) return null
-    return isFile(join(root, p)) ? join(root, p) : null
+    return false
   }
-  return async (css) => {
+  return async (css, page) => {
+    const refuse = (url: string, why: string) => new Error(`buildSite: the CSS of ${page} names url(${url}), ${why}`)
+    const outside = (url: string) => refuse(url, 'a file outside the site, its public/ folder and the packages it uses; put the file in the site.')
+    /** The file a URL of the render server names, or null to leave the URL as it is. */
+    const fileOf = (url: string, at: string): string | null => {
+      if (url === '' || NOT_A_FILE.test(url)) return null
+      let p: string
+      try {
+        p = decodeURI(at)
+      } catch {
+        throw refuse(url, 'whose % escapes do not decode; write a % in a name as %25.')
+      }
+      let file: string
+      if (p.startsWith('/@fs/')) {
+        const abs = p.slice('/@fs'.length)
+        // /@fs/C:/… on Windows.
+        file = /^\/[A-Za-z]:\//.test(abs) ? abs.slice(1) : abs
+      } else if (p.startsWith('/')) {
+        const publicDir = join(root, 'public')
+        const fromPublic = resolve(publicDir, '.' + p)
+        if (inside(publicDir, fromPublic) && isFile(fromPublic)) return null
+        file = resolve(root, '.' + p)
+        if (!inside(resolve(root), file)) throw outside(url)
+      } else {
+        // A relative URL the render server could not resolve.
+        file = resolve(root, p)
+      }
+      if (!isFile(file)) {
+        throw refuse(url, "which is no file of the site or its public/ folder; fix the path, or give another site's file by its full URL.")
+      }
+      const real = realpathSync(file)
+      if (inside(realOut, real)) throw refuse(url, "a file in the build's own output folder; move it into the site.")
+      if (!inside(realRoot, real) && !fromPackage(real)) throw outside(url)
+      return real
+    }
     const found: { at: number; length: number; file: string; rest: string }[] = []
     for (const m of css.matchAll(CSS_URL)) {
       const url = m[1] ?? m[2] ?? m[3] ?? ''
       const cut = url.search(/[?#]/)
-      const file = fileOf(cut < 0 ? url : url.slice(0, cut))
+      const file = fileOf(url, cut < 0 ? url : url.slice(0, cut))
       if (file) found.push({ at: m.index, length: m[0].length, file, rest: cut < 0 ? '' : url.slice(cut) })
     }
     const files: CSSFile[] = []
@@ -338,10 +402,50 @@ function cssFiles(root: string): (css: string) => Promise<{ css: string; files: 
   }
 }
 
+/** Whether a `unicode-range` value covers Basic Latin's printable characters, U+0020 to U+007E. */
+function coversBasicLatin(range: string): boolean {
+  const spans: [number, number][] = []
+  for (const part of range.split(',')) {
+    const m = /^\s*u\+([0-9a-f?]{1,6})(?:-([0-9a-f]{1,6}))?\s*$/i.exec(part)
+    if (!m) continue
+    if (m[1]!.includes('?')) spans.push([parseInt(m[1]!.replace(/\?/g, '0'), 16), parseInt(m[1]!.replace(/\?/g, 'f'), 16)])
+    else spans.push([parseInt(m[1]!, 16), parseInt(m[2] ?? m[1]!, 16)])
+  }
+  for (let c = 0x20; c <= 0x7e; c++) if (!spans.some(([a, b]) => a <= c && c <= b)) return false
+  return true
+}
+
+/** The family names a declaration value lists: `'A B', system-ui` → ['a b', 'system-ui']. */
+const families = (value: string) => value.split(',').map((f) => f.trim().replace(/^['"]|['"]$/g, '').toLowerCase())
+
+/**
+ * The woff2 fonts a page preloads: of each `@font-face` in its CSS, the
+ * woff2 sources, when its family is one the page's CSS uses (in
+ * `font-family`, `font` or a custom property such as `--weft-font-sans`)
+ * and its `unicode-range` is absent or covers Basic Latin; and any font
+ * `optIn` names by its file name.
+ */
+function preloads(baseCSS: string, pageCSS: string, files: CSSFile[], optIn: string[]): string[] {
+  const css = (baseCSS + '\n' + pageCSS).replace(/\/\*[\s\S]*?\*\//g, '')
+  const faces = [...css.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => m[1]!)
+  const rest = css.replace(/@font-face\s*\{[^}]*\}/g, '')
+  const used = new Set<string>()
+  for (const m of rest.matchAll(/(?:font-family|font|--[\w-]+)\s*:\s*([^;}]*)/g)) for (const f of families(m[1]!)) used.add(f)
+  const out = new Set<string>()
+  for (const face of faces) {
+    const family = /font-family\s*:\s*([^;]*)/.exec(face)?.[1]
+    const range = /unicode-range\s*:\s*([^;]*)/.exec(face)?.[1]
+    if (!family || !used.has(families(family)[0]!) || (range !== undefined && !coversBasicLatin(range))) continue
+    for (const m of face.matchAll(/url\((\/assets\/[^)?#]+\.woff2)/g)) out.add(m[1]!)
+  }
+  for (const f of files) if (f.path.endsWith('.woff2') && optIn.includes(basename(f.file))) out.add(f.path)
+  return [...out]
+}
+
 /** Write the whole build into `dir`, a fresh folder of its own, and mark it. */
 async function writeBuild(
   dir: string,
-  { root, app, appDir, pages, contentAssets, baseCSS, cssTarget, cssInlineLimit }: BuildInput,
+  { root, app, appDir, pages, contentAssets, baseCSS, cssTarget, cssInlineLimit, outDir, preloadFonts }: BuildInput,
 ): Promise<Manifest> {
   // Every file in the build; none is ever written twice, nor under two names the file system takes for one.
   const taken: Taken = new Map()
@@ -366,17 +470,17 @@ async function writeBuild(
   const rules = speculationRules(app)
   const sentSize = sentSizes()
   const minify = minifier(cssTarget)
-  const named = cssFiles(root)
+  const named = cssFiles(root, outDir)
   for (const page of pages) {
     // The files the page's CSS names (fonts, images), copied in under hashed names.
-    const { css: pageCSS, files: assets } = await named(page.css)
+    const { css: pageCSS, files: assets } = await named(page.css, `pages/${page.file}`)
     for (const asset of assets) {
       const file = asset.path.slice(1)
       if (taken.get(fsKey(file))?.path === file) continue
       await write(file, await readFile(asset.file))
       immutable.add(file)
     }
-    const fonts = [...new Set(assets.filter((a) => a.path.endsWith('.woff2')).map((a) => a.path))]
+    const fonts = preloads(baseCSS, pageCSS, assets, preloadFonts)
     // The theme, base.css, the CSS of what the page renders, then view transitions.
     const css = minify([baseCSS, pageCSS, VIEW_TRANSITION].filter(Boolean).join('\n'), `pages/${page.file}`) + '\n'
     let stylesheet: string | null = null

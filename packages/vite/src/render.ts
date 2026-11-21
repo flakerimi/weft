@@ -126,8 +126,9 @@ const isScript = (mod: EnvironmentModuleNode) =>
  * Every module the page imports, directly or not, in load order (a module
  * after its imports). With `only`, just what the page's CSS needs:
  * - a component (a `.vue` file) is followed when the server render used it
- *   (`rendered`, absolute posix paths), or when a followed component imports it
- *   directly (it may draw it later, as a Button draws its Spinner once loading);
+ *   (`rendered`, absolute posix paths), and only then: outside an island
+ *   nothing runs in the browser, so what the render did not draw is never
+ *   drawn (a still Button never shows its Spinner);
  * - one reached only through other modules, such as an index re-exporting
  *   every component, is left out with what it imports;
  * - under an island's file (`islands`), everything the island uses is
@@ -206,17 +207,17 @@ async function pageModules(
     }
     place(mod)
   }
-  const visit = (mod: EnvironmentModuleNode, fromSFC: boolean) => {
+  const visit = (mod: EnvironmentModuleNode) => {
     const file = mod.file ? normalizePath(mod.file) : ''
     if (!only || (isSFC(mod) && only.islands.has(file))) return visitWhole(mod)
     if (seen.has(mod)) return
-    if (isSFC(mod) && !fromSFC && !only.rendered.has(file)) return
+    if (isSFC(mod) && !only.rendered.has(file) && mod.url !== page) return
     seen.add(mod)
-    for (const dep of mod.importedModules) visit(dep, isSFC(mod))
+    for (const dep of mod.importedModules) visit(dep)
     place(mod)
   }
   const start = await vite.environments.ssr.moduleGraph.getModuleByUrl(page)
-  if (start) visit(start, true)
+  if (start) visit(start)
   return order
 }
 

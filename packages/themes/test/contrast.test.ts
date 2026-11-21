@@ -27,8 +27,8 @@ const themes: Theme[] = [neutral, weft, ...accents.map((accent) => lisa(tokens a
 describe.each(themes.map((t) => [t.name, t] as const))('%s', (_, theme) => {
   const css = themeToCss(theme)
   const schemes = {
-    light: block(css, ':root, [data-weft-scheme="light"]'),
-    dark: { ...block(css, ':root, [data-weft-scheme="light"]'), ...block(css, '[data-weft-scheme="dark"]') },
+    light: block(css, ':where(:root, [data-weft-scheme="light"])'),
+    dark: { ...block(css, ':where(:root, [data-weft-scheme="light"])'), ...block(css, ':where([data-weft-scheme="dark"])') },
   }
 
   for (const [scheme, v] of Object.entries(schemes)) {

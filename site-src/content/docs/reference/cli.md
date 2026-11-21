@@ -4,7 +4,7 @@ description: Every command and flag of weft and weft-build-pages, and the instal
 order: 30
 ---
 
-This page lists every command and flag the `weft` command has today, the page build's command, and the installer's settings. Commands the design plans but the code does not have yet are under [Coming next](../coming-next.md).
+Look up here every command and flag the `weft` command has today, the page build's flags, and the installer's settings. Commands the design plans but the code does not have yet are under [Coming next](../coming-next.md).
 
 ## weft
 
@@ -36,7 +36,7 @@ Replaces the running `weft` with another release from `weft.base.al`.
 
 | Flag | What it does |
 | --- | --- |
-| `--check` | Only says whether a newer release exists; changes nothing |
+| `--check` | Only says whether the latest release differs from yours, and changes nothing. After a rollback of the site the latest may be older than yours. |
 | `--version X` | Installs release `X` instead of the latest, older ones included |
 
 It downloads the archive for your platform and `SHA256SUMS`, checks the archive against it, writes the new binary beside the running one, and renames it into place, so the old one stays whole until the new one is complete. It follows a symlink to the real file.
@@ -62,7 +62,7 @@ It says `weft X is up to date.` when there is nothing to do, and `Updated weft X
 The page build. It comes with `@weft/vite`; run it from a site's `package.json` script.
 
 ```text
-weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa|weft]
+weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa|weft] [--preload-font <file.woff2>]...
 ```
 
 | Flag | What it does |
@@ -72,5 +72,6 @@ weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app b
 | `--theme` | `neutral` (the default), `lisa` or `weft`. See [Themes](../guides/themes.md). |
 | `--app-prefix` | A path prefix, such as `/app`, for a client-rendered app built beside the pages. |
 | `--app-dir` | Where that app's Vite build is. Default `<root>/app-dist`. |
+| `--preload-font` | A font file, such as `lucide.woff2`, to preload on the pages whose CSS names it, besides the Latin faces of the families they use. Give it once per font. |
 
 It prints `weft: built N pages into <dist>`. It needs Node 22.18 or later, which runs TypeScript without a build step. Any error is one sentence, and the folder at `--out` is left as it was.

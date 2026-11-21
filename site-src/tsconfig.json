@@ -1,5 +1,15 @@
 {
   "extends": "../tsconfig.base.json",
-  "compilerOptions": { "types": ["vite/client", "@weft/vite/virtual"] },
-  "include": ["pages", "components", "content.config.ts"]
+  "compilerOptions": {
+    "types": [
+      "vite/client",
+      "@weft/vite/virtual"
+    ]
+  },
+  "include": [
+    "pages",
+    "components",
+    "content.config.ts",
+    "env.d.ts"
+  ]
 }

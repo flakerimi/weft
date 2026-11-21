@@ -363,7 +363,9 @@ function equivalent(now: 'bar' | 'sheet' | 'column', label: string | undefined):
               </li>
             </ul>
           </template>
-          <Tooltip v-else-if="item.to" :text="item.label" placement="right" :disabled="!collapsed">
+          <!-- Collapsed, an item names itself in a Tooltip; open, it needs none, so a page that is not
+               collapsed renders no Tooltip and ships none of its CSS. -->
+          <Tooltip v-else-if="item.to && collapsed" :text="item.label" placement="right">
             <Link
               class="weft-nav__item"
               data-weft-item
@@ -379,13 +381,33 @@ function equivalent(now: 'bar' | 'sheet' | 'column', label: string | undefined):
               <Badge v-if="item.badge !== undefined && !collapsed" :label="item.badge" variant="soft" tone="neutral" size="sm" />
             </Link>
           </Tooltip>
-          <Tooltip v-else :text="item.label" placement="right" :disabled="!collapsed">
+          <Link
+            v-else-if="item.to"
+            class="weft-nav__item"
+            data-weft-item
+            :data-disabled="item.disabled ? 'true' : undefined"
+            :to="item.to"
+            :target="item.target"
+            :active="item.active"
+            :disabled="item.disabled"
+            @click="onItem(item, $event)"
+          >
+            <Icon v-if="item.icon" :name="item.icon" class="weft-nav__icon" />
+            <span class="weft-nav__label" :class="{ 'weft-visually-hidden': collapsed }"><slot name="item" :item="item">{{ item.label }}</slot></span>
+            <Badge v-if="item.badge !== undefined && !collapsed" :label="item.badge" variant="soft" tone="neutral" size="sm" />
+          </Link>
+          <Tooltip v-else-if="collapsed" :text="item.label" placement="right">
             <button type="button" class="weft-nav__item" data-weft-item :disabled="item.disabled || undefined" @click="onItem(item, $event)">
               <Icon v-if="item.icon" :name="item.icon" class="weft-nav__icon" />
               <span class="weft-nav__label" :class="{ 'weft-visually-hidden': collapsed }"><slot name="item" :item="item">{{ item.label }}</slot></span>
               <Badge v-if="item.badge !== undefined && !collapsed" :label="item.badge" variant="soft" tone="neutral" size="sm" />
             </button>
           </Tooltip>
+          <button v-else type="button" class="weft-nav__item" data-weft-item :disabled="item.disabled || undefined" @click="onItem(item, $event)">
+            <Icon v-if="item.icon" :name="item.icon" class="weft-nav__icon" />
+            <span class="weft-nav__label" :class="{ 'weft-visually-hidden': collapsed }"><slot name="item" :item="item">{{ item.label }}</slot></span>
+            <Badge v-if="item.badge !== undefined && !collapsed" :label="item.badge" variant="soft" tone="neutral" size="sm" />
+          </button>
         </li>
       </ul>
     </template>

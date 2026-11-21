@@ -37,7 +37,7 @@ describe('lisa theme', () => {
 
   it('emits its control sizes, the same for pointer and touch', () => {
     const css = themeToCss(theme)
-    const root = /:root, \[data-weft-scheme="light"\] \{[^}]*\}/.exec(css)![0]
+    const root = /:where\(:root, \[data-weft-scheme="light"\]\) \{[^}]*\}/.exec(css)![0]
     expect(root).toContain('--weft-control-sm: 28px;')
     expect(root).toContain('--weft-control-md: 34px;')
     expect(root).toContain('--weft-control-lg: 44px;')
@@ -54,8 +54,8 @@ describe('lisa theme', () => {
 
   it('gives solid fills the ink the contract pairs with them', () => {
     const css = themeToCss(theme)
-    const light = /:root, \[data-weft-scheme="light"\] \{[^}]*\}/.exec(css)![0]
-    const dark = /\[data-weft-scheme="dark"\] \{[^}]*\}/.exec(css)![0]
+    const light = /:where\(:root, \[data-weft-scheme="light"\]\) \{[^}]*\}/.exec(css)![0]
+    const dark = /:where\(\[data-weft-scheme="dark"\]\) \{[^}]*\}/.exec(css)![0]
     expect(light).toContain(`--weft-color-primary-fg: ${tokens.color.ink['warm-white'].value};`)
     expect(dark).toContain(`--weft-color-primary-fg: ${tokens.color.ink['ink-900'].value};`)
   })

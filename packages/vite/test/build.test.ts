@@ -10,6 +10,7 @@ import {
   readdirSync,
   readFileSync,
   readlinkSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
@@ -387,22 +388,80 @@ describe('buildSite with files its CSS names', () => {
     )
   })
 
-  it('preloads the page\'s woff2 fonts, in its head and in its Early Hints', () => {
-    const fonts = Object.keys(manifest.files).filter((f) => f.endsWith('.woff2')).sort()
-    expect(fonts).toHaveLength(3)
+  it('preloads the Latin faces of the families the page uses, in its head and in its Early Hints', () => {
+    const font = `/assets/Test-${sha(source('styles/fonts/Test.woff2'))}.woff2`
     const head = html('index').split('</head>')[0]!
-    for (const font of fonts) {
-      expect(head).toContain(`<link rel="preload" href="${font}" as="font" type="font/woff2" crossorigin>`)
-      expect(manifest.hints['/']).toContain(`<${font}>; rel=preload; as=font; type="font/woff2"; crossorigin`)
-    }
-    // Before the stylesheet that names them, so the fetch starts first.
+    expect(head).toContain(`<link rel="preload" href="${font}" as="font" type="font/woff2" crossorigin>`)
+    expect(manifest.hints['/']).toContain(`<${font}>; rel=preload; as=font; type="font/woff2"; crossorigin`)
+    // The Latin Extended face is for text this page may never show, and no rule uses the icon font.
+    expect(head.match(/rel="preload"/g)).toHaveLength(1)
+    expect(manifest.hints['/']!.filter((l) => l.includes('as=font'))).toHaveLength(1)
+    // Before the stylesheet that names it, so the fetch starts first.
     expect(head.indexOf('rel="preload"')).toBeLessThan(head.indexOf('<style>'))
     expect(html('plain')).not.toContain('rel="preload"')
     expect(manifest.hints['/plain']).toBeUndefined()
   })
 
+  it('preloads a font the site lists in preloadFonts, by its file name', async () => {
+    const opted = tempDir()
+    const built = await buildSite({ root: fixture('css-assets'), outDir: opted, theme: 'weft', preloadFonts: ['lucide.woff2'] })
+    const head = readFileSync(join(opted, 'pages/index/index.html'), 'utf8').split('</head>')[0]!
+    const icons = `/assets/lucide-${sha(lucide())}.woff2`
+    expect(head).toContain(`<link rel="preload" href="${icons}" as="font" type="font/woff2" crossorigin>`)
+    expect(head.match(/rel="preload"/g)).toHaveLength(2)
+    expect(built.hints['/']).toContain(`<${icons}>; rel=preload; as=font; type="font/woff2"; crossorigin`)
+  })
+
   it('inlines the weft theme', () => {
     expect(styleOf(html('plain'))).toContain('--weft-color-bg:#e8ecf4')
+  })
+})
+
+describe('buildSite refuses a url() in CSS it cannot serve', { timeout: 30_000 }, () => {
+  /** Build the css-unsafe site with `css` as its stylesheet; the error the build fails with. */
+  async function refusal(css: string, setup?: (root: string) => void): Promise<string> {
+    const root = linkedSite('css-unsafe')
+    writeFileSync(join(root, 'styles/bad.css'), css)
+    setup?.(root)
+    const out = join(tempDir(), 'dist')
+    const done = expectFailureLogs()
+    const error = await buildSite({ root, outDir: out }).then(
+      () => '(built)',
+      (e: Error) => e.message,
+    )
+    done()
+    expect(existsSync(out)).toBe(false)
+    return error
+  }
+  const outside = (url: string) =>
+    `buildSite: the CSS of pages/index.vue names url(${url}), a file outside the site, its public/ folder and the packages it uses; put the file in the site.`
+
+  it('a file of the system, through /@fs/', async () => {
+    expect(await refusal('.x { background: url(/@fs/etc/passwd); }')).toBe(outside('/@fs/etc/passwd'))
+  })
+
+  it('a path from the site root that climbs out of it', async () => {
+    expect(await refusal('.x { background: url(/../../x.png); }')).toBe(outside('/../../x.png'))
+  })
+
+  it('a file of the site that is a symlink to one outside it', async () => {
+    const target = join(tempDir(), 'outside.png')
+    writeFileSync(target, 'x'.repeat(5000))
+    const error = await refusal('.x { background: url(./outside.png); }', (root) => symlinkSync(target, join(root, 'styles/outside.png')))
+    // The render server follows the link and names the file where it is.
+    expect(error).toBe(outside(`/@fs${realpathSync(target)}`))
+  })
+
+  it('a path that names no file', async () => {
+    expect(await refusal('.x { background: url(/nope.png); }')).toBe(
+      'buildSite: the CSS of pages/index.vue names url(/nope.png), which is no file of the site or its public/ folder; fix the path, or give another site\'s file by its full URL.',
+    )
+  })
+
+  it('a path whose % escapes do not decode', async () => {
+    expect(await refusal('.x { background: url(/bad%zz.png); }')).toBe(
+      'buildSite: the CSS of pages/index.vue names url(/bad%zz.png), whose % escapes do not decode; write a % in a name as %25.',
+    )
   })
 })
 
@@ -1392,7 +1451,7 @@ describe('bin/weft-build-pages.mjs', () => {
       code: 1,
       stderr:
         'weft-build-pages: --out is required.\n' +
-        'usage: weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa|weft]\n',
+        'usage: weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa|weft] [--preload-font <file.woff2>]...\n',
     })
   })
 })

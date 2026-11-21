@@ -22,7 +22,7 @@ Pick one with the page build's `--theme` flag:
 weft-build-pages --root . --out dist --theme weft
 ```
 
-The build inlines the theme first on every page, before Weft's base styles and the components' CSS. A theme names its fonts; it does not ship them. Load them yourself with `@font-face`, as this site does. A file your CSS names with `url()`, a package's font included, is copied into the build under a name made from its bytes, and each page preloads the `.woff2` fonts its CSS names, so declare only the subsets you use.
+The build inlines the theme first on every page, before Weft's base styles and the components' CSS. A theme names its fonts; it does not ship them. Load them yourself with `@font-face`, as this site does. A file your CSS names with `url()`, a package's font included, is copied into the build under a name made from its bytes. A page preloads a `.woff2` face of each family its CSS uses when the face has no `unicode-range` or its range covers Basic Latin; preload others with `--preload-font`. A `url()` that names no file, or a file outside the site and the packages it uses, fails the build.
 
 ## The tokens
 
@@ -53,7 +53,7 @@ Dialogs, sheets and menus that open outside that element take its scheme with th
 
 ## Change the tokens
 
-Set tokens in a stylesheet your pages import. It comes after the theme, so it wins:
+Set tokens in a stylesheet your pages import. It comes after the theme, and the theme's scheme selectors add no specificity, so a plain `:root` rule wins in light and in dark:
 
 ```css
 :root {
@@ -61,6 +61,8 @@ Set tokens in a stylesheet your pages import. It comes after the theme, so it wi
   --weft-radius-control: 4px;
 }
 ```
+
+To change a token in one scheme only, set it on `[data-weft-scheme="dark"]` and in a `prefers-color-scheme: dark` media query on `:root:not([data-weft-scheme="light"])`, as the theme does. An element with its own `data-weft-scheme` takes the theme's values again for everything inside it.
 
 When you change a colour this way, the derived `-fg`, `-text`, `-hover` and `-active` colours are not worked out again. Set them too, and check their contrast.
 

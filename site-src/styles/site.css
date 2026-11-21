@@ -1,10 +1,16 @@
 /* weft.base.al's look, from the approved design (docs/design/site-2026-11-21):
    the weft theme's colours on a ground of thin vertical threads (the warp),
    saffron for the thread that crosses them. Every page imports this. */
+/* The warp is the theme's line colour in light and its raised surface in dark,
+   keyed on the theme's own scheme selectors, so data-weft-scheme follows too.
+   The thread is the theme's warning tone: saffron in both schemes. */
+:where(:root, [data-weft-scheme="light"]) { --site-warp: var(--weft-color-border); }
+:where([data-weft-scheme="dark"]) { --site-warp: var(--weft-color-surface-raised); }
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-weft-scheme="light"])) { --site-warp: var(--weft-color-surface-raised); }
+}
 .site {
-  --site-warp: #C9D0E0;
-  --site-saffron: #E2A11B;
-  --site-code-bg: #141C3A;
+  --site-saffron: var(--weft-color-warning);
   --site-mark-height: 26px;
   min-height: 100vh;
   font-optical-sizing: auto;
@@ -12,10 +18,10 @@
   background-image: repeating-linear-gradient(90deg, var(--site-warp) 0 1px, transparent 1px 28px);
   background-attachment: fixed;
 }
-@media (prefers-color-scheme: dark) {
-  .site { --site-warp: #1C2448; --site-code-bg: #0A0F24; }
-}
 html { overflow-x: clip; }
+/* Skip to the content: off screen until the keyboard reaches it. */
+.site-skip { position: absolute; inset-inline-start: 16px; inset-block-start: -64px; z-index: 50; padding: 8px 16px; border-radius: var(--weft-radius-control); background: var(--weft-color-surface); }
+.site-skip:focus { inset-block-start: 8px; }
 .site a { color: var(--weft-color-primary-text); text-underline-offset: 3px; }
 .site code, .site kbd, .site pre { font-family: var(--weft-font-mono); font-variant-ligatures: none; }
 
@@ -38,13 +44,13 @@ html { overflow-x: clip; }
   content: "";
   position: absolute;
   inset: 0;
-  mask-image: url(/weft.svg), linear-gradient(#000 86%, transparent 86%);
+  mask-image: url(/weft.svg), linear-gradient(black 86%, transparent 86%);
   mask-size: 100% 100%;
   mask-composite: intersect;
   background: currentColor;
 }
 .site-mark::after {
-  mask-image: url(/weft.svg), linear-gradient(transparent 86%, #000 86%);
+  mask-image: url(/weft.svg), linear-gradient(transparent 86%, black 86%);
   background: var(--site-saffron);
 }
 @media (forced-colors: active) {

@@ -22,6 +22,8 @@ import SiteHeader from '../../components/SiteHeader.vue'
 
 const props = defineProps<{ slug: string }>()
 const page = useContent('docs', props.slug)
+// A table scrolls inside a container of its own on a narrow screen, keeping its table semantics.
+const html = (part: { html: string }) => part.html.replaceAll('<table>', '<div class="docs-table"><table>').replaceAll('</table>', '</table></div>')
 // A copy block is one command, shown and copied by the landing page's CopyCommand island.
 for (const part of page.parts) {
   if ('code' in part && part.code.trim().includes('\n')) {
@@ -59,13 +61,13 @@ const crumbs: BreadcrumbItem[] = [
 
 <template>
   <div class="site">
-    <SiteHeader current="docs" menu="docs-nav" />
+    <SiteHeader current="docs" :path="page.path" menu="docs-nav" />
     <div class="docs">
       <aside id="docs-nav" class="docs-nav" popover>
         <Button class="site-menu docs-close" variant="ghost" tone="neutral" size="sm" popovertarget="docs-nav" popovertargetaction="hide">Close</Button>
         <NavigationMenu :items="groups" orientation="vertical" label="Docs" />
       </aside>
-      <Page class="docs-page">
+      <Page id="main" class="docs-page">
         <template #header>
           <Breadcrumb v-if="page.slug" :items="crumbs" />
           <h1 class="docs-title">{{ page.frontmatter.title }}</h1>
@@ -83,7 +85,7 @@ const crumbs: BreadcrumbItem[] = [
           <article class="docs-prose">
             <template v-for="(part, i) in page.parts" :key="i">
               <Island v-if="'code' in part" when="idle" :component="CopyCommand" :props="{ command: part.code.trim() }" />
-              <div v-else v-html="part.html" />
+              <div v-else v-html="html(part)" />
             </template>
           </article>
           <nav v-if="page.prev || page.next" class="docs-pager" aria-label="Previous and next">
