@@ -137,6 +137,27 @@ const TYPES: Record<string, string> = {
 const TEXT = new Set(['.html', '.css', '.js', '.mjs', '.json', '.webmanifest', '.svg', '.txt', '.md', '.xml'])
 
 /** The Content-Type a file is served with, from its extension. */
+/**
+ * A page's HTML without the comments outside its islands: Vue's hydration
+ * markers (`<!--[-->`, `<!---->`) and a template's own comments. Only an
+ * island is ever hydrated, against everything inside its `<weft-island>`,
+ * which stays as it is; outside one they are bytes that do nothing.
+ */
+export function dropStaticComments(html: string): string {
+  let out = ''
+  let depth = 0
+  let from = 0
+  for (const m of html.matchAll(/<weft-island\b|<\/weft-island>|<!--[\s\S]*?-->/g)) {
+    if (m[0] === '</weft-island>') depth--
+    else if (m[0].startsWith('<weft-island')) depth++
+    else if (depth === 0) {
+      out += html.slice(from, m.index)
+      from = m.index + m[0].length
+    }
+  }
+  return out + html.slice(from)
+}
+
 export const contentType = (file: string) => TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream'
 
 const sha256 = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex')
@@ -543,7 +564,7 @@ async function writeBuild(
       preload: [...client.imports, ...(startsOnLoad(page.html) ? client.runtime : [])],
     }
     const file = htmlFile(page.path)
-    await write(file, pageHTML({ body: page.html, head: page.head, prePaint: page.prePaint, fonts, css, stylesheet, scripts, rules }))
+    await write(file, pageHTML({ body: dropStaticComments(page.html), head: page.head, prePaint: page.prePaint, fonts, css, stylesheet, scripts, rules }))
 
     const links = [
       ...fonts.map((f) => `<${f}>; rel=preload; as=font; type="font/woff2"; crossorigin`),

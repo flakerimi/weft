@@ -378,6 +378,19 @@ describe('DropdownMenu with :portal="false"', () => {
     expect($('[role="menu"]')).toBeNull()
   })
 
+  it('lines its items up from the start edge, whatever the place it is drawn in aligns', async () => {
+    const unstyle = loadStyles()
+    try {
+      const m = mount(InPlaceMenu, { defaultOpen: true })
+      unmount = m.unmount
+      await settle()
+      ;($('.place') as HTMLElement).style.textAlign = 'end'
+      expect(getComputedStyle($('[role="menu"]')).textAlign).toBe('start')
+    } finally {
+      unstyle()
+    }
+  })
+
   it('starts open in place when it starts open', async () => {
     const m = mount(InPlaceMenu, { defaultOpen: true })
     unmount = m.unmount
