@@ -14,6 +14,7 @@ type command struct {
 }
 
 var commands = map[string]command{
+	"create":  {"make an app (weft create <name>)", createCmd},
 	"version": {"print the Weft version", versionCmd},
 	"update":  {"update weft to the latest release (--check, --version X)", updateCmd},
 }

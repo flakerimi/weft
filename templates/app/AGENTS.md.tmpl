@@ -1,0 +1,32 @@
+# AGENTS.md
+
+[[.Name]] is a Weft app: Go serves the API and the pages the build writes, in one binary. Weft [[.Version]] is unpacked in `.weft/`, which `weft` writes and you do not edit.
+
+## Commands
+
+```sh
+weft dev        # run the app, rebuilding pages and Go as you save
+weft build      # build the pages, then the binary
+weft upgrade    # move the app to the Weft version of the weft you run
+go test ./...   # the Go tests
+pnpm typecheck  # check the Vue files
+```
+
+## Layout
+
+| Path | What it is |
+| --- | --- |
+| `main.go`, `dist.go` | The server; `dist.go` embeds `web/dist` unless built with `-tags dev` |
+| `api/` | The Go API, under `/api` |
+| `web/pages/` | One page per `.vue` file; its path is the route |
+| `web/components/` | Your components; an island is one used with `Island` |
+
+## Rules
+
+- Every component is `<script setup vapor lang="ts">`. Never use the Options API, `getCurrentInstance` or VNode render functions.
+- Weft components (`Page`, `Card`, `Button` and the rest) need no import in a `.vue` file. `useHead` is a function, so import it from `@weft/ui`.
+- Styles use only `--weft-*` tokens, each with a fallback.
+- Components adapt from inside; do not write a mobile variant of a component.
+- The components, their props and examples are in `.weft/catalog/components.json`.
+- The Go code uses the standard library and `github.com/flakerimi/weft`.
+- More for agents: https://weft.base.al/llms.txt

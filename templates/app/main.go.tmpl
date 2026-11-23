@@ -1,0 +1,33 @@
+// Command [[.Name]] serves the app: the Go API and the built pages, in one binary.
+package main
+
+import (
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/flakerimi/weft"
+
+	"[[.Module]]/api"
+)
+
+// dist is the built pages. It is nil under the dev tag, which weft dev uses so
+// the program compiles before any build; weft dev serves the pages itself.
+var dist fs.FS
+
+func handler() http.Handler {
+	if dist != nil {
+		return weft.Serve(dist, api.Handler())
+	}
+	return api.Handler()
+}
+
+func main() {
+	addr := ":8080"
+	if p := os.Getenv("PORT"); p != "" {
+		addr = ":" + p
+	}
+	log.Printf("[[.Name]] on http://localhost%s", addr)
+	log.Fatal(http.ListenAndServe(addr, handler()))
+}
