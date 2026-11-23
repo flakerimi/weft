@@ -46,14 +46,21 @@ function files(dir: string): string[] {
     .sort()
 }
 
-/** Everything under `dir` by lstat: a file's bytes, a symlink's target, a folder as "dir". */
-function snapshot(dir: string): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const e of readdirSync(dir, { recursive: true, withFileTypes: true })) {
-    const path = join(e.parentPath, e.name)
-    const key = relative(dir, path)
+/**
+ * Everything under `dir` by lstat: a file's bytes, a symlink's target, a folder as "dir".
+ * A symlink is not followed (readdirSync's `recursive` would follow one to a folder,
+ * such as a linked site's node_modules, which other tests' servers write to meanwhile).
+ */
+function snapshot(dir: string, out: Record<string, string> = {}, base = dir): Record<string, string> {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, e.name)
+    const key = relative(base, path)
     const stat = lstatSync(path)
-    out[key] = stat.isSymbolicLink() ? `-> ${readlinkSync(path)}` : stat.isDirectory() ? 'dir' : readFileSync(path, 'base64')
+    if (stat.isSymbolicLink()) out[key] = `-> ${readlinkSync(path)}`
+    else if (stat.isDirectory()) {
+      out[key] = 'dir'
+      snapshot(path, out, base)
+    } else out[key] = readFileSync(path, 'base64')
   }
   return out
 }

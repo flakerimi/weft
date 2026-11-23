@@ -1,10 +1,10 @@
 ---
 title: CLI
-description: Every command and flag of weft and weft-build-pages, and the installer's settings.
+description: Every command and flag of weft, weft-build-pages and weft-dev, and the installer's settings.
 order: 30
 ---
 
-Look up here every command and flag the `weft` command has today, the page build's flags, and the installer's settings. Commands the design plans but the code does not have yet are under [Coming next](../coming-next.md).
+Look up here every command and flag the `weft` command has today, the flags of the page build and the page dev server, and the installer's settings. Commands the design plans but the code does not have yet are under [Coming next](../coming-next.md).
 
 ## weft
 
@@ -76,3 +76,23 @@ weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app b
 | `--separate-runtime` | A section of the site, such as `/components`, whose pages' islands get a runtime of their own, with Vue cut down to what those islands use, so heavy islands there do not grow the one every other page loads. A page is in the longest section it is in or under: `/components` and `/components/button` are both in `/components`. Give it once per section, as a path with no trailing `/`. |
 
 It prints `weft: built N pages into <dist>`. It needs Node 22.18 or later, which runs TypeScript without a build step. Any error is one sentence, and the folder at `--out` is left as it was.
+
+## weft-dev
+
+The page dev server. It comes with `@weft/vite`, beside `weft-build-pages`.
+
+```text
+weft-dev --root <site> [--port n] [--host h] [--api <url>] [--theme neutral|lisa|weft]
+```
+
+| Flag | What it does |
+| --- | --- |
+| `--root` | The site's folder, which holds `pages/`. Required. Its `package.json` may be in a folder above. |
+| `--port` | The port to listen on. Default `5173`; `0` takes a free one. |
+| `--host` | The host to listen on. Default `localhost`. |
+| `--api` | Where `/api` and every path under it go, such as `http://127.0.0.1:8081`. Without it they are pages like any other path. |
+| `--theme` | `neutral` (the default), `lisa` or `weft`, as for the build. |
+
+It prints `weft: dev server at <url>` once it listens. Each page is rendered when it is asked for, as the build renders it, so a saved edit shows on the next request. A dynamic page's `getPaths()` is called on each request. An unknown path gets `pages/404.vue` with status 404, or a plain 404 without one. A page that fails to render gets a 500 page naming its file and the error; the server keeps running, and the page reloads when you save the fix. A change to any file under `--root` reloads the browser; no module is replaced in place. Islands hydrate from Vite's modules, not from a client build. A file a page writes with `useFile` is served once that page has rendered.
+
+It stops on SIGTERM or Ctrl-C. A port in use is the sentence `weft dev: port <n> is in use; stop what is using it or pass --port.`, with exit status 1; a flag it does not know exits with status 2.

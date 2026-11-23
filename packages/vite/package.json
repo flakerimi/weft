@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "bin": {
-    "weft-build-pages": "./bin/weft-build-pages.mjs"
+    "weft-build-pages": "./bin/weft-build-pages.mjs",
+    "weft-dev": "./bin/weft-dev.mjs"
   },
   "exports": {
     ".": "./src/index.ts",

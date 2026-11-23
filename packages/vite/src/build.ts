@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto'
 import { constants as fs, existsSync, readFileSync, realpathSync, statSync, type Dirent } from 'node:fs'
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, rmdir, stat, unlink, writeFile } from 'node:fs/promises'
-import { createRequire } from 'node:module'
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { brotliCompressSync, constants as zlib, gzipSync } from 'node:zlib'
@@ -10,10 +9,11 @@ import { build, isCSSRequest, mergeConfig, normalizePath, type Plugin, type Reso
 import { siteConfig } from './config.ts'
 import { weft } from './plugin.ts'
 import type { ContentAsset } from './content.ts'
-import { createRenderServer, renderPage, type PageHead, type RenderResult } from './render.ts'
+import { pageHTML, readStyles, THEMES, VIEW_TRANSITION, type Theme } from './document.ts'
+import { createRenderServer, renderPage, type RenderResult } from './render.ts'
 import { discoverRoutes, expandRoutes, type ExpandedRoute, type PageModule, type RoutesJson } from './routes.ts'
 
-export type Theme = 'neutral' | 'lisa' | 'weft'
+export type { Theme } from './document.ts'
 
 export interface BuildOptions {
   /** The site's root directory; its pages are `<root>/pages/**.vue`. */
@@ -101,12 +101,10 @@ function speculationRules(app: RoutesJson['app']): string {
   }
   return `<script type="speculationrules">${JSON.stringify(rules)}</script>`
 }
-const VIEW_TRANSITION = '@view-transition { navigation: auto; }'
 
 /** Whether an island in the page's HTML starts on load: `data-when="load"`, or no `data-when`. */
 export const startsOnLoad = (html: string) =>
   [...html.matchAll(/<weft-island\b[^>]*>/g)].some(([tag]) => !['idle', 'visible', 'media'].includes(/\sdata-when="([^"]*)"/.exec(tag)?.[1] ?? 'load'))
-const THEMES: Theme[] = ['neutral', 'lisa', 'weft']
 const BOOT_ENTRY = normalizePath(fileURLToPath(new URL('./boot.ts', import.meta.url)))
 const RUNTIME_MODULE = normalizePath(fileURLToPath(new URL('./client.ts', import.meta.url)))
 
@@ -568,8 +566,18 @@ async function writeBuild(
       runtime: client.runtime[0]!,
       preload: [...client.imports, ...(startsOnLoad(page.html) ? client.runtime : [])],
     }
+    const tags = [
+      rules,
+      ...(scripts
+        ? [
+            ...scripts.preload.map((m) => `<link rel="modulepreload" href="${m}">`),
+            // The runtime by its file name: the loader imports it from beside itself.
+            `<script type="module" src="${scripts.entry}" data-weft-runtime="${basename(scripts.runtime)}"></script>`,
+          ]
+        : []),
+    ]
     const file = htmlFile(page.path)
-    await write(file, pageHTML({ body: dropStaticComments(page.html), head: page.head, prePaint: page.prePaint, fonts, css, stylesheet, scripts, rules }))
+    await write(file, pageHTML({ body: dropStaticComments(page.html), head: page.head, prePaint: page.prePaint, fonts, css, stylesheet, tags }))
 
     const links = [
       ...fonts.map((f) => `<${f}>; rel=preload; as=font; type="font/woff2"; crossorigin`),
@@ -1035,40 +1043,6 @@ function appRoute(prefix: string): NonNullable<RoutesJson['app']> {
 }
 
 /**
- * The CSS every page starts with: the theme stylesheet, then @weft/ui's
- * base.css, and their files. Each component brings its own stylesheet,
- * collected per page. `bundles` are the stylesheets that hold every
- * component's CSS (weft.css, built and source, and the group sheets of
- * @imports it is made of), which a page may not import.
- */
-async function readStyles(root: string, theme: Theme): Promise<{ css: string; files: string[]; bundles: string[] }> {
-  const read = async (from: string, spec: string, fix: string) => {
-    try {
-      const file = createRequire(from).resolve(spec)
-      return [file, await readFile(file, 'utf8')] as const
-    } catch (e) {
-      const why = e instanceof Error ? e.message.split('\n')[0] : String(e)
-      throw new Error(`buildSite: cannot read ${spec} (${why}); ${fix}.`)
-    }
-  }
-  const [baseFile, base] = await read(join(root, 'package.json'), '@weft/ui/styles/base.css', 'add @weft/ui to the site\'s dependencies')
-  // The theme comes from @weft/ui's own @weft/themes, the version its components expect.
-  const [themeFile, themeCss] = await read(baseFile, `@weft/themes/${theme}.css`, 'run pnpm --filter @weft/themes build')
-  const styles = dirname(baseFile)
-  const bundles: string[] = []
-  for (const name of (await readdir(styles)).filter((n) => n.endsWith('.css')).sort()) {
-    const text = await readFile(join(styles, name), 'utf8')
-    if (text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/@import\s+'[^']*';/g, '').trim() === '') bundles.push(join(styles, name))
-  }
-  try {
-    bundles.push(createRequire(baseFile).resolve('@weft/ui/weft.css'))
-  } catch {
-    // Not built: then no page can import it either.
-  }
-  return { css: `${themeCss}\n${base}`, files: [themeFile, baseFile], bundles }
-}
-
-/**
  * Vite's `build.cssTarget` (browser versions such as `safari16.4`, as Vite
  * resolves it) as Lightning CSS targets, as Vite converts it when it minifies
  * CSS. `false`, `esnext` or an `es20xx` language version (Vite's default
@@ -1120,7 +1094,7 @@ interface ClientBuild {
 }
 
 /** A CSS module request: `*.module.css` and the like, or a `<style module>` block. */
-const CSS_MODULE = /\.module\.(css|less|sass|scss|styl|stylus|pcss|postcss|sss)(?:$|\?)/
+export const CSS_MODULE = /\.module\.(css|less|sass|scss|styl|stylus|pcss|postcss|sss)(?:$|\?)/
 
 /**
  * Island CSS is inlined into the pages that use the island, so the client build
@@ -1308,71 +1282,4 @@ async function buildClient(root: string, dir: string, islands: string[]): Promis
     runtime: runtimeFiles.map((f) => '/' + f),
     files: chunks.map((o) => o.fileName),
   }
-}
-
-const escapeHTML = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
-
-/** `<title>`, description and Open Graph tags for what the page set with useHead. */
-function headTags({ title, description, image }: PageHead): string[] {
-  const meta = (attr: string, key: string, value: string | undefined) =>
-    value === undefined ? [] : [`<meta ${attr}="${key}" content="${escapeHTML(value)}">`]
-  return [
-    ...(title === undefined ? [] : [`<title>${escapeHTML(title)}</title>`]),
-    ...meta('name', 'description', description),
-    ...meta('property', 'og:title', title),
-    ...meta('property', 'og:description', description),
-    ...meta('property', 'og:image', image),
-  ]
-}
-
-/**
- * The page's pre-paint snippets in one blocking inline script, or none.
- * A snippet that would end the script early is refused in a sentence.
- */
-function prePaintTag(snippets: string[]): string[] {
-  if (!snippets.length) return []
-  for (const code of snippets) {
-    if (/<\/script|<!--/i.test(code)) throw new Error(`buildSite: a pre-paint snippet holds "</script" or "<!--", which would break the page's <head>: ${code.slice(0, 60)}`)
-  }
-  return [`<script data-weft-prepaint>${snippets.join('\n')}</script>`]
-}
-
-function pageHTML(p: {
-  body: string
-  head: PageHead
-  /** Pre-paint snippets (usePrePaint), run before the CSS and the first paint. */
-  prePaint: string[]
-  /** The woff2 fonts the page's CSS names, preloaded. */
-  fonts: string[]
-  css: string
-  stylesheet: string | null
-  /** The loader, the runtime it imports when an island is due, and the modules to preload beside it. */
-  scripts: { entry: string; runtime: string; preload: string[] } | null
-  /** The speculation rules script. */
-  rules: string
-}): string {
-  return [
-    '<!doctype html>',
-    '<html lang="en">',
-    '<head>',
-    '<meta charset="utf-8">',
-    '<meta name="viewport" content="width=device-width, initial-scale=1">',
-    ...prePaintTag(p.prePaint),
-    ...headTags(p.head),
-    ...p.fonts.map((f) => `<link rel="preload" href="${f}" as="font" type="font/woff2" crossorigin>`),
-    p.stylesheet === null ? `<style>${p.css}</style>` : `<link rel="stylesheet" href="${p.stylesheet}">`,
-    p.rules,
-    ...(p.scripts
-      ? [
-          ...p.scripts.preload.map((m) => `<link rel="modulepreload" href="${m}">`),
-          // The runtime by its file name: the loader imports it from beside itself.
-          `<script type="module" src="${p.scripts.entry}" data-weft-runtime="${basename(p.scripts.runtime)}"></script>`,
-        ]
-      : []),
-    '</head>',
-    `<body>${p.body}</body>`,
-    '</html>',
-    '',
-  ].join('\n')
 }
