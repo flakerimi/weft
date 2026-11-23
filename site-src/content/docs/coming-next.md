@@ -26,10 +26,6 @@ Until then, build sites inside the repository as [Your first site](getting-start
 
 The `weft` binary will carry Weft's JavaScript packages, and `weft create` will unpack them, so apps need neither npm nor a clone of the repository. Phase 4, inferred: the design gives this no phase of its own, and `weft create`, which unpacks them, is phase 4.
 
-## Auto-imported components
-
-`@weft/vite` will import Weft's components for you, so a page can write `<Button>` without an `import` line. Phase 4, inferred: the design gives `@weft/vite` to phase 4 and no phase of its own to auto-imports. Until then, import each component from `@weft/ui`, as every example here does.
-
 ## Tailwind in a new app
 
 `weft create` will set up `@weft/themes/tailwind.css` in an app that wants Tailwind for its own components. Phase 4, with `weft create`. The file itself works today: see [Themes](guides/themes.md#tailwind).

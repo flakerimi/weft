@@ -170,6 +170,5 @@ Fix the cause. Never weaken the check.
 These are planned but not built (see https://weft.base.al/docs/coming-next):
 
 - `weft create`, `weft dev` and `weft build`. Today there is no dev server for a page build: rebuild with `pnpm --filter <site> build`;
-- auto-imported components;
 - an `<Image>` component, actions, environment values, a development overlay and `weft deploy`;
 - `weft add <block>`.

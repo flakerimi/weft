@@ -18,7 +18,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, relative } from 'node:path'
+import { basename, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { brotliCompressSync, brotliDecompressSync, gunzipSync } from 'node:zlib'
@@ -79,9 +79,17 @@ function expectFailureLogs() {
   }
 }
 
+/**
+ * A copy of a fixture's source, without the declaration file weftAutoImport()
+ * writes into a fixture another test built in place.
+ */
+function copyFixture(name: string, to: string) {
+  cpSync(fixture(name), to, { recursive: true, filter: (src) => basename(src) !== '.weft-types' })
+}
+
 function linkedSite(name: string): string {
   const root = join(tempDir(), name)
-  cpSync(fixture(name), root, { recursive: true })
+  copyFixture(name, root)
   symlinkSync(fileURLToPath(new URL('../node_modules', import.meta.url)), join(root, 'node_modules'))
   return root
 }
@@ -1319,7 +1327,7 @@ describe('buildSite refuses', { timeout: 30_000 }, () => {
   // refuse could not write into, or delete from, the fixtures.
   const site = () => {
     const root = join(tempDir(), 'site')
-    cpSync(fixture('static-site'), root, { recursive: true })
+    copyFixture('static-site', root)
     return root
   }
   const refused = async (root: string, outDir: string, fixtureFiles = ['env.d.ts', 'pages/index.vue', 'vite.config.ts']) => {
@@ -1379,7 +1387,7 @@ describe('buildSite refuses', { timeout: 30_000 }, () => {
     async () => {
       const parent = tempDir()
       const root = join(parent, 'caf\u00e9')
-      cpSync(fixture('static-site'), root, { recursive: true })
+      copyFixture('static-site', root)
       const nfd = join(parent, 'cafe\u0301')
       await refused(root, nfd)
       await refused(root, join(nfd, 'pages'))
@@ -1397,7 +1405,7 @@ describe('buildSite refuses', { timeout: 30_000 }, () => {
   it('an outDir that contains a root whose name starts with ".."', async () => {
     const parent = tempDir()
     const root = join(parent, '..site')
-    cpSync(fixture('static-site'), root, { recursive: true })
+    copyFixture('static-site', root)
     await refused(root, parent)
   })
 

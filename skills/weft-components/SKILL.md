@@ -57,7 +57,7 @@ The main value is always `v-model`, and names mean one thing everywhere:
 
 ## Compose
 
-Import every component from `@weft/ui`; nothing is auto-imported. A settings page:
+A page the build renders, and every island and component in it, may use Weft's components without importing them: `@weft/vite` adds `import { … } from '@weft/ui'` for each tag the template uses. It leaves your own names alone: a name the file imports or declares, the component's own file name, lowercase tags and anything inside `v-pre`. Import other things you need, such as `useWeft`, `useToast` or a type, yourself. Writing the component imports by hand, as here, works the same. A settings page:
 
 ```vue
 <script setup vapor lang="ts">

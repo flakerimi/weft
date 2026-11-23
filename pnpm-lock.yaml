@@ -96,6 +96,9 @@ importers:
       lucide-static:
         specifier: ^1.77.0
         version: 1.77.0
+      magic-string:
+        specifier: ^1.4.5
+        version: 1.4.5
       markdown-it:
         specifier: ^15.0.3
         version: 15.0.3

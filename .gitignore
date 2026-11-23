@@ -14,3 +14,6 @@ site-src/public/releases/
 
 cmd/weft/bundle/*
 !cmd/weft/bundle/README.md
+
+# Written by weftAutoImport() into each site and app it builds.
+.weft-types/

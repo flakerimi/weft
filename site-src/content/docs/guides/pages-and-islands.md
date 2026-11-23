@@ -129,10 +129,35 @@ The server renders the button, so it shows before any script runs. The island ru
 
 A page with islands loads one small module script, the loader (about 0.5 KB), which sets each island's trigger. The first island that starts fetches the runtime, Vue and the hydration, once for the page; every island then shares it and loads its own code. A page with an island that starts on `load` preloads the runtime with the loader; one whose islands wait (`idle`, `visible`, `media`) fetches nothing more until one starts.
 
+## Components without imports
+
+A page, an island or any component of the site may use Weft's components without importing them. The build adds the import for each one the template uses, so this page needs no `<script>` at all:
+
+```vue
+<template>
+  <Page title="About">
+    <Section><Card>Made with Weft.</Card></Section>
+  </Page>
+</template>
+```
+
+It gets `import { Card, Page, Section } from '@weft/ui'` at the top of its `<script setup>`, or a `<script setup vapor lang="ts">` to hold it, and builds as if you had written the line: the page inlines the same CSS, and an island loads the same code. Writing the import yourself still works, as every example here does.
+
+Your own names come first. A tag gets no import when:
+
+- the file imports or declares that name itself, in `<script setup>` or a plain `<script>` beside it, as `import Card from '../components/Card.vue'` or `const Card = …` does;
+- it is the component's own name: `<Card>` inside `components/Card.vue` is the component itself, drawn recursively, as Vue has it (the page `pages/card.vue` showing `<Card>` gets Weft's);
+- it is lowercase (`<button>`, `<card>`), or inside an element marked `v-pre`;
+- it is not one of `@weft/ui`'s components.
+
+A component with only a plain `<script>`, and no `<script setup>`, is left as it is.
+
+For your editor and `vue-tsc`, the build writes `.weft-types/components.d.ts` in the site, which tells TypeScript what each name is. Add it to the `include` of your `tsconfig.json`, and keep it out of git: it is rewritten on each build, whenever the list changes.
+
 ## Before the first paint
 
 `usePrePaint(id, code)` adds a few lines of script to the top of the `<head>`, on the pages that render the calling component. Use it only to copy a stored preference onto `<html>` for CSS to read, as `AppShell` does for its collapsed sidebar. The server's markup must not depend on it.
 
 ## Your Vite config
 
-If the site has a `vite.config.ts`, the build uses it. It adds Vue, Weft's icons and [Markdown content](markdown.md) unless your config already has them.
+If the site has a `vite.config.ts`, the build uses it. It adds Vue, Weft's icons, [Markdown content](markdown.md) and the imports of Weft's components unless your config already has them. To write the declaration file elsewhere, or not at all, add `weftAutoImport({ dts: false })` from `@weft/vite` to your config's plugins.
