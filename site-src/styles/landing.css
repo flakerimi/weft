@@ -16,7 +16,7 @@
 }
 .landing-main { overflow-x: clip; }
 .landing-wrap { inline-size: var(--landing-col); margin-inline: auto; }
-.landing :focus-visible { outline: 3px solid var(--site-saffron); outline-offset: 3px; }
+.landing :focus-visible { outline: calc(var(--weft-focus-width, 2px) + 1px) solid var(--site-saffron); outline-offset: 3px; }
 
 /* The header lies over the night band, the wordmark and links light. */
 .landing-top { position: absolute; inset: 0 0 auto; z-index: 5; }
@@ -74,7 +74,7 @@
   gap: 0;
   padding: 0;
   background: color-mix(in srgb, var(--weft-color-bg) 70%, black);
-  border: 1px solid var(--weft-color-border);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -160,7 +160,7 @@
 .northline__side {
   padding: 16px 12px;
   background: color-mix(in srgb, var(--weft-color-bg) 40%, var(--weft-color-surface-raised));
-  border-inline-end: 1px solid var(--weft-color-border);
+  border-inline-end: var(--weft-border-width, 1px) solid var(--weft-color-border);
 }
 .northline__brand { display: flex; align-items: center; gap: 10px; margin: 4px 8px 18px; font-weight: 700; font-size: 15px; }
 .northline__logo { inline-size: 22px; block-size: 22px; border-radius: 6px; background: var(--weft-color-primary); box-shadow: inset 0 -5px var(--site-saffron); }
@@ -174,7 +174,7 @@
 
 /* On the phone: its bar, then the cards. */
 .northline--phone { display: flex; flex-direction: column; gap: 0; background: color-mix(in srgb, var(--weft-color-bg) 40%, var(--weft-color-surface-raised)); }
-.northline--phone .northline__bar { padding: 26px 12px 10px; background: var(--weft-color-surface-raised); border-block-end: 1px solid var(--weft-color-border); }
+.northline--phone .northline__bar { padding: 26px 12px 10px; background: var(--weft-color-surface-raised); border-block-end: var(--weft-border-width, 1px) solid var(--weft-color-border); }
 .northline--phone .northline__title { font-size: 18px; }
 .northline--phone .landing-devices { padding: 10px; }
 
@@ -194,7 +194,7 @@
   margin: 0;
   overflow: hidden;
   background: var(--weft-color-surface-raised);
-  border: 1px solid var(--weft-color-border);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border);
   border-radius: 16px;
 }
 .landing-tile--settings { grid-column: span 5; }
@@ -215,7 +215,7 @@
   gap: 4px 14px;
   padding: 14px 20px;
   font-size: 14px;
-  border-block-start: 1px solid var(--weft-color-border);
+  border-block-start: var(--weft-border-width, 1px) solid var(--weft-color-border);
 }
 .landing-tile figcaption strong { margin-inline-end: 4px; font-weight: 600; }
 .landing-tile figcaption a { font: 13px var(--weft-font-mono); text-decoration: none; }
@@ -227,7 +227,7 @@
   inline-size: 100%;
   max-inline-size: 520px;
   background: var(--weft-color-surface-raised);
-  border: 1px solid var(--weft-color-border);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border);
   border-radius: 14px;
   box-shadow: 0 20px 50px -20px color-mix(in srgb, black 40%, transparent);
   overflow: hidden;
@@ -255,7 +255,7 @@
   padding: 0 8px;
   font: 12px/1.6 var(--weft-font-mono);
   font-weight: 400;
-  border: 1px solid currentColor;
+  border: var(--weft-border-width, 1px) solid currentColor;
   border-radius: 999px;
 }
 .landing-preview {
@@ -266,14 +266,14 @@
   padding: 20px;
   font-size: 15px;
   background: var(--weft-color-surface-raised);
-  border: 1px solid var(--weft-color-border);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border);
   border-radius: 16px;
 }
 .landing-preview .weft-provider { display: contents; }
 .landing-popover {
   padding: 12px;
   background: var(--weft-color-surface-raised);
-  border: 1px solid var(--weft-color-border);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border);
   border-radius: 12px;
   box-shadow: 0 12px 30px -14px color-mix(in srgb, black 35%, transparent);
 }
@@ -305,7 +305,7 @@
   min-block-size: 168px;
   padding: 20px;
   background: var(--weft-color-surface-raised);
-  border: 1px solid var(--weft-color-border);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border);
   border-radius: 16px;
 }
 /* On touch its controls are 44 px tall. */
@@ -321,7 +321,7 @@
   min-inline-size: 0;
   color: var(--weft-color-text);
   background: var(--weft-color-bg);
-  border: 1px solid var(--weft-color-border);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border);
   border-radius: 16px;
   overflow: hidden;
 }
@@ -329,7 +329,7 @@
   padding: 10px 20px;
   font: 13px/1.5 var(--weft-font-mono);
   color: var(--weft-color-text-muted);
-  border-block-end: 1px solid var(--weft-color-border);
+  border-block-end: var(--weft-border-width, 1px) solid var(--weft-color-border);
 }
 .landing-code .shiki {
   --weft-code-background: transparent;
@@ -351,7 +351,7 @@
   gap: 18px;
   padding: 28px 32px;
   background: var(--weft-color-surface-raised);
-  border: 1px solid var(--weft-color-border);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border);
   border-radius: 16px;
 }
 .landing-bench__row { display: grid; grid-template-columns: 240px 1fr 7.5ch; gap: 24px; align-items: center; }
@@ -369,7 +369,7 @@
   font-size: 16px;
   color: var(--weft-color-text-muted);
   background: var(--weft-color-surface-raised);
-  border: 1px solid var(--weft-color-border);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border);
   border-radius: 16px;
 }
 .landing-facts strong { display: block; margin-block-end: 4px; font-size: 19px; color: var(--weft-color-text); }
@@ -381,11 +381,11 @@
   padding: 8px 28px;
   list-style: none;
   background: var(--weft-color-surface-raised);
-  border: 1px solid var(--weft-color-border);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border);
   border-radius: 16px;
 }
 .landing-agents li { padding-block: 18px; }
-.landing-agents li + li { border-block-start: 1px solid var(--weft-color-border); }
+.landing-agents li + li { border-block-start: var(--weft-border-width, 1px) solid var(--weft-color-border); }
 .landing-agents li strong { display: block; font-size: 18px; }
 .landing-agents li span { font-size: 16px; color: var(--weft-color-text-muted); }
 .landing-agents .shiki { white-space: pre-wrap; overflow-wrap: anywhere; }

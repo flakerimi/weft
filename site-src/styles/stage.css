@@ -7,7 +7,7 @@
 .gallery-stage {
   /* The site's raised surface, read here, outside the canvas's own theme. */
   --site-stage: var(--weft-color-surface-raised);
-  border: 1px solid var(--weft-color-border);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border);
   border-radius: 16px;
   background: var(--weft-color-surface-raised);
   overflow: hidden;
@@ -18,7 +18,7 @@
   align-items: center;
   gap: 8px 20px;
   padding: 8px 10px 8px 14px;
-  border-block-end: 1px solid var(--weft-color-border);
+  border-block-end: var(--weft-border-width, 1px) solid var(--weft-color-border);
   transition: opacity var(--weft-duration-control) var(--weft-ease-standard);
 }
 /* Before the island starts (and without JavaScript) the toolbar is inert: drawn faint, not offered. */
@@ -52,7 +52,7 @@
    its own, its theme's ground. */
 .gallery-canvas:not([data-weft-scheme]) { background: var(--site-stage); }
 /* At a device's width it is a framed box on the stage. */
-.gallery-canvas[data-width] { margin-block: 20px; border: 1px solid var(--weft-color-border); border-radius: 12px; }
+.gallery-canvas[data-width] { margin-block: 20px; border: var(--weft-border-width, 1px) solid var(--weft-color-border); border-radius: 12px; }
 .gallery-example { display: grid; justify-items: center; }
 .gallery-example > * { max-inline-size: 100%; }
 /* A table takes the stage's width, as it takes a page's: centred, it would

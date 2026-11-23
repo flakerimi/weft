@@ -11,10 +11,9 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { neutral } from '@weft/themes'
 import { describe, expect, it } from 'vitest'
+import { breaks, declarationsIn, type Declaration, type Exception, isException, themeDefaults, tokenUses, wrongFallback as wrongFor } from './line-tokens.ts'
 
 const src = join(dirname(fileURLToPath(import.meta.url)), '../src')
-
-interface Exception { file: string; property: string; value: string; reason: string }
 
 /** Left as they are: each is matched exactly, and an entry that matches nothing fails the test. */
 const exceptions: Exception[] = [
@@ -53,99 +52,12 @@ const files = readdirSync(src, { recursive: true, encoding: 'utf8' })
   .map((f) => f.split('\\').join('/'))
   .filter((f) => f.endsWith('.vue') || f.endsWith('.css'))
   .sort()
-
-interface Declaration { file: string; line: number; property: string; value: string }
-
-/** The declarations in a file, comments blanked out (newlines kept, so lines still count). */
-function declarations(file: string): Declaration[] {
-  const text = readFileSync(join(src, file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' '))
-  const found: Declaration[] = []
-  for (const m of text.matchAll(/(?<![\w-])((?:box-shadow|border|outline)(?:-[a-z]+)*)\s*:\s*([^;{}"'`\n]+)/g)) {
-    const line = text.slice(0, m.index).split('\n').length
-    found.push({ file, line, property: m[1]!, value: m[2]!.trim() })
-  }
-  return found
-}
-const all = files.flatMap(declarations)
-
-/** The value with every var(--weft-…) removed (fallbacks too), parentheses balanced. */
-function withoutTokens(value: string): string {
-  let out = ''
-  for (let i = 0; i < value.length; ) {
-    if (value.startsWith('var(--weft-', i)) {
-      let depth = 1
-      for (i += 'var('.length; depth > 0 && i < value.length; i++) {
-        if (value[i] === '(') depth++
-        else if (value[i] === ')') depth--
-      }
-    } else out += value[i++]
-  }
-  return out
-}
-
-const isException = (d: Declaration) =>
-  exceptions.some((e) => e.file === d.file && e.property === d.property && e.value === d.value)
+const text = (f: string) => readFileSync(join(src, f), 'utf8')
+const all = files.flatMap((f) => declarationsIn(f, text(f)))
+const uses = files.flatMap((f) => tokenUses(f, text(f)))
+const defaults = themeDefaults(neutral)
+const wrongFallback = (u: Parameters<typeof wrongFor>[0]) => wrongFor(u, defaults)
 const where = (d: Declaration) => `src/${d.file}:${d.line}: ${d.property}: ${d.value}`
-
-/** A border or outline property that takes a width: the shorthands, their sides, and the -width longhands. */
-const widthProperty = /^(?:border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-width)?|outline(?:-width)?)$/
-const literalWidth = /(?<![\w.-])(?:\d*\.)?\d+px\b|\b(?:thin|medium|thick)\b/
-
-/** Why a declaration breaks the rule, or undefined when it keeps it. */
-function breaks(d: Declaration): string | undefined {
-  if (d.property === 'box-shadow') {
-    if (d.value === 'none' || /^var\(--weft-shadow-[a-z]+, /.test(d.value)) return undefined
-    return 'an elevation shadow must read a --weft-shadow-* token, with its fallback'
-  }
-  if (widthProperty.test(d.property)) {
-    const rest = withoutTokens(d.value)
-    if (literalWidth.test(rest)) return 'a border or outline width must read --weft-border-width, --weft-border-width-strong or --weft-focus-width, with its fallback'
-    return undefined
-  }
-  if (d.property === 'outline-offset' && withoutTokens(d.value).trim().startsWith('-')) {
-    return 'an inset ring sits in by a line\'s width, so its offset must be calc(-1 * <that width\'s token>)'
-  }
-  return undefined
-}
-
-/** What each shadow and width token defaults to in the themes; a fallback must say the same. */
-const defaults: Record<string, string> = {
-  '--weft-border-width': `${neutral.border.width}px`,
-  '--weft-border-width-strong': `${neutral.border.strong}px`,
-  '--weft-focus-width': `${neutral.border.focus}px`,
-  ...Object.fromEntries(Object.entries(neutral.shadow).map(([k, v]) => [`--weft-shadow-${k}`, v])),
-}
-
-interface TokenUse { file: string; line: number; token: string; fallback: string | undefined }
-
-/** Every var() of a shadow or width token in a text, with its fallback (parentheses balanced). */
-function tokenUses(file: string, text: string): TokenUse[] {
-  const uses: TokenUse[] = []
-  for (const m of text.matchAll(/var\((--weft-(?:border-width(?:-strong)?|focus-width|shadow-[a-z]+))\s*(,?)/g)) {
-    let fallback: string | undefined
-    if (m[2]) {
-      let depth = 1
-      let i = m.index + m[0].length
-      const start = i
-      for (; i < text.length; i++) {
-        if (text[i] === '(') depth++
-        else if (text[i] === ')' && --depth === 0) break
-      }
-      fallback = text.slice(start, i).trim()
-    }
-    uses.push({ file, line: text.slice(0, m.index).split('\n').length, token: m[1]!, fallback })
-  }
-  return uses
-}
-const uses = files.flatMap((f) => tokenUses(f, readFileSync(join(src, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' '))))
-
-/** Why a token's use breaks the rule (no fallback, or one that is not the theme default), or undefined. */
-function wrongFallback(u: TokenUse): string | undefined {
-  const want = defaults[u.token]
-  if (want === undefined) return `${u.token} is not a theme token`
-  if (u.fallback !== want) return `its fallback is ${u.fallback === undefined ? 'missing' : `"${u.fallback}"`}; the themes' default is "${want}"`
-  return undefined
-}
 
 describe('shadows and line widths', () => {
   it('reads the files it guards', () => {
@@ -155,7 +67,7 @@ describe('shadows and line widths', () => {
   })
 
   it('come from the theme\'s tokens, except the listed exceptions', () => {
-    const broken = all.filter((d) => !isException(d) && breaks(d)).map((d) => `${where(d)} (${breaks(d)})`)
+    const broken = all.filter((d) => !isException(d, exceptions) && breaks(d)).map((d) => `${where(d)} (${breaks(d)})`)
     expect(broken).toEqual([])
   })
 

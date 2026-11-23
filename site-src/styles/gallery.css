@@ -12,12 +12,12 @@
 /* One column no wider than the page's, whatever its tables and examples need: they scroll in their own frames. */
 .gallery-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-block-start: 24px; }
 /* The page's own headings, not those inside an example's preview. */
-.gallery-section > h2 { font-size: 1.5rem; padding-block-start: 0.5em; border-block-start: 2px solid var(--site-saffron); }
+.gallery-section > h2 { font-size: 1.5rem; padding-block-start: 0.5em; border-block-start: var(--weft-border-width-strong, 2px) solid var(--site-saffron); }
 :is(.gallery-section, .gallery-more) > h3 { font-size: 1.125rem; margin-block-start: 8px; }
 .gallery-section > h2, :is(.gallery-section, .gallery-more) > h3 { scroll-margin-block-start: 88px; }
 .gallery-page :not(pre) > code { font-size: 0.875em; padding: 0.1em 0.35em; border-radius: 4px; background: color-mix(in srgb, currentColor 7%, transparent); }
 
-.gallery-code { margin: 0; border: 1px solid var(--weft-color-border); border-radius: 12px; overflow: hidden; }
+.gallery-code { margin: 0; border: var(--weft-border-width, 1px) solid var(--weft-color-border); border-radius: 12px; overflow: hidden; }
 .gallery-code figcaption {
   display: flex;
   align-items: center;
@@ -26,7 +26,7 @@
   padding: 6px 6px 6px 14px;
   font: 0.8125rem/1.4 var(--weft-font-mono);
   color: var(--weft-color-text-muted);
-  border-block-end: 1px solid var(--weft-color-border);
+  border-block-end: var(--weft-border-width, 1px) solid var(--weft-color-border);
 }
 .gallery-code pre { margin: 0; padding: 16px; overflow-x: auto; font-size: 0.875rem; line-height: 1.6; border: 0; border-radius: 0; }
 
@@ -42,7 +42,7 @@
   min-block-size: 8rem;
   padding: 32px 24px;
   background: var(--weft-color-surface-raised);
-  border: 1px solid var(--weft-color-border);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border);
   border-radius: 16px;
 }
 .gallery-preview > *, .gallery-preview > weft-island > * { max-inline-size: 100%; }
@@ -51,14 +51,14 @@
 .gallery-table { max-inline-size: 100%; overflow-x: auto; }
 /* The page's own tables, not a Table example's. */
 .gallery-table table { border-collapse: collapse; inline-size: 100%; font-size: 0.9375rem; }
-.gallery-table :is(th, td) { text-align: start; vertical-align: top; padding: 8px 12px; border-block-end: 1px solid var(--weft-color-border); }
+.gallery-table :is(th, td) { text-align: start; vertical-align: top; padding: 8px 12px; border-block-end: var(--weft-border-width, 1px) solid var(--weft-color-border); }
 .gallery-table thead th { font-size: 0.8125rem; color: var(--weft-color-text-muted); }
 .gallery-table tbody th { font-weight: 600; white-space: nowrap; }
 .gallery-api td:nth-child(2) code { overflow-wrap: anywhere; }
 .gallery-api td code + code { margin-inline-start: 8px; }
 .gallery-required { font-size: 0.8125rem; font-weight: 400; color: var(--weft-color-danger-text); }
 
-.gallery-raw { inline-size: 100%; block-size: 28rem; background: var(--weft-color-surface); border: 1px solid var(--weft-color-border); border-radius: 12px; }
+.gallery-raw { inline-size: 100%; block-size: 28rem; background: var(--weft-color-surface); border: var(--weft-border-width, 1px) solid var(--weft-color-border); border-radius: 12px; }
 .gallery-page .docs-pager { margin-block-start: 48px; }
 
 /* AppShell is a whole page's frame, as tall as the viewport; in a thumbnail or a preview it gets a page of its own height. */
