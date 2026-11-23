@@ -57,8 +57,10 @@ func TestUnpackReplacesOlder(t *testing.T) {
 	if !exists(t, filepath.Join(dir, ".weft/a")) {
 		t.Error("a is missing")
 	}
-	if exists(t, filepath.Join(dir, ".weft.new")) {
-		t.Error(".weft.new remains")
+	for _, leftover := range []string{".weft.new", ".weft.old"} {
+		if exists(t, filepath.Join(dir, leftover)) {
+			t.Errorf("%s remains", leftover)
+		}
 	}
 	if got := unpacked(dir); got != "0.0.6" {
 		t.Errorf("unpacked = %q, want 0.0.6", got)
@@ -155,5 +157,42 @@ func TestBundleScript(t *testing.T) {
 	os.WriteFile(filepath.Join(foreign, "mine"), []byte("x"), 0o644)
 	if err := exec.Command("sh", "../../scripts/bundle.sh", foreign).Run(); err == nil {
 		t.Error("bundle.sh wrote into a folder that is not a bundle")
+	}
+}
+
+func TestBundleScriptRelativeOut(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds the packages")
+	}
+	script, err := filepath.Abs("../../scripts/bundle.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cwd := t.TempDir()
+	cmd := exec.Command("sh", script, "rel/out")
+	cmd.Dir = cwd
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("bundle.sh: %v\n%s", err, b)
+	}
+	if !exists(t, filepath.Join(cwd, "rel/out/weft/packages/ui/package.json")) {
+		t.Error("a relative OUT was not resolved against the working folder")
+	}
+}
+
+func TestBundleScriptMarksBeforeBuilding(t *testing.T) {
+	if _, err := exec.LookPath("pnpm"); err == nil {
+		// Run with a PATH that cannot find pnpm so the build step fails.
+		if p, _ := exec.LookPath("pnpm"); strings.HasPrefix(p, "/usr/bin") || strings.HasPrefix(p, "/bin") {
+			t.Skip("pnpm is on the minimal PATH")
+		}
+	}
+	out := filepath.Join(t.TempDir(), "bundle")
+	cmd := exec.Command("sh", "../../scripts/bundle.sh", out)
+	cmd.Env = append(os.Environ(), "PATH=/usr/bin:/bin")
+	if err := cmd.Run(); err == nil {
+		t.Fatal("bundle.sh succeeded without pnpm")
+	}
+	if !exists(t, filepath.Join(out, ".weft-bundle")) {
+		t.Error("a failed run left no .weft-bundle, so the next run would refuse the folder")
 	}
 }

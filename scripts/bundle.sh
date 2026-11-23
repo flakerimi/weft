@@ -13,7 +13,11 @@ if [ $# -ne 1 ]; then
 	exit 2
 fi
 root=$(cd "$(dirname "$0")/.." && pwd)
-out="$1"
+# Resolve OUT against the caller's folder before anything changes directory.
+case "$1" in
+/*) out="$1" ;;
+*) out="$PWD/$1" ;;
+esac
 
 if [ -e "$out" ] && [ ! -d "$out" ]; then
 	echo "scripts/bundle.sh: $out is not a folder; name a missing or empty folder." >&2
@@ -29,15 +33,22 @@ if [ -d "$out" ] && [ ! -e "$out/.weft-bundle" ]; then
 	done
 fi
 
+# Mark OUT first, so a run that fails midway can be run again.
+mkdir -p "$out"
+touch "$out/.weft-bundle"
+
 cd "$root"
 pnpm --filter @weft/themes --filter @weft/ui build >&2
 
-# Clear what an earlier run wrote, and only that.
-if [ -e "$out/.weft-bundle" ]; then
-	rm -rf "$out/weft" "$out/template" "$out/.weft-bundle"
-fi
+# Move what an earlier run wrote into a fresh temporary folder; nothing is deleted.
+old=$(mktemp -d)
+for d in weft template; do
+	if [ -e "$out/$d" ]; then
+		mv "$out/$d" "$old/"
+		echo "scripts/bundle.sh: the earlier $d is in $old." >&2
+	fi
+done
 mkdir -p "$out/weft/packages" "$out/weft/go" "$out/weft/catalog"
-out=$(cd "$out" && pwd)
 
 # copy_tree FROM TO copies a folder without what a bundle never needs.
 copy_tree() {
@@ -92,5 +103,3 @@ cp catalog/components.json "$out/weft/catalog/"
 if [ -d templates/app ]; then
 	copy_tree templates/app "$out/template"
 fi
-
-touch "$out/.weft-bundle"

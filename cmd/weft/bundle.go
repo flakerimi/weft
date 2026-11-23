@@ -73,6 +73,10 @@ func unpack(bundle fs.FS, appDir, version string) error {
 		}
 	}
 	if err := os.Rename(tmp, dst); err != nil {
+		if _, statErr := os.Lstat(old); statErr == nil {
+			os.Rename(old, dst)
+		}
+		os.RemoveAll(tmp)
 		return err
 	}
 	return os.RemoveAll(old)
