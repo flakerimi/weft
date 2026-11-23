@@ -85,8 +85,18 @@ func assertCreated(t *testing.T, dir string) {
 	if got := strings.TrimSpace(read(".weft/VERSION")); got != "0.0.0-dev" {
 		t.Errorf(".weft/VERSION = %q", got)
 	}
-	if !exists(t, filepath.Join(dir, ".gitignore")) {
-		t.Error(".gitignore is missing")
+	if !strings.Contains(read("package.json"), `"name": "`+filepath.Base(dir)+`"`) {
+		t.Errorf("package.json has the wrong name: %q", read("package.json"))
+	}
+	ignore := strings.Split(read(".gitignore"), "\n")
+	for _, want := range []string{".weft/", "node_modules/", "web/dist/", "web/.weft-types/", "/" + filepath.Base(dir)} {
+		found := false
+		for _, l := range ignore {
+			found = found || l == want
+		}
+		if !found {
+			t.Errorf(".gitignore lacks the line %q: %q", want, ignore)
+		}
 	}
 	filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
 		if err == nil && info.IsDir() && info.Name() == ".weft" {
@@ -117,6 +127,26 @@ func TestCreateWritesApp(t *testing.T) {
 		t.Errorf("stdout %q", out)
 	}
 	assertCreated(t, "myapp")
+}
+
+func TestCreateNamedLikeAFolder(t *testing.T) {
+	inTempDir(t, "work")
+	code, _, errs := create(t, "web", "--no-install")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errs)
+	}
+	b, _ := os.ReadFile("web/.gitignore")
+	lines := strings.Split(string(b), "\n")
+	hasRooted := false
+	for _, l := range lines {
+		if l == "web" || l == "api" {
+			t.Errorf(".gitignore line %q would ignore the app's own folder", l)
+		}
+		hasRooted = hasRooted || l == "/web"
+	}
+	if !hasRooted {
+		t.Errorf(".gitignore = %q, want a /web line", b)
+	}
 }
 
 func TestCreateOptions(t *testing.T) {

@@ -8,9 +8,11 @@
 weft dev        # run the app, rebuilding pages and Go as you save
 weft build      # build the pages, then the binary
 weft upgrade    # move the app to the Weft version of the weft you run
-go test ./...   # the Go tests
+go test -tags dev ./...   # the Go tests
 pnpm typecheck  # check the Vue files
 ```
+
+Go commands need `-tags dev` until the first `weft build`: without it `dist.go` embeds `web/dist`, which does not exist yet.
 
 ## Layout
 
