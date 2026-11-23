@@ -9,6 +9,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { neutral } from '@weft/themes'
 import { describe, expect, it } from 'vitest'
 
 const src = join(dirname(fileURLToPath(import.meta.url)), '../src')
@@ -30,8 +31,8 @@ const exceptions: Exception[] = [
     reason: 'a tinted halo that marks the current item; not elevation',
   },
   {
-    file: 'styles/command-palette.css', property: 'box-shadow', value: 'inset 0 -2px 0 var(--weft-color-focus, Highlight)',
-    reason: 'the focused search field\'s underline, drawn inset; not elevation',
+    file: 'styles/command-palette.css', property: 'box-shadow', value: 'inset 0 calc(-1 * var(--weft-focus-width, 2px)) 0 var(--weft-color-focus, Highlight)',
+    reason: 'the focused search field\'s focus indicator, an underline drawn inset as wide as the focus ring; not elevation',
   },
   {
     file: 'styles/switch.css', property: 'box-shadow', value: 'inset 0 0 0 var(--weft-border-width, 1px) var(--weft-color-danger, #DC2626)',
@@ -107,6 +108,45 @@ function breaks(d: Declaration): string | undefined {
   return undefined
 }
 
+/** What each shadow and width token defaults to in the themes; a fallback must say the same. */
+const defaults: Record<string, string> = {
+  '--weft-border-width': `${neutral.border.width}px`,
+  '--weft-border-width-strong': `${neutral.border.strong}px`,
+  '--weft-focus-width': `${neutral.border.focus}px`,
+  ...Object.fromEntries(Object.entries(neutral.shadow).map(([k, v]) => [`--weft-shadow-${k}`, v])),
+}
+
+interface TokenUse { file: string; line: number; token: string; fallback: string | undefined }
+
+/** Every var() of a shadow or width token in a text, with its fallback (parentheses balanced). */
+function tokenUses(file: string, text: string): TokenUse[] {
+  const uses: TokenUse[] = []
+  for (const m of text.matchAll(/var\((--weft-(?:border-width(?:-strong)?|focus-width|shadow-[a-z]+))\s*(,?)/g)) {
+    let fallback: string | undefined
+    if (m[2]) {
+      let depth = 1
+      let i = m.index + m[0].length
+      const start = i
+      for (; i < text.length; i++) {
+        if (text[i] === '(') depth++
+        else if (text[i] === ')' && --depth === 0) break
+      }
+      fallback = text.slice(start, i).trim()
+    }
+    uses.push({ file, line: text.slice(0, m.index).split('\n').length, token: m[1]!, fallback })
+  }
+  return uses
+}
+const uses = files.flatMap((f) => tokenUses(f, readFileSync(join(src, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' '))))
+
+/** Why a token's use breaks the rule (no fallback, or one that is not the theme default), or undefined. */
+function wrongFallback(u: TokenUse): string | undefined {
+  const want = defaults[u.token]
+  if (want === undefined) return `${u.token} is not a theme token`
+  if (u.fallback !== want) return `its fallback is ${u.fallback === undefined ? 'missing' : `"${u.fallback}"`}; the themes' default is "${want}"`
+  return undefined
+}
+
 describe('shadows and line widths', () => {
   it('reads the files it guards', () => {
     expect(files.filter((f) => f.endsWith('.css')).length).toBeGreaterThan(80)
@@ -117,6 +157,23 @@ describe('shadows and line widths', () => {
   it('come from the theme\'s tokens, except the listed exceptions', () => {
     const broken = all.filter((d) => !isException(d) && breaks(d)).map((d) => `${where(d)} (${breaks(d)})`)
     expect(broken).toEqual([])
+  })
+
+  it('fall back to the themes\' defaults wherever a token is read', () => {
+    expect(uses.length).toBeGreaterThan(100)
+    expect(uses.filter(wrongFallback).map((u) => `src/${u.file}:${u.line}: ${u.token} (${wrongFallback(u)})`)).toEqual([])
+  })
+
+  it('catch a fallback that differs from the default, or none', () => {
+    const [ok] = tokenUses('x.css', 'border: var(--weft-border-width, 1px) solid red;')
+    expect(wrongFallback(ok!)).toBeUndefined()
+    const [thick] = tokenUses('x.css', 'border: var(--weft-border-width, 2px) solid red;')
+    expect(wrongFallback(thick!)).toContain('the themes\' default is "1px"')
+    const [shadow] = tokenUses('x.css', 'box-shadow: var(--weft-shadow-popup, 0 8px 24px color-mix(in srgb, CanvasText 20%, transparent));')
+    expect(shadow!.fallback).toBe('0 8px 24px color-mix(in srgb, CanvasText 20%, transparent)')
+    expect(wrongFallback(shadow!)).toBeDefined()
+    const [bare] = tokenUses('x.css', 'outline: var(--weft-focus-width) solid red;')
+    expect(wrongFallback(bare!)).toContain('missing')
   })
 
   it('list only exceptions that are still there, each with a reason', () => {

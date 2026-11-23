@@ -31,7 +31,7 @@
   font-size: 1.0625em;
 }
 .weft-command-palette__input::placeholder { color: var(--weft-color-text-muted, GrayText); opacity: 1; }
-.weft-command-palette__search:focus-within { box-shadow: inset 0 -2px 0 var(--weft-color-focus, Highlight); }
+.weft-command-palette__search:focus-within { box-shadow: inset 0 calc(-1 * var(--weft-focus-width, 2px)) 0 var(--weft-color-focus, Highlight); }
 .weft-command-palette__glyph,
 .weft-command-palette__chevron { flex: none; inline-size: 16px; block-size: 16px; color: var(--weft-color-text-muted, GrayText); }
 [dir="rtl"] .weft-command-palette__chevron,

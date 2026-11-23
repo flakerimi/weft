@@ -32,3 +32,12 @@
 /* Invalid: the track has no border, so a danger line is drawn inside its edge,
    as wide as the theme's hairline, taking no space. */
 .weft-switch[data-invalid] .weft-switch__track { box-shadow: inset 0 0 0 var(--weft-border-width, 1px) var(--weft-color-danger, #DC2626); }
+/* Forced colours drop box-shadow: there the line is an outline over the track's
+   edge (its colour replaced by the system's), left off while the input has
+   keyboard focus, so the focus ring shows. */
+@media (forced-colors: active) {
+  .weft-switch[data-invalid] .weft-switch__input:not(:focus-visible) + .weft-switch__track {
+    outline: var(--weft-border-width, 1px) solid var(--weft-color-danger, #DC2626);
+    outline-offset: calc(-1 * var(--weft-border-width, 1px));
+  }
+}

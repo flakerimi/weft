@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { nextTick } from 'vue'
 import ChoiceCases from '../fixtures/forms/ChoiceCases.vue'
 import { mount } from '../mount.ts'
-import { loadStyles, ruleFor } from '../styles.ts'
+import { loadStyles, mediaRule, ruleFor } from '../styles.ts'
 import { key, px, settle, space } from './helpers.ts'
 
 let mounted: { unmount(): void }[] = []
@@ -289,6 +289,16 @@ describe('Switch', () => {
       const valid = getComputedStyle(el.querySelector('.bound .weft-switch__track')!)
       for (const p of ['borderTopWidth', 'inlineSize', 'blockSize', 'paddingTop'] as const) expect(track[p], p).toBe(valid[p])
       expect(valid.boxShadow).not.toContain('inset')
+    })
+
+    // Forced colours drop box-shadow, so there the line is an outline over the track's edge
+    // (no space taken), left off while the input has keyboard focus so the focus ring shows.
+    it('draws the line as an outline in forced colours, giving way to the focus ring', () => {
+      const selector = '.weft-switch[data-invalid] .weft-switch__input:not(:focus-visible) + .weft-switch__track'
+      const rule = mediaRule('(forced-colors: active)', selector)!
+      expect(rule, selector).toBeDefined()
+      expect(rule.style.getPropertyValue('outline')).toBe('var(--weft-border-width, 1px) solid var(--weft-color-danger, #DC2626)')
+      expect(rule.style.getPropertyValue('outline-offset')).toBe('calc(-1 * var(--weft-border-width, 1px))')
     })
   })
 })
