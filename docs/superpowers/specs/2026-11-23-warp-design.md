@@ -159,7 +159,7 @@ A page calls `api.products.list({ sort: '-created_at' })`. A renamed Go field is
 - Soft delete (`deleted_at`) and timestamps as in Base.
 - Relations: `belongs_to` (the id and the related record's id and name in answers, in lists too), `has_many`, `many_to_many` (ids in and out).
 - **Migrations are additive and automatic:** at start, a missing table or column is created. Anything that loses data (a dropped or retyped column) is never automatic: the app refuses to start and says what differs. `weft db` shows the difference.
-- **Engines:** SQLite first (the default in a new app, through a pure-Go driver so no C compiler is needed), then PostgreSQL. MySQL later if wanted. The driver is the app's dependency.
+- **Engines:** SQLite first (the default in a new app, through a pure-Go driver so no C compiler is needed), then PostgreSQL, then MySQL (the owner, 2026-11-23). The driver is the app's dependency. The differences between the three (placeholders, quoting, column types, returning the new id) are in one small dialect per engine, and every `Store` test runs against all three.
 - Custom queries use `database/sql` directly; `data` exposes the `*sql.DB`.
 
 ### Built-in modules
@@ -201,7 +201,7 @@ These replace phases 4b and 5 of the Weft design. Each gets its own plan.
 | --- | --- |
 | W1 | The core: `warp.App`, modules, env configuration, typed routes on `ServeMux`, the error shape, validation; `weft.Serve` becomes `warp.Serve`; the template's `main.go` and `app/` move to this shape |
 | W2 | `warp/describe`, `weft gen` (types, the typed client, form schemas), `weft routes`; `weft dev` regenerates on a Go change |
-| W3 | `warp/data`: `Store`, additive migrations, list queries, `warp.Resource`, SQLite then PostgreSQL |
+| W3 | `warp/data`: `Store`, additive migrations, list queries, `warp.Resource`; SQLite, then PostgreSQL, then MySQL |
 | W4 | `auth`: sessions, users, roles, permissions; `useSession`, the login page, `perm`, the route guard; `mail` with the `log` and `smtp` drivers |
 | W5 | `weft scaffold`, with `DataTable` and `EntityDialog` (from the Weft design's phase 5) |
 | W6 | `storage` and attachments; `events` and `live` with `useLive` |
@@ -224,12 +224,12 @@ W1 starts after phase 4 (app tooling) lands, because it changes the template tha
 - snake_case JSON; the list shape `{items, total, page, per_page}`; PATCH for updates; 422 for validation.
 - Sessions in a signed HttpOnly cookie, with a bearer token only for clients that are not the app's own pages.
 - Migrations add and never remove.
-- SQLite by default through a pure-Go driver, then PostgreSQL.
+- SQLite by default through a pure-Go driver.
 - Modules are listed explicitly in `app/modules.go`; nothing registers itself from an `init` function.
 - Scaffolding never deletes: there is no `destroy` command.
 
 ## Open for the owner
 
-1. **Base itself.** The reading found real defects in `base-core` (the rate limiter leaks a goroutine per request, permission checks that always pass or always fail, uploads that always fail, an emitter that panics). They can be reported or fixed there separately; this design does not depend on it.
-2. **MySQL.** Wanted as a third engine, or not at all?
-3. **Existing Base apps.** This design does not migrate them. Say if one should be the first Warp app, since that would decide which modules come first.
+1. **Existing Base apps.** This design does not migrate them. Say if one should be the first Warp app, since that would decide which modules come first.
+
+Answered 2026-11-23: MySQL is the third engine; the defects found in `base-core` and `base-go/cmd` are fixed in those repositories, as separate work that this design does not depend on.
