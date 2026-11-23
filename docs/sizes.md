@@ -67,7 +67,7 @@ component uses. Neither is counted in the rows below.
 | Form | 6.41 | — | 2.13 | 8.54 |
 | FormField | 2.64 | — | 1.13 | 3.77 |
 | Grid | 0.86 | — | 0.41 | 1.26 |
-| Header | 16.98 | — | 3.38 | 20.36 |
+| Header | 16.98 | — | 3.38 | 20.35 |
 | Icon | 0.67 | — | 0.33 | 1.00 |
 | Input | 2.43 | — | 0.97 | 3.40 |
 | InputNumber | 2.82 | — | 1.00 | 3.82 |
@@ -96,7 +96,7 @@ component uses. Neither is counted in the rows below.
 | Stack | 0.35 | — | 0.27 | 0.62 |
 | StatCard | 2.39 | — | 1.01 | 3.40 |
 | Stepper | 2.97 | — | 1.00 | 3.97 |
-| Switch | 1.96 | — | 1.36 | 3.32 |
+| Switch | 1.96 | — | 1.37 | 3.33 |
 | Table | 10.79 | — | 2.75 | 13.54 |
 | Tabs | 3.74 | — | 1.28 | 5.02 |
 | Textarea | 2.12 | — | 0.54 | 2.66 |
@@ -105,11 +105,11 @@ component uses. Neither is counted in the rows below.
 | Toaster | 4.22 | — | 2.12 | 6.34 |
 | Toggle | 2.30 | — | 1.39 | 3.69 |
 | ToggleGroup | 3.45 | — | 1.39 | 4.84 |
-| Tooltip | 10.70 | — | 1.74 | 12.44 |
+| Tooltip | 10.70 | — | 1.71 | 12.41 |
 | Tree | 3.95 | — | 0.74 | 4.69 |
 | WeftProvider | 0.97 | — | 0.27 | 1.25 |
 
-The five heaviest: DateRangePicker (28.18 KB), Combobox (24.76 KB), Select (22.47 KB), AppShell (22.29 KB), Header (20.36 KB).
+The five heaviest: DateRangePicker (28.18 KB), Combobox (24.76 KB), Select (22.47 KB), AppShell (22.29 KB), Header (20.35 KB).
 
 ## Tree-shaking
 

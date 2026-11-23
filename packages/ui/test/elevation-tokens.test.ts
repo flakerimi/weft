@@ -34,6 +34,10 @@ const exceptions: Exception[] = [
     reason: 'the focused search field\'s underline, drawn inset; not elevation',
   },
   {
+    file: 'styles/switch.css', property: 'box-shadow', value: 'inset 0 0 0 var(--weft-border-width, 1px) var(--weft-color-danger, #DC2626)',
+    reason: 'an invalid switch\'s danger line, inset as wide as the hairline because the track has no border; not elevation',
+  },
+  {
     file: 'styles/toast.css', property: 'border-inline-start', value: '4px solid var(--weft-tone, CanvasText)',
     reason: 'the tone\'s accent bar, a mark of its own and not a hairline',
   },

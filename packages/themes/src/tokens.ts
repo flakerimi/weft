@@ -45,7 +45,7 @@ export interface Theme {
    * parts of controls (a switch's or a slider's thumb, a selected pill tab);
    * `card`, resting surfaces (Card, StatCard, a Table's box and its cards);
    * `popup`, what floats over the page (menus, popovers, select lists,
-   * tooltips, toasts); `dialog`, dialogs, sheets and the command palette.
+   * toasts; a tooltip draws none); `dialog`, dialogs, sheets and the command palette.
    * `none` draws none.
    */
   shadow: { control: string; card: string; popup: string; dialog: string }

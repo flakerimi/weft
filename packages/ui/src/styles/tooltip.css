@@ -6,7 +6,6 @@
   border-radius: var(--weft-radius-control, 8px);
   background: var(--weft-color-text, CanvasText);
   color: var(--weft-color-bg, Canvas);
-  box-shadow: var(--weft-shadow-popup, 0 8px 24px color-mix(in srgb, CanvasText 16%, transparent));
   font-size: 0.875em;
   line-height: 1.4;
   overflow-wrap: break-word;

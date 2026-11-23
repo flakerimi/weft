@@ -55,7 +55,7 @@ The tokens:
 | `--weft-color-<tone>-fg`, `-text`, `-hover`, `-active` | derived per tone, worked out at theme build |
 | `--weft-space-1`, `-2`, `-3`, `-4`, `-6`, `-8` (no 5 or 7), `--weft-radius-control`, `-card`, `-panel` | spacing and corners |
 | `--weft-control-sm`, `-md`, `-lg` | drawn control heights |
-| `--weft-shadow-control`, `-card`, `-popup`, `-dialog` | shadows: thumbs and a selected pill tab; cards, stat cards and tables (`none` by default); menus, popovers, select lists, tooltips, toasts; dialogs, sheets, the command palette |
+| `--weft-shadow-control`, `-card`, `-popup`, `-dialog` | shadows: thumbs and a selected pill tab; cards, stat cards and tables (`none` by default); menus, popovers, select lists, toasts (not tooltips); dialogs, sheets, the command palette |
 | `--weft-border-width`, `--weft-border-width-strong`, `--weft-focus-width` | line widths: every hairline (1px), emphasised lines such as a tab's indicator (2px), the focus ring (2px) |
 | `--weft-font-sans`, `-mono`, `--weft-weight-body`, `-heading`, `-title` | type |
 | `--weft-duration-*`, `--weft-ease-*` | motion |

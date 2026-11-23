@@ -53,6 +53,7 @@ const plans = [
     <Switch v-model="on" class="bound" label="Wi-Fi" description="Join known networks." @change="changes++" />
     <Switch v-model="busy" class="busy" label="Sync" loading />
     <FormField label="Alerts" class="in-field"><Switch /></FormField>
+    <FormField label="Terms" error="Accept the terms." class="invalid-field"><Switch label="I accept" /></FormField>
   </div>
   <WeftProvider v-else-if="$props.case === 'adaptive'" :input="input">
     <Checkbox class="c" label="Tick" />

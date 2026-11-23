@@ -266,6 +266,31 @@ describe('Switch', () => {
     const field = cases({ case: 'switch' }).el.querySelector('.in-field')!
     expect(field.querySelector<HTMLLabelElement>('.weft-form-field__label')!.htmlFor).toBe(field.querySelector('input')!.id)
   })
+
+  describe('invalid', () => {
+    let unload: () => void
+    beforeEach(() => { unload = loadStyles() })
+    afterEach(() => unload())
+
+    // The track has no border, so the invalid state is a line drawn inside its edge
+    // that takes no space: the track keeps its size and the thumb its place.
+    it('draws a danger line around its track, as wide as the theme\'s border, without moving anything', async () => {
+      const el = cases({ case: 'switch' }).el
+      await nextTick()
+      const invalid = el.querySelector<HTMLElement>('.invalid-field .weft-switch')!
+      expect(invalid.dataset.invalid).toBe('true')
+      const track = getComputedStyle(invalid.querySelector('.weft-switch__track')!)
+      expect(track.boxShadow).toContain('inset')
+      expect(track.boxShadow).toContain('#DC2626')
+      expect(track.boxShadow).toContain('1px')
+      const rule = ruleFor('.weft-switch[data-invalid] .weft-switch__track')!.style.getPropertyValue('box-shadow')
+      expect(rule).toBe('inset 0 0 0 var(--weft-border-width, 1px) var(--weft-color-danger, #DC2626)')
+      // No space taken: no border, the same size and padding as a valid track.
+      const valid = getComputedStyle(el.querySelector('.bound .weft-switch__track')!)
+      for (const p of ['borderTopWidth', 'inlineSize', 'blockSize', 'paddingTop'] as const) expect(track[p], p).toBe(valid[p])
+      expect(valid.boxShadow).not.toContain('inset')
+    })
+  })
 })
 
 describe('touch', () => {

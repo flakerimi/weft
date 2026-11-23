@@ -29,4 +29,6 @@
 .weft-switch[data-state="checked"] .weft-switch__track { background: var(--weft-tone, LinkText); }
 .weft-switch[data-state="checked"] .weft-switch__thumb { margin-inline-start: calc(var(--weft-switch-w, 36px) - var(--weft-switch-h, 20px)); }
 .weft-switch[data-loading] .weft-switch__input { cursor: progress; }
-.weft-switch[data-invalid] .weft-switch__track { border-color: var(--weft-color-danger, #DC2626); }
+/* Invalid: the track has no border, so a danger line is drawn inside its edge,
+   as wide as the theme's hairline, taking no space. */
+.weft-switch[data-invalid] .weft-switch__track { box-shadow: inset 0 0 0 var(--weft-border-width, 1px) var(--weft-color-danger, #DC2626); }
