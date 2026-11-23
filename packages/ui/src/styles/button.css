@@ -9,7 +9,7 @@
   gap: var(--weft-space-2, 8px);
   block-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
   padding-inline: var(--weft-space-3, 12px);
-  border: 1px solid transparent;
+  border: var(--weft-border-width, 1px) solid transparent;
   border-radius: var(--weft-radius-control, 8px);
   font: inherit;
   font-weight: var(--weft-weight-heading, 600);

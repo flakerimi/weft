@@ -40,6 +40,23 @@ export interface Theme {
    * control keeps its size and extends its hit area with a pseudo-element.
    */
   control: { sm: number; md: number; lg: number }
+  /**
+   * CSS `box-shadow` values, as `--weft-shadow-*`: `control`, the small raised
+   * parts of controls (a switch's or a slider's thumb, a selected pill tab);
+   * `card`, resting surfaces (Card, StatCard, a Table's box and its cards);
+   * `popup`, what floats over the page (menus, popovers, select lists,
+   * tooltips, toasts); `dialog`, dialogs, sheets and the command palette.
+   * `none` draws none.
+   */
+  shadow: { control: string; card: string; popup: string; dialog: string }
+  /**
+   * px: `width`, every hairline (control, card and table borders, dividers),
+   * as `--weft-border-width`; `strong`, emphasised lines (a tab's indicator,
+   * a slider thumb's ring, a key cap's bottom edge), as
+   * `--weft-border-width-strong`; `focus`, the focus ring's outline, as
+   * `--weft-focus-width`. 0 draws no line.
+   */
+  border: { width: number; strong: number; focus: number }
   /** px */
   space: { 1: number; 2: number; 3: number; 4: number; 6: number; 8: number }
   /** ms: transitions, and `toast`, how long a toast stays before it leaves on its own (an interaction delay, kept under reduced motion). */

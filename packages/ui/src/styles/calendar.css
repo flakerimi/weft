@@ -73,7 +73,7 @@
 .weft-calendar__view:focus-visible,
 .weft-calendar__day:focus-visible,
 .weft-calendar__cell:focus-visible {
-  outline: 2px solid var(--weft-color-focus, Highlight);
+  outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight);
   outline-offset: 1px;
 }
 

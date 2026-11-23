@@ -41,7 +41,7 @@
 .weft-checkbox__input:focus-visible + .weft-checkbox__box,
 .weft-switch__input:focus-visible + .weft-switch__track,
 .weft-radio__input:focus-visible + .weft-radio__circle {
-  outline: 2px solid var(--weft-color-focus, Highlight);
+  outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight);
   outline-offset: 2px;
 }
 .weft-checkbox__text,

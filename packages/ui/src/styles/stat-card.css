@@ -6,9 +6,10 @@
   flex-direction: column;
   gap: var(--weft-space-3, 12px);
   padding: var(--weft-space-4, 16px);
-  border: 1px solid var(--weft-color-border, GrayText);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   border-radius: var(--weft-radius-card, 12px);
   background: var(--weft-color-surface, Canvas);
+  box-shadow: var(--weft-shadow-card, none);
   color: var(--weft-color-text, CanvasText);
   min-inline-size: 0;
 }
@@ -42,4 +43,4 @@
 .weft-stat-card__description { color: var(--weft-color-text-muted, GrayText); font-size: 0.9em; }
 .weft-stat-card__sparkline { block-size: 40px; color: var(--weft-color-primary, LinkText); }
 .weft-stat-card__sparkline > svg { display: block; inline-size: 100%; block-size: 100%; }
-.weft-stat-card__footer { padding-block-start: var(--weft-space-3, 12px); border-block-start: 1px solid var(--weft-color-border, GrayText); }
+.weft-stat-card__footer { padding-block-start: var(--weft-space-3, 12px); border-block-start: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText); }

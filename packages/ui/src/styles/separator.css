@@ -7,7 +7,7 @@
   color: var(--weft-color-text-muted, GrayText);
   font-size: 0.857em;
 }
-.weft-separator__line { flex: 1; block-size: 1px; background: var(--weft-color-border, GrayText); }
+.weft-separator__line { flex: 1; block-size: var(--weft-border-width, 1px); background: var(--weft-color-border, GrayText); }
 .weft-separator__content { display: inline-flex; align-items: center; gap: var(--weft-space-1, 4px); white-space: nowrap; }
 .weft-separator[data-orientation="vertical"] { flex-direction: column; inline-size: auto; align-self: stretch; }
-.weft-separator[data-orientation="vertical"] .weft-separator__line { block-size: auto; inline-size: 1px; }
+.weft-separator[data-orientation="vertical"] .weft-separator__line { block-size: auto; inline-size: var(--weft-border-width, 1px); }

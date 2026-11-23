@@ -288,7 +288,7 @@ describe('DatePicker', () => {
       const unstyle = loadStyles()
       try {
         await cases()
-        expect(ruleFor('.weft-date-picker__button:focus-visible')!.style.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+        expect(ruleFor('.weft-date-picker__button:focus-visible')!.style.getPropertyValue('outline')).toBe('var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight)')
         expect(ruleFor('.weft-input:focus-within')).toBeDefined()
       } finally {
         unstyle()

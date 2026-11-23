@@ -32,7 +32,7 @@
 @media (hover: hover) {
   .weft-tree__item:hover { background: color-mix(in srgb, var(--weft-color-text, CanvasText) 6%, transparent); }
 }
-.weft-tree__item:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: -2px; }
+.weft-tree__item:focus-visible { outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight); outline-offset: calc(-1 * var(--weft-focus-width, 2px)); }
 .weft-tree__item[aria-selected="true"] { background: var(--weft-color-primary-soft, color-mix(in srgb, LinkText 14%, transparent)); font-weight: var(--weft-weight-heading, 600); }
 .weft-tree__item[aria-disabled="true"] { color: var(--weft-color-text-muted, GrayText); cursor: not-allowed; }
 .weft-tree__toggle { display: inline-grid; place-items: center; flex: none; inline-size: 16px; block-size: 16px; color: var(--weft-color-text-muted, GrayText); }

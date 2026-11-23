@@ -5,7 +5,7 @@
   place-items: center;
   inline-size: 16px;
   block-size: 16px;
-  border: 1px solid var(--weft-color-border, GrayText);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   background: var(--weft-color-surface, Field);
   border-radius: 4px;
   color: var(--weft-tone-fg, Canvas);

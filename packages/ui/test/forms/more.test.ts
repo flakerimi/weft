@@ -488,7 +488,9 @@ describe('FieldGroup', () => {
       const [input, button] = el.querySelectorAll<HTMLElement>('.row > *')
       expect(getComputedStyle(input!).borderStartEndRadius).toBe('0')
       expect(getComputedStyle(button!).borderStartStartRadius).toBe('0')
-      expect(getComputedStyle(button!).marginInlineStart).toBe('-1px')
+      // Each overlaps the one before by the theme's border width (happy-dom leaves the calc() unsimplified; a browser gives -1px).
+      expect(ruleFor('.weft-field-group[data-orientation="horizontal"] > * + *')!.style.getPropertyValue('margin-inline-start')).toBe('calc(-1 * var(--weft-border-width, 1px))')
+      expect(getComputedStyle(button!).marginInlineStart).toMatch(/^(-1px|calc\(-1 \* 1px\))$/)
       expect(ruleFor('.weft-field-group > :focus-within')!.style.getPropertyValue('z-index')).toBe('1')
     })
   })

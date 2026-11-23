@@ -231,7 +231,7 @@ describe('Select', () => {
     try {
       await cases()
       const ring = ruleFor('.weft-input.weft-select__trigger:focus-visible')!.style
-      expect(ring.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+      expect(ring.getPropertyValue('outline')).toBe('var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight)')
       expect(ruleFor('.weft-listbox__option[data-active]')).toBeDefined()
       // And it applies: focused, the button matches :focus-visible and draws the ring.
       trigger().focus()

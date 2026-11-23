@@ -6,12 +6,12 @@
   align-items: flex-start;
   gap: var(--weft-space-3, 12px);
   padding: var(--weft-space-3, 12px);
-  border: 1px solid var(--weft-color-border, GrayText);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   border-inline-start: 4px solid var(--weft-tone, CanvasText);
   border-radius: var(--weft-radius-card, 12px);
   background: var(--weft-color-surface-raised, Canvas);
   color: var(--weft-color-text, CanvasText);
-  box-shadow: 0 8px 24px color-mix(in srgb, CanvasText 16%, transparent);
+  box-shadow: var(--weft-shadow-popup, 0 8px 24px color-mix(in srgb, CanvasText 16%, transparent));
   pointer-events: auto;
   touch-action: pan-y;
   transition-property: opacity, translate;

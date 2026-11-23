@@ -15,7 +15,7 @@
   gap: var(--weft-space-2, 8px);
   min-block-size: max(var(--weft-control-lg, 44px), var(--weft-hit-min, 24px));
   padding-inline: var(--weft-space-2, 8px);
-  border-block-end: 1px solid var(--weft-color-border, GrayText);
+  border-block-end: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
 }
 .weft-command-palette__input {
   flex: 1;
@@ -72,7 +72,7 @@
 .weft-command-palette__kbds { display: inline-flex; gap: 2px; }
 .weft-command-palette__footer {
   padding: var(--weft-space-2, 8px);
-  border-block-start: 1px solid var(--weft-color-border, GrayText);
+  border-block-start: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   color: var(--weft-color-text-muted, GrayText);
   font-size: 0.85em;
 }

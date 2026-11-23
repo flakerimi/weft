@@ -289,7 +289,7 @@ describe('FileUpload', () => {
       try {
         await cases()
         expect(ruleFor('.weft-file-upload__zone[data-dragging]')).toBeDefined()
-        expect(ruleFor(':focus-visible')!.style.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+        expect(ruleFor(':focus-visible')!.style.getPropertyValue('outline')).toBe('var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight)')
       } finally {
         unstyle()
       }

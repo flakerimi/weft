@@ -6,7 +6,7 @@
   inline-size: 100%;
   min-block-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
   padding: var(--weft-space-2, 8px) var(--weft-space-3, 12px);
-  border: 1px solid var(--weft-color-border, GrayText);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   border-radius: var(--weft-radius-control, 8px);
   background: var(--weft-color-surface, Field);
   color: var(--weft-color-text, FieldText);
@@ -17,8 +17,8 @@
 .weft-textarea[data-autoresize] { resize: none; overflow-y: hidden; }
 .weft-textarea::placeholder { color: var(--weft-color-text-muted, GrayText); opacity: 1; }
 .weft-textarea:focus-visible {
-  outline: 2px solid var(--weft-color-focus, Highlight);
-  outline-offset: -1px;
+  outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight);
+  outline-offset: calc(-1 * var(--weft-border-width, 1px));
   border-color: var(--weft-color-focus, Highlight);
 }
 .weft-textarea[data-size="sm"] { padding: var(--weft-space-1, 4px) var(--weft-space-2, 8px); font-size: 0.875em; }

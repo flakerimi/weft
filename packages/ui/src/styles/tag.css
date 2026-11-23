@@ -17,7 +17,7 @@
   outline: none;
 }
 .weft-tag[data-size="sm"] { min-block-size: 18px; font-size: 0.8em; }
-.weft-tag:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: 1px; }
+.weft-tag:focus-visible { outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight); outline-offset: 1px; }
 .weft-tag__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .weft-tag__remove {
   position: relative;
