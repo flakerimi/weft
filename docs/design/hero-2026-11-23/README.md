@@ -6,8 +6,9 @@ Its own ground (about `#0F172F`) is the band's `#0F1530` within a shade, so the 
 
 ## Where it is shown, and the two widths
 
-- From 901 px up it is a square as tall as the hero, at most 1024 px (988 px at 1440 and 2560 px; 920 px between 901 and 1279 px). Every screen gets `weave-1024`: a 1× screen needs about 1000 px, and 1024 px is the whole source, so a 2× screen gets the most there is.
-- At 900 px and under it covers a 708 px tall band under the phone (`cover`): 708 px square at 320 to 708 px, as wide as the screen up to 900 px. A 1× screen gets `weave-640`, a 2× or 3× screen `weave-1024`.
+- From 1280 px up, where the copy and the frames sit side by side, it is a 1024 px square at the hero's bottom end, its pegged edge rising clear above the two frames, which are drawn at 80 % and set low in their column. Every screen gets `weave-1024`: a 1× screen needs 1024 px, and 1024 px is the whole source, so a 2× screen gets the most there is.
+- From 901 to 1279 px (the copy above the frames) it is a square as tall as the hero, at most 920 px, at the bottom end: `weave-1024`.
+- At 900 px and under it covers a band under the phone and the gap above it (`cover`): 708 px tall from 641 to 900 px, and 816 px from 640 px down, where the gap between the copy and the phone is 180 px, so a band of weave shows in a phone's first screen. A 1× screen gets `weave-640`, a 2× or 3× screen `weave-1024`.
 
 Each served file is at most 60 KB (`landingImageLimit` in `site-src/landing_test.go`).
 
@@ -37,7 +38,7 @@ The source has an alpha channel that is opaque everywhere; `format=rgb24` drops 
 
 # The loom at the close
 
-`loom-source.png` is the owner's second picture (1254 × 1254): the whole loom from above, a navy pegged board with navy warp and saffron weft, on a dark navy ground. It is shown on the landing page alone, in its closing section (`#start`), beside the install command, on a dark tile (the theme's raised surface in the dark scheme), fading into the tile where they meet; the tile's corners clip it. It is an `<img>` with an empty `alt`, `width` and `height` 480, `loading="lazy"` and `decoding="async"`, in a `<picture>` that offers AVIF first. A `.vue` page has no way yet to name a file the build hashes, so the files are in `site-src/public/`, served as they are and revalidated by their ETag rather than cached for a year.
+`loom-source.png` is the owner's second picture (1254 × 1254): the whole loom from above, a navy pegged board with navy warp and saffron weft, on a dark navy ground. It is shown on the landing page alone, in its closing section (`#start`), beside the install command, on a dark tile (the theme's raised surface in the dark scheme). Its own ground is greyer than the tile, so a radial mask fades it into the tile all round the board. It is an `<img>` with an empty `alt`, `width` and `height` 480, `loading="lazy"` and `decoding="async"`, in a `<picture>` that offers AVIF first. A `.vue` page has no way yet to name a file the build hashes, so the files are in `site-src/public/`, served as they are and revalidated by their ETag rather than cached for a year.
 
 It is 480 px wide beside the copy (45 % of the tile, at most 480 px) and the tile's width when stacked under 640 px (288 to 608 px): 1× screens get the 480 px files, 2× and 3× screens the 960 px ones.
 

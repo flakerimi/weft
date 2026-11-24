@@ -6,7 +6,7 @@
    data-weft-scheme="dark"), so it is night in both schemes, while the
    pictures of the app follow the page's. Every colour is a theme token.
    Nothing here may stretch the page: what reaches past the column (the
-   thread, the desktop frame) is clipped by the hero. */
+   thread, the weave) is clipped by the hero. */
 @import './site.css';
 
 .landing {
@@ -44,19 +44,20 @@
 }
 /* The weave, the owner's picture (docs/design/hero-2026-11-23/): drawn into
    the ground at its end and bottom, fading into it towards the copy and the
-   header, under the frames. Its own ground is the band's, so no edge shows;
-   until it loads, the band is the band. Beside the copy, its fade starts
-   where the copy ends (15 % of 988 px in, at 50vw - 118 px): narrower than
-   1448 px it moves out past the page's edge. */
+   header, under the frames; its pegged edge rises clear above them. Its own
+   ground is the band's, so no edge shows; until it loads, the band is the
+   band. Beside the copy, its fade starts where the copy ends (15 % of 1024 px
+   in, at 50vw - 118 px): narrower than 1512 px it moves out past the page's
+   edge. */
 .landing-hero__ground::after {
   content: "";
   position: absolute;
-  inset: auto min(0px, 50vw - 724px) 0 auto;
-  block-size: min(100%, 1024px);
+  inset: auto min(0px, 50vw - 756px) 0 auto;
+  block-size: 1024px;
   aspect-ratio: 1;
   background-image: image-set(url(../images/weave-1024.avif) type("image/avif"), url(../images/weave-1024.webp) type("image/webp"));
   background-size: 100%;
-  mask-image: linear-gradient(90deg, transparent 15%, 40%, black 55%), linear-gradient(transparent 4%, black 22%);
+  mask-image: linear-gradient(90deg, transparent 15%, 40%, black 55%), linear-gradient(transparent 7%, black 19%);
   mask-composite: intersect;
 }
 .landing-hero__grid {
@@ -134,11 +135,11 @@
   .landing-thread { background: CanvasText; }
 }
 
-/* The two frames, over the thread. The desktop starts at the frames' start
-   and reaches past the column towards the page's edge (the hero clips it);
-   the phone stands in front of its lower start corner, over the sidebar's
+/* The two frames, over the thread, drawn at 80 % and set low in their
+   column, so the weave has the space above and beside them. The phone
+   stands in front of the desktop's lower start corner, over the sidebar's
    empty end, clear of the stats, the rows and the open menu. */
-.landing-frames { position: relative; block-size: 780px; margin: 0; }
+.landing-frames { position: relative; block-size: 780px; margin: 190px 0 0; zoom: 0.8; }
 .hero-frame {
   position: absolute;
   overflow: hidden;
@@ -155,10 +156,7 @@
   inset-block-start: 0;
   inset-inline-start: 0;
   z-index: 2;
-  /* To 24 px from the page's edge: the column's own width plus the gutter
-     beside the page's column (from the viewport, as a % here would be the
-     frames' own column), at most 780 px. */
-  inline-size: min(780px, 100% + max(32px, (100vw - 1176px) / 2) - 24px);
+  inline-size: 720px;
   block-size: 620px;
   border-radius: 14px;
 }
@@ -409,8 +407,9 @@
 
 /* The close: the install command again, beside the owner's loom
    (docs/design/hero-2026-11-23/), so the page ends on the material it began
-   with. A dark tile, as the code panels are; the loom's own ground is near
-   the tile's, and fades into it where they meet, so no square shows. */
+   with. A dark tile, as the code panels are; the picture's own ground,
+   greyer than the tile, fades into it all round the board, so no square
+   or patch shows. */
 .landing-end {
   display: grid;
   grid-template-columns: minmax(0, 1fr) min(480px, 45%);
@@ -424,14 +423,15 @@
 .landing-end > div { padding: 32px clamp(24px, 4vw, 56px); }
 .landing-end h2 { margin: 0 0 12px; font-size: clamp(34px, 3.6vw, 50px); line-height: 1.02; }
 .landing-end p { margin: 0 0 28px; font-size: 18px; color: var(--weft-color-text-muted); }
-.landing-end img { display: block; inline-size: 100%; block-size: auto; mask-image: linear-gradient(90deg, transparent, black 25%); }
+.landing-end img { display: block; inline-size: 100%; block-size: auto; mask-image: radial-gradient(closest-side, black 80%, transparent); }
 
 /* Under 1280 px the copy is above the frames, and the desktop keeps to the column's end. */
 @media (max-width: 1279.98px) {
   .landing-hero__grid { grid-template-columns: minmax(0, 1fr); gap: 80px; }
   .landing-hero__copy { max-inline-size: 640px; }
   .hero-frame--desk { inset-inline: auto 0; inline-size: min(780px, 100% - 80px); }
-  .landing-hero__ground::after { block-size: min(100%, 920px); }
+  .landing-frames { margin: 0; zoom: 1; }
+  .landing-hero__ground::after { inset-inline-end: 0; block-size: min(100%, 920px); }
 }
 @media (max-width: 1099.98px) {
   .landing-adapt { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "code code" "pointer touch" "demo demo"; }
@@ -468,5 +468,7 @@
   .landing-install .copy-command__text { padding: 13px 12px; font-size: 13px; }
   .landing-tile__stage { padding: 24px 16px; }
   .landing-end { grid-template-columns: minmax(0, 1fr); }
-  .landing-end img { mask-image: linear-gradient(transparent, black 25%); }
+  /* On a phone the weave shows in the first screen: a band of it between the copy and the phone. */
+  .landing-hero__grid { gap: 180px; }
+  .landing-hero__ground::after { block-size: 816px; mask-image: linear-gradient(transparent, black 14%); }
 }

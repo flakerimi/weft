@@ -306,7 +306,7 @@ func TestLandingAgents(t *testing.T) {
 	}
 }
 
-// The landing page's budgets, brotli, all bytes. First view at most 22 KB:
+// The landing page's budgets, brotli, all bytes. First view at most 23 KB:
 // what a browser fetches before an idle island starts, which is the HTML
 // with its CSS inlined, any stylesheet it links, the loader (boot-*.js) and
 // every module the page or its Early Hints preload (fonts are cached and
@@ -339,10 +339,13 @@ func TestLandingAgents(t *testing.T) {
 // from docs/design/hero-2026-11-23/) are counted like the fonts, apart from the
 // first view, each with a limit of its own: the ruling of 2026-11-23 holds
 // every served variant of a picture, AVIF or WebP at any width, to 60 KB.
-// The markup and CSS that show a picture are part of the first view.
+// The markup and CSS that show a picture are part of the first view. The
+// owner's ruling of 2026-11-24 moved the first view from 22 KB to 23 KB for
+// the closing section with the loom, below the fold, which adds markup and
+// CSS and no script.
 const (
 	landingImageLimit     = 60 * 1024
-	landingFirstViewLimit = 22 * 1024
+	landingFirstViewLimit = 23 * 1024
 	landingTotalLimit     = 82 * 1024
 	landingDemoLimit      = 16269 // 14,790 B plus 10 %
 	landingOnDemandLimit  = 16689 // 15,172 B plus 10 %
