@@ -11,7 +11,6 @@ Check here whether something you want is built yet: this is what Weft's design p
 | Command | What it will do | Phase |
 | --- | --- | --- |
 | `weft create <name>` | Write a new app from a template and install its dependencies | 4 |
-| `weft dev` | Run Vite and Go together, proxy `/api`, restart Go on change | 4 |
 | `weft gen` | Write TypeScript types and field schemas from tagged Go structs | 4b |
 | `weft add <block>` | Add a page or block, such as `weft add crud customers` | 5 |
 | `weft catalog [name]` | Print the component catalogue, or one component | 6 |

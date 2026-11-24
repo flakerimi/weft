@@ -37,24 +37,17 @@ if (values.port !== undefined) {
   if (!(port <= 65535)) fail(`--port "${values.port}" is not a port number; give one from 0 to 65535.`, 2)
 }
 
-const { devSite } = await import('../src/dev.ts')
+// Before anything starts, so a signal while it starts, such as a Ctrl-C to
+// `weft dev`, is a clean stop too.
 let server
-try {
-  server = await devSite({ root: values.root, port, host: values.host, api: values.api, theme: values.theme })
-} catch (e) {
-  const message = e instanceof Error ? e.message : String(e)
-  // The server's sentences already say who they are from.
-  process.stderr.write(`${message.startsWith('weft dev: ') ? message : `weft dev: ${message}`}\n`)
-  process.exit(1)
-}
-process.stdout.write(`weft: dev server at ${server.url}\n`)
-
 let stopping = false
 const stop = () => {
   if (stopping) return
   stopping = true
   // Stopped as asked: success, also for Vite's own SIGTERM handler, which exits once it has closed.
   process.exitCode = 0
+  // Nothing listens yet: there is nothing to close.
+  if (!server) process.exit(0)
   // However the close goes, the process ends soon.
   setTimeout(() => process.exit(0), 2000).unref()
   server.close().then(
@@ -64,3 +57,14 @@ const stop = () => {
 }
 process.on('SIGTERM', stop)
 process.on('SIGINT', stop)
+
+const { devSite } = await import('../src/dev.ts')
+try {
+  server = await devSite({ root: values.root, port, host: values.host, api: values.api, theme: values.theme })
+} catch (e) {
+  const message = e instanceof Error ? e.message : String(e)
+  // The server's sentences already say who they are from.
+  process.stderr.write(`${message.startsWith('weft dev: ') ? message : `weft dev: ${message}`}\n`)
+  process.exit(1)
+}
+process.stdout.write(`weft: dev server at ${server.url}\n`)

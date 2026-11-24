@@ -290,6 +290,20 @@ describe('weft-dev', { timeout: 30_000 }, () => {
       await expect(fetch(url)).rejects.toThrow()
       expect(dev.out().stderr).toBe('')
     }, 30_000)
+
+    // `weft dev` may stop it before it listens, as on a Ctrl-C while it starts.
+    it(`stops cleanly on ${signal} while it starts`, async () => {
+      const root = site('dev-site')
+      writeFileSync(
+        join(root, 'vite.config.mjs'),
+        "process.stderr.write('loading config\\n')\nawait new Promise((done) => setTimeout(done, 10_000))\nexport default {}\n",
+      )
+      const dev = run(['--root', root, '--port', '0'])
+      await vi.waitFor(() => expect(dev.out().stderr).toBe('loading config\n'), { timeout: 10_000, interval: 20 })
+      dev.child.kill(signal)
+      expect(await dev.exited).toEqual({ code: 0, signal: null })
+      expect(dev.out().stdout).toBe('')
+    }, 30_000)
   }
 
   it('prints the port sentence alone when the port is taken', async () => {

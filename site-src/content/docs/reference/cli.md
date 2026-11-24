@@ -16,6 +16,7 @@ Usage: weft <command>
 Commands:
   build      build the pages, then the app's binary (-o <file>)
   create     make an app (weft create <name>)
+  dev        run the app, restarting Go when a .go file changes (--port n)
   update     update weft to the latest release (--check, --version X)
   upgrade    move the app to this weft's Weft version (--no-install)
   version    print the Weft version
@@ -49,6 +50,18 @@ It says `weft X is up to date.` when there is nothing to do, and `Updated weft X
 | Variable | What it does |
 | --- | --- |
 | `WEFT_BASE` | Where the releases are. Default `https://weft.base.al` |
+
+### weft dev
+
+Runs an app while you work. It builds the Go code with the `dev` tag into `.weft/dev/app` and runs it on a free port, starts [weft-dev](#weft-dev) beside it with the app's theme, which renders each page when it is asked for and sends `/api` to the Go server, and prints `weft dev: http://localhost:<n>` once both answer. Run it anywhere inside the app; it checks the app first, as `weft build` does.
+
+| Flag | What it does |
+| --- | --- |
+| `--port n` | The page server's port. Default `5173`; `0` takes a free one |
+
+Every 300 ms it looks for a changed `.go` file outside `.weft/`, `.git/`, `node_modules/` and `web/`. When one changed it builds again and, if the build succeeds, replaces the running Go server. A failed build prints the compiler's output, and the last build keeps serving `/api` until you save the fix. A change under `web/` reloads the browser and needs no build; a change to `web/vite.config` needs `weft dev` to start again. The Go server's own output is passed through, such as the line the template's `main.go` logs with its port: open the page server's address, which sends `/api` on.
+
+Ctrl-C or SIGTERM stops both servers, with exit status 0. If either stops by itself, `weft dev` stops the other and says `weft dev: the Go server stopped; see its output above.` (or `the page server`), with exit status 1. A port in use is the sentence `weft dev: port <n> is in use; stop what is using it or pass --port.`, and nothing is started. Wrong usage exits with status 2.
 
 ### weft build
 

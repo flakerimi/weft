@@ -169,6 +169,6 @@ Fix the cause. Never weaken the check.
 
 These are planned but not built (see https://weft.base.al/docs/coming-next):
 
-- `weft create` and `weft dev`. Until `weft dev`, run the page dev server from `@weft/vite`, `weft-dev --root <site>`: it renders each page when it is asked for and reloads the browser when a file changes;
+- `weft create`. In an app, `weft dev` runs the page dev server beside the Go API; in a site of its own, run it from `@weft/vite`, `weft-dev --root <site>`. It renders each page when it is asked for and reloads the browser when a file changes;
 - an `<Image>` component, actions, environment values, a development overlay and `weft deploy`;
 - `weft add <block>`.
