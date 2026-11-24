@@ -48,16 +48,20 @@
    ground is the band's, so no edge shows; until it loads, the band is the
    band. Beside the copy, its fade starts where the copy ends (15 % of 1024 px
    in, at 50vw - 118 px): narrower than 1512 px it moves out past the page's
-   edge. */
+   edge. Its top stays clear of the header's links (the box starts 40 px
+   above the hero). Drawn only where a mask can fade it: without one it would
+   be a hard square over the copy, and the band is plain. */
+@supports (mask-image: none) or (-webkit-mask-image: none) {
+  .landing-hero__ground::after { content: ""; }
+}
 .landing-hero__ground::after {
-  content: "";
   position: absolute;
   inset: auto min(0px, 50vw - 756px) 0 auto;
   block-size: 1024px;
   aspect-ratio: 1;
   background-image: image-set(url(../images/weave-1024.avif) type("image/avif"), url(../images/weave-1024.webp) type("image/webp"));
   background-size: 100%;
-  mask-image: linear-gradient(90deg, transparent 15%, 40%, black 55%), linear-gradient(transparent 7%, black 19%);
+  mask-image: linear-gradient(90deg, transparent 15%, 40%, black 55%), linear-gradient(transparent 104px, black 220px);
   mask-composite: intersect;
 }
 .landing-hero__grid {
@@ -133,6 +137,8 @@
 }
 @media (forced-colors: active) {
   .landing-thread { background: CanvasText; }
+  /* System colours over a busy picture read badly: the band stays plain. */
+  .landing-hero__ground::after { content: none; }
 }
 
 /* The two frames, over the thread, drawn at 80 % and set low in their

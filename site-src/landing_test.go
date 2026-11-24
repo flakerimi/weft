@@ -695,6 +695,11 @@ func TestLandingWeave(t *testing.T) {
 	if len(widths) != 2 {
 		t.Errorf("the weave is offered at widths %v, want two", keys(widths))
 	}
+	// Drawn only where a mask can fade it into the band: elsewhere the band is plain.
+	if !regexp.MustCompile(`@supports \([^{]*mask-image:none[^{]*\)\{\.landing-hero__ground:after\{content:""\}\}`).MatchString(page) ||
+		regexp.MustCompile(`\.landing-hero__ground:after\{[^}]*content:""[^}]*background`).MatchString(page) {
+		t.Error("the weave is drawn without testing for a mask; a browser without one would show it as a hard square over the copy")
+	}
 	if strings.Contains(element(page, `class="landing-hero"`), "<img") {
 		t.Error("the hero has an <img>; the weave is decoration, drawn by the CSS")
 	}

@@ -147,7 +147,9 @@ func TestDarkSurfaces(t *testing.T) {
 // loads at the width the CSS gives each layout; at 1440 × 900 at least a
 // third of the hero's end half in the first screen is weave that shows (its
 // mask at half or more) and that no frame covers; and on a phone (844 px
-// tall) it is fully drawn within the first screen.
+// tall) it is fully drawn within the first screen. Side by side (1280 px and
+// up) the header's links lie clear of it too; and with forced colours it is
+// not drawn.
 func TestLandingWeaveLeavesTheCopyClear(t *testing.T) {
 	dist(t)
 	b := startBrowser(t)
@@ -170,6 +172,7 @@ func TestLandingWeaveLeavesTheCopyClear(t *testing.T) {
 			Mask           string
 			OnScreen, Room float64
 			Drawn          float64
+			OnNav          []string
 		}
 		b.eval(`(() => {
 			const ground = document.querySelector('.landing-hero__ground'), art = getComputedStyle(ground, '::after'), g = ground.getBoundingClientRect()
@@ -178,7 +181,7 @@ func TestLandingWeaveLeavesTheCopyClear(t *testing.T) {
 			// Each gradient of the mask: where it starts to show, where it is half drawn, where it is whole.
 			let x = [left, left, left], y = [top, top, top]
 			for (const m of art.maskImage.matchAll(/linear-gradient\((90deg, )?([^()]*(?:\([^()]*\)[^()]*)*)\)/g)) {
-				const stops = [...m[2].matchAll(/(?:^|[\s,])([\d.]+)%/g)].map((s) => parseFloat(s[1]) / 100)
+				const stops = [...m[2].matchAll(/(?:^|[\s,])([\d.]+)(%|px)/g)].map((s) => parseFloat(s[1]) / (s[2] == '%' ? 100 : m[1] ? w : h))
 				if (m[2].startsWith('rgba(0, 0, 0, 0),')) stops.unshift(0)
 				const [a, z] = [stops[0], stops.at(-1)], half = stops.length > 2 ? stops[1] : (a + z) / 2
 				if (m[1]) x = [a, half, z].map((p) => left + p * w); else y = [a, half, z].map((p) => top + p * h)
@@ -199,8 +202,11 @@ func TestLandingWeaveLeavesTheCopyClear(t *testing.T) {
 				all++
 				if (px >= x[1] && py >= y[1] && px < left + w && !frames.some((r) => px >= r.left && px < r.right && py >= r.top && py < r.bottom)) shown++
 			}
+			const onNav = [...document.querySelectorAll('.landing-top a:not(.site-skip)')].map((a) => [a, a.getBoundingClientRect()])
+				.filter(([, r]) => r.width > 0 && r.right > x[0] + 1 && r.bottom > y[0] + 1).map(([a]) => (a.textContent.trim() || a.getAttribute('aria-label') || a.href).slice(0, 30))
 			const image = performance.getEntriesByType('resource').map((e) => e.name).find((n) => /weave-\d+-/.test(n)) || ''
 			return {
+				onNav,
 				image: image.replace(/^.*\/(weave-\d+)-.*$/, '$1'), onWeave,
 				mask: art.maskImage + ' ' + [x[0], y[0], left, top, w, h].map(Math.round),
 				onScreen: (Math.min(innerWidth, left + w) - Math.max(0, left)) / Math.min(w, innerWidth),
@@ -209,6 +215,9 @@ func TestLandingWeaveLeavesTheCopyClear(t *testing.T) {
 		})()`, &got)
 		if len(got.OnWeave) > 0 {
 			t.Errorf("%s: the copy lies on the weave (%s): %s", at, got.Mask, strings.Join(got.OnWeave, " | "))
+		}
+		if width >= 1280 && len(got.OnNav) > 0 {
+			t.Errorf("%s: the header's links lie on the weave (%s): %s", at, got.Mask, strings.Join(got.OnNav, " | "))
 		}
 		if got.OnScreen < 0.8 {
 			t.Errorf("%s: only %.0f %% of the weave's width is on the screen (%s)", at, got.OnScreen*100, got.Mask)
@@ -226,6 +235,23 @@ func TestLandingWeaveLeavesTheCopyClear(t *testing.T) {
 		if got.Image != want {
 			t.Errorf("%s: the page loaded %q, want %s at 1×", at, got.Image, want)
 		}
+	}
+}
+
+// With forced colours the band is plain: system colours over a busy picture read badly.
+func TestLandingWeaveNotInForcedColours(t *testing.T) {
+	dist(t)
+	b := startBrowser(t)
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
+	defer srv.Close()
+	b.call(b.session, "Emulation.setEmulatedMedia", map[string]any{"features": []map[string]string{{"name": "forced-colors", "value": "active"}}})
+	b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 1440, "height": 900, "deviceScaleFactor": 1, "mobile": false})
+	b.open(srv.URL + "/")
+	b.doing, b.deadline = "the weave in forced colours", time.Now().Add(pageTimeout)
+	var content string
+	b.eval(`getComputedStyle(document.querySelector('.landing-hero__ground'), '::after').content`, &content)
+	if content != "none" {
+		t.Errorf("with forced colours the weave is drawn (content %s); the band stays plain", content)
 	}
 }
 
