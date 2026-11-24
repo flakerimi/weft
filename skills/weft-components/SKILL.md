@@ -1,6 +1,6 @@
 ---
 name: weft-components
-description: Use before writing or changing the markup of a Weft page, island or app - choosing which @weft/ui component fits, composing layout from Page, Section, Stack and Grid, reading the component catalogue (catalog/components.json, or /catalog.json and one entry's JSON on weft.base.al), and keeping to the adaptive rules for touch, pointer, surface and width.
+description: Use before writing or changing the markup of a Weft page, island or app - choosing which @weft/ui component fits, composing layout from Page, Section, Stack and Grid, looking components up with weft catalog (or one entry's JSON on weft.base.al), and keeping to the adaptive rules for touch, pointer, surface and width.
 ---
 
 # Choosing and composing Weft components
@@ -9,21 +9,18 @@ Weft has 76 Vapor components in `@weft/ui`. Each one adapts to touch or pointer,
 
 ## Read the catalogue first
 
-The catalogue is in three places:
-
-- `catalog/components.json` in the repository. It is generated: never edit it;
-- `https://weft.base.al/catalog.json`, or one entry at `https://weft.base.al/components/<slug>.json`, where `DatePicker` is `date-picker`;
-- a page for people at `https://weft.base.al/components/<slug>`.
-
-An entry has `name`, `group`, `purpose`, `use`, `avoid`, `adapts` (`input`, `surface`, `width`), `props`, `emits`, `slots`, `notes` (keyboard and ARIA) and `examples` with their `source`. List them all, then look one up:
+Never read the whole catalogue: it is hundreds of kilobytes of JSON. Ask `weft` for the pieces you need:
 
 ```sh
-jq -r '.components[] | "\(.name) (\(.group)): \(.purpose)"' catalog/components.json
-jq '.components[] | select(.name == "DatePicker") | {use, avoid, adapts, props: [.props[].name]}' catalog/components.json
-curl -fsSL https://weft.base.al/components/date-picker.json
+weft catalog                        # every component, one line each, by group
+weft catalog DatePicker Select      # each one: use, avoid, adapts, props, events, slots, notes, an example
+weft catalog DatePicker --examples  # with every example
+weft catalog Button --json          # the entry as JSON
 ```
 
-The examples are files in `packages/ui/examples/<Name>/`, and the prose is `packages/ui/src/<group>/<Name>.docs.md`. Start from an example rather than inventing a usage.
+Names match without regard to case or hyphens (`date-picker`), and an unknown name gets the closest ones. In an app it reads `.weft/catalog/components.json`, the app's version; elsewhere, the catalogue `weft` carries. Start from an example rather than inventing a usage.
+
+Without `weft`, fetch one entry, such as `https://weft.base.al/components/date-picker.json` for `DatePicker`; `https://weft.base.al/catalog.json` has every one, and is as large as the file. In the Weft repository the catalogue is `catalog/components.json`, generated: never edit it. The examples there are files in `packages/ui/examples/<Name>/`, and the prose is `packages/ui/src/<group>/<Name>.docs.md`.
 
 ## Choose by `use` and `avoid`
 
@@ -110,5 +107,5 @@ On a page the build renders, a form works only inside an `Island` (see `weft-sit
 Planned but not built, so do not look for them (phases at https://weft.base.al/docs/coming-next):
 
 - `DataTable`, `EntityDialog`, the charts, the landing blocks (`Hero`, `FeatureGrid`, `Pricing`, `Testimonials`, `Faq`, `Cta`) and `Image`. Use `Table`, `Dialog` with a `Form`, `StatCard`, and a `Grid` of `Card`s today;
-- `weft catalog [name]` and `weft mcp`, which will serve the catalogue; read the JSON yourself;
+- `weft mcp`, which will serve the catalogue to agents over MCP; run `weft catalog` instead;
 - `weft check` and `@weft/eslint-plugin`, which will flag raw HTML controls; check your markup against the rules above.

@@ -8,6 +8,7 @@
 weft dev        # run the app, rebuilding pages and Go as you save
 weft build      # build the pages, then the binary
 weft upgrade    # move the app to the Weft version of the weft you run
+weft catalog    # the components; weft catalog <Name> for one
 go test -tags dev ./...   # the Go tests
 pnpm typecheck  # check the Vue files
 ```
@@ -29,6 +30,6 @@ Go commands need `-tags dev` until the first `weft build`: without it `dist.go` 
 - Weft components (`Page`, `Card`, `Button` and the rest) need no import in a `.vue` file. `useHead` is a function, so import it from `@weft/ui`.
 - Styles use only `--weft-*` tokens, each with a fallback.
 - Components adapt from inside; do not write a mobile variant of a component.
-- The components, their props and examples are in `.weft/catalog/components.json`.
+- Before you write markup, run `weft catalog` for the list of components, then `weft catalog <Name>` for each one you use: its props, events, slots and an example. Never read `.weft/catalog/components.json` whole: it is too large.
 - The Go code uses the standard library and `github.com/flakerimi/weft`.
 - More for agents: https://weft.base.al/llms.txt

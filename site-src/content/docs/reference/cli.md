@@ -15,6 +15,7 @@ Usage: weft <command>
 
 Commands:
   build      build the pages, then the app's binary (-o <file>)
+  catalog    list the components, or print one (weft catalog <Name>, --json)
   create     make an app (weft create <name>)
   dev        run the app, restarting Go when a .go file changes (--port n)
   update     update weft to the latest release (--check, --version X)
@@ -105,6 +106,74 @@ Moves an app to the Weft version of the `weft` you run: it rewrites `weft.versio
 | Flag | What it does |
 | --- | --- |
 | `--no-install` | Skip `pnpm install` |
+
+### weft catalog
+
+Prints the component catalogue in pieces, so an agent reads only the components it uses. Inside an app it reads `.weft/catalog/components.json`; outside one, or before `.weft/` is unpacked, the catalogue `weft` carries.
+
+```text
+weft catalog [<Name>...] [--examples] [--json]
+```
+
+With no name it lists every component under its group, its name and its purpose:
+
+```text
+76 components. Run weft catalog <Name> for one.
+
+disclosure
+  Accordion       Stacked sections whose content opens under its header.
+  Collapsible     Content shown and hidden by one trigger.
+```
+
+With names it prints each component as Markdown: its purpose, `Use:` and `Avoid:`, `Adapts:` on each axis, `Props:` as `name: type = default`, with `required` where it is, then what it does, `Emits:` with each payload, `Slots:` with each slot's props, `Notes:`, and its first example. A section it has nothing for is left out. Names match without regard to case or hyphens, so `date-picker` finds `DatePicker`:
+
+````text
+# Kbd
+
+A key on the keyboard, for showing shortcuts.
+
+Use: In help text, menus and tooltips, one Kbd per key of a shortcut.
+Avoid: For code or a value to copy, use a code element.
+
+Adapts:
+- input: Nothing changes; show shortcuts only where a keyboard is likely, which the page decides.
+- surface: Nothing changes; text follows the surface's type scale.
+- width: Nothing changes.
+
+Props:
+- value: string — The key: a character (`K`) or a name with a symbol (`command`, `shift`, `option`, `enter`, `backspace`, `tab`, `arrowup`…). The default slot replaces it.
+- size: 'sm' | 'md' | 'lg' = 'md' — `sm`, `md` or `lg`.
+
+Slots: default
+
+Notes:
+`value` is a character (`K`) or a key name. Names with a symbol draw the
+symbol and say the name to assistive technology, which reads symbols poorly:
+`command` (⌘), `shift` (⇧), `option` (⌥), `enter` (↵), `backspace` (⌫),
+`tab` (⇥) and the arrows `arrowup`, `arrowdown`, `arrowleft`, `arrowright`.
+Any other value is drawn as given. It draws what it is told and never guesses
+the reader's operating system, so the server and browser agree. The default
+slot replaces the value.
+
+Example: Basic
+
+```vue
+<script setup vapor lang="ts">
+import { Kbd } from '@weft/ui'
+</script>
+
+<template>
+  <p>Search with <Kbd value="command" /> <Kbd value="K" />, then press <Kbd value="enter" /> to open.</p>
+</template>
+```
+````
+
+| Flag | What it does |
+| --- | --- |
+| `--examples` | Every example of each component named, not only the first |
+| `--json` | The entries as the catalogue has them, as a JSON array: every one, or the ones named |
+
+An unknown name prints nothing for the others and exits with status 1: `weft catalog: no component named "date"; did you mean DatePicker, DateRangePicker?`, naming up to three, or `…; run weft catalog to list them.` when none is close. Wrong usage exits with status 2.
 
 ## The installer
 

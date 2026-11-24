@@ -12,12 +12,11 @@ Check here whether something you want is built yet: this is what Weft's design p
 | --- | --- | --- |
 | `weft gen` | Write TypeScript types and field schemas from tagged Go structs | 4b |
 | `weft add <block>` | Add a page or block, such as `weft add crud customers` | 5 |
-| `weft catalog [name]` | Print the component catalogue, or one component | 6 |
 | `weft check` | Run Weft's lint rules and type checks | 6 |
 | `weft mcp` | Serve the catalogue and `check` to agents over MCP | 6 |
 | `weft deploy` | Publish an app | 6b |
 
-The commands that make, run, build and upgrade an app work today: see the [CLI reference](reference/cli.md). The catalogue exists today too, as `catalog/components.json` in the repository, and in each app's `.weft/catalog/`.
+The commands that make, run, build and upgrade an app, and `weft catalog`, which prints the component catalogue, work today: see the [CLI reference](reference/cli.md).
 
 ## App routes
 
