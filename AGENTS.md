@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This file is for agents working on Weft itself. To build with Weft, read the skills in `skills/` instead, or https://weft.base.al/llms.txt.
+This file is for agents working on Weft itself. To build with Weft, start from https://weft.base.al/index.md, then https://weft.base.al/llms.txt, or read the skills in `skills/`.
 
 Weft is one UI system for Go and Vue apps. It has Vapor components, a page build, and a Go package that serves the build from one binary. It is pre-alpha, and nothing is published to npm.
 

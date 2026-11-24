@@ -361,11 +361,18 @@ func TestIndexMd(t *testing.T) {
 		if !strings.Contains(text, "It describes Weft "+version+".") {
 			t.Errorf("/index.md does not name Weft %s", version)
 		}
-	} else if v := regexp.MustCompile(`\d+\.\d+\.\d+`).FindString(text); v != "" || strings.Contains(text, "It describes") {
+	} else if v := regexp.MustCompile(`(?:^|[^\d.])\d+\.\d+\.\d+(?:$|[^\d.]|\.(?:$|\D))`).FindString(text); v != "" || strings.Contains(text, "It describes") {
 		t.Errorf("/index.md, built without WEFT_SITE_VERSION, names a version (%q)", v)
 	}
 	if !strings.Contains(text, "`weft: unknown command \"catalog\"`") {
 		t.Error("/index.md does not say what to do when weft has no catalog command")
+	}
+	// weft dev reads the theme once, and the page server may listen on ::1
+	// only, where 127.0.0.1 is refused.
+	for _, want := range []string{"then start `weft dev` again", "use `localhost`, not `127.0.0.1`"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("/index.md does not say %q", want)
+		}
 	}
 	for _, l := range anyLink.FindAllStringSubmatch(text, -1) {
 		link := l[1] + l[2]

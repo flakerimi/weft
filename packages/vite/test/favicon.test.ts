@@ -84,4 +84,10 @@ describe('iconTags', () => {
     symlinkSync(join(root, 'public/real.svg'), join(root, 'public/favicon.svg'))
     expect(iconTags(root)).toEqual([SVG])
   })
+
+  it('takes an entry it cannot stat, such as a symlink to itself, as no file', () => {
+    const root = siteWith(['favicon.ico'])
+    symlinkSync('favicon.svg', join(root, 'public/favicon.svg'))
+    expect(iconTags(root)).toEqual([ICO])
+  })
 })

@@ -23,7 +23,7 @@ Commands:
   version    print the Weft version
 ```
 
-`weft`, `weft help`, `weft -h` and `weft --help` print this. An unknown command prints `weft: unknown command "x". Run "weft help".` and exits with status 2.
+`weft`, `weft help`, `weft -h` and `weft --help` print this. An unknown command prints `weft: unknown command "x". Run "weft help".` and exits with status 2. `-h` or `--help` after a command prints that command's usage, such as `Usage is weft dev [--port n].`, with exit status 0.
 
 ### weft version
 
@@ -72,7 +72,7 @@ Before it writes anything it checks that `go`, `node` 22.18 or later and `pnpm` 
 
 ### weft dev
 
-Runs an app while you work. It builds the Go code with the `dev` tag into `.weft/dev/app` and runs it on a free port, starts [weft-dev](#weft-dev) beside it with the app's theme, which renders each page when it is asked for and sends `/api` to the Go server, and prints `weft dev: http://localhost:<n>` once both answer. Run it anywhere inside the app; it checks the app first, as `weft build` does.
+Runs an app while you work. It builds the Go code with the `dev` tag into `.weft/dev/app` and runs it on a free port, starts [weft-dev](#weft-dev) beside it with the app's theme, which renders each page when it is asked for and sends `/api` to the Go server, and prints `weft dev: http://localhost:<n>` once both answer. Open that address with `localhost`, not `127.0.0.1`: the page server may listen on `::1` only. Run it anywhere inside the app; it checks the app first, as `weft build` does. It reads the theme once, as it starts: after you change `"theme"` in `package.json`, stop `weft dev`, then start `weft dev` again.
 
 | Flag | What it does |
 | --- | --- |
@@ -80,13 +80,13 @@ Runs an app while you work. It builds the Go code with the `dev` tag into `.weft
 
 Every 300 ms it looks for a changed `.go` file outside `.weft/`, `.git/`, `node_modules/` and `web/`. When one changed it builds again and, if the build succeeds, replaces the running Go server. A failed build prints the compiler's output, and the last build keeps serving `/api` until you save the fix. A rebuilt server that stops by itself, such as one that panics as it starts, prints `weft dev: the Go server stopped after the restart; fix it and save again.`, and the next save builds and starts it again. A folder it may not read is skipped, and named once. A change under `web/` reloads the browser and needs no build; a change to `web/vite.config` needs `weft dev` to start again. The Go server's own output is passed through. Built with the `dev` tag, the template's server listens on `127.0.0.1` only and prints no address, so the one address shown is the page server's, which sends `/api` on.
 
-The Go server must listen on the port in the `PORT` variable. If it does not answer there within 30 s of starting, `weft dev` stops both servers and says `weft dev: the Go server did not answer within 30 s; make main.go listen on the port in the PORT variable.`, with exit status 1.
+The Go server must listen on the port in the `PORT` variable. If it does not answer there within 30 s of starting, `weft dev` stops both servers and says `weft dev: the Go server did not answer within 30 s; make main.go listen on the port in the PORT variable.`, with exit status 1. The page server has the same 30 s, after which it says `weft dev: the page server did not answer within 30 s; see its output above.`
 
-Ctrl-C, SIGTERM, closing the terminal (SIGHUP) or `Ctrl-\` (SIGQUIT) stops both servers, with exit status 0. If the page server, or the Go server it started with, stops by itself, `weft dev` stops the other and says `weft dev: the page server stopped; see its output above.` (or `the Go server`), with exit status 1. A port in use is the sentence `weft dev: port <n> is in use; stop what is using it or pass --port.`, checked before anything else, so nothing is installed or started. Wrong usage exits with status 2.
+Ctrl-C, SIGTERM, closing the terminal (SIGHUP) or `Ctrl-\` (SIGQUIT) stops both servers, with exit status 0. Killed so that it cannot stop them, as by SIGKILL, it leaves neither running: each server's standard input is a pipe `weft dev` holds open, and each exits when it ends. If the page server, or the Go server it started with, stops by itself, `weft dev` stops the other and says `weft dev: the page server stopped; see its output above.` (or `the Go server`), with exit status 1. A port in use is the sentence `weft dev: port <n> is in use; stop what is using it or pass --port.`, checked before anything else, so nothing is installed or started. Wrong usage exits with status 2.
 
 ### weft build
 
-Builds an app: runs `weft-build-pages --root web --out web/dist` with the app's theme, then `go build`, which embeds `web/dist`. Run it anywhere inside the app; it finds the nearest `package.json` with a `"weft"` object.
+Builds an app: runs `weft-build-pages --root web --out web/dist` with the app's theme, then `go build`, which embeds `web/dist`. Run it anywhere inside the app; it finds the nearest `package.json` with a `"weft"` object. A `package.json` on the way that is not valid JSON stops the search: the command names it and says to fix it.
 
 | Flag | What it does |
 | --- | --- |
@@ -95,7 +95,8 @@ Builds an app: runs `weft-build-pages --root web --out web/dist` with the app's 
 It prints the build's output, then `Built <file>`. First it checks the app:
 
 - An app recorded at another Weft version is refused: `weft build: this app is on Weft <a> and this weft is <b>; run weft upgrade to move the app, or weft update --version <a> to match it.` For an app on a newer Weft than this `weft`, which `weft upgrade` would refuse, the sentence ends `run weft update --version <a> to match it.` alone. An app whose `"weft"` object has no `version` is refused with a sentence that says what to add.
-- When `.weft/` is missing or holds another version, as in a fresh clone, it unpacks the packages into it and runs `pnpm install`. It runs `pnpm install` too when `node_modules/` is missing.
+- When `.weft/` is missing or holds another version, as in a fresh clone, it unpacks the packages into it and runs `pnpm install`. It runs `pnpm install` too when `node_modules/` is missing. A `.weft/` without the `VERSION` file `weft` writes is not its own and is left alone, with a sentence saying to move it out of the app folder. Nothing beside `.weft/` is touched.
+- After an install, or when `web/.weft-types/components.d.ts` is missing, it writes that file with [weft-types](#weft-types), so `pnpm typecheck` checks the components' props before any build.
 
 Outside an app it says `weft build: no Weft app here; run it in a folder made by weft create.` Any failure is one sentence on standard error, with exit status 1; wrong usage exits with status 2.
 
@@ -187,7 +188,7 @@ $ weft catalog --find date
   Timeline        Events in order, each a dot on a line with its date, title and description, the ones up to now marked done.
 ```
 
-When nothing matches it says `weft catalog: nothing matches "<words>"; run weft catalog to list them.`, with exit status 1.
+When nothing matches it says `weft catalog: nothing matches "<words>"; run weft catalog to list them.`, with exit status 1. `--find` with no words, or only blank ones, is wrong usage.
 
 An unknown name prints nothing for the others and exits with status 1, naming up to three components: the names it starts or is part of (`weft catalog: no component named "date"; did you mean DatePicker, DateRangePicker?`); when there are none, the components whose purpose, use or notes have it as a word, then names within a few edits (`weft catalog: no component named "modal"; did you mean Dialog, OverlayPanel, Sheet?`); or `…; run weft catalog to list them.` when none is close. It never prints another component in place of the one named. Wrong usage exits with status 2.
 
@@ -226,7 +227,7 @@ It prints `weft: built N pages into <dist>`. It needs Node 22.18 or later, which
 The page dev server. It comes with `@weft/vite`, beside `weft-build-pages`.
 
 ```text
-weft-dev --root <site> [--port n] [--host h] [--api <url>] [--theme neutral|lisa|weft]
+weft-dev --root <site> [--port n] [--host h] [--api <url>] [--theme neutral|lisa|weft] [--exit-with-parent]
 ```
 
 | Flag | What it does |
@@ -236,7 +237,18 @@ weft-dev --root <site> [--port n] [--host h] [--api <url>] [--theme neutral|lisa
 | `--host` | The host to listen on. Default `localhost`. Any other host exposes Vite's own file serving, which includes the app's folder, to the network. |
 | `--api` | Where `/api` and every path under it go, such as `http://127.0.0.1:8081`. Without it they are pages like any other path. |
 | `--theme` | `neutral` (the default), `lisa` or `weft`, as for the build. |
+| `--exit-with-parent` | Stop, with exit status 0, when standard input ends. `weft dev` passes it with a pipe it holds open. Without it standard input is not read. |
 
 It prints `weft: dev server at <url>` once it listens. Each page is rendered when it is asked for, as the build renders it, so a saved edit shows on the next request. A dynamic page's `getPaths()` is called on each request. An unknown path gets `pages/404.vue` with status 404, or a plain 404 without one. A page that fails to render gets a 500 page naming its file and the error; the server keeps running, and the page reloads when you save the fix. A change to any file under `--root` reloads the browser; no module is replaced in place. Islands hydrate from Vite's modules, not from a client build. A file a page writes with `useFile` is served once that page has rendered.
 
 It stops on SIGTERM or Ctrl-C. A port in use is the sentence `weft dev: port <n> is in use; stop what is using it or pass --port.`, with exit status 1; a flag it does not know exits with status 2.
+
+## weft-types
+
+Writes a site's `.weft-types/components.d.ts`, which tells TypeScript what each auto-imported component is, as a build does, without building. It comes with `@weft/vite`; `weft create`, `weft build`, `weft dev` and `weft upgrade` run it in an app.
+
+```text
+weft-types --root <site>
+```
+
+It prints nothing once the file is written. When `@weft/ui` cannot be found from the site, it says so with exit status 1.

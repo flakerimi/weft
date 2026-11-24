@@ -71,9 +71,8 @@ func catalogCmd(args []string, stdout, stderr io.Writer) int {
 	find := fl.Bool("find", false, "the components whose name or text has every word")
 	var names []string
 	for {
-		if err := fl.Parse(args); err != nil {
-			fmt.Fprintf(stderr, "weft catalog: %v; %s\n", err, usage)
-			return 2
+		if code, done := flagsFailed(fl.Parse(args), "catalog", usage, stdout, stderr); done {
+			return code
 		}
 		if fl.NArg() == 0 {
 			break
@@ -85,7 +84,8 @@ func catalogCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "weft catalog: --examples needs a component name; %s\n", usage)
 		return 2
 	}
-	if *find && (len(names) == 0 || *examples) {
+	words := strings.Fields(strings.Join(names, " "))
+	if *find && (len(words) == 0 || *examples) {
 		fmt.Fprintf(stderr, "weft catalog: --find needs words and takes no --examples; %s\n", usage)
 		return 2
 	}
@@ -95,7 +95,6 @@ func catalogCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	picked := all
 	if *find {
-		words := strings.Fields(strings.Join(names, " "))
 		picked = nil
 		for _, c := range all {
 			if hasWords(c.catalogEntry, words) {

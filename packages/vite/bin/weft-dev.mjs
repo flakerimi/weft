@@ -2,11 +2,14 @@
 // The page dev server, which `weft dev` starts beside the app's Go API:
 // `weft-dev --root web --port 5173 --api http://127.0.0.1:8081`. It prints
 // `weft: dev server at <url>` once it listens, and stops on SIGTERM or SIGINT.
+// With --exit-with-parent it also stops when its standard input ends: `weft
+// dev` gives it a pipe it holds open for its whole life, which ends when it
+// dies, however it dies.
 // It imports the package's TypeScript source, so Node must strip types,
 // which it does by default from Node 22.18.
 import { parseArgs } from 'node:util'
 
-const usage = 'usage: weft-dev --root <site> [--port n] [--host h] [--api <url>] [--theme neutral|lisa|weft]'
+const usage = 'usage: weft-dev --root <site> [--port n] [--host h] [--api <url>] [--theme neutral|lisa|weft] [--exit-with-parent]'
 
 function fail(message, code = 1) {
   process.stderr.write(`weft dev: ${message}\n${code === 2 ? usage + '\n' : ''}`)
@@ -24,6 +27,7 @@ try {
       host: { type: 'string' },
       api: { type: 'string' },
       theme: { type: 'string' },
+      'exit-with-parent': { type: 'boolean' },
     },
   }))
 } catch (e) {
@@ -57,6 +61,13 @@ const stop = () => {
 }
 process.on('SIGTERM', stop)
 process.on('SIGINT', stop)
+// Reading standard input is what lets its end be seen; without the flag
+// nothing reads it, so neither does Vite's own handler of its end fire.
+if (values['exit-with-parent']) {
+  process.stdin.on('end', stop)
+  process.stdin.on('error', stop)
+  process.stdin.resume()
+}
 
 const { devSite } = await import('../src/dev.ts')
 try {

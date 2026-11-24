@@ -542,9 +542,10 @@ func TestCatalogFind(t *testing.T) {
 	if code != 1 || out != "" || errs != `weft catalog: nothing matches "zzzz"; run weft catalog to list them.`+"\n" {
 		t.Errorf("--find zzzz: exit %d, stdout %q, stderr %q", code, out, errs)
 	}
-	for _, args := range [][]string{{"--find"}, {"--find", "date", "--examples"}} {
-		if code, _, errs := catalog(t, args...); code != 2 || !strings.Contains(errs, "usage is weft catalog") {
-			t.Errorf("%v: exit %d, stderr %q", args, code, errs)
+	// No words, or only empty and blank ones, is wrong usage, not a match for all.
+	for _, args := range [][]string{{"--find"}, {"--find", "date", "--examples"}, {"--find", ""}, {"--find", "  "}, {"--find", "", " \t"}} {
+		if code, out, errs := catalog(t, args...); code != 2 || out != "" || !strings.HasPrefix(errs, "weft catalog: --find needs words") || !strings.Contains(errs, "usage is weft catalog") {
+			t.Errorf("%q: exit %d, stdout %.40q, stderr %q", args, code, out, errs)
 		}
 	}
 }

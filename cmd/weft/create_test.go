@@ -2,11 +2,14 @@ package main
 
 import (
 	"bytes"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // stagedBundle is a bundle scripts/bundle.sh staged once for this test binary;
@@ -110,6 +113,13 @@ func assertCreated(t *testing.T, dir string) {
 	for _, p := range []string{"web/pages/index.vue", "web/components/Hello.vue", "api/api.go", "dist_dev.go", "CLAUDE.md", "README.md", "AGENTS.md"} {
 		if !exists(t, filepath.Join(dir, p)) {
 			t.Errorf("%s is missing", p)
+		}
+	}
+	// An agent starts from /index.md, as the app's AGENTS.md says too.
+	for _, f := range []string{"README.md", "AGENTS.md"} {
+		text := read(f)
+		if i, j := strings.Index(text, "https://weft.base.al/index.md"), strings.Index(text, "https://weft.base.al/llms.txt"); i < 0 || j < 0 || i > j {
+			t.Errorf("%s does not name /index.md before /llms.txt: %q", f, text)
 		}
 	}
 	if strings.Contains(read("AGENTS.md")+read("README.md")+read("main.go"), "[[") {
@@ -287,6 +297,53 @@ func TestCreatedAppGoTests(t *testing.T) {
 	}
 }
 
+// The server built with the dev tag exits when its standard input ends only
+// under WEFT_DEV_PARENT=1, as weft dev runs it; run by hand, here with
+// /dev/null as its standard input, it keeps serving.
+func TestDevServerReadsStdinOnlyUnderWeftDev(t *testing.T) {
+	inTempDir(t, "work")
+	if code, _, errs := create(t, "myapp", "--no-install"); code != 0 {
+		t.Fatalf("exit %d: %s", code, errs)
+	}
+	bin := filepath.Join(t.TempDir(), "app")
+	build := exec.Command("go", "build", "-tags", "dev", "-o", bin, ".")
+	build.Dir = "myapp"
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v\n%s", err, out)
+	}
+	for _, parent := range []bool{false, true} {
+		port := strconv.Itoa(freeTestPort(t))
+		cmd := exec.Command(bin)
+		cmd.Env = append(os.Environ(), "PORT="+port)
+		if parent {
+			cmd.Env = append(cmd.Env, "WEFT_DEV_PARENT=1")
+		}
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		exited := make(chan error, 1)
+		go func() { exited <- cmd.Wait() }()
+		select {
+		case err := <-exited:
+			if !parent {
+				t.Errorf("without WEFT_DEV_PARENT the server exited (%v) as its standard input ended", err)
+			} else if err != nil {
+				t.Errorf("under WEFT_DEV_PARENT=1 the server exited with %v, want 0", err)
+			}
+		case <-time.After(3 * time.Second):
+			if parent {
+				t.Error("under WEFT_DEV_PARENT=1 the server did not exit within 3 s of its standard input ending")
+			} else if c, err := net.DialTimeout("tcp", "127.0.0.1:"+port, time.Second); err != nil {
+				t.Errorf("without WEFT_DEV_PARENT the server does not answer: %v", err)
+			} else {
+				c.Close()
+			}
+			cmd.Process.Kill()
+			<-exited
+		}
+	}
+}
+
 func TestWriteAppVersionKeepsFile(t *testing.T) {
 	dir := t.TempDir()
 	before := "{\n  \"name\": \"a\",\n  \"dependencies\": {\"weft\": \"1\"},\n\t\"weft\" : { \"theme\":\"lisa\",  \"version\" : \"0.0.5\" },\n  \"z\": 1\n}\n"
@@ -329,6 +386,52 @@ func TestFindAppNeedsAnObject(t *testing.T) {
 			t.Errorf(`"weft": %s: findApp = %q, %v; want the folder above`, weftValue, got, err)
 		}
 	}
+}
+
+// A package.json that does not parse, as after a trailing comma, is the app
+// to report: findApp returns the nearest such folder, so readApp says what
+// to fix, rather than walking past it to "no Weft app here". One that parses
+// with no "weft" object is still passed over.
+func TestFindAppStopsAtBadJSON(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "app", "web")
+	os.MkdirAll(sub, 0o755)
+	os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"weft":{"version":"1"}}`), 0o644)
+	os.WriteFile(filepath.Join(root, "app", "package.json"), []byte(`{"weft":{"version":"1",}}`), 0o644)
+	os.WriteFile(filepath.Join(sub, "package.json"), []byte(`{"name":"x"}`), 0o644)
+	if got, err := findApp(sub); err != nil || got != filepath.Join(root, "app") {
+		t.Errorf("findApp = %q, %v; want the folder whose package.json does not parse", got, err)
+	}
+}
+
+// Each command that runs an app says the file does not parse, in its own
+// words, and weft catalog still answers there.
+func TestCommandsReportBadJSON(t *testing.T) {
+	outsideApp(t)
+	file, _ := filepath.Abs("package.json")
+	os.WriteFile(file, []byte("{\n  \"name\": \"myapp\",\n  \"weft\": {\"version\": \"0.0.0-dev\", \"theme\": \"lisa\",}\n}\n"), 0o644)
+	port := strconv.Itoa(freeTestPort(t))
+	for _, args := range [][]string{{"build"}, {"dev", "--port", port}, {"upgrade"}} {
+		code, out, errs := runCmd(args...)
+		prefix := "weft " + args[0] + ": " + file + " is not valid JSON ("
+		if code != 1 || out != "" || !strings.HasPrefix(errs, prefix) || !strings.HasSuffix(errs, "); fix it and run the command again.\n") {
+			t.Errorf("%v: exit %d, stdout %q, stderr %q, want %q…", args, code, out, errs, prefix)
+		}
+	}
+	if code, out, errs := runCmd("catalog", "Button"); code != 0 || !strings.HasPrefix(out, "# Button\n") {
+		t.Errorf("catalog: exit %d, stdout %.40q, stderr %q", code, out, errs)
+	}
+}
+
+// freeTestPort is a port nothing listens on at 127.0.0.1.
+func freeTestPort(t *testing.T) int {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port
 }
 
 func TestWriteAppVersionRenames(t *testing.T) {

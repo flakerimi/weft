@@ -5,7 +5,8 @@
   "type": "module",
   "bin": {
     "weft-build-pages": "./bin/weft-build-pages.mjs",
-    "weft-dev": "./bin/weft-dev.mjs"
+    "weft-dev": "./bin/weft-dev.mjs",
+    "weft-types": "./bin/weft-types.mjs"
   },
   "exports": {
     ".": "./src/index.ts",

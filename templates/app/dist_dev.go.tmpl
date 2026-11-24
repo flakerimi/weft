@@ -2,9 +2,26 @@
 
 package main
 
-import "net/http"
+import (
+	"io"
+	"net/http"
+	"os"
+)
 
 // Under the dev tag dist stays nil, so the program compiles before any build.
+
+// weft dev sets WEFT_DEV_PARENT=1 and gives the server a standard input it
+// holds open for its whole life: when that ends, weft dev is gone, however it
+// went, so the server exits too rather than keep the port. Run by hand, as
+// with go run -tags dev ., the variable is not set and nothing reads it.
+func init() {
+	if os.Getenv("WEFT_DEV_PARENT") == "1" {
+		go func() {
+			io.Copy(io.Discard, os.Stdin)
+			os.Exit(0)
+		}()
+	}
+}
 
 // listen serves h at port on 127.0.0.1 only, so the API weft dev runs cannot
 // be reached from the network, and prints no URL: weft dev prints the one to

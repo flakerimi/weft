@@ -17,9 +17,8 @@ func upgradeCmd(args []string, stdout, stderr io.Writer) int {
 	fl := flag.NewFlagSet("upgrade", flag.ContinueOnError)
 	fl.SetOutput(io.Discard)
 	noInstall := fl.Bool("no-install", false, "do not run pnpm install")
-	if err := fl.Parse(args); err != nil {
-		fmt.Fprintf(stderr, "weft upgrade: %v; %s\n", err, usage)
-		return 2
+	if code, done := flagsFailed(fl.Parse(args), "upgrade", usage, stdout, stderr); done {
+		return code
 	}
 	if fl.NArg() > 0 {
 		fmt.Fprintf(stderr, "weft upgrade: %q is not a flag; %s\n", fl.Arg(0), usage)
@@ -61,6 +60,9 @@ func upgradeCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	if !*noInstall {
 		if err := pnpmInstall(appDir, stdout, stderr); err != nil {
+			return fail(stderr, "upgrade", err)
+		}
+		if err := writeTypes(appDir, stdout, stderr); err != nil {
 			return fail(stderr, "upgrade", err)
 		}
 	}

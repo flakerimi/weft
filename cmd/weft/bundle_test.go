@@ -65,13 +65,121 @@ func TestUnpackReplacesOlder(t *testing.T) {
 	if !exists(t, filepath.Join(dir, ".weft/a")) {
 		t.Error("a is missing")
 	}
-	for _, leftover := range []string{".weft.new", ".weft.old"} {
-		if exists(t, filepath.Join(dir, leftover)) {
-			t.Errorf("%s remains", leftover)
-		}
+	if left := runTemps(t, dir); len(left) != 0 {
+		t.Errorf("the run left %v", left)
 	}
 	if got := unpacked(dir); got != "0.0.6" {
 		t.Errorf("unpacked = %q, want 0.0.6", got)
+	}
+}
+
+// runTemps returns the folders an unpack makes for itself in dir
+// (.weft-new-* and .weft-old-*) that are there.
+func runTemps(t *testing.T, dir string) []string {
+	t.Helper()
+	var found []string
+	for _, pattern := range []string{".weft-new-*", ".weft-old-*"} {
+		m, err := filepath.Glob(filepath.Join(dir, pattern))
+		if err != nil {
+			t.Fatal(err)
+		}
+		found = append(found, m...)
+	}
+	return found
+}
+
+// writeFile writes text to dir/name, making its folders.
+func writeFile(t *testing.T, dir, name, text string) {
+	t.Helper()
+	p := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Folders beside .weft that the run did not make are left alone, whatever
+// their name: they may be the author's, such as an old .weft moved aside.
+func TestUnpackLeavesOtherFolders(t *testing.T) {
+	dir := t.TempDir()
+	foreign := []string{".weft.old/keep.txt", ".weft.new/keep.txt", ".weft-old-mine/keep.txt", ".weft-new-mine/keep.txt"}
+	for _, f := range foreign {
+		writeFile(t, dir, f, "mine")
+	}
+	for _, v := range []string{"0.0.5", "0.0.6"} {
+		if err := unpack(testBundle("weft/a"), dir, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range foreign {
+		if b, err := os.ReadFile(filepath.Join(dir, f)); err != nil || string(b) != "mine" {
+			t.Errorf("%s: %q, %v", f, b, err)
+		}
+	}
+	if left := runTemps(t, dir); len(left) != 2 {
+		t.Errorf("want only the two foreign temp-like folders, found %v", left)
+	}
+	if got := unpacked(dir); got != "0.0.6" {
+		t.Errorf("unpacked = %q, want 0.0.6", got)
+	}
+}
+
+// When the new tree cannot be renamed into place, the old .weft is put back
+// and nothing the run made is left.
+func TestUnpackFailedRenameRestores(t *testing.T) {
+	dir := t.TempDir()
+	if err := unpack(testBundle("weft/a"), dir, "0.0.5"); err != nil {
+		t.Fatal(err)
+	}
+	was := renameDir
+	t.Cleanup(func() { renameDir = was })
+	renameDir = func(from, to string) error {
+		if strings.HasPrefix(filepath.Base(from), ".weft-new-") {
+			return &os.LinkError{Op: "rename", Old: from, New: to, Err: os.ErrPermission}
+		}
+		return was(from, to)
+	}
+	if err := unpack(testBundle("weft/b"), dir, "0.0.6"); err == nil {
+		t.Fatal("unpack succeeded with a failing rename")
+	}
+	if got := unpacked(dir); got != "0.0.5" || !exists(t, filepath.Join(dir, ".weft/a")) || exists(t, filepath.Join(dir, ".weft/b")) {
+		t.Errorf("the old .weft is not back (VERSION %q)", got)
+	}
+	if left := runTemps(t, dir); len(left) != 0 {
+		t.Errorf("the failed run left %v", left)
+	}
+}
+
+// brokenFS is m with the file bad unreadable.
+type brokenFS struct {
+	m   fstest.MapFS
+	bad string
+}
+
+func (b brokenFS) Open(name string) (fs.File, error) {
+	if name == b.bad {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrPermission}
+	}
+	return b.m.Open(name)
+}
+
+// A copy that fails leaves the old .weft as it was and nothing of the run.
+func TestUnpackFailedCopyLeavesNothing(t *testing.T) {
+	dir := t.TempDir()
+	if err := unpack(testBundle("weft/a"), dir, "0.0.5"); err != nil {
+		t.Fatal(err)
+	}
+	bad := brokenFS{m: testBundle("weft/a", "weft/b"), bad: "weft/b"}
+	if err := unpack(bad, dir, "0.0.6"); err == nil {
+		t.Fatal("unpack succeeded with a bundle it cannot copy")
+	}
+	if got := unpacked(dir); got != "0.0.5" {
+		t.Errorf("unpacked = %q, want 0.0.5", got)
+	}
+	if left := runTemps(t, dir); len(left) != 0 {
+		t.Errorf("the failed run left %v", left)
 	}
 }
 
@@ -85,8 +193,8 @@ func TestUnpackRefusesForeignFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := unpack(testBundle("weft/a"), dir, "0.0.6")
-	if err == nil || !strings.Contains(err.Error(), ".weft") || !strings.Contains(err.Error(), "move it away") {
-		t.Fatalf("err = %v, want one naming .weft and \"move it away\"", err)
+	if err == nil || !strings.Contains(err.Error(), ".weft") || !strings.HasSuffix(err.Error(), "; move it out of the app folder and run the command again") {
+		t.Fatalf("err = %v, want one naming .weft and saying to move it out of the app folder", err)
 	}
 	if !exists(t, foreign) {
 		t.Error("the foreign file is gone")

@@ -85,8 +85,9 @@ const ICONS: [file: string, tag: string][] = [
 /**
  * The icon tags for the files the site at `root` has in `public/`, the
  * folder the build copies to its root: one for each that is there, a file
- * by its exact name (or a symlink to one), and none for the others. Read
- * each time, so the dev server sees a file dropped in.
+ * by its exact name (or a symlink to one), and none for the others, nor for
+ * an entry it cannot stat. Read each time, so the dev server sees a file
+ * dropped in.
  */
 export function iconTags(root: string): string[] {
   const dir = join(root, 'public')
@@ -96,7 +97,15 @@ export function iconTags(root: string): string[] {
   } catch {
     return []
   }
-  const isFile = (name: string) => names.has(name) && (statSync(join(dir, name), { throwIfNoEntry: false })?.isFile() ?? false)
+  // An entry that cannot be read, such as a symlink loop or one without permission, is no file.
+  const isFile = (name: string) => {
+    if (!names.has(name)) return false
+    try {
+      return statSync(join(dir, name)).isFile()
+    } catch {
+      return false
+    }
+  }
   return ICONS.filter(([file]) => isFile(file)).map(([, tag]) => tag)
 }
 

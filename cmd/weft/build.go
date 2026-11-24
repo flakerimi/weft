@@ -17,9 +17,8 @@ func buildCmd(args []string, stdout, stderr io.Writer) int {
 	fl := flag.NewFlagSet("build", flag.ContinueOnError)
 	fl.SetOutput(io.Discard)
 	out := fl.String("o", "", "the binary to write")
-	if err := fl.Parse(args); err != nil {
-		fmt.Fprintf(stderr, "weft build: %v; %s\n", err, usage)
-		return 2
+	if code, done := flagsFailed(fl.Parse(args), "build", usage, stdout, stderr); done {
+		return code
 	}
 	if fl.NArg() > 0 {
 		fmt.Fprintf(stderr, "weft build: %q is not a flag; %s\n", fl.Arg(0), usage)

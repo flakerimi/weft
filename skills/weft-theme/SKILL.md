@@ -21,7 +21,7 @@ weft-build-pages --root . --out dist --theme weft
 
 Put the flag in the site's `package.json` build script. Any other name fails the build. A theme names its fonts but does not ship them.
 
-In an app made with `weft create`, pick it with `weft create <name> --theme weft`. It is kept in `package.json` as `"weft": {"theme": ...}`, which `weft dev` and `weft build` pass on; change it there.
+In an app made with `weft create`, pick it with `weft create <name> --theme weft`. It is kept in `package.json` as `"weft": {"theme": ...}`, which `weft dev` and `weft build` pass on; change it there, then start `weft dev` again, as it reads the theme once.
 
 ## Light and dark
 

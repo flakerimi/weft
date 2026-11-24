@@ -1,6 +1,7 @@
 // weftAutoImport(): a page or component writes `<Button>` and gets
 // `import { Button } from '@weft/ui'`, unless the name is the author's own.
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -198,6 +199,35 @@ describe('weftAutoImport()', () => {
     await new Promise((r) => setTimeout(r, 20))
     await start()
     expect(statSync(dts).mtimeMs).toBe(before)
+  })
+
+  // weft create and weft build run it, so `pnpm typecheck` checks Weft's
+  // components before the first build or dev run has written the file.
+  it('weft-types --root writes the declaration file the plugin writes, and prints nothing', async () => {
+    const site = join(parent, 'types-site')
+    mkdirSync(join(site, 'pages'), { recursive: true })
+    symlinkSync(fileURLToPath(new URL('../node_modules', import.meta.url)), join(site, 'node_modules'))
+    const bin = fileURLToPath(new URL('../bin/weft-types.mjs', import.meta.url))
+    // Relative to where it runs, as `weft` gives it: `--root web` in the app.
+    const ran = spawnSync(process.execPath, [bin, '--root', 'types-site'], { encoding: 'utf8', cwd: parent })
+    expect(ran).toMatchObject({ status: 0, stdout: '', stderr: '' })
+    const written = readFileSync(join(site, '.weft-types', 'components.d.ts'), 'utf8')
+    expect(written).toBe(readFileSync(join(parent, 'types', 'components.d.ts'), 'utf8'))
+
+    const bare = mkdtempSync(join(tmpdir(), 'weft-types-bare-'))
+    try {
+      // Without the NODE_PATH that pnpm's bin shim gives this test, which reaches this repository's packages.
+      const env = { ...process.env }
+      delete env.NODE_PATH
+      const refused = spawnSync(process.execPath, [bin, '--root', bare], { encoding: 'utf8', env })
+      expect(refused.status).toBe(1)
+      expect(refused.stderr).toBe(`weft-types: @weft/ui cannot be found from ${bare}; run pnpm install in the app and run the command again.\n`)
+      const usage = spawnSync(process.execPath, [bin], { encoding: 'utf8' })
+      expect(usage.status).toBe(2)
+      expect(usage.stderr).toBe('weft-types: --root is required; usage is weft-types --root <site>.\n')
+    } finally {
+      rmSync(bare, { recursive: true, force: true })
+    }
   })
 
   it('siteConfig adds it once, unless the site has it, and it runs before vite:vue', async () => {

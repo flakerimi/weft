@@ -273,9 +273,9 @@ describe('weft-dev', { timeout: 30_000 }, () => {
     for (const child of children.splice(0)) if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
   })
 
-  /** Run the bin; resolves with its first stdout line, or with how it ended. */
-  function run(args: string[]) {
-    const child = spawn(process.execPath, [here('../bin/weft-dev.mjs'), ...args], { stdio: ['ignore', 'pipe', 'pipe'] })
+  /** Run the bin; resolves with its first stdout line, or with how it ended. Its standard input is /dev/null, or a pipe the test holds. */
+  function run(args: string[], stdin: 'ignore' | 'pipe' = 'ignore') {
+    const child = spawn(process.execPath, [here('../bin/weft-dev.mjs'), ...args], { stdio: [stdin, 'pipe', 'pipe'] })
     children.push(child)
     let stdout = ''
     let stderr = ''
@@ -323,6 +323,52 @@ describe('weft-dev', { timeout: 30_000 }, () => {
       expect(dev.out().stdout).toBe('')
     }, 30_000)
   }
+
+  const pause = (ms: number) => new Promise((done) => setTimeout(done, ms))
+
+  // `weft dev` holds the other end of the pipe for its whole life, so the
+  // pipe ends when it dies, however it dies.
+  it('with --exit-with-parent, stays up while its standard input is open and exits 0 when it ends', async () => {
+    const dev = run(['--root', site('dev-site'), '--port', '0', '--exit-with-parent'], 'pipe')
+    const line = await dev.line
+    const url = line.slice('weft: dev server at '.length, -1)
+    await pause(2000)
+    expect(text((await get(url)).body)).toContain('Hello from dev')
+    expect(dev.child.exitCode).toBe(null)
+    const ended = Date.now()
+    dev.child.stdin!.end()
+    expect(await dev.exited).toEqual({ code: 0, signal: null })
+    expect(Date.now() - ended).toBeLessThan(3000)
+    await expect(fetch(url)).rejects.toThrow()
+    expect(dev.out().stderr).toBe('')
+  }, 30_000)
+
+  it('with --exit-with-parent, exits 0 when its standard input ends while it starts', async () => {
+    const root = site('dev-site')
+    writeFileSync(join(root, 'vite.config.mjs'), "process.stderr.write('loading config\\n')\nawait new Promise((done) => setTimeout(done, 10_000))\nexport default {}\n")
+    const dev = run(['--root', root, '--port', '0', '--exit-with-parent'], 'pipe')
+    await vi.waitFor(() => expect(dev.out().stderr).toBe('loading config\n'), { timeout: 10_000, interval: 20 })
+    dev.child.stdin!.end()
+    expect(await dev.exited).toEqual({ code: 0, signal: null })
+    expect(dev.out().stdout).toBe('')
+  }, 30_000)
+
+  // Vite closes its server when standard input ends, but only once something
+  // reads it: without the flag nothing does, so neither an open pipe nor its
+  // end stops the server.
+  it('without the flag, stays up with a pipe as its standard input, open or ended', async () => {
+    const dev = run(['--root', site('dev-site'), '--port', '0'], 'pipe')
+    const line = await dev.line
+    const url = line.slice('weft: dev server at '.length, -1)
+    await pause(1500)
+    expect(text((await get(url)).body)).toContain('Hello from dev')
+    dev.child.stdin!.end()
+    await pause(1500)
+    expect(dev.child.exitCode).toBe(null)
+    expect(text((await get(url)).body)).toContain('Hello from dev')
+    dev.child.kill('SIGTERM')
+    expect(await dev.exited).toEqual({ code: 0, signal: null })
+  }, 30_000)
 
   it('prints the port sentence alone when the port is taken', async () => {
     const taken: Server = createHTTPServer()

@@ -314,8 +314,8 @@ func TestDevServesPagesAndAPI(t *testing.T) {
 		}
 	}
 	check()
-	// The page server's standard input is /dev/null, which Vite reads as its
-	// parent going away only if it reads it: it must stay up.
+	// Each server's standard input is a pipe weft dev holds open: it reads
+	// it to see weft dev go, and must stay up while it is open.
 	time.Sleep(3 * time.Second)
 	check()
 	// The Go server prints no URL of its own, and answers on 127.0.0.1 only.
@@ -440,13 +440,10 @@ func childGroups(t *testing.T, pid int) []int {
 	return groups
 }
 
-// Closing the terminal (SIGHUP) or Ctrl-\ (SIGQUIT) stops the children too.
-// weft dev runs as a process of its own, built from this package, as a
-// signal to the test binary would stop the test.
-func TestDevStopsOnHangUpAndQuit(t *testing.T) {
-	if testing.Short() {
-		t.Skip("weft dev runs the app's servers")
-	}
+// buildWeft builds weft from this package, for a test that runs weft dev as
+// a process of its own: a signal to the test binary would stop the test.
+func buildWeft(t *testing.T) string {
+	t.Helper()
 	pkg, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -457,44 +454,89 @@ func TestDevStopsOnHangUpAndQuit(t *testing.T) {
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v: %s", err, out)
 	}
+	return bin
+}
+
+// devProc is weft dev running as a process of its own; done is closed once
+// it has exited, and err is then what Wait returned.
+type devProc struct {
+	cmd       *exec.Cmd
+	out, errb *syncBuffer
+	done      chan struct{}
+	err       error
+	groups    []int
+}
+
+// startDevProc runs bin dev --port port in app and returns once it prints its
+// URL line, with the process groups of its two children. Whatever the test
+// finds, nothing it started is left: a weft dev still running is sent
+// SIGTERM, so it stops its children, and killed only if it does not exit,
+// and then the groups it had are killed.
+func startDevProc(t *testing.T, bin, app string, port int) *devProc {
+	t.Helper()
+	p := &devProc{out: &syncBuffer{}, errb: &syncBuffer{}, done: make(chan struct{})}
+	p.cmd = exec.Command(bin, "dev", "--port", strconv.Itoa(port))
+	p.cmd.Dir = app
+	p.cmd.Stdout, p.cmd.Stderr = p.out, p.errb
+	// Wait returns once weft dev has exited, even when a child it left holds
+	// its output open.
+	p.cmd.WaitDelay = time.Second
+	if err := p.cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		p.err = p.cmd.Wait()
+		close(p.done)
+	}()
+	t.Cleanup(func() {
+		select {
+		case <-p.done:
+		default:
+			p.cmd.Process.Signal(syscall.SIGTERM)
+			select {
+			case <-p.done:
+			case <-time.After(10 * time.Second):
+				p.cmd.Process.Kill()
+				<-p.done
+			}
+		}
+		for _, pgid := range p.groups {
+			if groupAlive(pgid) {
+				syscall.Kill(-pgid, syscall.SIGKILL)
+			}
+		}
+	})
+	for deadline := time.Now().Add(60 * time.Second); !strings.Contains(p.out.String(), "weft dev: http://localhost:"); time.Sleep(50 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("no URL line within 60 s: %s%s", p.out.String(), p.errb.String())
+		}
+	}
+	p.groups = childGroups(t, p.cmd.Process.Pid)
+	if len(p.groups) != 2 {
+		t.Fatalf("want the groups of the Go server and the page server, found %v", p.groups)
+	}
+	return p
+}
+
+// Closing the terminal (SIGHUP) or Ctrl-\ (SIGQUIT) stops the children too.
+func TestDevStopsOnHangUpAndQuit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("weft dev runs the app's servers")
+	}
+	bin := buildWeft(t)
 	app := sharedDevApp(t)
 	for _, sig := range []syscall.Signal{syscall.SIGHUP, syscall.SIGQUIT} {
 		port := freeLocalPort(t)
-		var out, errb syncBuffer
-		cmd := exec.Command(bin, "dev", "--port", strconv.Itoa(port))
-		cmd.Dir = app
-		cmd.Stdout, cmd.Stderr = &out, &errb
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-		exited := make(chan error, 1)
-		go func() { exited <- cmd.Wait() }()
-		var groups []int
-		// Whatever the test finds, nothing it started is left.
-		t.Cleanup(func() {
-			cmd.Process.Kill()
-			for _, pgid := range groups {
-				syscall.Kill(-pgid, syscall.SIGKILL)
-			}
-		})
-		for deadline := time.Now().Add(60 * time.Second); !strings.Contains(out.String(), "weft dev: http://localhost:"); time.Sleep(50 * time.Millisecond) {
-			if time.Now().After(deadline) {
-				t.Fatalf("%v: no URL line within 60 s: %s%s", sig, out.String(), errb.String())
-			}
-		}
-		groups = childGroups(t, cmd.Process.Pid)
-		if len(groups) != 2 {
-			t.Fatalf("%v: want the groups of the Go server and the page server, found %v", sig, groups)
-		}
+		p := startDevProc(t, bin, app, port)
 		goPort := findGoPort(t, port)
 		if goPort == "" {
 			t.Fatalf("%v: found no page server on port %d", sig, port)
 		}
-		cmd.Process.Signal(sig)
+		p.cmd.Process.Signal(sig)
 		select {
-		case err := <-exited:
-			if err != nil {
-				t.Errorf("%v: weft dev: %v: %s", sig, err, errb.String())
+		case <-p.done:
+			if p.err != nil {
+				t.Errorf("%v: weft dev: %v: %s", sig, p.err, p.errb.String())
 			}
 		case <-time.After(10 * time.Second):
 			t.Fatalf("%v: weft dev did not exit within 10 s", sig)
@@ -504,10 +546,59 @@ func TestDevStopsOnHangUpAndQuit(t *testing.T) {
 				t.Errorf("%v: %s still answers", sig, addr)
 			}
 		}
-		for _, pgid := range groups {
+		for _, pgid := range p.groups {
 			if groupAlive(pgid) {
 				t.Errorf("%v: process group %d is left", sig, pgid)
 			}
+		}
+	}
+}
+
+// weft dev killed so that it cannot stop its children (SIGKILL, as a
+// harness stops a command it ran in the background) leaves neither server
+// running: each reads the end of the pipe weft dev held as its standard
+// input, and exits.
+func TestDevStopsWhenKilled(t *testing.T) {
+	if testing.Short() {
+		t.Skip("weft dev runs the app's servers")
+	}
+	bin := buildWeft(t)
+	app := sharedDevApp(t)
+	port := freeLocalPort(t)
+	p := startDevProc(t, bin, app, port)
+	goPort := findGoPort(t, port)
+	if goPort == "" {
+		t.Fatalf("found no page server on port %d", port)
+	}
+	p.cmd.Process.Kill()
+	select {
+	case <-p.done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("weft dev did not die of SIGKILL within 10 s")
+	}
+	addrs := []string{"localhost:" + strconv.Itoa(port), "127.0.0.1:" + goPort}
+	left := func() []string {
+		var what []string
+		for _, addr := range addrs {
+			if c, err := net.DialTimeout("tcp", addr, time.Second); err == nil {
+				c.Close()
+				what = append(what, addr+" answers")
+			}
+		}
+		for _, pgid := range p.groups {
+			if groupAlive(pgid) {
+				what = append(what, "group "+strconv.Itoa(pgid)+" is alive")
+			}
+		}
+		return what
+	}
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+		what := left()
+		if len(what) == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("5 s after weft dev was killed: %v", what)
 		}
 	}
 }
@@ -549,8 +640,10 @@ func TestDevStopsChildren(t *testing.T) {
 	}
 }
 
-// A Ctrl-C at a terminal reaches the children too, so a child may stop before
-// weft dev hears of it: that is still a clean stop.
+// A signal sent to every process, as at a shutdown, reaches the children too,
+// so a child may stop before weft dev hears of it: that is still a clean stop.
+// (A Ctrl-C at a terminal reaches weft dev alone: each child is in a process
+// group of its own.)
 func TestDevChildStopsFirstOnCtrlC(t *testing.T) {
 	app := sharedDevApp(t)
 	port := freeLocalPort(t)
@@ -572,7 +665,7 @@ func TestDevChildStopsFirstOnCtrlC(t *testing.T) {
 		t.Errorf("exit %d: %s", code, r.stderr)
 	}
 	if strings.Contains(r.stderr.String(), "stopped") {
-		t.Errorf("a Ctrl-C was reported as a stop: %s", r.stderr)
+		t.Errorf("a child stopped by the signal was reported as a stop: %s", r.stderr)
 	}
 }
 
@@ -581,10 +674,23 @@ func TestDevStopsWhileStarting(t *testing.T) {
 	app := sharedDevApp(t)
 	port := freeLocalPort(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	var out, errb syncBuffer
-	done := make(chan int, 1)
-	go func() { done <- dev(ctx, []string{"--port", strconv.Itoa(port)}, &out, &errb) }()
+	var code int
+	finished := make(chan struct{})
+	go func() {
+		code = dev(ctx, []string{"--port", strconv.Itoa(port)}, &out, &errb)
+		close(finished)
+	}()
+	// On every path, a failure's too, weft dev is stopped and waited for, so
+	// it stops its children.
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-finished:
+		case <-time.After(10 * time.Second):
+			t.Error("weft dev did not stop within 10 s of being cancelled")
+		}
+	})
 	// The page server starts right after the Go server and takes a second to
 	// answer.
 	for deadline := time.Now().Add(30 * time.Second); findGoPort(t, port) == ""; time.Sleep(5 * time.Millisecond) {
@@ -594,7 +700,7 @@ func TestDevStopsWhileStarting(t *testing.T) {
 	}
 	cancel()
 	select {
-	case code := <-done:
+	case <-finished:
 		if code != 0 {
 			t.Errorf("exit %d", code)
 		}
@@ -742,6 +848,30 @@ func TestDevGoServerIgnoresPort(t *testing.T) {
 	var out, errb syncBuffer
 	code := devWithin(t, 30*time.Second, &out, &errb, "--port", strconv.Itoa(port))
 	want := "weft dev: the Go server did not answer within 2 s; make main.go listen on the port in the PORT variable.\n"
+	if code != 1 || !strings.HasSuffix(errb.String(), want) || out.String() != "" {
+		t.Errorf("exit %d, stdout %q, stderr %q, want it to end %q", code, out.String(), errb.String(), want)
+	}
+	if left := appGroups(t, app, port); len(left) != 0 {
+		t.Errorf("processes are left: %v", left)
+	}
+}
+
+// A page server that never answers, here one whose Vite config never
+// finishes loading, stops weft dev after the same deadline, in a sentence
+// that points at its output.
+func TestDevPageServerNeverAnswers(t *testing.T) {
+	app := devApp(t)
+	config := "await new Promise((done) => setTimeout(done, 60_000))\nexport default {}\n"
+	if err := os.WriteFile(filepath.Join(app, "web", "vite.config.mjs"), []byte(config), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	was := devReadyWithin
+	devReadyWithin = 5 * time.Second
+	t.Cleanup(func() { devReadyWithin = was })
+	port := freeLocalPort(t)
+	var out, errb syncBuffer
+	code := devWithin(t, 30*time.Second, &out, &errb, "--port", strconv.Itoa(port))
+	want := "weft dev: the page server did not answer within 5 s; see its output above.\n"
 	if code != 1 || !strings.HasSuffix(errb.String(), want) || out.String() != "" {
 		t.Errorf("exit %d, stdout %q, stderr %q, want it to end %q", code, out.String(), errb.String(), want)
 	}

@@ -26,15 +26,17 @@ const (
 	// devPoll is how often weft dev looks for a changed .go file.
 	devPoll = 300 * time.Millisecond
 	// devGrace is how long a child that stopped may wait for weft dev's own
-	// stop: a Ctrl-C at a terminal may reach a child before weft dev.
+	// stop: a signal sent to every process, as at a shutdown, may reach a
+	// child before weft dev. A Ctrl-C at a terminal reaches weft dev alone,
+	// since each child is in a process group of its own.
 	devGrace = 500 * time.Millisecond
 	// pageURLLine starts the line weft-dev prints once it listens; weft dev
 	// prints its own URL line instead.
 	pageURLLine = "weft: dev server at "
 )
 
-// devReadyWithin is how long the Go server has to answer on PORT once
-// started; tests shorten it.
+// devReadyWithin is how long the Go server and the page server have to
+// answer once started; tests shorten it.
 var devReadyWithin = 30 * time.Second
 
 func devCmd(args []string, stdout, stderr io.Writer) int {
@@ -54,9 +56,8 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fl := flag.NewFlagSet("dev", flag.ContinueOnError)
 	fl.SetOutput(io.Discard)
 	port := fl.Int("port", 5173, "the port of the page server")
-	if err := fl.Parse(args); err != nil {
-		fmt.Fprintf(stderr, "weft dev: %v; %s\n", err, usage)
-		return 2
+	if code, done := flagsFailed(fl.Parse(args), "dev", usage, stdout, stderr); done {
+		return code
 	}
 	if fl.NArg() > 0 {
 		fmt.Fprintf(stderr, "weft dev: %q is not a flag; %s\n", fl.Arg(0), usage)
@@ -92,6 +93,19 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return fail(stderr, "dev", err)
 	}
+	// Each child's standard input is the read end of a pipe whose write end
+	// weft dev holds, and never writes to, for its whole life. When weft dev
+	// dies, however it dies, SIGKILL too, the kernel closes the write end and
+	// each child reads the end of its input and exits: the Go server under
+	// WEFT_DEV_PARENT=1, the page server under --exit-with-parent. An
+	// *os.File as Stdin is handed to the child as it is, with no goroutine
+	// copying into it.
+	parentIn, parentOut, err := os.Pipe()
+	if err != nil {
+		return fail(stderr, "dev", fmt.Errorf("cannot make a pipe for the servers (%v); run weft dev again", err))
+	}
+	defer parentIn.Close()
+	defer parentOut.Close()
 
 	// say prints a sentence about watching once, however often it recurs.
 	said := map[string]bool{}
@@ -126,7 +140,8 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	goServer := func() (*child, error) {
 		cmd := exec.Command(bin)
 		cmd.Dir = appDir
-		cmd.Env = append(os.Environ(), "PORT="+strconv.Itoa(goPort))
+		cmd.Env = append(os.Environ(), "PORT="+strconv.Itoa(goPort), "WEFT_DEV_PARENT=1")
+		cmd.Stdin = parentIn
 		cmd.Stdout, cmd.Stderr = stdout, stderr
 		return startChild("the Go server", cmd)
 	}
@@ -138,10 +153,11 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if cfg.Theme != "" {
 		pageArgs = append(pageArgs, "--theme", cfg.Theme)
 	}
+	pageArgs = append(pageArgs, "--exit-with-parent")
 	cmd := exec.Command("pnpm", pageArgs...)
 	cmd.Dir = appDir
-	// Its standard input stays /dev/null, which Vite does not read: Vite
-	// exits when its standard input ends only once something reads it.
+	// pnpm exec hands its standard input to node as it is.
+	cmd.Stdin = parentIn
 	pageOut := &dropLine{w: stdout, prefix: []byte(pageURLLine)}
 	cmd.Stdout = pageOut
 	cmd.Stderr = stderr
@@ -185,13 +201,13 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	// localhost, so it is asked on localhost, whichever address that is.
 	pageURL := "http://localhost:" + strconv.Itoa(*port) + "/"
 	apiURL := "http://127.0.0.1:" + strconv.Itoa(goPort) + "/"
-	// The Go server, started just before, has devReadyWithin to answer.
+	// Both, started just before, have devReadyWithin to answer.
 	ready := time.NewTicker(50 * time.Millisecond)
 	deadline := time.After(devReadyWithin)
 	apiReady := false
 	for {
 		if !apiReady && answers(apiURL) {
-			apiReady, deadline = true, nil
+			apiReady = true
 		}
 		if apiReady && answers(pageURL) {
 			break
@@ -206,7 +222,11 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		case <-deadline:
 			pageOut.quiet.Store(true)
 			stopAll()
-			fmt.Fprintf(stderr, "weft dev: the Go server did not answer within %d s; make main.go listen on the port in the PORT variable.\n", int(devReadyWithin.Seconds()))
+			if !apiReady {
+				fmt.Fprintf(stderr, "weft dev: the Go server did not answer within %d s; make main.go listen on the port in the PORT variable.\n", int(devReadyWithin.Seconds()))
+			} else {
+				fmt.Fprintf(stderr, "weft dev: the page server did not answer within %d s; see its output above.\n", int(devReadyWithin.Seconds()))
+			}
 			return 1
 		case <-ready.C:
 		}

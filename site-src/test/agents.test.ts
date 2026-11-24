@@ -130,7 +130,8 @@ describe('index.md', () => {
 
   it('names no version when it is built without one, and checks weft by asking it for weft catalog', () => {
     expect(unversioned).not.toContain('It describes')
-    expect(unversioned).not.toMatch(/\d+\.\d+\.\d+/)
+    // A version, not an address such as 127.0.0.1.
+    expect(unversioned).not.toMatch(/(?<![\d.])\d+\.\d+\.\d+(?!\.?\d)/)
     expect(unversioned).toBe(text.replace(' It describes Weft 1.2.3.', ''))
     for (const page of [text, unversioned]) {
       expect(page).not.toContain('Older than')

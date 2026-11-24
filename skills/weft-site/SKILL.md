@@ -39,6 +39,8 @@ hello/
   main.go             the server (see weft-go)
 ```
 
+The build writes the icon tags in every page's `<head>` by itself, one for each of `favicon.ico`, `favicon.svg` and `apple-touch-icon.png` that `public/` holds, with no setting. Drop the files in `public/` (`web/public/` in an app) and leave the tags out of `useHead`.
+
 To add a site to the repository:
 
 1. Add the folder to `pnpm-workspace.yaml`.

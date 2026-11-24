@@ -142,7 +142,10 @@ func versionSpan(data []byte) (int, int, error) {
 }
 
 // findApp returns the nearest folder at or above start whose package.json has
-// a "weft" object.
+// a "weft" object, or whose package.json does not parse: that one may be the
+// app with a typo in it, so readApp's sentence, which names the file and says
+// to fix it, is what the command prints. A package.json that parses and has
+// no "weft" object is passed over, as a folder above may be the app.
 func findApp(start string) (string, error) {
 	dir, err := filepath.Abs(start)
 	if err != nil {
@@ -150,6 +153,9 @@ func findApp(start string) (string, error) {
 	}
 	for {
 		if data, err := os.ReadFile(filepath.Join(dir, "package.json")); err == nil {
+			if !json.Valid(data) {
+				return dir, nil
+			}
 			var pkg struct {
 				Weft json.RawMessage `json:"weft"`
 			}
@@ -210,8 +216,9 @@ func prerequisites() error {
 // ensure is the gate every command that runs an app passes. It refuses an app
 // recorded at another Weft version (pointing an older one at weft upgrade),
 // checks the prerequisites, unpacks the bundle into .weft/ when that holds
-// another version or nothing (a fresh clone), and runs pnpm install when it
-// unpacked or node_modules/ is missing.
+// another version or nothing (a fresh clone), runs pnpm install when it
+// unpacked or node_modules/ is missing, and writes the components'
+// declaration file when it installed or the file is missing.
 // Its errors carry no "weft <command>: " prefix; the command adds it.
 func ensure(appDir string, stdout, stderr io.Writer) (appConfig, error) {
 	cfg, err := readApp(appDir)
@@ -247,7 +254,26 @@ func ensure(appDir string, stdout, stderr io.Writer) (appConfig, error) {
 			return cfg, err
 		}
 	}
+	if _, err := os.Stat(filepath.Join(appDir, componentTypes)); install || err != nil {
+		if err := writeTypes(appDir, stdout, stderr); err != nil {
+			return cfg, err
+		}
+	}
 	return cfg, nil
+}
+
+// componentTypes is the declaration file that tells TypeScript what each
+// auto-imported Weft component is; the app's web/tsconfig.json includes it.
+var componentTypes = filepath.Join("web", ".weft-types", "components.d.ts")
+
+// writeTypes writes the app's componentTypes with @weft/vite's weft-types, as
+// a build or dev run would, so pnpm typecheck checks the components' props
+// before either has run.
+func writeTypes(appDir string, stdout, stderr io.Writer) error {
+	if err := runIn(appDir, stdout, stderr, "pnpm", "exec", "weft-types", "--root", "web"); err != nil {
+		return fmt.Errorf("pnpm exec weft-types did not write %s; fix what its output above says and run the command again", filepath.Join(appDir, componentTypes))
+	}
+	return nil
 }
 
 // pnpmInstall runs pnpm install in appDir, passing its output through.

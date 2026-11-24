@@ -164,7 +164,7 @@ Your own names come first. A tag gets no import when:
 
 A component with only a plain `<script>`, and no `<script setup>`, is left as it is.
 
-For your editor and `vue-tsc`, the build writes `.weft-types/components.d.ts` in the site, which tells TypeScript what each name is. Add it to the `include` of your `tsconfig.json`, and keep it out of git: it is rewritten on each build, whenever the list changes.
+For your editor and `vue-tsc`, the build writes `.weft-types/components.d.ts` in the site, which tells TypeScript what each name is. Add it to the `include` of your `tsconfig.json`, and keep it out of git: it is rewritten on each build, whenever the list changes. In an app, `weft create` and `weft build` write it too before any build, with `weft-types --root web`, so `pnpm typecheck` checks the components' props from the start.
 
 ## Before the first paint
 

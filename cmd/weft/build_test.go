@@ -170,6 +170,40 @@ func TestBuildMakesBinary(t *testing.T) {
 	}
 }
 
+// A created app checks the props of Weft's components before its first
+// build: weft create leaves web/.weft-types/components.d.ts, and ensure, so
+// every command that runs the app, puts it back when it is gone.
+func TestCreatedAppChecksComponentProps(t *testing.T) {
+	inTempDir(t, "work")
+	app := copyApp(t, ".")
+	t.Chdir(app)
+	if exists(t, filepath.Join(app, "web", "dist")) {
+		t.Fatal("the created app was built")
+	}
+	dts := filepath.Join(app, "web", ".weft-types", "components.d.ts")
+	if !exists(t, dts) {
+		t.Fatal("weft create left no web/.weft-types/components.d.ts")
+	}
+	page := filepath.Join(app, "web", "pages", "bad.vue")
+	if err := os.WriteFile(page, []byte("<template>\n  <Button tone=\"nope\" />\n</template>\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("pnpm", "typecheck").CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "bad.vue") || !strings.Contains(string(out), `"nope"`) {
+		t.Errorf("pnpm typecheck passed a Button with tone=\"nope\": %v\n%s", err, out)
+	}
+	if err := os.Remove(dts); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if _, err := ensure(app, &stdout, &stderr); err != nil {
+		t.Fatalf("ensure: %v: %s%s", err, &stdout, &stderr)
+	}
+	if !exists(t, dts) {
+		t.Error("ensure did not write web/.weft-types/components.d.ts again")
+	}
+}
+
 // withoutExecBits copies the staged bundle with every executable bit cleared,
 // as files from the embedded bundle are, and points WEFT_BUNDLE at it.
 func withoutExecBits(t *testing.T) {

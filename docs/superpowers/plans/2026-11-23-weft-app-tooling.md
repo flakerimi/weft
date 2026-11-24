@@ -305,4 +305,14 @@ The template, with `[[.Name]]`, `[[.Module]]`, `[[.Version]]` and `[[.Theme]]` (
 
 Added after the plan was written, under the owner's rule that Weft is built for coding agents: `weft catalog` prints the component catalogue in pieces (a line per component, or one component as compact Markdown, or `--json`), reading the app's `.weft/` or the bundle. weft.base.al gains `/index.md`, the page an agent is sent to and can build an app from, generated from the docs, the skills, the catalogue, the template's rules and the version, and linked first from `llms.txt`.
 
+A final fix wave, after the whole-branch review, closes its findings: `unpack` removes only the temporary folders it made, `weft dev` killed hard leaves no server running, a `package.json` that does not parse is named with what to fix, and smaller fixes to help flags, readiness, component types and the docs.
+
+### Task 10: The hero's prompt for agents
+
+Added at the owner's request: the landing page's hero leads with a prompt to hand a coding agent, which points it at `/index.md` to install `weft`, create the app and learn the components, then build what was asked. It reuses the copy island, works without JavaScript, and keeps the `curl` install below it as the way by hand.
+
+### Task 11: A favicon, and icon tags from `public/`
+
+Added at the owner's request: weft.base.al gets a favicon, an SVG mark with a 32 px `favicon.ico` and a 180 px `apple-touch-icon.png`. The page build writes the `<link>` tags for whichever of those three files a site's `public/` folder holds, with no setting, so a created app gets them by dropping the files in `web/public/`.
+
 Cutting and publishing `0.0.6` is the owner's step and is not part of this plan.

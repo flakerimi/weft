@@ -25,7 +25,9 @@
  * With `dts` (by default `<root>/.weft-types/components.d.ts`), the plugin
  * also writes a declaration that tells TypeScript and the editor what each
  * name is, rewritten only when its content changes. A Weft app's tsconfig
- * includes it.
+ * includes it. `writeComponentTypes(root)`, which the `weft-types` bin runs,
+ * writes the same file with no build, so a fresh app typechecks before its
+ * first build or dev run.
  *
  * `siteConfig` adds this plugin to every page build and render server; an
  * app built with plain Vite adds `weftAutoImport()` to its plugins.
@@ -188,6 +190,21 @@ export function autoImport(code: string, names: Set<string>, filename?: string):
   return { code: s.toString(), map: s.generateMap({ source: filename, includeContent: true, hires: true }) }
 }
 
+/** Where the declaration file goes, from the root, unless `dts` says otherwise. */
+const DTS = '.weft-types/components.d.ts'
+
+/** `@weft/ui`'s component names and its index's folder, resolved from `root` as a site's own imports are; null when the site has no @weft/ui. */
+function loadComponents(root: string): { names: Set<string>; dir: string } | null {
+  let index: string
+  try {
+    index = createRequire(join(root, 'package.json')).resolve(SOURCE)
+  } catch {
+    return null
+  }
+  // Vite's module ids are posix paths, on Windows too.
+  return { names: new Set(componentNames(readFileSync(index, 'utf8'))), dir: normalizePath(dirname(index)) + '/' }
+}
+
 /** The declaration file: every name, as the component `@weft/ui` exports. */
 function declaration(names: string[]): string {
   const lines = [...names].sort().map((n) => `    ${n}: typeof import('${SOURCE}')['${n}']`)
@@ -215,22 +232,29 @@ function writeIfChanged(file: string, text: string) {
   writeFileSync(file, text)
 }
 
+/**
+ * Write the declaration file for the site at `root`, as the plugin does on
+ * each build, and return its path; null, writing nothing, when `@weft/ui`
+ * cannot be resolved from the root.
+ */
+export function writeComponentTypes(root: string, dts: string = DTS): string | null {
+  // createRequire needs an absolute path; a root may be given from the working folder.
+  root = resolve(root)
+  const ui = loadComponents(root)
+  if (!ui) return null
+  const file = resolve(root, dts)
+  writeIfChanged(file, declaration([...ui.names]))
+  return file
+}
+
 export function weftAutoImport(opts: AutoImportOptions = {}): Plugin {
   let root = process.cwd()
   /** The component names, and the folder of the index that exports them; read once. */
   let found: { names: Set<string>; dir: string } | null | undefined
 
-  /** `@weft/ui`'s index, resolved from the root as the site's own imports are; null when the site has no @weft/ui. */
+  /** `@weft/ui`'s components, read once per configuration. */
   function load(): { names: Set<string>; dir: string } | null {
-    if (found !== undefined) return found
-    let index: string
-    try {
-      index = createRequire(join(root, 'package.json')).resolve(SOURCE)
-    } catch {
-      return (found = null)
-    }
-    // Vite's module ids are posix paths, on Windows too.
-    found = { names: new Set(componentNames(readFileSync(index, 'utf8'))), dir: normalizePath(dirname(index)) + '/' }
+    if (found === undefined) found = loadComponents(root)
     return found
   }
 
@@ -244,7 +268,7 @@ export function weftAutoImport(opts: AutoImportOptions = {}): Plugin {
     },
     buildStart() {
       const ui = load()
-      if (ui && opts.dts !== false) writeIfChanged(resolve(root, opts.dts ?? '.weft-types/components.d.ts'), declaration([...ui.names]))
+      if (ui && opts.dts !== false) writeIfChanged(resolve(root, opts.dts ?? DTS), declaration([...ui.names]))
     },
     transform(code, id) {
       if (!id.endsWith('.vue') || id.startsWith('\0') || id.includes('/node_modules/')) return

@@ -28,6 +28,7 @@ type templateData struct {
 var reserved = map[string]bool{"web": true, "api": true, "app": true, "node_modules": true, "dist": true}
 
 func createCmd(args []string, stdout, stderr io.Writer) int {
+	const usage = "usage is weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install]."
 	fl := flag.NewFlagSet("create", flag.ContinueOnError)
 	fl.SetOutput(io.Discard)
 	module := fl.String("module", "", "the Go module path")
@@ -35,9 +36,8 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 	noInstall := fl.Bool("no-install", false, "do not run pnpm install")
 	var names []string
 	for {
-		if err := fl.Parse(args); err != nil {
-			fmt.Fprintf(stderr, "weft create: %v; usage is weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install].\n", err)
-			return 2
+		if code, done := flagsFailed(fl.Parse(args), "create", usage, stdout, stderr); done {
+			return code
 		}
 		if fl.NArg() == 0 {
 			break
@@ -46,7 +46,7 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 		args = fl.Args()[1:]
 	}
 	if len(names) != 1 {
-		fmt.Fprintln(stderr, "weft create: give exactly one name; usage is weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install].")
+		fmt.Fprintln(stderr, "weft create: give exactly one name; "+usage)
 		return 2
 	}
 	name := names[0]
@@ -103,6 +103,10 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 		cmd.Stdout, cmd.Stderr = stdout, stderr
 		if err := cmd.Run(); err != nil {
 			fmt.Fprintf(stderr, "weft create: pnpm install did not finish; run pnpm install in %s to finish.\n", name)
+			return 1
+		}
+		if err := writeTypes(name, stdout, stderr); err != nil {
+			fmt.Fprintf(stderr, "weft create: %v.\n", strings.TrimSuffix(err.Error(), "."))
 			return 1
 		}
 	}
