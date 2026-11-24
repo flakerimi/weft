@@ -1,7 +1,7 @@
 ---
 title: Your first site
 description: Make a site with one page, build it, and see what the build writes.
-order: 11
+order: 12
 ---
 
 On this page you make a site with one page, build it, and look at what the build writes. You need the repository set up as [Install](install.md) describes. Run every command from the repository's root.

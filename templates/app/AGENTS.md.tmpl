@@ -18,7 +18,7 @@ Go commands need `-tags dev` until the first `weft build`: without it `dist.go` 
 
 | Path | What it is |
 | --- | --- |
-| `main.go`, `dist.go` | The server; `dist.go` embeds `web/dist` unless built with `-tags dev` |
+| `main.go`, `dist.go`, `dist_dev.go` | The server. `dist.go` embeds `web/dist` and listens on every interface; with `-tags dev`, as `weft dev` builds it, `dist_dev.go` embeds nothing and listens on 127.0.0.1 only |
 | `api/` | The Go API, under `/api` |
 | `web/pages/` | One page per `.vue` file; its path is the route |
 | `web/components/` | Your components; an island is one used with `Island` |

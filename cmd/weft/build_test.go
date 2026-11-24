@@ -16,6 +16,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/flakerimi/weft"
 )
 
 var (
@@ -234,23 +236,34 @@ func TestBuildUnpacksAnOlderWeft(t *testing.T) {
 	}
 }
 
-// otherVersionApp makes an app without installing it and records it at 9.9.9.
-func otherVersionApp(t *testing.T) []byte {
+// otherVersionApp makes an app without installing it and records it at version.
+func otherVersionApp(t *testing.T, version string) []byte {
 	t.Helper()
 	inTempDir(t, "work")
 	if code, _, errs := create(t, "myapp", "--no-install"); code != 0 {
 		t.Fatalf("exit %d: %s", code, errs)
 	}
-	if err := writeAppVersion("myapp", "9.9.9"); err != nil {
-		t.Fatal(err)
+	if version != weft.Version {
+		if err := writeAppVersion("myapp", version); err != nil {
+			t.Fatal(err)
+		}
 	}
 	pkg, _ := os.ReadFile("myapp/package.json")
 	t.Chdir("myapp")
 	return pkg
 }
 
+// setVersion makes this weft's version v until the test ends, as a release
+// build's is.
+func setVersion(t *testing.T, v string) {
+	t.Helper()
+	was := weft.Version
+	weft.Version = v
+	t.Cleanup(func() { weft.Version = was })
+}
+
 func TestBuildRefusesOtherVersion(t *testing.T) {
-	otherVersionApp(t)
+	otherVersionApp(t, "9.9.9")
 	code, out, errs := build(t)
 	if code != 1 {
 		t.Fatalf("exit %d: %s%s", code, out, errs)
@@ -268,21 +281,22 @@ func TestBuildRefusesOtherVersion(t *testing.T) {
 }
 
 func TestUpgradeMovesApp(t *testing.T) {
-	before := otherVersionApp(t)
+	before := otherVersionApp(t, "0.0.5")
+	setVersion(t, "0.1.0")
 	os.WriteFile(".weft/stale.txt", []byte("x"), 0o644)
 	var out, errb bytes.Buffer
 	code := run([]string{"upgrade", "--no-install"}, &out, &errb)
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errb.String())
 	}
-	if out.String() != "Moved myapp from Weft 9.9.9 to 0.0.0-dev\n" {
+	if out.String() != "Moved myapp from Weft 0.0.5 to 0.1.0\n" {
 		t.Errorf("stdout %q", out.String())
 	}
 	after, _ := os.ReadFile("package.json")
-	if want := bytes.Replace(before, []byte(`"9.9.9"`), []byte(`"0.0.0-dev"`), 1); !bytes.Equal(after, want) {
+	if want := bytes.Replace(before, []byte(`"0.0.5"`), []byte(`"0.1.0"`), 1); !bytes.Equal(after, want) {
 		t.Errorf("package.json = %q, want %q", after, want)
 	}
-	if got := unpacked("."); got != "0.0.0-dev" || exists(t, ".weft/stale.txt") {
+	if got := unpacked("."); got != "0.1.0" || exists(t, ".weft/stale.txt") {
 		t.Errorf(".weft was not unpacked again (VERSION %q)", got)
 	}
 	if exists(t, "node_modules") {
@@ -290,8 +304,65 @@ func TestUpgradeMovesApp(t *testing.T) {
 	}
 
 	out.Reset()
-	if code := run([]string{"upgrade", "--no-install"}, &out, &errb); code != 0 || out.String() != "myapp is already on Weft 0.0.0-dev\n" {
+	if code := run([]string{"upgrade", "--no-install"}, &out, &errb); code != 0 || out.String() != "myapp is already on Weft 0.1.0\n" {
 		t.Errorf("second upgrade: exit %d, stdout %q", code, out.String())
+	}
+}
+
+// An app made by a development build moves forward to a release.
+func TestUpgradeMovesADevApp(t *testing.T) {
+	otherVersionApp(t, "0.0.0-dev")
+	setVersion(t, "0.0.6")
+	code, out, errs := runCmd("upgrade", "--no-install")
+	if code != 0 || out != "Moved myapp from Weft 0.0.0-dev to 0.0.6\n" {
+		t.Errorf("exit %d, stdout %q, stderr %q", code, out, errs)
+	}
+}
+
+// An app on a newer Weft is never moved backwards.
+func TestUpgradeRefusesNewer(t *testing.T) {
+	for _, c := range []struct{ app, weft string }{{"9.9.9", "0.0.0-dev"}, {"0.2.0", "0.1.0"}, {"0.1.0", "0.1.0-alpha.2"}} {
+		t.Run(c.app+"_"+c.weft, func(t *testing.T) {
+			before := otherVersionApp(t, c.app)
+			setVersion(t, c.weft)
+			code, out, errs := runCmd("upgrade", "--no-install")
+			want := "weft upgrade: this app is on Weft " + c.app + ", newer than this weft " + c.weft + "; run weft update to get " + c.app + " or later.\n"
+			if code != 1 || errs != want || out != "" {
+				t.Errorf("exit %d, stdout %q, stderr %q, want %q", code, out, errs, want)
+			}
+			if after, _ := os.ReadFile("package.json"); !bytes.Equal(after, before) {
+				t.Errorf("package.json changed: %q", after)
+			}
+		})
+	}
+}
+
+func TestNewerVersion(t *testing.T) {
+	for _, c := range []struct {
+		a, b  string
+		newer bool
+	}{
+		{"0.1.0", "0.0.5", true},
+		{"0.0.5", "0.1.0", false},
+		{"0.0.10", "0.0.9", true},
+		{"1.0.0", "0.99.99", true},
+		{"0.1.0", "0.1.0", false},
+		{"0.1.0", "0.1.0-alpha.1", true},
+		{"0.1.0-alpha.1", "0.1.0", false},
+		{"0.1.0-alpha.10", "0.1.0-alpha.2", true},
+		{"0.1.0-beta", "0.1.0-alpha.9", true},
+		{"0.1.0-alpha.1", "0.1.0-alpha", true},
+		{"0.0.1", "0.0.0-dev", true},
+		{"0.0.0-alpha", "0.0.0-dev", true},
+		{"0.0.0-dev", "0.0.1", false},
+		{"0.0.0-dev", "0.0.0-dev", false},
+		{"nonsense", "0.0.1", false},
+		{"0.0.1", "nonsense", false},
+		{"nonsense", "0.0.0-dev", false},
+	} {
+		if got := newerVersion(c.a, c.b); got != c.newer {
+			t.Errorf("newerVersion(%q, %q) = %v, want %v", c.a, c.b, got, c.newer)
+		}
 	}
 }
 

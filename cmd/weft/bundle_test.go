@@ -26,7 +26,7 @@ func exists(t *testing.T, path string) bool {
 
 func TestUnpackWritesTree(t *testing.T) {
 	dir := t.TempDir()
-	b := testBundle("weft/packages/ui/package.json", "weft/go/serve.go", "template/x")
+	b := testBundle("weft/packages/ui/package.json", "weft/go/serve.go", "weft/go/go.mod.bundle", "template/x")
 	if err := unpack(b, dir, "0.0.6"); err != nil {
 		t.Fatal(err)
 	}
@@ -34,6 +34,14 @@ func TestUnpackWritesTree(t *testing.T) {
 		if !exists(t, filepath.Join(dir, p)) {
 			t.Errorf("%s is missing", p)
 		}
+	}
+	// The bundle keeps the Go package's go.mod as go.mod.bundle, since
+	// go:embed leaves out a folder with a go.mod; unpack names it back.
+	if b, err := os.ReadFile(filepath.Join(dir, ".weft/go/go.mod")); err != nil || string(b) != "x weft/go/go.mod.bundle" {
+		t.Errorf(".weft/go/go.mod = %q, %v", b, err)
+	}
+	if exists(t, filepath.Join(dir, ".weft/go/go.mod.bundle")) {
+		t.Error(".weft/go/go.mod.bundle is left")
 	}
 	if exists(t, filepath.Join(dir, ".weft/template")) {
 		t.Error("the template must not be unpacked")
@@ -124,7 +132,7 @@ func TestBundleScript(t *testing.T) {
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("bundle.sh: %v\n%s", err, b)
 	}
-	for _, p := range []string{"weft/packages/ui/dist/weft.css", "weft/go/go.mod", "weft/go/serve.go", "weft/catalog/components.json", ".weft-bundle"} {
+	for _, p := range []string{"weft/packages/ui/dist/weft.css", "weft/go/go.mod.bundle", "weft/go/serve.go", "weft/catalog/components.json", ".weft-bundle"} {
 		if !exists(t, filepath.Join(out, p)) {
 			t.Errorf("%s is missing", p)
 		}
@@ -143,6 +151,9 @@ func TestBundleScript(t *testing.T) {
 		if strings.Contains(p, "node_modules") || strings.HasSuffix(p, "_test.go") ||
 			strings.HasSuffix(p, ".docs.md") || d.Name() == "test" || d.Name() == "examples" {
 			t.Errorf("the bundle holds %s", p)
+		}
+		if d.Name() == "go.mod" {
+			t.Errorf("the bundle holds %s, whose folder go:embed would leave out", p)
 		}
 		return nil
 	})

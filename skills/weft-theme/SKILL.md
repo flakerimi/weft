@@ -21,6 +21,8 @@ weft-build-pages --root . --out dist --theme weft
 
 Put the flag in the site's `package.json` build script. Any other name fails the build. A theme names its fonts but does not ship them.
 
+In an app made with `weft create`, pick it with `weft create <name> --theme weft`. It is kept in `package.json` as `"weft": {"theme": ...}`, which `weft dev` and `weft build` pass on; change it there.
+
 ## Light and dark
 
 Pages follow `prefers-color-scheme`. To force a scheme, set `data-weft-scheme="light"` or `"dark"` on any element; everything inside it follows, and dialogs, sheets and menus opened from inside take the scheme with them:
@@ -103,4 +105,4 @@ Never edit `dist/*.css`: it is generated. Change the `lisa` theme only through L
 
 ## Not yet
 
-`weft create`, which will set up Tailwind for a new app, is planned but not built. See https://weft.base.al/docs/coming-next.
+Nothing about theming is planned and unbuilt. `weft create` does not set an app up for Tailwind, and is not planned to: import `@weft/themes/tailwind.css` yourself, as above. What else is planned is at https://weft.base.al/docs/coming-next.

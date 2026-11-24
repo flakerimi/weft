@@ -10,7 +10,6 @@ Check here whether something you want is built yet: this is what Weft's design p
 
 | Command | What it will do | Phase |
 | --- | --- | --- |
-| `weft create <name>` | Write a new app from a template and install its dependencies | 4 |
 | `weft gen` | Write TypeScript types and field schemas from tagged Go structs | 4b |
 | `weft add <block>` | Add a page or block, such as `weft add crud customers` | 5 |
 | `weft catalog [name]` | Print the component catalogue, or one component | 6 |
@@ -18,15 +17,11 @@ Check here whether something you want is built yet: this is what Weft's design p
 | `weft mcp` | Serve the catalogue and `check` to agents over MCP | 6 |
 | `weft deploy` | Publish an app | 6b |
 
-Until then, build sites inside the repository as [Your first site](getting-started/first-site.md) shows, with `weft-build-pages` and `go build`. The catalogue itself exists today, as `catalog/components.json` in the repository.
+The commands that make, run, build and upgrade an app work today: see the [CLI reference](reference/cli.md). The catalogue exists today too, as `catalog/components.json` in the repository, and in each app's `.weft/catalog/`.
 
-## Packages in the binary
+## App routes
 
-The `weft` binary will carry Weft's JavaScript packages, and `weft create` will unpack them, so apps need neither npm nor a clone of the repository. Phase 4, inferred: the design gives this no phase of its own, and `weft create`, which unpacks them, is phase 4.
-
-## Tailwind in a new app
-
-`weft create` will set up `@weft/themes/tailwind.css` in an app that wants Tailwind for its own components. Phase 4, with `weft create`. The file itself works today: see [Themes](guides/themes.md#tailwind).
+A client-side router and `layouts/`, for an app whose pages the browser switches between without loading a new document, inside a layout they share. Phase 4c. Today an app made with `weft create` is pages rendered at build, with islands, and a Go API.
 
 ## The Go-to-Vue contract
 

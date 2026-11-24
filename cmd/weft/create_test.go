@@ -129,29 +129,63 @@ func TestCreateWritesApp(t *testing.T) {
 	assertCreated(t, "myapp")
 }
 
+// An app named like a folder inside web/ gets an anchored .gitignore line, so
+// web/pages is not ignored.
 func TestCreateNamedLikeAFolder(t *testing.T) {
 	inTempDir(t, "work")
-	code, _, errs := create(t, "web", "--no-install")
+	code, _, errs := create(t, "pages", "--no-install")
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errs)
 	}
-	b, _ := os.ReadFile("web/.gitignore")
+	b, _ := os.ReadFile("pages/.gitignore")
 	lines := strings.Split(string(b), "\n")
 	hasRooted := false
 	for _, l := range lines {
-		if l == "web" || l == "api" {
-			t.Errorf(".gitignore line %q would ignore the app's own folder", l)
+		if l == "pages" || l == "pages/" {
+			t.Errorf(".gitignore line %q would ignore web/pages", l)
 		}
-		hasRooted = hasRooted || l == "/web"
+		hasRooted = hasRooted || l == "/pages"
 	}
 	if !hasRooted {
-		t.Errorf(".gitignore = %q, want a /web line", b)
+		t.Errorf(".gitignore = %q, want a /pages line", b)
+	}
+}
+
+// A name whose binary would land in a folder of the app is refused, and
+// nothing is written.
+func TestCreateRefusesReservedName(t *testing.T) {
+	inTempDir(t, "work")
+	for _, name := range []string{"web", "api", "app", "dist"} {
+		code, out, errs := create(t, name, "--no-install")
+		want := "weft create: " + name + " is the name of a folder Weft uses in an app, where its binary would be written; choose another name.\n"
+		if code != 2 || errs != want || out != "" {
+			t.Errorf("%s: exit %d, stdout %q, stderr %q, want %q", name, code, out, errs, want)
+		}
+	}
+	if code, _, errs := create(t, "node_modules", "--no-install"); code != 2 || !strings.HasPrefix(errs, "weft create: ") {
+		t.Errorf("node_modules: exit %d, stderr %q", code, errs)
+	}
+	if entries, _ := os.ReadDir("."); len(entries) != 0 {
+		t.Errorf("wrote %v", entries)
+	}
+}
+
+// Tailwind is not set up by weft create, so the flag is unknown.
+func TestCreateRefusesTailwind(t *testing.T) {
+	inTempDir(t, "work")
+	code, _, errs := create(t, "shop", "--tailwind", "--no-install")
+	want := "weft create: flag provided but not defined: -tailwind; usage is weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install].\n"
+	if code != 2 || errs != want {
+		t.Errorf("exit %d, stderr %q, want %q", code, errs, want)
+	}
+	if entries, _ := os.ReadDir("."); len(entries) != 0 {
+		t.Errorf("wrote %v", entries)
 	}
 }
 
 func TestCreateOptions(t *testing.T) {
 	inTempDir(t, "work")
-	code, _, errs := create(t, "--no-install", "shop", "--module", "example.com/shop", "--theme", "lisa", "--tailwind")
+	code, _, errs := create(t, "--no-install", "shop", "--module", "example.com/shop", "--theme", "lisa")
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errs)
 	}
@@ -318,5 +352,28 @@ func TestWriteAppVersionRenames(t *testing.T) {
 	entries, _ := os.ReadDir(dir)
 	if len(entries) != 1 {
 		t.Errorf("left %v in the folder", entries)
+	}
+}
+
+// A "weft" object without a version is refused in a sentence that says what
+// to add, by readApp and so by every command.
+func TestReadAppNeedsAVersion(t *testing.T) {
+	for _, pkg := range []string{`{"name":"a","weft":{}}`, `{"weft":{"theme":"lisa"}}`, `{"weft":{"version":""}}`} {
+		dir := t.TempDir()
+		file := filepath.Join(dir, "package.json")
+		if err := os.WriteFile(file, []byte(pkg), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		sentence := ` has no weft.version; add "version": "0.0.0-dev", this weft's version, to its "weft" object`
+		if _, err := readApp(dir); err == nil || err.Error() != file+sentence {
+			t.Errorf("%s: readApp error %v, want %q", pkg, err, file+sentence)
+		}
+		t.Chdir(dir)
+		for _, command := range []string{"build", "upgrade"} {
+			code, _, errs := runCmd(command)
+			if code != 1 || !strings.HasPrefix(errs, "weft "+command+": ") || !strings.HasSuffix(errs, "package.json"+sentence+".\n") {
+				t.Errorf("%s: weft %s: exit %d, stderr %q", pkg, command, code, errs)
+			}
+		}
 	}
 }

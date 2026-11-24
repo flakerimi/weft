@@ -4,7 +4,7 @@ description: Install the weft command, and get the packages you build with.
 order: 10
 ---
 
-On this page you install the `weft` command and set up the repository you build sites in. You need macOS or Linux, on arm64 or amd64.
+On this page you install the `weft` command and the tools an app needs. You need macOS or Linux, on arm64 or amd64.
 
 ## The weft command
 
@@ -44,17 +44,19 @@ curl -fsSL https://weft.base.al/install | WEFT_VERSION=0.0.2 WEFT_BIN_DIR="$HOME
 
 `weft update` replaces the binary with the latest release. `weft update --check` only tells you whether there is a newer one. See the [CLI reference](../reference/cli.md) for the flags.
 
-## The packages
+## What an app needs
 
-The `weft` command does not carry the UI packages yet. Today you build inside a clone of the Weft repository, which is a pnpm workspace. The repository is private for now, so you need access to it.
+The `weft` command carries Weft's packages, and puts them in each app it makes. An app also needs:
 
-You need:
-
+- Go 1.26, which builds its server;
 - Node 22.18 or later, which runs the page build's TypeScript directly;
-- pnpm 10;
-- Go 1.26.
+- pnpm 10, which installs Vue, Vite and the other public packages from the npm registry.
 
-Clone the repository, install its packages, and build the themes, which the page build reads:
+`weft create`, `weft dev` and `weft build` check for all three before they write anything.
+
+## In a clone of the repository
+
+To work on Weft itself, or to follow [Your first site](first-site.md), which builds inside the repository, clone it. It is private for now, so you need access to it. Install its packages, and build the themes, which the page build reads:
 
 ```sh
 git clone git@github.com:flakerimi/weft.git
@@ -73,4 +75,4 @@ It serves the site on `http://localhost:8080`.
 
 ## Next
 
-[Build your first site](first-site.md).
+[Create an app](create-an-app.md).

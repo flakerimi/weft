@@ -42,6 +42,9 @@ func readApp(dir string) (appConfig, error) {
 	if pkg.Weft == nil {
 		return appConfig{}, fmt.Errorf("%s has no \"weft\" key; run the command inside a Weft app", file)
 	}
+	if pkg.Weft.Version == "" {
+		return appConfig{}, fmt.Errorf("%s has no weft.version; add \"version\": %q, this weft's version, to its \"weft\" object", file, weft.Version)
+	}
 	return appConfig{Name: pkg.Name, Version: pkg.Weft.Version, Theme: pkg.Weft.Theme}, nil
 }
 

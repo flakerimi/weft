@@ -1,7 +1,7 @@
 ---
 title: Your first Go handler
 description: Serve the built pages and an API from one Go binary.
-order: 12
+order: 13
 ---
 
 On this page you write a Go program that serves the pages you built in [Your first site](first-site.md) and answers one API route. Both come from one binary.

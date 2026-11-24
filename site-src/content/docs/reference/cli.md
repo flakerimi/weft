@@ -1,6 +1,6 @@
 ---
 title: CLI
-description: Every command and flag of weft, weft-build-pages and weft-dev, and the installer's settings.
+description: Every command, flag and error of weft, weft-build-pages and weft-dev, and the installer's settings.
 order: 30
 ---
 
@@ -51,6 +51,24 @@ It says `weft X is up to date.` when there is nothing to do, and `Updated weft X
 | --- | --- |
 | `WEFT_BASE` | Where the releases are. Default `https://weft.base.al` |
 
+### weft create
+
+Makes an app in a new folder named after it. It writes the app's files from the template that `weft` carries, unpacks Weft's packages and Go package into the app's `.weft/`, records the Weft version and the theme in `package.json`'s `"weft"` object, and runs `pnpm install`. Then it prints `Created <name>. Next: cd <name> && weft dev`. [Create an app](../getting-started/create-an-app.md) walks through what it writes.
+
+```text
+weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install]
+```
+
+| Flag | What it does |
+| --- | --- |
+| `--module <path>` | The Go module path in `go.mod`. Default: the name |
+| `--theme` | `neutral` (the default), `lisa` or `weft`. See [Themes](../guides/themes.md) |
+| `--no-install` | Skip `pnpm install`; `weft dev` or `weft build` runs it later |
+
+The name is a lowercase letter, then lowercase letters, digits and hyphens, at most 64 in all. It is also the binary's name, so `web`, `api`, `app` and `dist` are refused: the binary would be written into a folder of the app. Wrong usage, such as a bad name, theme or flag, is one sentence with exit status 2.
+
+Before it writes anything it checks that `go`, `node` 22.18 or later and `pnpm` 10 or later are on `PATH`, and that the folder is missing or empty; otherwise it says `weft create: <name> already exists and is not empty; choose another name or move it away.`, or names the missing tool, with exit status 1. If `pnpm install` fails, the app stays, and it says `weft create: pnpm install did not finish; run pnpm install in <name> to finish.`
+
 ### weft dev
 
 Runs an app while you work. It builds the Go code with the `dev` tag into `.weft/dev/app` and runs it on a free port, starts [weft-dev](#weft-dev) beside it with the app's theme, which renders each page when it is asked for and sends `/api` to the Go server, and prints `weft dev: http://localhost:<n>` once both answer. Run it anywhere inside the app; it checks the app first, as `weft build` does.
@@ -59,9 +77,11 @@ Runs an app while you work. It builds the Go code with the `dev` tag into `.weft
 | --- | --- |
 | `--port n` | The page server's port. Default `5173`; `0` takes a free one |
 
-Every 300 ms it looks for a changed `.go` file outside `.weft/`, `.git/`, `node_modules/` and `web/`. When one changed it builds again and, if the build succeeds, replaces the running Go server. A failed build prints the compiler's output, and the last build keeps serving `/api` until you save the fix. A rebuilt server that stops by itself, such as one that panics as it starts, prints `weft dev: the Go server stopped after the restart; fix it and save again.`, and the next save builds and starts it again. A folder it may not read is skipped, and named once. A change under `web/` reloads the browser and needs no build; a change to `web/vite.config` needs `weft dev` to start again. The Go server's own output is passed through, such as the line the template's `main.go` logs with its port: open the page server's address, which sends `/api` on.
+Every 300 ms it looks for a changed `.go` file outside `.weft/`, `.git/`, `node_modules/` and `web/`. When one changed it builds again and, if the build succeeds, replaces the running Go server. A failed build prints the compiler's output, and the last build keeps serving `/api` until you save the fix. A rebuilt server that stops by itself, such as one that panics as it starts, prints `weft dev: the Go server stopped after the restart; fix it and save again.`, and the next save builds and starts it again. A folder it may not read is skipped, and named once. A change under `web/` reloads the browser and needs no build; a change to `web/vite.config` needs `weft dev` to start again. The Go server's own output is passed through. Built with the `dev` tag, the template's server listens on `127.0.0.1` only and prints no address, so the one address shown is the page server's, which sends `/api` on.
 
-Ctrl-C, SIGTERM, closing the terminal (SIGHUP) or `Ctrl-\` (SIGQUIT) stops both servers, with exit status 0. If the page server, or the Go server it started with, stops by itself, `weft dev` stops the other and says `weft dev: the page server stopped; see its output above.` (or `the Go server`), with exit status 1. A port in use is the sentence `weft dev: port <n> is in use; stop what is using it or pass --port.`, and nothing is started. Wrong usage exits with status 2.
+The Go server must listen on the port in the `PORT` variable. If it does not answer there within 30 s of starting, `weft dev` stops both servers and says `weft dev: the Go server did not answer within 30 s; make main.go listen on the port in the PORT variable.`, with exit status 1.
+
+Ctrl-C, SIGTERM, closing the terminal (SIGHUP) or `Ctrl-\` (SIGQUIT) stops both servers, with exit status 0. If the page server, or the Go server it started with, stops by itself, `weft dev` stops the other and says `weft dev: the page server stopped; see its output above.` (or `the Go server`), with exit status 1. A port in use is the sentence `weft dev: port <n> is in use; stop what is using it or pass --port.`, checked before anything else, so nothing is installed or started. Wrong usage exits with status 2.
 
 ### weft build
 
@@ -73,14 +93,14 @@ Builds an app: runs `weft-build-pages --root web --out web/dist` with the app's 
 
 It prints the build's output, then `Built <file>`. First it checks the app:
 
-- An app recorded at another Weft version is refused: `weft build: this app is on Weft <a> and this weft is <b>; run weft upgrade to move the app, or weft update --version <a> to match it.`
+- An app recorded at another Weft version is refused: `weft build: this app is on Weft <a> and this weft is <b>; run weft upgrade to move the app, or weft update --version <a> to match it.` An app whose `"weft"` object has no `version` is refused with a sentence that says what to add.
 - When `.weft/` is missing or holds another version, as in a fresh clone, it unpacks the packages into it and runs `pnpm install`. It runs `pnpm install` too when `node_modules/` is missing.
 
 Outside an app it says `weft build: no Weft app here; run it in a folder made by weft create.` Any failure is one sentence on standard error, with exit status 1; wrong usage exits with status 2.
 
 ### weft upgrade
 
-Moves an app to the Weft version of the `weft` you run: it rewrites `weft.version` in `package.json`, changing no other byte, unpacks that version's packages into `.weft/`, and runs `pnpm install`. It prints `Moved <name> from Weft <a> to <b>`, or `<name> is already on Weft <b>` when there is nothing to do.
+Moves an app to the Weft version of the `weft` you run: it rewrites `weft.version` in `package.json`, changing no other byte, unpacks that version's packages into `.weft/`, and runs `pnpm install`. It prints `Moved <name> from Weft <a> to <b>`, or `<name> is already on Weft <b>` when there is nothing to do. It never moves an app backwards: an app on a newer Weft is refused with `weft upgrade: this app is on Weft <a>, newer than this weft <b>; run weft update to get <a> or later.`, and exit status 1. A development build's `0.0.0-dev` is older than any release.
 
 | Flag | What it does |
 | --- | --- |
@@ -128,7 +148,7 @@ weft-dev --root <site> [--port n] [--host h] [--api <url>] [--theme neutral|lisa
 | --- | --- |
 | `--root` | The site's folder, which holds `pages/`. Required. Its `package.json` may be in a folder above. |
 | `--port` | The port to listen on. Default `5173`; `0` takes a free one. |
-| `--host` | The host to listen on. Default `localhost`. |
+| `--host` | The host to listen on. Default `localhost`. Any other host exposes Vite's own file serving, which includes the app's folder, to the network. |
 | `--api` | Where `/api` and every path under it go, such as `http://127.0.0.1:8081`. Without it they are pages like any other path. |
 | `--theme` | `neutral` (the default), `lisa` or `weft`, as for the build. |
 

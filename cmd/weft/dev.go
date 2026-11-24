@@ -33,6 +33,10 @@ const (
 	pageURLLine = "weft: dev server at "
 )
 
+// devReadyWithin is how long the Go server has to answer on PORT once
+// started; tests shorten it.
+var devReadyWithin = 30 * time.Second
+
 func devCmd(args []string, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), stopSignals...)
 	defer stop()
@@ -67,16 +71,8 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "weft dev: "+errNoApp)
 		return 1
 	}
-	cfg, err := ensure(appDir, stdout, stderr)
-	if err != nil {
-		if ctx.Err() != nil {
-			return 0
-		}
-		return fail(stderr, "dev", err)
-	}
-
-	// The page port is checked here, before any child starts, so a port in
-	// use is one sentence and nothing is left running.
+	// The page port is checked first, before pnpm install or any child, so
+	// a port in use is one sentence and nothing is left running.
 	if *port == 0 {
 		if *port, err = freePort(); err != nil {
 			return fail(stderr, "dev", err)
@@ -84,6 +80,13 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	} else if !portFree(*port) {
 		fmt.Fprintf(stderr, "weft dev: port %d is in use; stop what is using it or pass --port.\n", *port)
 		return 1
+	}
+	cfg, err := ensure(appDir, stdout, stderr)
+	if err != nil {
+		if ctx.Err() != nil {
+			return 0
+		}
+		return fail(stderr, "dev", err)
 	}
 	goPort, err := freePort()
 	if err != nil {
@@ -182,8 +185,17 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	// localhost, so it is asked on localhost, whichever address that is.
 	pageURL := "http://localhost:" + strconv.Itoa(*port) + "/"
 	apiURL := "http://127.0.0.1:" + strconv.Itoa(goPort) + "/"
+	// The Go server, started just before, has devReadyWithin to answer.
 	ready := time.NewTicker(50 * time.Millisecond)
-	for !answers(apiURL) || !answers(pageURL) {
+	deadline := time.After(devReadyWithin)
+	apiReady := false
+	for {
+		if !apiReady && answers(apiURL) {
+			apiReady, deadline = true, nil
+		}
+		if apiReady && answers(pageURL) {
+			break
+		}
 		select {
 		case <-ctx.Done():
 			return stopAsked()
@@ -191,6 +203,11 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			return exited(api)
 		case <-pages.done:
 			return exited(pages)
+		case <-deadline:
+			pageOut.quiet.Store(true)
+			stopAll()
+			fmt.Fprintf(stderr, "weft dev: the Go server did not answer within %d s; make main.go listen on the port in the PORT variable.\n", int(devReadyWithin.Seconds()))
+			return 1
 		case <-ready.C:
 		}
 	}

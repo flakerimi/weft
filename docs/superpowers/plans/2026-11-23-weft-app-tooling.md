@@ -6,9 +6,9 @@
 
 **Architecture:** The `weft` binary carries a *bundle*: Weft's three JavaScript packages, the `weft` Go package, the component catalogue and the app template. `weft create` writes the template and unpacks the bundle into the app's own git-ignored `.weft/` folder; the app is a pnpm workspace whose members are `.weft/packages/*`, the same topology as this repository, and its `go.mod` replaces `github.com/flakerimi/weft` with `./.weft/go`. `weft build` runs the existing page build and then `go build`; `weft dev` runs a new page dev server from `@weft/vite` beside the app's Go API and restarts Go when a `.go` file changes.
 
-**Tech Stack:** Go 1.26 standard library only (`embed`, `os/exec`, `text/template`); Vue `3.6.0-rc.16`; Vite `^8.3.8`; `magic-string` (`1.4.5` on 2026-11-23); for the Tailwind option `tailwindcss` and `@tailwindcss/vite` (both `4.3.5` on 2026-11-23). Run `npm view <pkg> version` again before adding each.
+**Tech Stack:** Go 1.26 standard library only (`embed`, `os/exec`, `text/template`); Vue `3.6.0-rc.16`; Vite `^8.3.8`; `magic-string` (`1.4.5` on 2026-11-23). Run `npm view <pkg> version` again before adding each. (Tailwind was planned for Task 7, which the owner dropped on 2026-11-24.)
 
-**Spec:** `docs/superpowers/specs/2026-11-20-weft-design.md`, phase 4 and *Distribution*. `site-src/content/docs/coming-next.md` lists what this plan delivers: `weft create`, `weft dev`, `weft build`, packages in the binary, auto-imported components, Tailwind in a new app.
+**Spec:** `docs/superpowers/specs/2026-11-20-weft-design.md`, phase 4 and *Distribution*. `site-src/content/docs/coming-next.md` lists what this plan delivers: `weft create`, `weft dev`, `weft build`, packages in the binary, auto-imported components. (Tailwind in a new app was dropped with Task 7.)
 
 ## Calls made by Claude (they change the spec; Task 8 writes them into it)
 
@@ -255,6 +255,8 @@ The template, with `{{.Name}}`, `{{.Module}}`, `{{.Version}}`, `{{.Theme}}` and 
 - [ ] **Step 5:** Move `weft dev` out of `coming-next.md`. Commit `CLI: weft dev runs the page server and the Go API together`.
 
 ### Task 7: Tailwind in a new app
+
+> **Dropped by the owner on 2026-11-24**, before it started: Weft has no Tailwind inside, so `weft create` does not set an app up for it; `@weft/themes/tailwind.css` stays for an app that adds Tailwind by hand. Task 8 removed the `--tailwind` stub Task 2 left. The text below is kept as it was planned.
 
 **Files:**
 - Modify: `templates/app/package.json.tmpl`, `templates/app/web/pages/index.vue` → `index.vue.tmpl`

@@ -58,6 +58,13 @@ func unpack(bundle fs.FS, appDir, version string) error {
 		os.RemoveAll(tmp)
 		return err
 	}
+	// go:embed leaves out a folder that holds a go.mod, so the bundle keeps
+	// the Go package's as go.mod.bundle.
+	goMod := filepath.Join(tmp, "go", "go.mod")
+	if err := os.Rename(goMod+".bundle", goMod); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		os.RemoveAll(tmp)
+		return err
+	}
 	if err := os.WriteFile(filepath.Join(tmp, "VERSION"), []byte(version+"\n"), 0o644); err != nil {
 		os.RemoveAll(tmp)
 		return err

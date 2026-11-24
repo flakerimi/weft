@@ -65,4 +65,4 @@ The releases are not in the binary. They are in the image under `/data/releases`
 
 ## Page weight
 
-This site holds each docs page to 10 KB brotli. That counts the HTML, its CSS, the loader every page with an island starts with (`boot-*.js`, about 0.5 KB), and the scripts of the page's own islands with the chunks they import. It does not count the shared Vue runtime, `client-*.js`, which a browser caches once for the whole site and fetches only when an island starts, nor fonts, which are cached and preloaded. `site-src/main_test.go` checks every docs page after each build.
+This site holds each docs page to 14 KB brotli, about what a browser receives in the first round trip on a new connection. That counts the HTML, its CSS, the loader every page with an island starts with (`boot-*.js`, about 0.5 KB), and the scripts of the page's own islands with the chunks they import. It does not count the shared Vue runtime, `client-*.js`, which a browser caches once for the whole site and fetches only when an island starts, nor fonts, which are cached and preloaded. `site-src/main_test.go` checks every docs page after each build.

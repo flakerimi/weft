@@ -21,20 +21,22 @@ var nameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 // templateData is what a .tmpl file of the app template can use.
 type templateData struct {
 	Name, Module, Version, Theme string
-	Tailwind                     bool
 }
+
+// reserved are names an app may not take: its binary, named like the app,
+// would be written into a folder of the app or of its build.
+var reserved = map[string]bool{"web": true, "api": true, "app": true, "node_modules": true, "dist": true}
 
 func createCmd(args []string, stdout, stderr io.Writer) int {
 	fl := flag.NewFlagSet("create", flag.ContinueOnError)
 	fl.SetOutput(io.Discard)
 	module := fl.String("module", "", "the Go module path")
 	theme := fl.String("theme", "neutral", "neutral, lisa or weft")
-	tailwind := fl.Bool("tailwind", false, "set the app up for Tailwind")
 	noInstall := fl.Bool("no-install", false, "do not run pnpm install")
 	var names []string
 	for {
 		if err := fl.Parse(args); err != nil {
-			fmt.Fprintf(stderr, "weft create: %v; usage is weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--tailwind] [--no-install].\n", err)
+			fmt.Fprintf(stderr, "weft create: %v; usage is weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install].\n", err)
 			return 2
 		}
 		if fl.NArg() == 0 {
@@ -44,12 +46,16 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 		args = fl.Args()[1:]
 	}
 	if len(names) != 1 {
-		fmt.Fprintln(stderr, "weft create: give exactly one name; usage is weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--tailwind] [--no-install].")
+		fmt.Fprintln(stderr, "weft create: give exactly one name; usage is weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install].")
 		return 2
 	}
 	name := names[0]
 	if !nameRe.MatchString(name) {
 		fmt.Fprintf(stderr, "weft create: %q is not a name; use a lowercase letter then lowercase letters, digits and hyphens, at most 64 in all.\n", name)
+		return 2
+	}
+	if reserved[name] {
+		fmt.Fprintf(stderr, "weft create: %s is the name of a folder Weft uses in an app, where its binary would be written; choose another name.\n", name)
 		return 2
 	}
 	if *module == "" {
@@ -82,7 +88,7 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "weft create: %v.\n", strings.TrimSuffix(err.Error(), "."))
 		return 1
 	}
-	data := templateData{Name: name, Module: *module, Version: weft.Version, Theme: *theme, Tailwind: *tailwind}
+	data := templateData{Name: name, Module: *module, Version: weft.Version, Theme: *theme}
 	if err := writeTemplate(bundle, name, data); err != nil {
 		fmt.Fprintf(stderr, "weft create: cannot write %s (%v); fix that and run the command again.\n", name, err)
 		return 1

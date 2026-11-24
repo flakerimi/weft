@@ -2,4 +2,13 @@
 
 package main
 
+import "net/http"
+
 // Under the dev tag dist stays nil, so the program compiles before any build.
+
+// listen serves h at port on 127.0.0.1 only, so the API weft dev runs cannot
+// be reached from the network, and prints no URL: weft dev prints the one to
+// open.
+func listen(port string, h http.Handler) error {
+	return http.ListenAndServe("127.0.0.1:"+port, h)
+}

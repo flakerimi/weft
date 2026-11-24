@@ -13,15 +13,16 @@ Weft is one UI system for Go and Vue apps. It has four parts:
 - **`@weft/ui`**: 76 Vue components, written once, that adapt to touch or pointer, to a landing page or an app, and to the width they are given. Every component is a Vapor component: no virtual DOM.
 - **`@weft/vite`**: the page build. It renders your pages to HTML when you build, compresses them, and ships JavaScript only for the parts you mark interactive.
 - **The `weft` Go package**: `weft.Serve` serves that build from memory, next to your API, in one binary.
-- **The `weft` command**: today it prints its version and updates itself.
+- **The `weft` command**: it makes an app, runs it while you work, builds it into one binary, and updates itself. It carries the other three parts.
 
-Weft is pre-alpha. The packages are not published to npm, and the repository is private for now, so you build inside a clone of it. The [install page](getting-started/install.md) says how.
+Weft is pre-alpha. Its packages are not published to npm: the `weft` command puts them in each app it makes. The repository is private for now.
 
 ## Where to start
 
-1. [Install](getting-started/install.md) the command and the repository.
-2. [Build your first site](getting-started/first-site.md): one page, rendered at build time.
-3. [Add a Go handler](getting-started/first-go-handler.md) and serve both from one binary.
+1. [Install](getting-started/install.md) the command.
+2. [Create an app](getting-started/create-an-app.md), run it while you edit it, and build it into one binary.
+
+To see the page build and the Go side on their own, in a clone of the repository, [build your first site](getting-started/first-site.md) and then [add a Go handler](getting-started/first-go-handler.md).
 
 Then read the guides as you need them:
 

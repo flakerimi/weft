@@ -38,7 +38,7 @@ export function llmsTxt({ docs, skills, components }: AgentInput): string {
     '',
     `> Weft is one UI system for Go and Vue apps: ${components.length} Vapor components in @weft/ui that adapt to touch or pointer, landing or app, and the width they get; @weft/vite, a page build that renders pages to HTML and ships JavaScript only for islands; and the weft Go package, whose weft.Serve serves the build and an API from one binary.`,
     '',
-    'Weft is pre-alpha: its packages are not on npm, so sites are built inside a clone of the Weft repository. The docs describe the code as it is; Coming next lists what is planned but not built, so check it before looking for a command or a component. The skills are Claude Code skills, raw Markdown to install as SKILL.md; each component has its catalogue entry as JSON.',
+    'Weft is pre-alpha: its packages are not on npm. The weft command carries them, and `weft create <name>` makes an app with them, which `weft dev` runs and `weft build` builds into one binary. The docs describe the code as it is; Coming next lists what is planned but not built, so check it before looking for a command or a component. The skills are Claude Code skills, raw Markdown to install as SKILL.md; each component has its catalogue entry as JSON.',
     '',
     '## Docs',
     '',

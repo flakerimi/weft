@@ -87,9 +87,12 @@ for p in ui themes vite; do
 	keep_fields "$pkg/$p/package.json" $fields
 done
 
-for f in go.mod serve.go files.go manifest.go; do
+for f in serve.go files.go manifest.go; do
 	cp "$f" "$out/weft/go/"
 done
+# go:embed leaves out a folder that holds a go.mod (it is another module), so
+# the bundle keeps it as go.mod.bundle and weft unpacks it as go.mod.
+cp go.mod "$out/weft/go/go.mod.bundle"
 cat > "$out/weft/go/version.go" <<GO
 // Package weft serves Weft applications: a Go binary that embeds its Vue frontend.
 package weft

@@ -24,10 +24,9 @@ func handler() http.Handler {
 }
 
 func main() {
-	addr := ":8080"
-	if p := os.Getenv("PORT"); p != "" {
-		addr = ":" + p
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
 	}
-	log.Printf("[[.Name]] on http://localhost%s", addr)
-	log.Fatal(http.ListenAndServe(addr, handler()))
+	log.Fatal(listen(port, handler()))
 }

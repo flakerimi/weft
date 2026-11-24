@@ -162,16 +162,51 @@ func (r *devRun) stop(t *testing.T) int {
 	}
 }
 
-var goPortRe = regexp.MustCompile(`myapp on http://localhost:(\d+)`)
+var apiFlagRe = regexp.MustCompile(`--api http://127\.0\.0\.1:(\d+)`)
 
-// goPort is the Go server's port, from the line the template's main.go logs.
+// findGoPort is the Go server's port, from the --api flag weft dev gives the
+// page server it started on pagePort, or "" while there is none.
+func findGoPort(t *testing.T, pagePort int) string {
+	t.Helper()
+	out, err := exec.Command("ps", "-A", "-ww", "-o", "command=").Output()
+	if err != nil {
+		t.Fatalf("ps: %v", err)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.Contains(line, "weft-dev --root web --port "+strconv.Itoa(pagePort)+" ") {
+			if m := apiFlagRe.FindStringSubmatch(line); m != nil {
+				return m[1]
+			}
+		}
+	}
+	return ""
+}
+
+// goPort is the Go server's port.
 func (r *devRun) goPort(t *testing.T) string {
 	t.Helper()
-	m := goPortRe.FindStringSubmatch(r.stderr.String())
-	if m == nil {
-		t.Fatalf("the Go server logged no address: %s", r.stderr)
+	port, _ := strconv.Atoi(r.url[strings.LastIndexByte(r.url, ':')+1:])
+	p := findGoPort(t, port)
+	if p == "" {
+		t.Fatalf("found no page server on port %d", port)
 	}
-	return m[1]
+	return p
+}
+
+// otherAddress is an address of this machine that is not a loopback one, or
+// "" when it has none.
+func otherAddress(t *testing.T) string {
+	t.Helper()
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok && !n.IP.IsLoopback() && !n.IP.IsLinkLocalUnicast() && n.IP.To4() != nil {
+			return n.IP.String()
+		}
+	}
+	return ""
 }
 
 // appGroups returns the commands, by process group, other than the test's
@@ -283,8 +318,19 @@ func TestDevServesPagesAndAPI(t *testing.T) {
 	// parent going away only if it reads it: it must stay up.
 	time.Sleep(3 * time.Second)
 	check()
-	if got := strings.Count(r.stdout.String(), "http://"); got != 1 {
-		t.Errorf("stdout has %d URLs: %q", got, r.stdout)
+	// The Go server prints no URL of its own, and answers on 127.0.0.1 only.
+	if got := strings.Count(r.stdout.String()+r.stderr.String(), "http://"); got != 1 {
+		t.Errorf("the output has %d URLs: %q", got, r.stdout.String()+r.stderr.String())
+	}
+	goPort := r.goPort(t)
+	if code, _ := get(t, "http://127.0.0.1:"+goPort+"/api/hello"); code != 200 {
+		t.Errorf("the Go server does not answer on 127.0.0.1: %d", code)
+	}
+	if addr := otherAddress(t); addr == "" {
+		t.Log("this machine has no address but loopback ones")
+	} else if c, err := net.DialTimeout("tcp", net.JoinHostPort(addr, goPort), time.Second); err == nil {
+		c.Close()
+		t.Errorf("the Go server answers on %s, not only on 127.0.0.1", addr)
 	}
 	if code := r.stop(t); code != 0 {
 		t.Errorf("exit %d: %s", code, r.stderr)
@@ -440,9 +486,9 @@ func TestDevStopsOnHangUpAndQuit(t *testing.T) {
 		if len(groups) != 2 {
 			t.Fatalf("%v: want the groups of the Go server and the page server, found %v", sig, groups)
 		}
-		m := goPortRe.FindStringSubmatch(errb.String())
-		if m == nil {
-			t.Fatalf("%v: the Go server logged no address: %s", sig, errb.String())
+		goPort := findGoPort(t, port)
+		if goPort == "" {
+			t.Fatalf("%v: found no page server on port %d", sig, port)
 		}
 		cmd.Process.Signal(sig)
 		select {
@@ -453,7 +499,7 @@ func TestDevStopsOnHangUpAndQuit(t *testing.T) {
 		case <-time.After(10 * time.Second):
 			t.Fatalf("%v: weft dev did not exit within 10 s", sig)
 		}
-		for _, addr := range []string{"localhost:" + strconv.Itoa(port), "127.0.0.1:" + m[1]} {
+		for _, addr := range []string{"localhost:" + strconv.Itoa(port), "127.0.0.1:" + goPort} {
 			if !refuses(addr) {
 				t.Errorf("%v: %s still answers", sig, addr)
 			}
@@ -539,10 +585,11 @@ func TestDevStopsWhileStarting(t *testing.T) {
 	var out, errb syncBuffer
 	done := make(chan int, 1)
 	go func() { done <- dev(ctx, []string{"--port", strconv.Itoa(port)}, &out, &errb) }()
-	// The Go server logs its address at once; the page server takes a second.
-	for deadline := time.Now().Add(30 * time.Second); !goPortRe.MatchString(errb.String()); time.Sleep(5 * time.Millisecond) {
+	// The page server starts right after the Go server and takes a second to
+	// answer.
+	for deadline := time.Now().Add(30 * time.Second); findGoPort(t, port) == ""; time.Sleep(5 * time.Millisecond) {
 		if time.Now().After(deadline) {
-			t.Fatalf("the Go server did not start: %s%s", out.String(), errb.String())
+			t.Fatalf("the page server did not start: %s%s", out.String(), errb.String())
 		}
 	}
 	cancel()
@@ -557,8 +604,8 @@ func TestDevStopsWhileStarting(t *testing.T) {
 	if got := out.String(); got != "" && !regexp.MustCompile(`^weft dev: http://localhost:\d+\n$`).MatchString(got) {
 		t.Errorf("stdout %q", got)
 	}
-	if strings.Contains(errb.String(), "stopped") || strings.Count(errb.String(), "\n") != 1 {
-		t.Errorf("stderr %q, want only the Go server's line", errb.String())
+	if errb.String() != "" {
+		t.Errorf("stderr %q, want nothing", errb.String())
 	}
 	if left := appGroups(t, app, port); len(left) != 0 {
 		t.Errorf("processes are left: %v", left)
@@ -651,6 +698,55 @@ func TestDevPortTaken(t *testing.T) {
 		if !binTime(t, app).Equal(before) {
 			t.Errorf("%s: the Go server was built", host)
 		}
+	}
+}
+
+// The port is checked before anything else: in a fresh clone, before pnpm
+// install.
+func TestDevPortTakenBeforeInstall(t *testing.T) {
+	if testing.Short() {
+		t.Skip("weft dev runs the app's servers")
+	}
+	inTempDir(t, "work")
+	if code, _, errs := create(t, "myapp", "--no-install"); code != 0 {
+		t.Fatalf("exit %d: %s", code, errs)
+	}
+	t.Chdir("myapp")
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	port := l.Addr().(*net.TCPAddr).Port
+	var out, errb syncBuffer
+	code := devWithin(t, 30*time.Second, &out, &errb, "--port", strconv.Itoa(port))
+	if want := "weft dev: port " + strconv.Itoa(port) + " is in use; stop what is using it or pass --port.\n"; code != 1 || errb.String() != want || out.String() != "" {
+		t.Errorf("exit %d, stdout %q, stderr %q, want only %q", code, out.String(), errb.String(), want)
+	}
+	if exists(t, "node_modules") {
+		t.Error("pnpm install ran before the port was checked")
+	}
+}
+
+// A Go server that never answers on PORT stops weft dev after the deadline.
+func TestDevGoServerIgnoresPort(t *testing.T) {
+	app := devApp(t)
+	main := "package main\n\nimport \"net/http\"\n\nfunc main() { http.ListenAndServe(\"127.0.0.1:0\", nil) }\n"
+	if err := os.WriteFile(filepath.Join(app, "main.go"), []byte(main), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	was := devReadyWithin
+	devReadyWithin = 2 * time.Second
+	t.Cleanup(func() { devReadyWithin = was })
+	port := freeLocalPort(t)
+	var out, errb syncBuffer
+	code := devWithin(t, 30*time.Second, &out, &errb, "--port", strconv.Itoa(port))
+	want := "weft dev: the Go server did not answer within 2 s; make main.go listen on the port in the PORT variable.\n"
+	if code != 1 || !strings.HasSuffix(errb.String(), want) || out.String() != "" {
+		t.Errorf("exit %d, stdout %q, stderr %q, want it to end %q", code, out.String(), errb.String(), want)
+	}
+	if left := appGroups(t, app, port); len(left) != 0 {
+		t.Errorf("processes are left: %v", left)
 	}
 }
 

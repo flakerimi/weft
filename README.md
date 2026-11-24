@@ -14,6 +14,9 @@
 
 ```sh
 curl -fsSL https://weft.base.al/install | sh
+weft create myapp      # an app: Vue pages and a Go API
+cd myapp && weft dev   # run it while you work
+weft build             # one binary that serves both
 weft update            # later: move to the newest release
 ```
 
@@ -104,7 +107,8 @@ stylesheet, not a fork. Want Tailwind for your own components? Import
 
 Pre-alpha. What exists today:
 
-- `weft` CLI (`version`, `update`) and the curl installer
+- `weft` CLI (`create`, `dev`, `build`, `upgrade`, `version`, `update`), which
+  carries Weft's packages, and the curl installer
 - tokens and the `neutral` and `lisa` themes
 - the adaptive core: `useWeft`, `WeftProvider`, `useWidth`
 - layout: `Stack`, `Grid`, `Page`, `Section`, `Card`, `Divider`
@@ -112,8 +116,8 @@ Pre-alpha. What exists today:
 
 Next, in order: the headless layer and primitives (buttons, inputs, select,
 date picker, upload, dialog…), the Go-to-Vue contract (types and validation
-generated from Go structs, `weft add crud`), login and permissions,
-`weft create` / `dev` / `build`, app blocks and live charts, the agent kit
+generated from Go structs, `weft add crud`), login and permissions, app
+blocks and live charts, the agent kit
 (catalogue, skills, lint, MCP), and landing blocks. The full design is in
 [`docs/superpowers/specs/2026-11-20-weft-design.md`](docs/superpowers/specs/2026-11-20-weft-design.md).
 
