@@ -15,7 +15,7 @@ type command struct {
 
 var commands = map[string]command{
 	"build":   {"build the pages, then the app's binary (-o <file>)", buildCmd},
-	"catalog": {"list the components, or print one (weft catalog <Name>, --json)", catalogCmd},
+	"catalog": {"list the components, print one (weft catalog <Name>) or search (--find)", catalogCmd},
 	"create":  {"make an app (weft create <name>)", createCmd},
 	"dev":     {"run the app, restarting Go when a .go file changes (--port n)", devCmd},
 	"version": {"print the Weft version", versionCmd},

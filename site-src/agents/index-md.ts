@@ -9,8 +9,8 @@ import { SITE, type AgentInput } from './llms.ts'
 import { groupsOf } from '../gallery/model.ts'
 
 export interface IndexInput extends AgentInput {
-  /** The release the page describes: see siteVersion. */
-  version: string
+  /** The release the page describes, when it is built for one: see siteVersion. */
+  version?: string
   /** templates/app/AGENTS.md.tmpl, as it is on disk. */
   appAgents: string
 }
@@ -20,17 +20,13 @@ const RELEASE = /^\d+\.\d+\.\d+(?:-[a-z0-9.]+)?$/
 
 /**
  * The Weft release the site describes: WEFT_SITE_VERSION, which
- * scripts/publish-site.sh sets to the version it publishes, else the last
- * release site/releases.txt lists, the one the live site serves.
+ * scripts/publish-site.sh sets to the version it publishes. A build without
+ * it, which no release came with, names none.
  */
-export function siteVersion(env: string | undefined, releases: string): string {
-  if (env) {
-    if (!RELEASE.test(env)) throw new Error(`index.md: WEFT_SITE_VERSION is "${env}", not a release version; set it to one like 0.0.6, or unset it to use the last line of site/releases.txt.`)
-    return env
-  }
-  const last = releases.trim().split('\n').at(-1)?.trim() ?? ''
-  if (!RELEASE.test(last)) throw new Error(`index.md: site/releases.txt ends with "${last}", not a release version; end it with the latest published release, or set WEFT_SITE_VERSION.`)
-  return last
+export function siteVersion(env: string | undefined): string | undefined {
+  if (!env) return undefined
+  if (!RELEASE.test(env)) throw new Error(`index.md: WEFT_SITE_VERSION is "${env}", not a release version; set it to one like 0.0.6, or unset it for a page that names no version.`)
+  return env
 }
 
 /** The bullets of a Markdown file's `## Rules` section, each as one line. */
@@ -80,7 +76,7 @@ export function indexMd({ docs, skills, components, version, appAgents }: IndexI
   return [
     '# Build an app with Weft',
     '',
-    `You were sent here to build something with Weft. This page is the whole brief, for a coding agent working in a terminal: follow it from the top. It describes Weft ${version}.`,
+    `You were sent here to build something with Weft. This page is the whole brief, for a coding agent working in a terminal: follow it from the top.${version ? ` It describes Weft ${version}.` : ''}`,
     '',
     `Weft is one UI system for Go and Vue: ${components.length} components that adapt to touch or pointer and to the width they get, a page build that ships JavaScript only where a page is interactive, and a Go server, in one binary. You write Vue pages and a Go API; \`weft\` does the rest.`,
     '',
@@ -88,10 +84,11 @@ export function indexMd({ docs, skills, components, version, appAgents }: IndexI
     '',
     '```sh',
     'weft version',
+    'weft catalog',
     '```',
     '',
     `- No \`weft\`: \`curl -fsSL ${SITE}/install | sh\` puts it in \`~/.local/bin\`.`,
-    `- Older than ${version}: \`weft update\`.`,
+    '- If `weft catalog` says `weft: unknown command "catalog"`, this `weft` is older than this page: run `weft update`.',
     '- You also need Go 1.26, Node 22.18 or later and pnpm 10. `weft create` says which is missing.',
     '',
     '## 2. Create the app',
@@ -112,6 +109,8 @@ export function indexMd({ docs, skills, components, version, appAgents }: IndexI
     `weft catalog                   # ${components.length} components in ${groups.length} groups, one line each`,
     'weft catalog Card Table Form   # each one: props, events, slots, how it adapts, an example',
     '```',
+    '',
+    'Do not know the name? `weft catalog --find <word>` lists the components whose name or text has the word.',
     '',
     `Never read the catalogue file whole: it is too large. Without \`weft\`, fetch one entry, \`${SITE}/components/<slug>.json\` (\`DatePicker\` is \`date-picker\`); \`${SITE}/catalog.json\` is the whole file.`,
     '',
@@ -143,6 +142,7 @@ export function indexMd({ docs, skills, components, version, appAgents }: IndexI
     '',
     `- The commands ${list(commands.map((c) => `\`${c.replace(/`/g, '')}\``))}.`,
     ...NOT_YET.map((n) => `- ${n.missing}: ${n.instead}.`),
+    "- Storing data is the app's own code today: `database/sql` and a driver, in `api/`.",
     '',
     '## More',
     '',

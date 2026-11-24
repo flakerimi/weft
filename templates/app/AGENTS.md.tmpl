@@ -8,7 +8,7 @@
 weft dev        # run the app, rebuilding pages and Go as you save
 weft build      # build the pages, then the binary
 weft upgrade    # move the app to the Weft version of the weft you run
-weft catalog    # the components; weft catalog <Name> for one
+weft catalog    # the components; weft catalog <Name> for one, --find <word> to search
 go test -tags dev ./...   # the Go tests
 pnpm typecheck  # check the Vue files
 ```
@@ -27,13 +27,13 @@ Go commands need `-tags dev` until the first `weft build`: without it `dist.go` 
 ## Rules
 
 - Use a Weft component wherever one exists: never write a raw `<button>`, `<input>`, `<select>` or `<dialog>`, and never hand-roll a menu, a popover or a date field.
-- Before you write markup, run `weft catalog` for the list of components, then `weft catalog <Name>` for each one you use: its props, events, slots and an example. Never read `.weft/catalog/components.json` whole: it is too large.
+- Before you write markup, run `weft catalog` for the list of components, then `weft catalog <Name>` for each one you use: its props, events, slots and an example; `weft catalog --find <word>` when you do not know the name. Never read `.weft/catalog/components.json` whole: it is too large.
 - Lay pages out with `Page`, `Section`, `Stack` and `Grid`, not with custom CSS.
 - Every component is `<script setup vapor lang="ts">`. Never use the Options API, `getCurrentInstance` or VNode render functions, nor another UI library.
 - Weft components (`Page`, `Card`, `Button` and the rest) need no import in a `.vue` file. `useHead` is a function, so import it from `@weft/ui`.
 - Styles use only `--weft-*` tokens, each with a fallback.
 - Components adapt from inside; do not write a mobile variant of a component.
-- The Go code uses the standard library and `github.com/flakerimi/weft`.
+- Go: use the standard library and `github.com/flakerimi/weft`; add a dependency only for what the standard library cannot do, such as a database driver.
 - Do not edit `.weft/`: `weft` writes it.
 
 More for agents: https://weft.base.al/index.md and https://weft.base.al/llms.txt

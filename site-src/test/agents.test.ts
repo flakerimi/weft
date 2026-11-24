@@ -103,6 +103,9 @@ describe('index.md', () => {
   // The commands cmd/weft has, from its table of commands.
   const commands = [...readFileSync(new URL('../../cmd/weft/main.go', import.meta.url), 'utf8').matchAll(/^\t"([a-z]+)": +\{/gm)].map((m) => m[1]!)
   const text = indexMd({ ...input, version: '1.2.3', appAgents })
+  // Built outside a publish, it names no version.
+  const unversioned = indexMd({ ...input, appAgents })
+  const weftGo = readFileSync(new URL('../../skills/weft-go/SKILL.md', import.meta.url), 'utf8')
   const section = (heading: string) => text.split(`\n## ${heading}\n`)[1]!.split('\n## ')[0]!
 
   it('is a brief in six steps, with the version and the counts computed', () => {
@@ -117,13 +120,24 @@ describe('index.md', () => {
       'More',
     ])
     expect(text).toContain('It describes Weft 1.2.3.')
-    expect(text).toContain('- Older than 1.2.3: `weft update`.')
     const groups = new Set(catalog.components.map((c) => c.group)).size
     expect(text).toContain(`${catalog.components.length} components that adapt`)
     expect(text).toContain(`# ${catalog.components.length} components in ${groups} groups, one line each`)
     for (const s of skills) expect(section('More')).toContain(s.slug)
     expect(text.endsWith('\n')).toBe(true)
     expect(text.length, 'an agent pays for every line').toBeLessThan(8 * 1024)
+  })
+
+  it('names no version when it is built without one, and checks weft by asking it for weft catalog', () => {
+    expect(unversioned).not.toContain('It describes')
+    expect(unversioned).not.toMatch(/\d+\.\d+\.\d+/)
+    expect(unversioned).toBe(text.replace(' It describes Weft 1.2.3.', ''))
+    for (const page of [text, unversioned]) {
+      expect(page).not.toContain('Older than')
+      const step = page.split('\n## 1. Check what is installed\n')[1]!.split('\n## ')[0]!
+      expect(step).toMatch(/^weft catalog\b/m)
+      expect(step).toContain('- If `weft catalog` says `weft: unknown command "catalog"`, this `weft` is older than this page: run `weft update`.')
+    }
   })
 
   it('names only commands weft has, and tells the agent to look components up with weft catalog', () => {
@@ -135,6 +149,7 @@ describe('index.md', () => {
     expect(step).toMatch(/^weft catalog +#/m)
     expect(step).toMatch(/^weft catalog [A-Z]\w+( [A-Z]\w+)* +#/m)
     expect(step).toContain('Never read the catalogue file whole')
+    expect(step).toContain('Do not know the name? `weft catalog --find <word>`')
     // The JSON is only the fallback, after the commands.
     expect(step.indexOf('/catalog.json')).toBeGreaterThan(step.indexOf('Without `weft`'))
     expect(text.indexOf('/catalog.json')).toBe(text.indexOf(`${SITE}/catalog.json`) + SITE.length)
@@ -157,7 +172,10 @@ describe('index.md', () => {
       expect(rules.some((r) => re.test(r)), `AGENTS.md.tmpl: ${point}`).toBe(true)
       expect(skill.split('\n').some((l) => re.test(l)), `weft-components: ${point}`).toBe(true)
     }
-    expect(rules.some((r) => /standard library/.test(r))).toBe(true)
+    // Go, as the app's rules and the weft-go skill put it.
+    const go = 'Go: use the standard library and `github.com/flakerimi/weft`; add a dependency only for what the standard library cannot do, such as a database driver.'
+    expect(rules).toContain(go)
+    expect(weftGo).toContain(go)
     expect(rules.some((r) => /Do not edit `\.weft\/`/.test(r))).toBe(true)
   })
 
@@ -166,6 +184,7 @@ describe('index.md', () => {
     const listed = commandsNotYet(comingNext)
     const step = section('6. What is not built yet')
     expect(step).toContain(`${SITE}/docs/coming-next`)
+    expect(step).toContain("- Storing data is the app's own code today: `database/sql` and a driver, in `api/`.")
     expect(step).toContain(`- The commands ${listed.slice(0, -1).join(', ')} and ${listed.at(-1)}.`)
     for (const c of listed) expect(commands, c).not.toContain(c.replace(/`/g, '').split(' ')[1])
     const names = new Set(catalog.components.map((c) => c.name))
@@ -182,12 +201,12 @@ describe('index.md', () => {
     }
   })
 
-  it('reads the version from WEFT_SITE_VERSION, else the last published release', () => {
-    expect(siteVersion('0.0.6', '0.0.1\n0.0.5\n')).toBe('0.0.6')
-    expect(siteVersion(undefined, '0.0.1\n0.0.5\n')).toBe('0.0.5')
-    expect(siteVersion('', '0.1.0-alpha.1\n')).toBe('0.1.0-alpha.1')
-    expect(() => siteVersion('v1', '0.0.5\n')).toThrow(/^index\.md: WEFT_SITE_VERSION is "v1", not a release version; /)
-    expect(() => siteVersion(undefined, '')).toThrow(/^index\.md: site\/releases\.txt ends with "", not a release version; /)
+  it('reads the version from WEFT_SITE_VERSION, and has none without it', () => {
+    expect(siteVersion('0.0.6')).toBe('0.0.6')
+    expect(siteVersion('0.1.0-alpha.1')).toBe('0.1.0-alpha.1')
+    expect(siteVersion(undefined)).toBeUndefined()
+    expect(siteVersion('')).toBeUndefined()
+    expect(() => siteVersion('v1')).toThrow(/^index\.md: WEFT_SITE_VERSION is "v1", not a release version; /)
   })
 
   it('refuses rules it cannot repeat', () => {

@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -62,11 +63,12 @@ type component struct {
 }
 
 func catalogCmd(args []string, stdout, stderr io.Writer) int {
-	const usage = "usage is weft catalog [<Name>...] [--examples] [--json]."
+	const usage = "usage is weft catalog [<Name>...] [--examples] [--json], or weft catalog --find <word> [<word>...]."
 	fl := flag.NewFlagSet("catalog", flag.ContinueOnError)
 	fl.SetOutput(io.Discard)
 	asJSON := fl.Bool("json", false, "the entries as the catalogue has them")
 	examples := fl.Bool("examples", false, "every example, not only the first")
+	find := fl.Bool("find", false, "the components whose name or text has every word")
 	var names []string
 	for {
 		if err := fl.Parse(args); err != nil {
@@ -83,12 +85,35 @@ func catalogCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "weft catalog: --examples needs a component name; %s\n", usage)
 		return 2
 	}
+	if *find && (len(names) == 0 || *examples) {
+		fmt.Fprintf(stderr, "weft catalog: --find needs words and takes no --examples; %s\n", usage)
+		return 2
+	}
 	all, err := loadCatalog()
 	if err != nil {
 		return fail(stderr, "catalog", err)
 	}
 	picked := all
-	if len(names) > 0 {
+	if *find {
+		words := strings.Fields(strings.Join(names, " "))
+		picked = nil
+		for _, c := range all {
+			if hasWords(c.catalogEntry, words) {
+				picked = append(picked, c)
+			}
+		}
+		if len(picked) == 0 {
+			fmt.Fprintf(stderr, "weft catalog: nothing matches %q; run weft catalog to list them.\n", strings.Join(words, " "))
+			return 1
+		}
+		if !*asJSON {
+			width := nameWidth(all)
+			for _, c := range picked {
+				printLine(stdout, width, c)
+			}
+			return 0
+		}
+	} else if len(names) > 0 {
 		picked = nil
 		seen := map[string]bool{}
 		for _, n := range names {
@@ -192,9 +217,10 @@ func findComponent(all []component, name string) *component {
 }
 
 // closest returns up to three names near name: those it starts or that start
-// it, then those it is part of or that are part of it; only when there are
-// none, those within a few edits of it. Each kind is by fewest edits, then in
-// the catalogue's order.
+// it, then those it is part of or that are part of it. Only when there are
+// none: the components whose purpose, use or notes have it as a word, then
+// the names within a few edits of it. Each kind is by fewest edits (the text
+// matches by the field they match in), then in the catalogue's order.
 func closest(all []component, name string) []string {
 	q := fold(name)
 	limit := max(2, len(q)/3)
@@ -223,6 +249,24 @@ func closest(all []component, name string) []string {
 			}
 		}
 		found = kept
+	} else if q != "" {
+		// No name has it: the components whose text has the word come before
+		// the names within a few edits, by where it is: purpose, use, notes.
+		word := wordRe(name)
+		var byText []near
+		for _, c := range all {
+			for i, text := range []string{c.Purpose, c.Use, c.Notes} {
+				if word.MatchString(text) {
+					byText = append(byText, near{c.Name, 2, i})
+					break
+				}
+			}
+		}
+		for _, f := range found {
+			f.kind = 3
+			byText = append(byText, f)
+		}
+		found = byText
 	}
 	sort.SliceStable(found, func(i, j int) bool {
 		if found[i].kind != found[j].kind {
@@ -235,6 +279,23 @@ func closest(all []component, name string) []string {
 		out = append(out, found[i].name)
 	}
 	return out
+}
+
+// wordRe matches word as a whole word, without regard to case.
+func wordRe(word string) *regexp.Regexp {
+	return regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(word) + `\b`)
+}
+
+// hasWords says whether every word is in e's name, or is a whole word of its
+// purpose, use or notes.
+func hasWords(e catalogEntry, words []string) bool {
+	text := e.Purpose + "\n" + e.Use + "\n" + e.Notes
+	for _, w := range words {
+		if !strings.Contains(strings.ToLower(e.Name), strings.ToLower(w)) && !wordRe(w).MatchString(text) {
+			return false
+		}
+	}
+	return true
 }
 
 // editDistance is the Levenshtein distance between a and b, by bytes.
@@ -270,16 +331,28 @@ func printList(w io.Writer, all []component) {
 		}
 		byGroup[c.Group] = append(byGroup[c.Group], c)
 	}
+	width := nameWidth(all)
+	for _, g := range groups {
+		fmt.Fprintf(w, "\n%s\n", g)
+		for _, c := range byGroup[g] {
+			printLine(w, width, c)
+		}
+	}
+}
+
+// nameWidth is the length of the longest name, which the list pads names to.
+func nameWidth(all []component) int {
 	width := 0
 	for _, c := range all {
 		width = max(width, len(c.Name))
 	}
-	for _, g := range groups {
-		fmt.Fprintf(w, "\n%s\n", g)
-		for _, c := range byGroup[g] {
-			fmt.Fprintf(w, "  %-*s %s\n", width, c.Name, c.Purpose)
-		}
-	}
+	return width
+}
+
+// printLine writes a component's line of the list: its name, padded, and its
+// purpose.
+func printLine(w io.Writer, width int, c component) {
+	fmt.Fprintf(w, "  %-*s %s\n", width, c.Name, c.Purpose)
 }
 
 // printEntry writes one entry as compact Markdown, leaving out the sections

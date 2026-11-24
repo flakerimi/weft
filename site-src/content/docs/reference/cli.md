@@ -15,7 +15,7 @@ Usage: weft <command>
 
 Commands:
   build      build the pages, then the app's binary (-o <file>)
-  catalog    list the components, or print one (weft catalog <Name>, --json)
+  catalog    list the components, print one (weft catalog <Name>) or search (--find)
   create     make an app (weft create <name>)
   dev        run the app, restarting Go when a .go file changes (--port n)
   update     update weft to the latest release (--check, --version X)
@@ -113,6 +113,7 @@ Prints the component catalogue in pieces, so an agent reads only the components 
 
 ```text
 weft catalog [<Name>...] [--examples] [--json]
+weft catalog --find <word> [<word>...] [--json]
 ```
 
 With no name it lists every component under its group, its name and its purpose:
@@ -171,9 +172,24 @@ import { Kbd } from '@weft/ui'
 | Flag | What it does |
 | --- | --- |
 | `--examples` | Every example of each component named, not only the first |
-| `--json` | The entries as the catalogue has them, as a JSON array: every one, or the ones named |
+| `--json` | The entries as the catalogue has them, as a JSON array: every one, the ones named, or the ones found |
+| `--find` | Search instead of naming: the components whose name has each word, or whose purpose, use or notes have it as a whole word, without regard to case. Words may be separate or in one argument. |
 
-An unknown name prints nothing for the others and exits with status 1: `weft catalog: no component named "date"; did you mean DatePicker, DateRangePicker?`, naming up to three, or `…; run weft catalog to list them.` when none is close. Wrong usage exits with status 2.
+`--find` prints the list's lines of the components that match every word, in the catalogue's order:
+
+```text
+$ weft catalog --find date
+  Calendar        A month of dates to choose one, several or a range from, in the locale's names, digits and first day of the week.
+  DatePicker      A date field where a date is typed as the locale writes it or chosen from a calendar that opens beside it.
+  DateRangePicker A field for a range of dates, a start and an end, typed in the locale or chosen in a calendar of two months.
+  InputTime       A time of day, typed part by part in the locale's order and hour cycle.
+  Separator       A rule that separates content, with an optional label or icon in its middle.
+  Timeline        Events in order, each a dot on a line with its date, title and description, the ones up to now marked done.
+```
+
+When nothing matches it says `weft catalog: nothing matches "<words>"; run weft catalog to list them.`, with exit status 1.
+
+An unknown name prints nothing for the others and exits with status 1, naming up to three components: the names it starts or is part of (`weft catalog: no component named "date"; did you mean DatePicker, DateRangePicker?`); when there are none, the components whose purpose, use or notes have it as a word, then names within a few edits (`weft catalog: no component named "modal"; did you mean Dialog, OverlayPanel, Sheet?`); or `…; run weft catalog to list them.` when none is close. It never prints another component in place of the one named. Wrong usage exits with status 2.
 
 ## The installer
 

@@ -208,9 +208,10 @@ func prerequisites() error {
 }
 
 // ensure is the gate every command that runs an app passes. It refuses an app
-// recorded at another Weft version (pointing an older one at weft upgrade), checks the prerequisites, unpacks the
-// bundle into .weft/ when that holds another version or nothing (a fresh
-// clone), and runs pnpm install when it unpacked or node_modules/ is missing.
+// recorded at another Weft version (pointing an older one at weft upgrade),
+// checks the prerequisites, unpacks the bundle into .weft/ when that holds
+// another version or nothing (a fresh clone), and runs pnpm install when it
+// unpacked or node_modules/ is missing.
 // Its errors carry no "weft <command>: " prefix; the command adds it.
 func ensure(appDir string, stdout, stderr io.Writer) (appConfig, error) {
 	cfg, err := readApp(appDir)

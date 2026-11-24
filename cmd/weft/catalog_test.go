@@ -384,7 +384,7 @@ func TestCatalogUnknownName(t *testing.T) {
 func TestCatalogUsage(t *testing.T) {
 	outsideApp(t)
 	code, out, errs := catalog(t, "--nope")
-	if code != 2 || out != "" || errs != "weft catalog: flag provided but not defined: -nope; usage is weft catalog [<Name>...] [--examples] [--json].\n" {
+	if code != 2 || out != "" || errs != "weft catalog: flag provided but not defined: -nope; usage is weft catalog [<Name>...] [--examples] [--json], or weft catalog --find <word> [<word>...].\n" {
 		t.Errorf("exit %d, stdout %q, stderr %q", code, out, errs)
 	}
 }
@@ -475,6 +475,76 @@ func TestCatalogIsSmall(t *testing.T) {
 		t.Logf("%s: %d B printed, %d B of JSON: %.1f %%", c.name, len(out), len(raw), 100*ratio)
 		if ratio >= c.limit {
 			t.Errorf("%s prints %.1f %% of its JSON, at or over %.0f %%", c.name, 100*ratio, 100*c.limit)
+		}
+	}
+}
+
+// A word that names no component finds the components whose purpose, use or
+// notes have it, as suggestions only: nothing is printed but the sentence.
+func TestCatalogSuggestsByWhatItIsFor(t *testing.T) {
+	outsideApp(t)
+	for _, c := range []struct{ name, want string }{
+		{"modal", `weft catalog: no component named "modal"; did you mean Dialog, OverlayPanel, Sheet?` + "\n"},
+		{"Modal", `weft catalog: no component named "Modal"; did you mean Dialog, OverlayPanel, Sheet?` + "\n"},
+	} {
+		code, out, errs := catalog(t, c.name)
+		if code != 1 || out != "" || errs != c.want {
+			t.Errorf("%s: exit %d, stdout %.30q, stderr %q, want %q", c.name, code, out, errs, c.want)
+		}
+	}
+	// A whole word only: "moda" is in no text.
+	if _, _, errs := catalog(t, "moda"); strings.Contains(errs, "Dialog") {
+		t.Errorf("moda: %q", errs)
+	}
+}
+
+// listLine is a component's line in weft catalog's list.
+func listLine(e map[string]any) string {
+	return fmt.Sprintf("  %-15s %s", str(e["name"]), str(e["purpose"]))
+}
+
+func TestCatalogFind(t *testing.T) {
+	outsideApp(t)
+	entries := repoEntries(t)
+	// What --find gives: each component whose name has the word, or whose
+	// purpose, use or notes have it as a whole word, in the catalogue's order.
+	want := func(words ...string) string {
+		var lines []string
+		for _, e := range entries {
+			all := true
+			for _, w := range words {
+				re := regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(w) + `\b`)
+				text := str(e["purpose"]) + "\n" + str(e["use"]) + "\n" + str(e["notes"])
+				all = all && (strings.Contains(strings.ToLower(str(e["name"])), strings.ToLower(w)) || re.MatchString(text))
+			}
+			if all {
+				lines = append(lines, listLine(e))
+			}
+		}
+		return strings.Join(lines, "\n") + "\n"
+	}
+	code, out, errs := catalog(t, "--find", "date")
+	if code != 0 || errs != "" || out != want("date") {
+		t.Errorf("--find date: exit %d, stderr %q:\n%s\nwant\n%s", code, errs, out, want("date"))
+	}
+	for _, name := range []string{"DatePicker", "DateRangePicker", "Calendar"} {
+		if !strings.Contains(out, "  "+name+" ") {
+			t.Errorf("--find date does not list %s", name)
+		}
+	}
+	// Every word must match, as separate arguments or in one.
+	_, two, _ := catalog(t, "--find", "date", "range")
+	_, one, _ := catalog(t, "--find", "date range")
+	if two != want("date", "range") || one != two || !strings.Contains(two, "  DateRangePicker ") || strings.Count(two, "\n") >= strings.Count(out, "\n") {
+		t.Errorf("--find date range:\n%s", two)
+	}
+	code, out, errs = catalog(t, "--find", "zzzz")
+	if code != 1 || out != "" || errs != `weft catalog: nothing matches "zzzz"; run weft catalog to list them.`+"\n" {
+		t.Errorf("--find zzzz: exit %d, stdout %q, stderr %q", code, out, errs)
+	}
+	for _, args := range [][]string{{"--find"}, {"--find", "date", "--examples"}} {
+		if code, _, errs := catalog(t, args...); code != 2 || !strings.Contains(errs, "usage is weft catalog") {
+			t.Errorf("%v: exit %d, stderr %q", args, code, errs)
 		}
 	}
 }

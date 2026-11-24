@@ -355,19 +355,17 @@ func TestIndexMd(t *testing.T) {
 	if res, home := get(t, srv, "/", "Accept-Encoding", "identity"); res.StatusCode != 200 || !strings.HasPrefix(res.Header.Get("Content-Type"), "text/html") || strings.Contains(home, "# Build an app with Weft") {
 		t.Errorf("GET /: %d %s, want the landing page", res.StatusCode, res.Header.Get("Content-Type"))
 	}
-	// It names the release it describes: the one a publish builds it for,
-	// else the last one published.
-	version := os.Getenv("WEFT_SITE_VERSION")
-	if version == "" {
-		b, err := os.ReadFile("../site/releases.txt")
-		if err != nil {
-			t.Fatal(err)
+	// It names the release a publish builds it for, and no version at all
+	// when it is built without one.
+	if version := os.Getenv("WEFT_SITE_VERSION"); version != "" {
+		if !strings.Contains(text, "It describes Weft "+version+".") {
+			t.Errorf("/index.md does not name Weft %s", version)
 		}
-		lines := strings.Split(strings.TrimSpace(string(b)), "\n")
-		version = lines[len(lines)-1]
+	} else if v := regexp.MustCompile(`\d+\.\d+\.\d+`).FindString(text); v != "" || strings.Contains(text, "It describes") {
+		t.Errorf("/index.md, built without WEFT_SITE_VERSION, names a version (%q)", v)
 	}
-	if !strings.Contains(text, "It describes Weft "+version+".") {
-		t.Errorf("/index.md does not name Weft %s", version)
+	if !strings.Contains(text, "`weft: unknown command \"catalog\"`") {
+		t.Error("/index.md does not say what to do when weft has no catalog command")
 	}
 	for _, l := range anyLink.FindAllStringSubmatch(text, -1) {
 		link := l[1] + l[2]

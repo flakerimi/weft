@@ -16,6 +16,7 @@ weft catalog                        # every component, one line each, by group
 weft catalog DatePicker Select      # each one: use, avoid, adapts, props, events, slots, notes, an example
 weft catalog DatePicker --examples  # with every example
 weft catalog Button --json          # the entry as JSON
+weft catalog --find date            # the components whose name or text has the word
 ```
 
 Names match without regard to case or hyphens (`date-picker`), and an unknown name gets the closest ones. In an app it reads `.weft/catalog/components.json`, the app's version; elsewhere, the catalogue `weft` carries. Start from an example rather than inventing a usage.

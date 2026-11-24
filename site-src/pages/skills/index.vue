@@ -10,7 +10,6 @@ import { useCollection, useContent } from 'virtual:weft/content'
 import { useFile } from 'virtual:weft/files'
 import catalogText from '../../../catalog/components.json?raw'
 import appAgents from '../../../templates/app/AGENTS.md.tmpl?raw'
-import releasesText from '../../../site/releases.txt?raw'
 import '../../styles/fonts.css'
 import '../../styles/docs.css'
 import { installCommand, llmsFull, llmsTxt } from '../../agents/llms.ts'
@@ -29,8 +28,8 @@ const docs = useCollection('docs').map((d) => useContent('docs', d.slug))
 const input = { docs, skills, components: (JSON.parse(catalogText) as Catalog).components }
 useFile('/llms.txt', llmsTxt(input))
 useFile('/llms-full.txt', llmsFull(input))
-// WEFT_SITE_VERSION is set by scripts/publish-site.sh to the release it publishes.
-useFile('/index.md', indexMd({ ...input, version: siteVersion(process.env.WEFT_SITE_VERSION, releasesText), appAgents }))
+// WEFT_SITE_VERSION is set by scripts/publish-site.sh to the release it publishes; without it the page names no version.
+useFile('/index.md', indexMd({ ...input, version: siteVersion(process.env.WEFT_SITE_VERSION), appAgents }))
 
 const names = skills.map((s) => s.frontmatter.title)
 const commands = [

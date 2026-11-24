@@ -135,7 +135,7 @@ weft update --version 0.0.2
 
 ## Do not
 
-- Add a dependency to the Go side. The `weft` package and its users here use only the standard library.
+- Add a Go dependency the app does not need. Go: use the standard library and `github.com/flakerimi/weft`; add a dependency only for what the standard library cannot do, such as a database driver. The `weft` package itself uses only the standard library.
 - Compress, render or hash anything per request. Everything comes from the build's manifest.
 - Embed releases or large media. Serve them with `WithFiles`.
 - Run `scripts/publish-site.sh`, `scripts/rollback-site.sh` or `lisa` for weft.base.al without `--dry-run`. Publishing that site is the owner's step.
