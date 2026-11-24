@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { loadContent } from '@weft/vite'
 import config from '../content.config.ts'
 import { installCommand, llmsFull, llmsTxt, repoFile, SITE } from '../agents/llms.ts'
-import { commandsNotYet, indexMd, NOT_YET, rulesOf, siteVersion } from '../agents/index-md.ts'
+import { AGENT_PROMPT, commandsNotYet, indexMd, NOT_YET, rulesOf, siteVersion } from '../agents/index-md.ts'
 import { slugOf, type Catalog } from '../gallery/model.ts'
 
 const site = new URL('..', import.meta.url).pathname
@@ -213,6 +213,42 @@ describe('index.md', () => {
     expect(() => rulesOf('# AGENTS.md\n')).toThrow(/has no "## Rules" section/)
     expect(() => rulesOf('## Rules\n\n- [[.Name]] is an app\n')).toThrow(/\[\[ \]\]/)
     expect(() => rulesOf('## Rules\n\n- one\n  two\n')).toThrow(/one line/)
+  })
+})
+
+// The prompt the landing hero offers to paste into a coding agent: it sends
+// the agent to /index.md, and asks only for what that page tells it to do.
+describe('the prompt for agents', () => {
+  const appAgents = readFileSync(new URL('../../templates/app/AGENTS.md.tmpl', import.meta.url), 'utf8')
+  const page = indexMd({ ...input, appAgents })
+  // What the page gives the agent to run: each line of a sh block, and each command in backticks.
+  const blocks = [...page.matchAll(/^```sh\n([\s\S]*?)^```$/gm)].flatMap((m) => m[1]!.split('\n'))
+  const given = [...blocks, ...[...page.matchAll(/`([^`\n]+)`/g)].map((m) => m[1]!)].map((l) => l.trim())
+
+  it('is one line that sends the agent to /index.md and ends where the person types what to build', () => {
+    expect(AGENT_PROMPT).toBe(
+      'Read https://weft.base.al/index.md and follow it: install weft, create the app, and learn the components with weft catalog. Then build: ',
+    )
+    expect(AGENT_PROMPT).not.toMatch(/\n/)
+    expect(AGENT_PROMPT.endsWith('Then build: ')).toBe(true)
+    expect([...AGENT_PROMPT.matchAll(/https?:\/\/\S+/g)].map((m) => m[0])).toEqual([`${SITE}/index.md`])
+  })
+
+  it('asks only for what /index.md gives a command for', () => {
+    // Each weft command it names is one the page tells the agent to run.
+    const named = [...AGENT_PROMPT.matchAll(/\bweft ([a-z]+)\b/g)].map((m) => m[1]!)
+    expect(named).toEqual(['catalog'])
+    for (const c of named) expect(given.some((l) => l.startsWith(`weft ${c}`)), `weft ${c}`).toBe(true)
+    // And each step it asks for, in its own words.
+    const steps: [string, string][] = [
+      ['install weft', `curl -fsSL ${SITE}/install | sh`],
+      ['create the app', 'weft create <name>'],
+      ['learn the components with weft catalog', 'weft catalog Card Table Form'],
+    ]
+    for (const [step, command] of steps) {
+      expect(AGENT_PROMPT, step).toContain(step)
+      expect(given.some((l) => l.startsWith(command)), `${step}: ${command}`).toBe(true)
+    }
   })
 })
 

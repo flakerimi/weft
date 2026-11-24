@@ -468,9 +468,9 @@ func (b *browser) click(selector string) {
 }
 
 // The site's copy button is Weft's Button, one island for both its uses: a
-// command it shows (the docs, the skills, the landing page) and a code block
-// it names by id (the gallery). Pressed, it puts that text on the clipboard
-// and says so.
+// command it shows (the docs, the skills, the landing page) and text it
+// names by id (the gallery's code, the landing hero's prompt for agents).
+// Pressed, it puts that text on the clipboard and says so.
 func TestCopyButtonsCopy(t *testing.T) {
 	dist(t)
 	b := startBrowser(t)
@@ -482,6 +482,8 @@ func TestCopyButtonsCopy(t *testing.T) {
 	for _, c := range []struct{ path, button, text string }{
 		{"/docs/getting-started/install", ".copy-command .copy-button", `document.querySelector('.copy-command__text').textContent`},
 		{"/", ".landing-install .copy-button", `document.querySelector('.landing-install .copy-command__text').textContent`},
+		// The hero's prompt for agents, whole, however much of it its box shows.
+		{"/", ".landing-prompt .copy-button", jsString(agentPrompt(t))},
 		{"/components/button", ".copy-code .copy-button", `document.getElementById(document.querySelector('.copy-code .copy-button').getAttribute('aria-controls')).textContent`},
 	} {
 		b.open(srv.URL + c.path)

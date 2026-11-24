@@ -15,6 +15,14 @@ export interface IndexInput extends AgentInput {
   appAgents: string
 }
 
+/**
+ * The prompt the landing hero offers to paste into a coding agent: it sends
+ * the agent to this page and names only what the page gives commands for. It
+ * ends with "Then build: " so the person types what they want after it. One
+ * line, one template literal: site-src/landing_test.go reads it from here.
+ */
+export const AGENT_PROMPT = `Read ${SITE}/index.md and follow it: install weft, create the app, and learn the components with weft catalog. Then build: `
+
 /** A release version, as scripts/version.sh accepts it. */
 const RELEASE = /^\d+\.\d+\.\d+(?:-[a-z0-9.]+)?$/
 
