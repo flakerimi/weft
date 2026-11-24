@@ -16,7 +16,7 @@
   align-items: center;
   gap: var(--weft-space-2, 8px);
   padding: var(--weft-space-6, 24px) var(--weft-space-4, 16px);
-  border: 1px dashed var(--weft-color-border, GrayText);
+  border: var(--weft-border-width, 1px) dashed var(--weft-color-border, GrayText);
   border-radius: var(--weft-radius-card, 12px);
   background: var(--weft-color-surface, Field);
   color: var(--weft-color-text, CanvasText);
@@ -60,7 +60,7 @@
   align-items: center;
   gap: var(--weft-space-3, 12px);
   padding: var(--weft-space-2, 8px);
-  border: 1px solid var(--weft-color-border, GrayText);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   border-radius: var(--weft-radius-control, 8px);
 }
 .weft-file-upload__file[data-status="error"] { border-color: var(--weft-color-danger, #DC2626); }

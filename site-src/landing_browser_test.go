@@ -59,10 +59,11 @@ func TestLandingHeroLayout(t *testing.T) {
 					r.selectNodeContents(n)
 					for (const rect of r.getClientRects()) if (meets(rect, t)) threadOnText.push(n.textContent.trim().slice(0, 30))
 				}
-				// The open menu hangs from its trigger's cell, at its end edge.
+				// The open menu hangs from its trigger's cell, at its end edge, 6 px
+				// below it as the component places it (less where the frames are drawn smaller).
 				const panel = desk.querySelector('[role="menu"]'), cell = panel.closest('td')
-				const p = box(panel), c = box(cell)
-				if (Math.abs(p.top - (c.bottom + 6)) > 2 || Math.abs(p.right - c.right) > 2) menu.push('menu at ' + Math.round(p.left) + ',' + Math.round(p.top) + '; cell ends ' + Math.round(c.right) + ',' + Math.round(c.bottom))
+				const p = box(panel), c = box(cell), zoom = parseFloat(getComputedStyle(desk.parentElement).zoom) || 1
+				if (Math.abs(p.top - (c.bottom + 6 * zoom)) > 2 || Math.abs(p.right - c.right) > 2) menu.push('menu at ' + Math.round(p.left) + ',' + Math.round(p.top) + '; cell ends ' + Math.round(c.right) + ',' + Math.round(c.bottom))
 				return { covered, overThread: overThread.slice(0, 3).map(String), threadOnText, menu }
 			})()`, &got)
 			if len(got.Covered) > 0 {
@@ -136,5 +137,146 @@ func TestDarkSurfaces(t *testing.T) {
 	})()`, &bright)
 	if bright > 0.1 {
 		t.Errorf("in dark the modal backdrop is a light colour (brightest channel %.2f); it is mixed from black, so it darkens", bright)
+	}
+}
+
+// The weave lies in the hero's ground, behind the copy only where its mask
+// has faded it out: no text of the copy (the headline, the lead, the install
+// command and the note under it) lies on the part of the picture that shows,
+// from a phone to a wide screen. It is on the screen, not moved off it; it
+// loads at the width the CSS gives each layout; at 1440 × 900 at least a
+// third of the hero's end half in the first screen is weave that shows (its
+// mask at half or more) and that no frame covers; and on a phone (844 px
+// tall) it is fully drawn within the first screen. Side by side (1280 px and
+// up) the header's links lie clear of it too; and with forced colours it is
+// not drawn.
+func TestLandingWeaveLeavesTheCopyClear(t *testing.T) {
+	dist(t)
+	b := startBrowser(t)
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
+	defer srv.Close()
+	b.call(b.session, "Emulation.setEmulatedMedia", map[string]any{"features": []map[string]string{{"name": "prefers-reduced-motion", "value": "reduce"}}})
+	for _, width := range []int{320, 390, 768, 1024, 1280, 1440, 2560} {
+		at := fmt.Sprintf("the weave at %d px", width)
+		height := 900
+		if width < 700 {
+			height = 844
+		}
+		b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": width, "height": height, "deviceScaleFactor": 1, "mobile": width < 700})
+		b.open(srv.URL + "/")
+		b.doing, b.deadline = at, time.Now().Add(pageTimeout)
+		b.eval(`document.fonts.ready.then(() => true)`, new(bool))
+		var got struct {
+			Image          string
+			OnWeave        []string
+			Mask           string
+			OnScreen, Room float64
+			Drawn          float64
+			OnNav          []string
+		}
+		b.eval(`(() => {
+			const ground = document.querySelector('.landing-hero__ground'), art = getComputedStyle(ground, '::after'), g = ground.getBoundingClientRect()
+			const w = parseFloat(art.width), h = parseFloat(art.height)
+			const left = g.right - parseFloat(art.right) - w, top = g.bottom - parseFloat(art.bottom) - h
+			// Each gradient of the mask: where it starts to show, where it is half drawn, where it is whole.
+			let x = [left, left, left], y = [top, top, top]
+			for (const m of art.maskImage.matchAll(/linear-gradient\((90deg, )?([^()]*(?:\([^()]*\)[^()]*)*)\)/g)) {
+				const stops = [...m[2].matchAll(/(?:^|[\s,])([\d.]+)(%|px)/g)].map((s) => parseFloat(s[1]) / (s[2] == '%' ? 100 : m[1] ? w : h))
+				if (m[2].startsWith('rgba(0, 0, 0, 0),')) stops.unshift(0)
+				const [a, z] = [stops[0], stops.at(-1)], half = stops.length > 2 ? stops[1] : (a + z) / 2
+				if (m[1]) x = [a, half, z].map((p) => left + p * w); else y = [a, half, z].map((p) => top + p * h)
+			}
+			const onWeave = []
+			const walker = document.createTreeWalker(document.querySelector('.landing-hero__copy'), NodeFilter.SHOW_TEXT)
+			for (let n; (n = walker.nextNode()); ) {
+				if (!n.textContent.trim()) continue
+				const r = document.createRange()
+				r.selectNodeContents(n)
+				for (const rect of r.getClientRects()) if (rect.right > x[0] + 1 && rect.bottom > y[0] + 1) onWeave.push(n.textContent.trim().slice(0, 30))
+			}
+			// The share of the end half of the hero, in the first screen, where the weave shows and no frame lies.
+			const frames = [...document.querySelectorAll('.hero-frame')].map((f) => f.getBoundingClientRect()).filter((r) => r.width > 0)
+			const bottom = Math.min(innerHeight, g.bottom)
+			let shown = 0, all = 0
+			for (let px = innerWidth / 2; px < innerWidth; px += 8) for (let py = 0; py < bottom; py += 8) {
+				all++
+				if (px >= x[1] && py >= y[1] && px < left + w && !frames.some((r) => px >= r.left && px < r.right && py >= r.top && py < r.bottom)) shown++
+			}
+			const onNav = [...document.querySelectorAll('.landing-top a:not(.site-skip)')].map((a) => [a, a.getBoundingClientRect()])
+				.filter(([, r]) => r.width > 0 && r.right > x[0] + 1 && r.bottom > y[0] + 1).map(([a]) => (a.textContent.trim() || a.getAttribute('aria-label') || a.href).slice(0, 30))
+			const image = performance.getEntriesByType('resource').map((e) => e.name).find((n) => /weave-\d+-/.test(n)) || ''
+			return {
+				onNav,
+				image: image.replace(/^.*\/(weave-\d+)-.*$/, '$1'), onWeave,
+				mask: art.maskImage + ' ' + [x[0], y[0], left, top, w, h].map(Math.round),
+				onScreen: (Math.min(innerWidth, left + w) - Math.max(0, left)) / Math.min(w, innerWidth),
+				room: shown / all, drawn: y[2],
+			}
+		})()`, &got)
+		if len(got.OnWeave) > 0 {
+			t.Errorf("%s: the copy lies on the weave (%s): %s", at, got.Mask, strings.Join(got.OnWeave, " | "))
+		}
+		if width >= 1280 && len(got.OnNav) > 0 {
+			t.Errorf("%s: the header's links lie on the weave (%s): %s", at, got.Mask, strings.Join(got.OnNav, " | "))
+		}
+		if got.OnScreen < 0.8 {
+			t.Errorf("%s: only %.0f %% of the weave's width is on the screen (%s)", at, got.OnScreen*100, got.Mask)
+		}
+		if width == 1440 && got.Room < 1.0/3 {
+			t.Errorf("%s: the weave shows, uncovered, in %.0f %% of the hero's end half in the first screen, want a third or more", at, got.Room*100)
+		}
+		if width < 700 && got.Drawn > float64(height)-100 {
+			t.Errorf("%s: the weave is whole only from y = %.0f, not within the first %d px", at, got.Drawn, height)
+		}
+		want := "weave-1024"
+		if width <= 900 {
+			want = "weave-640"
+		}
+		if got.Image != want {
+			t.Errorf("%s: the page loaded %q, want %s at 1×", at, got.Image, want)
+		}
+	}
+}
+
+// With forced colours the band is plain: system colours over a busy picture read badly.
+func TestLandingWeaveNotInForcedColours(t *testing.T) {
+	dist(t)
+	b := startBrowser(t)
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
+	defer srv.Close()
+	b.call(b.session, "Emulation.setEmulatedMedia", map[string]any{"features": []map[string]string{{"name": "forced-colors", "value": "active"}}})
+	b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 1440, "height": 900, "deviceScaleFactor": 1, "mobile": false})
+	b.open(srv.URL + "/")
+	b.doing, b.deadline = "the weave in forced colours", time.Now().Add(pageTimeout)
+	var content string
+	b.eval(`getComputedStyle(document.querySelector('.landing-hero__ground'), '::after').content`, &content)
+	if content != "none" {
+		t.Errorf("with forced colours the weave is drawn (content %s); the band stays plain", content)
+	}
+}
+
+// The loom waits below the fold: at 1440 × 900 it is not fetched on load,
+// and when it is scrolled into view the hero, with its weave, is out of it,
+// so the two pictures are never on screen together.
+func TestLandingLoomBelowTheFold(t *testing.T) {
+	dist(t)
+	b := startBrowser(t)
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
+	defer srv.Close()
+	b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 1440, "height": 900, "deviceScaleFactor": 1, "mobile": false})
+	b.doing, b.deadline = "the loom at 1440 px", time.Now().Add(pageTimeout)
+	b.call(b.session, "Page.navigate", map[string]any{"url": srv.URL + "/"})
+	b.wait("Page.loadEventFired")
+	var early bool
+	b.eval(`performance.getEntriesByType('resource').some((e) => e.name.includes('/loom-'))`, &early)
+	if early {
+		t.Error("at 1440 × 900 the loom is fetched on load; it is below the fold, loaded lazily")
+	}
+	b.eval(`(document.querySelector('#start img').scrollIntoView({ block: 'end' }), true)`, new(bool))
+	b.until(`document.querySelector('#start img').complete && document.querySelector('#start img').naturalWidth > 0`)
+	var heroBottom float64
+	b.eval(`document.querySelector('.landing-hero').getBoundingClientRect().bottom`, &heroBottom)
+	if heroBottom > 0 {
+		t.Errorf("with the loom in view the hero is still %.0f px on screen", heroBottom)
 	}
 }

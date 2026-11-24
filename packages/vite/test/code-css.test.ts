@@ -57,3 +57,40 @@ describe.each(['neutral', 'lisa', 'weft'])('code.css on the %s theme', (theme) =
     })
   }
 })
+
+// Its lines come from the theme too, as @weft/ui's do (packages/ui/test/elevation-tokens.test.ts):
+// the block's border reads --weft-border-width and its focus ring --weft-focus-width, each with
+// a fallback, and no border, outline or shadow in it has a literal width.
+describe('code.css lines', () => {
+  const rules = code.replace(/\/\*[\s\S]*?\*\//g, '')
+  const declarations = [...rules.matchAll(/(?<![\w-])((?:box-shadow|border|outline)(?:-[a-z]+)*)\s*:\s*([^;{}]+)/g)]
+    .map((m) => ({ property: m[1]!, value: m[2]!.trim() }))
+  /** The value with every var(--weft-…) removed, fallbacks too. */
+  const withoutTokens = (value: string) => {
+    let out = ''
+    for (let i = 0; i < value.length; ) {
+      if (value.startsWith('var(--weft-', i)) {
+        let depth = 1
+        for (i += 'var('.length; depth > 0 && i < value.length; i++) {
+          if (value[i] === '(') depth++
+          else if (value[i] === ')') depth--
+        }
+      } else out += value[i++]
+    }
+    return out
+  }
+
+  it('reads the border and focus widths from the theme, with fallbacks', () => {
+    expect(declarations.find((d) => d.property === 'border')?.value).toMatch(/^var\(--weft-border-width, 1px\) solid var\(--weft-color-border, [^)]+\)$/)
+    expect(declarations.find((d) => d.property === 'outline')?.value).toMatch(/^var\(--weft-focus-width, 2px\) solid var\(--weft-color-focus, [^)]+\)$/)
+  })
+
+  it('has no literal line width or shadow', () => {
+    const literal = declarations.filter((d) =>
+      d.property === 'box-shadow'
+        ? d.value !== 'none' && !d.value.startsWith('var(--weft-shadow-')
+        : /^(border(-[a-z]+)*|outline(-width)?)$/.test(d.property) && !/radius|color|style/.test(d.property) && /(?<![\w.-])\d*\.?\d+px\b/.test(withoutTokens(d.value)),
+    )
+    expect(literal).toEqual([])
+  })
+})

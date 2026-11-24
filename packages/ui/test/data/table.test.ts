@@ -691,7 +691,7 @@ describe('Table', () => {
         await cases({ selectable: true, input: 'touch' })
         expect(getComputedStyle($('thead th')).position).toBe('sticky')
         expect(px(getComputedStyle(bodyRows()[0]!.querySelector('td')!).blockSize)).toBeGreaterThanOrEqual(44)
-        expect(ruleFor('.weft-table__table[role="grid"] td:focus-visible')!.style.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+        expect(ruleFor('.weft-table__table[role="grid"] td:focus-visible')!.style.getPropertyValue('outline')).toBe('var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight)')
       } finally {
         unstyle()
       }

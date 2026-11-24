@@ -210,7 +210,7 @@ describe('DropdownMenu', () => {
     try {
       const m = await cases()
       const ring = ruleFor('.weft-menu__item:focus-visible')!.style
-      expect(ring.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+      expect(ring.getPropertyValue('outline')).toBe('var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight)')
       await openWith()
       const el = menu()
       el.style.transitionDuration = '40ms'

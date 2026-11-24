@@ -28,7 +28,7 @@
 }
 .weft-stepper[data-orientation="horizontal"] .weft-stepper__trigger { flex-direction: column; align-items: center; text-align: center; inline-size: 100%; }
 .weft-stepper__trigger:disabled { cursor: not-allowed; }
-.weft-stepper__trigger:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: 2px; }
+.weft-stepper__trigger:focus-visible { outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight); outline-offset: 2px; }
 
 .weft-stepper__indicator {
   display: inline-grid;
@@ -36,7 +36,7 @@
   flex: none;
   inline-size: var(--weft-control-sm, 28px);
   block-size: var(--weft-control-sm, 28px);
-  border: 2px solid var(--weft-color-border, GrayText);
+  border: var(--weft-border-width-strong, 2px) solid var(--weft-color-border, GrayText);
   border-radius: 50%;
   background: var(--weft-color-bg, Canvas);
   color: var(--weft-color-text-muted, GrayText);
@@ -58,13 +58,13 @@
 .weft-stepper__separator { position: absolute; background: var(--weft-color-border, GrayText); }
 .weft-stepper__item[data-state="completed"] .weft-stepper__separator { background: var(--weft-tone, CanvasText); }
 .weft-stepper[data-orientation="horizontal"] .weft-stepper__separator {
-  inset-block-start: calc(var(--weft-control-sm, 28px) / 2 - 1px);
+  inset-block-start: calc(var(--weft-control-sm, 28px) / 2 - var(--weft-border-width-strong, 2px) / 2);
   inset-inline-start: calc(50% + var(--weft-control-sm, 28px) / 2 + var(--weft-space-1, 4px));
   inset-inline-end: calc(-50% + var(--weft-control-sm, 28px) / 2 + var(--weft-space-1, 4px));
-  block-size: 2px;
+  block-size: var(--weft-border-width-strong, 2px);
 }
 .weft-stepper[data-orientation="vertical"] .weft-stepper__separator {
   inset-block: calc(var(--weft-control-sm, 28px) + var(--weft-space-1, 4px)) var(--weft-space-1, 4px);
-  inset-inline-start: calc(var(--weft-control-sm, 28px) / 2 - 1px);
-  inline-size: 2px;
+  inset-inline-start: calc(var(--weft-control-sm, 28px) / 2 - var(--weft-border-width-strong, 2px) / 2);
+  inline-size: var(--weft-border-width-strong, 2px);
 }

@@ -2,7 +2,7 @@
   border: 0;
   margin: 0;
   background: var(--weft-color-border, GrayText);
-  block-size: 1px;
+  block-size: var(--weft-border-width, 1px);
   inline-size: 100%;
 }
-.weft-divider[data-orientation="vertical"] { block-size: auto; inline-size: 1px; align-self: stretch; }
+.weft-divider[data-orientation="vertical"] { block-size: auto; inline-size: var(--weft-border-width, 1px); align-self: stretch; }

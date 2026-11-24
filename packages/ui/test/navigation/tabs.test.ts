@@ -226,7 +226,7 @@ describe('Tabs', () => {
     try {
       await cases({ input: 'touch' })
       expect(px(getComputedStyle(tab('Account')).minBlockSize)).toBe(44)
-      expect(ruleFor('.weft-tabs__tab:focus-visible')!.style.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+      expect(ruleFor('.weft-tabs__tab:focus-visible')!.style.getPropertyValue('outline')).toBe('var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight)')
     } finally {
       unstyle()
     }

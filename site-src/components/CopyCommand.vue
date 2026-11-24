@@ -58,7 +58,7 @@ async function copy(event: MouseEvent) {
   gap: var(--weft-space-3);
   padding: var(--weft-space-2) var(--weft-space-2) var(--weft-space-2) var(--weft-space-4);
   background: var(--weft-color-surface);
-  border: 1px solid var(--weft-color-border);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border);
   border-radius: var(--weft-radius-control);
 }
 .copy-command__text {

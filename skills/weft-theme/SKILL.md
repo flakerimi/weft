@@ -57,6 +57,8 @@ The tokens:
 | `--weft-color-<tone>-fg`, `-text`, `-hover`, `-active` | derived per tone, worked out at theme build |
 | `--weft-space-1`, `-2`, `-3`, `-4`, `-6`, `-8` (no 5 or 7), `--weft-radius-control`, `-card`, `-panel` | spacing and corners |
 | `--weft-control-sm`, `-md`, `-lg` | drawn control heights |
+| `--weft-shadow-control`, `-card`, `-popup`, `-dialog` | shadows: thumbs and a selected pill tab; cards, stat cards and tables (`none` by default); menus, popovers, select lists, toasts (not tooltips); dialogs, sheets, the command palette |
+| `--weft-border-width`, `--weft-border-width-strong`, `--weft-focus-width` | line widths: every hairline (1px), emphasised lines such as a tab's indicator (2px), the focus ring (2px) |
 | `--weft-font-sans`, `-mono`, `--weft-weight-body`, `-heading`, `-title` | type |
 | `--weft-duration-*`, `--weft-ease-*` | motion |
 | `--weft-hit-min`, `--weft-text-base`, `--weft-page-max` | set by input and surface, not by you |
@@ -80,20 +82,20 @@ To preload any other face, pass `--preload-font <file.woff2>`. A `url()` that na
 
 ## Tailwind
 
-Weft has no Tailwind inside. If your own components use Tailwind, import `@weft/themes/tailwind.css` after the theme. Tailwind's `bg-surface`, `text-primary` and the rest then read the same tokens.
+Weft has no Tailwind inside. If your own components use Tailwind, import `@weft/themes/tailwind.css` after the theme. Tailwind's `bg-surface`, `text-primary`, `shadow-popup` and the rest then read the same tokens.
 
 ## Add a theme to Weft
 
 1. Write `packages/themes/src/<name>.ts`, exporting a `Theme`. It has:
    - `light` and `dark` sets of every colour key, each as `#RRGGBB`;
-   - `font`, `radius`, `control`, `space`, `motion` and `ease`.
+   - `font`, `radius`, `control`, `shadow`, `border`, `space`, `motion` and `ease`. `shadow` holds CSS `box-shadow` values; `border` holds px widths (`width`, `strong`, `focus`).
    Copy `weft.ts` as a start.
 2. Export it from `src/index.ts`, write it in `scripts/build.ts`, and add `"./<name>.css"` to the package's `exports`.
 3. In `packages/vite/src/build.ts`, add it to the `Theme` type (`export type Theme = 'neutral' | 'lisa' | 'weft'`) and to `THEMES`. Add it to the usage line in `packages/vite/bin/weft-build-pages.mjs`, and to the docs' Themes and CLI pages.
 4. Test it in `packages/themes/test/<name>.test.ts`, as `weft.test.ts` does: every colour key in both schemes, and focus at 3:1 on the page.
 5. Run `pnpm --filter @weft/themes build`. It refuses a theme whose text, `-fg` or hover and active fills cannot reach 4.5:1, and names the colour to change.
 
-Never edit `dist/*.css`: it is generated. Change the `lisa` theme only through Lisa's token contract: `pnpm --filter @weft/themes sync:lisa <path to tokens.json>` copies it into `src/lisa/tokens.json`.
+Never edit `dist/*.css`: it is generated. Change the `lisa` theme only through Lisa's token contract: `pnpm --filter @weft/themes sync:lisa <path to tokens.json>` copies it into `src/lisa/tokens.json`. Its `shadow` and `border` are not read from the contract yet: `src/lisa.ts` gives them Weft's defaults.
 
 ## Do not
 

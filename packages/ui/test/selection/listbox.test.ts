@@ -462,7 +462,7 @@ describe('Listbox', () => {
     const unstyle = loadStyles()
     try {
       await cases()
-      expect(ruleFor('.weft-listbox__list:focus-visible')!.style.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+      expect(ruleFor('.weft-listbox__list:focus-visible')!.style.getPropertyValue('outline')).toBe('var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight)')
       expect(ruleFor('.weft-listbox__option[data-active]')).toBeDefined()
     } finally {
       unstyle()

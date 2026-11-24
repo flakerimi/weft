@@ -5,7 +5,7 @@
   inline-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
   block-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
   padding: 0;
-  border: 1px solid var(--weft-color-border, GrayText);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   border-radius: var(--weft-radius-control, 8px);
   background: var(--weft-color-surface, Field);
   color: var(--weft-color-text, FieldText);
@@ -20,8 +20,8 @@
 }
 .weft-pin-input[data-size="lg"] .weft-pin-input__box { inline-size: var(--weft-control-lg, 44px); block-size: var(--weft-control-lg, 44px); font-size: 1.0625em; }
 .weft-pin-input__box:focus-visible {
-  outline: 2px solid var(--weft-color-focus, Highlight);
-  outline-offset: -1px;
+  outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight);
+  outline-offset: calc(-1 * var(--weft-border-width, 1px));
   border-color: var(--weft-color-focus, Highlight);
 }
 .weft-pin-input[data-invalid] .weft-pin-input__box { border-color: var(--weft-color-danger, #DC2626); }

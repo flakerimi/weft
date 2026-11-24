@@ -74,7 +74,7 @@ describe('Collapsible', () => {
       const reduced = mediaRule('(prefers-reduced-motion: reduce)', '*')!.style
       expect(reduced.getPropertyValue('transition-duration')).toBe('0ms')
       expect(reduced.getPropertyPriority('transition-duration')).toBe('important')
-      expect(ruleFor('.weft-collapsible__trigger:focus-visible')!.style.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+      expect(ruleFor('.weft-collapsible__trigger:focus-visible')!.style.getPropertyValue('outline')).toBe('var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight)')
     } finally {
       unstyle()
     }
@@ -170,7 +170,7 @@ describe('Accordion', () => {
     try {
       await cases()
       expect(ruleFor('.weft-accordion__trigger')!.style.getPropertyValue('min-block-size')).toContain('var(--weft-hit-min')
-      expect(ruleFor('.weft-accordion__trigger:focus-visible')!.style.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+      expect(ruleFor('.weft-accordion__trigger:focus-visible')!.style.getPropertyValue('outline')).toBe('var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight)')
     } finally {
       unstyle()
     }

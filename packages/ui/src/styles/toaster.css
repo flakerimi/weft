@@ -9,7 +9,7 @@
   pointer-events: none;
   outline: none;
 }
-.weft-toaster:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: 2px; }
+.weft-toaster:focus-visible { outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight); outline-offset: 2px; }
 .weft-toaster[data-position^="top"] { inset-block-start: env(safe-area-inset-top, 0px); }
 .weft-toaster[data-position^="bottom"] { inset-block-end: env(safe-area-inset-bottom, 0px); }
 .weft-toaster[data-position$="start"] { inset-inline-start: 0; }

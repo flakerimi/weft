@@ -36,6 +36,8 @@ Every value a component draws with is a `--weft-*` custom property:
 | `--weft-color-primary-soft` | A pale ground of the primary, under selected table rows and tree items |
 | `--weft-space-1`, `-2`, `-3`, `-4`, `-6`, `-8` (no 5 or 7), `--weft-radius-control`, `-card`, `-panel` | Spacing and corners |
 | `--weft-control-sm`, `-md`, `-lg` | The drawn height of controls |
+| `--weft-shadow-control`, `-card`, `-popup`, `-dialog` | Shadows: the small raised parts of controls (a switch's or a slider's thumb, a selected pill tab); cards and other resting surfaces (`none` in every theme); menus, popovers, select lists and toasts (a tooltip draws none); dialogs, sheets and the command palette |
+| `--weft-border-width`, `--weft-border-width-strong`, `--weft-focus-width` | Line widths: every hairline (1px), the emphasised lines such as a tab's indicator (2px), and the focus ring (2px). `0px` removes the hairlines |
 | `--weft-font-sans`, `-mono`, `--weft-weight-body`, `-heading`, `-title` | Type |
 | `--weft-duration-*`, `--weft-ease-*` | Motion |
 | `--weft-hit-min`, `--weft-text-base`, `--weft-page-max` | Set by input and surface; see [the adaptive model](adaptive.md) |
@@ -71,4 +73,4 @@ When you change a colour this way, the derived `-fg`, `-text`, `-hover` and `-ac
 
 ## Tailwind
 
-Weft has no Tailwind inside. If your own components use Tailwind, import `@weft/themes/tailwind.css` after the theme. It maps Tailwind's colour names (`bg-surface`, `text-primary`) to the same tokens.
+Weft has no Tailwind inside. If your own components use Tailwind, import `@weft/themes/tailwind.css` after the theme. It maps Tailwind's colour, radius, shadow and font names (`bg-surface`, `text-primary`, `shadow-popup`) to the same tokens.

@@ -31,7 +31,7 @@
   padding: var(--weft-space-3, 12px);
   overflow-x: hidden;
   overflow-y: auto;
-  border-inline-end: 1px solid var(--weft-color-border, GrayText);
+  border-inline-end: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   background: var(--weft-color-surface, Canvas);
   transition: inline-size var(--weft-duration-layout, 220ms) var(--weft-ease-standard, ease);
 }
@@ -49,7 +49,7 @@
   color: var(--weft-color-primary-fg, Canvas);
 }
 .weft-app-shell__nav { flex: 1; min-block-size: 0; }
-.weft-app-shell__sidebar-footer { padding-block-start: var(--weft-space-3, 12px); border-block-start: 1px solid var(--weft-color-border, GrayText); }
+.weft-app-shell__sidebar-footer { padding-block-start: var(--weft-space-3, 12px); border-block-start: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText); }
 
 .weft-app-shell__header {
   grid-area: header;
@@ -61,7 +61,7 @@
   gap: var(--weft-space-2, 8px);
   min-block-size: calc(var(--weft-control-md, 36px) + 2 * var(--weft-space-3, 12px));
   padding: var(--weft-space-2, 8px) var(--weft-space-4, 16px);
-  border-block-end: 1px solid var(--weft-color-border, GrayText);
+  border-block-end: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   background: var(--weft-color-bg, Canvas);
 }
 .weft-app-shell__glyph { inline-size: 20px; block-size: 20px; }
@@ -80,7 +80,7 @@
   inset-block-end: 0;
   z-index: 40;
   padding-block-end: env(safe-area-inset-bottom, 0px);
-  border-block-start: 1px solid var(--weft-color-border, GrayText);
+  border-block-start: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   background: var(--weft-color-surface, Canvas);
 }
 .weft-app-shell__bar-list { display: flex; margin: 0; padding: 0; list-style: none; }
@@ -107,7 +107,7 @@
   -webkit-tap-highlight-color: transparent;
 }
 .weft-app-shell .weft-app-shell__bar-item[aria-current="page"] { color: var(--weft-color-primary-text, LinkText); }
-.weft-app-shell .weft-app-shell__bar-item:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: -2px; }
+.weft-app-shell .weft-app-shell__bar-item:focus-visible { outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight); outline-offset: calc(-1 * var(--weft-focus-width, 2px)); }
 .weft-app-shell__bar-icon { inline-size: 22px; block-size: 22px; }
 .weft-app-shell__bar-label { max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

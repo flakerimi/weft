@@ -21,14 +21,14 @@
   --weft-code-token-deleted: var(--weft-color-danger-text);
   --weft-code-token-changed: var(--weft-color-warning-text);
   margin: 0;
-  padding: var(--weft-space-4);
+  padding: var(--weft-space-4, 16px);
   overflow-x: auto;
-  border: 1px solid var(--weft-color-border);
-  border-radius: var(--weft-radius-card);
-  font: 0.875em/1.6 var(--weft-font-mono);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-card, 12px);
+  font: 0.875em/1.6 var(--weft-font-mono, ui-monospace, monospace);
   tab-size: 2;
 }
 .shiki:focus-visible {
-  outline: 2px solid var(--weft-color-focus);
+  outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight);
   outline-offset: 2px;
 }

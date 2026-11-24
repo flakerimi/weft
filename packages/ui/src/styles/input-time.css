@@ -20,7 +20,7 @@
 .weft-input-time__segment[data-placeholder] { color: var(--weft-color-text-muted, GrayText); }
 .weft-input-time__segment:focus { background: color-mix(in srgb, var(--weft-color-focus, Highlight) 18%, transparent); }
 .weft-input-time__segment:focus-visible {
-  outline: 2px solid var(--weft-color-focus, Highlight);
+  outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight);
   outline-offset: 0;
 }
 .weft-input-time__literal { color: var(--weft-color-text-muted, GrayText); white-space: pre; }

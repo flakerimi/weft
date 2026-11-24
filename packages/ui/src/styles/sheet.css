@@ -13,7 +13,7 @@
   overscroll-behavior: contain;
   background: var(--weft-color-surface-raised, Canvas);
   color: var(--weft-color-text, CanvasText);
-  box-shadow: 0 8px 32px color-mix(in srgb, CanvasText 24%, transparent);
+  box-shadow: var(--weft-shadow-dialog, 0 8px 32px color-mix(in srgb, CanvasText 24%, transparent));
   outline: none;
   transition: translate var(--weft-duration-layout, 220ms) var(--weft-ease-emphasized, ease-out);
 }

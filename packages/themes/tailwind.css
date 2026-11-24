@@ -24,6 +24,10 @@
   --radius-control: var(--weft-radius-control, 8px);
   --radius-card: var(--weft-radius-card, 12px);
   --radius-panel: var(--weft-radius-panel, 16px);
+  --shadow-control: var(--weft-shadow-control, 0 1px 2px color-mix(in srgb, CanvasText 25%, transparent));
+  --shadow-card: var(--weft-shadow-card, none);
+  --shadow-popup: var(--weft-shadow-popup, 0 8px 24px color-mix(in srgb, CanvasText 16%, transparent));
+  --shadow-dialog: var(--weft-shadow-dialog, 0 8px 32px color-mix(in srgb, CanvasText 24%, transparent));
   --font-sans: var(--weft-font-sans, system-ui, sans-serif);
   --font-mono: var(--weft-font-mono, ui-monospace, monospace);
 }

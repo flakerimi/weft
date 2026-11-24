@@ -132,7 +132,7 @@ describe('Dialog', () => {
       expect(ruleFor('.weft-close-button')!.style.getPropertyValue('outline')).toBe('')
       // The theme's focus ring (happy-dom keeps only part of the outline shorthand).
       const ring = ruleFor(':focus-visible')!.style
-      expect(ring.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+      expect(ring.getPropertyValue('outline')).toBe('var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight)')
       expect(ring.getPropertyValue('outline-offset')).toBe('2px')
     } finally {
       unstyle()

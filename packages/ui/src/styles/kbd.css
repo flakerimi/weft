@@ -7,8 +7,8 @@
   min-inline-size: 22px;
   block-size: 22px;
   padding-inline: var(--weft-space-1, 4px);
-  border: 1px solid var(--weft-color-border, GrayText);
-  border-block-end-width: 2px;
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
+  border-block-end-width: var(--weft-border-width-strong, 2px);
   border-radius: var(--weft-space-1, 4px);
   background: var(--weft-color-surface, Canvas);
   color: var(--weft-color-text, CanvasText);
