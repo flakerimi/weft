@@ -34,7 +34,7 @@ const (
 )
 
 func devCmd(args []string, stdout, stderr io.Writer) int {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), stopSignals...)
 	defer stop()
 	return dev(ctx, args, stdout, stderr)
 }
@@ -90,8 +90,28 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return fail(stderr, "dev", err)
 	}
 
+	// say prints a sentence about watching once, however often it recurs.
+	said := map[string]bool{}
+	say := func(sentence string) {
+		if !said[sentence] {
+			said[sentence] = true
+			fmt.Fprintln(stderr, sentence)
+		}
+	}
+	// files returns the app's .go files, or false when it cannot look.
+	files := func() (map[string]time.Time, bool) {
+		now, err := goFiles(appDir, func(dir string) {
+			say(fmt.Sprintf("weft dev: cannot read %s, so a change in it does not restart the Go server; make it readable if it holds Go code.", dir))
+		})
+		if err != nil {
+			say(fmt.Sprintf("weft dev: cannot look for changed .go files (%v), so a save does not restart the Go server; fix that and run weft dev again.", err))
+			return nil, false
+		}
+		return now, true
+	}
+
 	bin := filepath.Join(appDir, ".weft", "dev", "app")
-	last, _ := goFiles(appDir)
+	last, _ := files()
 	if !goBuild(ctx, appDir, bin, stderr) {
 		if ctx.Err() != nil {
 			return 0
@@ -131,7 +151,9 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	stopAll := func() {
 		var wg sync.WaitGroup
 		for _, c := range []*child{api, pages} {
-			wg.Go(c.stop)
+			if c != nil {
+				wg.Go(c.stop)
+			}
 		}
 		wg.Wait()
 	}
@@ -175,20 +197,40 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	ready.Stop()
 	fmt.Fprintf(stdout, "weft dev: http://localhost:%d\n", *port)
 
+	// After a restart a Go server that stops by itself, as one that panics at
+	// start, is like a compile error: weft dev waits for the next save, with
+	// api nil until then. Only the first one stopping ends weft dev.
+	restarted := false
+	apiDone := func() <-chan struct{} {
+		if api == nil {
+			return nil
+		}
+		return api.done
+	}
 	tick := time.NewTicker(devPoll)
 	defer tick.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return stopAsked()
-		case <-api.done:
-			return exited(api)
+		case <-apiDone():
+			if !restarted {
+				return exited(api)
+			}
+			select {
+			case <-ctx.Done():
+				return stopAsked()
+			case <-time.After(devGrace):
+			}
+			api = nil
+			fmt.Fprintln(stderr, "weft dev: the Go server stopped after the restart; fix it and save again.")
+			continue
 		case <-pages.done:
 			return exited(pages)
 		case <-tick.C:
 		}
-		now, err := goFiles(appDir)
-		if err != nil || sameFiles(now, last) {
+		now, ok := files()
+		if !ok || sameFiles(now, last) {
 			continue
 		}
 		last = now
@@ -198,11 +240,14 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			}
 			continue
 		}
-		api.stop()
+		if api != nil {
+			api.stop()
+		}
 		if api, err = goServer(); err != nil {
 			pages.stop()
 			return fail(stderr, "dev", fmt.Errorf("cannot start %s (%v); run weft dev again", bin, err))
 		}
+		restarted = true
 	}
 }
 
@@ -250,14 +295,21 @@ func goBuild(ctx context.Context, appDir, bin string, stderr io.Writer) bool {
 
 // goFiles returns the modification time of every .go file in the app, by
 // path, outside the folders at its top that hold no Go of the app's: .weft,
-// .git, node_modules and web.
-func goFiles(appDir string) (map[string]time.Time, error) {
+// .git, node_modules and web. A folder it may not read, such as a database
+// volume of another user, is skipped and passed to unreadable, if not nil.
+func goFiles(appDir string, unreadable func(dir string)) (map[string]time.Time, error) {
 	files := map[string]time.Time{}
 	err := filepath.WalkDir(appDir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// A file or folder removed while the walk ran is no error.
 			if errors.Is(err, fs.ErrNotExist) {
 				return nil
+			}
+			if errors.Is(err, fs.ErrPermission) && d != nil && d.IsDir() && p != appDir {
+				if unreadable != nil {
+					unreadable(p)
+				}
+				return filepath.SkipDir
 			}
 			return err
 		}
@@ -298,14 +350,21 @@ func sameFiles(a, b map[string]time.Time) bool {
 	return true
 }
 
-// portFree says whether port can be listened on at localhost: on 127.0.0.1
-// and on ::1, as localhost may be either.
+// portFree says whether port is free at localhost: whether it can be
+// listened on at 127.0.0.1 and at ::1, as localhost may be either, and
+// nothing answers there. The dial finds a server on the wildcard address,
+// beside which macOS lets a socket bind 127.0.0.1 or ::1.
 func portFree(port int) bool {
 	for _, host := range []string{"127.0.0.1", "::1"} {
-		l, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+		addr := net.JoinHostPort(host, strconv.Itoa(port))
+		l, err := net.Listen("tcp", addr)
 		if err == nil {
 			l.Close()
 		} else if errors.Is(err, syscall.EADDRINUSE) {
+			return false
+		}
+		if c, err := net.DialTimeout("tcp", addr, 500*time.Millisecond); err == nil {
+			c.Close()
 			return false
 		}
 	}

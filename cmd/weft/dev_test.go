@@ -291,12 +291,21 @@ func TestDevServesPagesAndAPI(t *testing.T) {
 	}
 }
 
+// An unreadable folder in the app, such as a database volume, is said once
+// and leaves restarts working.
 func TestDevRestartsGo(t *testing.T) {
 	app := devApp(t)
+	data := filepath.Join(app, "data")
+	unreadableDir(t, data)
 	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
 	eventually(t, r.url+"/api/hello", "Hello from Go", 5*time.Second)
 	setMessage(t, app, "Hello again")
 	eventually(t, r.url+"/api/hello", "Hello again", 10*time.Second)
+	setMessage(t, app, "Hello a third time")
+	eventually(t, r.url+"/api/hello", "Hello a third time", 10*time.Second)
+	if n := strings.Count(r.stderr.String(), "weft dev: cannot read "+data); n != 1 {
+		t.Errorf("the unreadable folder was named %d times, want once: %s", n, r.stderr)
+	}
 	if strings.Contains(r.stderr.String(), "stopped") {
 		t.Errorf("a restart was reported as a stop: %s", r.stderr)
 	}
@@ -323,6 +332,137 @@ func TestDevSurvivesCompileError(t *testing.T) {
 	eventually(t, r.url+"/api/hello", "Hello again", 10*time.Second)
 	if code := r.stop(t); code != 0 {
 		t.Errorf("exit %d: %s", code, r.stderr)
+	}
+}
+
+// A restarted Go server that stops at once, as one that panics at start, is
+// like a compile error: the page server stays, and the next save recovers.
+func TestDevSurvivesGoServerStopAfterRestart(t *testing.T) {
+	app := devApp(t)
+	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
+	file := filepath.Join(app, "main.go")
+	src, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	broken := bytes.Replace(src, []byte("func main() {\n"), []byte("func main() {\n\tpanic(\"boom\")\n"), 1)
+	if bytes.Equal(broken, src) {
+		t.Fatalf("main.go has no func main: %s", src)
+	}
+	os.WriteFile(file, broken, 0o644)
+	want := "weft dev: the Go server stopped after the restart; fix it and save again.\n"
+	for deadline := time.Now().Add(15 * time.Second); !strings.Contains(r.stderr.String(), want); time.Sleep(50 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("no %q within 15 s: %s", want, r.stderr)
+		}
+	}
+	if !strings.Contains(r.stderr.String(), "boom") {
+		t.Errorf("the panic was not shown: %s", r.stderr)
+	}
+	if code, body := get(t, r.url+"/"); code != 200 || !strings.Contains(body, ">Welcome</h1>") {
+		t.Errorf("the page server stopped answering: GET / = %d %q", code, body)
+	}
+	select {
+	case code := <-r.done:
+		r.done = nil
+		t.Fatalf("weft dev exited %d: %s", code, r.stderr)
+	default:
+	}
+	os.WriteFile(file, src, 0o644)
+	setMessage(t, app, "Hello again")
+	eventually(t, r.url+"/api/hello", "Hello again", 10*time.Second)
+	if code := r.stop(t); code != 0 {
+		t.Errorf("exit %d: %s", code, r.stderr)
+	}
+}
+
+// childGroups returns the process groups of pid's children.
+func childGroups(t *testing.T, pid int) []int {
+	t.Helper()
+	out, err := exec.Command("ps", "-A", "-o", "ppid=,pgid=").Output()
+	if err != nil {
+		t.Fatalf("ps: %v", err)
+	}
+	var groups []int
+	for _, line := range strings.Split(string(out), "\n") {
+		f := strings.Fields(line)
+		if len(f) == 2 && f[0] == strconv.Itoa(pid) {
+			pgid, _ := strconv.Atoi(f[1])
+			groups = append(groups, pgid)
+		}
+	}
+	return groups
+}
+
+// Closing the terminal (SIGHUP) or Ctrl-\ (SIGQUIT) stops the children too.
+// weft dev runs as a process of its own, built from this package, as a
+// signal to the test binary would stop the test.
+func TestDevStopsOnHangUpAndQuit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("weft dev runs the app's servers")
+	}
+	pkg, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(t.TempDir(), "weft")
+	build := exec.Command("go", "build", "-o", bin, ".")
+	build.Dir = pkg
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v: %s", err, out)
+	}
+	app := sharedDevApp(t)
+	for _, sig := range []syscall.Signal{syscall.SIGHUP, syscall.SIGQUIT} {
+		port := freeLocalPort(t)
+		var out, errb syncBuffer
+		cmd := exec.Command(bin, "dev", "--port", strconv.Itoa(port))
+		cmd.Dir = app
+		cmd.Stdout, cmd.Stderr = &out, &errb
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		exited := make(chan error, 1)
+		go func() { exited <- cmd.Wait() }()
+		var groups []int
+		// Whatever the test finds, nothing it started is left.
+		t.Cleanup(func() {
+			cmd.Process.Kill()
+			for _, pgid := range groups {
+				syscall.Kill(-pgid, syscall.SIGKILL)
+			}
+		})
+		for deadline := time.Now().Add(60 * time.Second); !strings.Contains(out.String(), "weft dev: http://localhost:"); time.Sleep(50 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatalf("%v: no URL line within 60 s: %s%s", sig, out.String(), errb.String())
+			}
+		}
+		groups = childGroups(t, cmd.Process.Pid)
+		if len(groups) != 2 {
+			t.Fatalf("%v: want the groups of the Go server and the page server, found %v", sig, groups)
+		}
+		m := goPortRe.FindStringSubmatch(errb.String())
+		if m == nil {
+			t.Fatalf("%v: the Go server logged no address: %s", sig, errb.String())
+		}
+		cmd.Process.Signal(sig)
+		select {
+		case err := <-exited:
+			if err != nil {
+				t.Errorf("%v: weft dev: %v: %s", sig, err, errb.String())
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatalf("%v: weft dev did not exit within 10 s", sig)
+		}
+		for _, addr := range []string{"localhost:" + strconv.Itoa(port), "127.0.0.1:" + m[1]} {
+			if !refuses(addr) {
+				t.Errorf("%v: %s still answers", sig, addr)
+			}
+		}
+		for _, pgid := range groups {
+			if groupAlive(pgid) {
+				t.Errorf("%v: process group %d is left", sig, pgid)
+			}
+		}
 	}
 }
 
@@ -487,7 +627,8 @@ func binTime(t *testing.T, app string) time.Time {
 // Review Focus 3: a taken port is one sentence, and no child is started.
 func TestDevPortTaken(t *testing.T) {
 	app := sharedDevApp(t)
-	for _, host := range []string{"127.0.0.1", "::1"} {
+	// "" is the wildcard: on macOS a socket may bind 127.0.0.1 or ::1 beside it.
+	for _, host := range []string{"127.0.0.1", "::1", ""} {
 		l, err := net.Listen("tcp", net.JoinHostPort(host, "0"))
 		if err != nil {
 			t.Logf("%s: %v", host, err)
@@ -544,6 +685,23 @@ func TestDevUsage(t *testing.T) {
 	}
 }
 
+// unreadableDir makes dir unreadable until the test ends, as a database
+// volume of another user is.
+func unreadableDir(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0); err != nil {
+		t.Fatal(err)
+	}
+	// Restored, so the temp folder can be removed.
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+	if _, err := os.ReadDir(dir); err == nil {
+		t.Skip("this user can read a folder with mode 000")
+	}
+}
+
 func TestGoFilesSkipsFolders(t *testing.T) {
 	dir := t.TempDir()
 	write := func(p string) {
@@ -559,12 +717,18 @@ func TestGoFilesSkipsFolders(t *testing.T) {
 	for _, p := range []string{
 		"main.go", "dist_dev.go", "api/api.go", "api/web/web.go", "api/notes.txt",
 		".weft/go/serve.go", ".git/hooks/x.go", "node_modules/x/y.go", "web/pages/x.go",
+		"db/x.go",
 	} {
 		write(p)
 	}
-	files, err := goFiles(dir)
+	unreadableDir(t, filepath.Join(dir, "db"))
+	var unreadable []string
+	files, err := goFiles(dir, func(d string) { unreadable = append(unreadable, d) })
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(unreadable) != 1 || unreadable[0] != filepath.Join(dir, "db") {
+		t.Errorf("unreadable folders %q, want only db", unreadable)
 	}
 	var got []string
 	for p := range files {

@@ -4,10 +4,16 @@ package main
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 	"syscall"
 	"time"
 )
+
+// stopSignals are the signals weft dev stops its children on and exits 0:
+// Ctrl-C, SIGTERM, the terminal closing (SIGHUP) and Ctrl-\ (SIGQUIT). The
+// children are in groups of their own, so these reach weft dev alone.
+var stopSignals = []os.Signal{os.Interrupt, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT}
 
 // startGroup starts cmd as the leader of a process group of its own, so that
 // stopGroup reaches what it starts too, such as the node that pnpm exec runs,
