@@ -268,7 +268,7 @@ func TestBuildRefusesOtherVersion(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit %d: %s%s", code, out, errs)
 	}
-	want := "weft build: this app is on Weft 9.9.9 and this weft is 0.0.0-dev; run weft upgrade to move the app, or weft update --version 9.9.9 to match it.\n"
+	want := "weft build: this app is on Weft 9.9.9 and this weft is 0.0.0-dev; run weft update --version 9.9.9 to match it.\n"
 	if errs != want {
 		t.Errorf("stderr %q, want %q", errs, want)
 	}

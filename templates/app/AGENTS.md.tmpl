@@ -26,10 +26,14 @@ Go commands need `-tags dev` until the first `weft build`: without it `dist.go` 
 
 ## Rules
 
-- Every component is `<script setup vapor lang="ts">`. Never use the Options API, `getCurrentInstance` or VNode render functions.
+- Use a Weft component wherever one exists: never write a raw `<button>`, `<input>`, `<select>` or `<dialog>`, and never hand-roll a menu, a popover or a date field.
+- Before you write markup, run `weft catalog` for the list of components, then `weft catalog <Name>` for each one you use: its props, events, slots and an example. Never read `.weft/catalog/components.json` whole: it is too large.
+- Lay pages out with `Page`, `Section`, `Stack` and `Grid`, not with custom CSS.
+- Every component is `<script setup vapor lang="ts">`. Never use the Options API, `getCurrentInstance` or VNode render functions, nor another UI library.
 - Weft components (`Page`, `Card`, `Button` and the rest) need no import in a `.vue` file. `useHead` is a function, so import it from `@weft/ui`.
 - Styles use only `--weft-*` tokens, each with a fallback.
 - Components adapt from inside; do not write a mobile variant of a component.
-- Before you write markup, run `weft catalog` for the list of components, then `weft catalog <Name>` for each one you use: its props, events, slots and an example. Never read `.weft/catalog/components.json` whole: it is too large.
 - The Go code uses the standard library and `github.com/flakerimi/weft`.
-- More for agents: https://weft.base.al/llms.txt
+- Do not edit `.weft/`: `weft` writes it.
+
+More for agents: https://weft.base.al/index.md and https://weft.base.al/llms.txt

@@ -436,6 +436,7 @@ echo "$1" >>"$FAKE/built"
 `, 0o755)
 	write(r.root, "scripts/site.sh", `#!/bin/sh
 set -eu
+echo "${WEFT_SITE_VERSION:-}" >"$FAKE/site-version"
 mkdir -p site-src/dist
 echo "<p>home</p>" >site-src/dist/index.html
 `, 0o755)
@@ -512,6 +513,10 @@ func TestPublishSiteKeepsOneTreePerVersion(t *testing.T) {
 		}
 		if got := lastLine(r.lisa()); !strings.HasPrefix(got, "server push --name weft "+pushed+"/.weft-site-push.") {
 			t.Fatalf("publish %s pushed %q, want a tree made in site/pushed", v, got)
+		}
+		// The pages are built for the version published, which /index.md names.
+		if b, _ := os.ReadFile(filepath.Join(r.fake, "site-version")); strings.TrimSpace(string(b)) != v {
+			t.Errorf("publish %s built the site with WEFT_SITE_VERSION %q", v, b)
 		}
 		pushedFiles, _ := os.ReadFile(filepath.Join(r.fake, "pushed-files"))
 		var kept []string

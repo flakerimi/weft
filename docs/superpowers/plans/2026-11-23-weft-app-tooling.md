@@ -66,10 +66,12 @@ The bundle's layout, which Tasks 1, 2 and 8 share:
     packages/ui/            package.json, src/, dist/weft.css
     packages/themes/        package.json, src/, dist/, tailwind.css
     packages/vite/          package.json, src/, bin/
-    go/                     go.mod, serve.go, files.go, manifest.go, version.go
+    go/                     go.mod.bundle, serve.go, files.go, manifest.go, version.go
     catalog/components.json
   template/                 a copy of templates/app/
 ```
+
+`go:embed` leaves out a folder that holds a `go.mod`, so the bundle stores the Go package's as `go.mod.bundle`, and unpacking renames it to `go.mod` (Task 8).
 
 ---
 
@@ -103,7 +105,7 @@ The bundle's layout, which Tasks 1, 2 and 8 share:
 - Create: `templates/app/**` (below), `cmd/weft/app.go`, `cmd/weft/create.go`, `cmd/weft/create_test.go`
 - Modify: `cmd/weft/main.go` (register `create`), `scripts/bundle.sh` (copy the template)
 
-The template, with `{{.Name}}`, `{{.Module}}`, `{{.Version}}`, `{{.Theme}}` and `{{.Tailwind}}`:
+The template, with `[[.Name]]`, `[[.Module]]`, `[[.Version]]` and `[[.Theme]]` (the delimiters are `[[` and `]]`, by the controller's ruling, since Vue templates use `{{ }}`; the table below keeps the `{{ }}` it was planned with). `{{.Tailwind}}` went with Task 7, which the owner dropped:
 
 | File | Content |
 | --- | --- |
@@ -123,7 +125,7 @@ The template, with `{{.Name}}`, `{{.Module}}`, `{{.Version}}`, `{{.Theme}}` and 
 **Interfaces:**
 - Consumes: `openBundle`, `unpack` (Task 1).
 - Produces:
-  - `weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--tailwind] [--no-install]`. `<name>` matches `^[a-z][a-z0-9-]{0,63}$`; `--module` defaults to the name; `--theme` to `neutral`.
+  - `weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install]` (`--tailwind` went with Task 7, which the owner dropped). `<name>` matches `^[a-z][a-z0-9-]{0,63}$`; `--module` defaults to the name; `--theme` to `neutral`.
   - `type appConfig struct{ Version, Theme string }`; `func readApp(dir string) (appConfig, error)`; `func writeAppVersion(dir, version string) error` (changes only `weft.version`, keeps the file's other bytes and key order); `func findApp(start string) (string, error)` (the nearest folder at or above `start` whose `package.json` has `"weft"`); `func prerequisites() error`.
   - On success, stdout ends `Created <name>. Next: cd <name> && weft dev\n`.
 
@@ -298,5 +300,9 @@ The template, with `{{.Name}}`, `{{.Module}}`, `{{.Version}}`, `{{.Theme}}` and 
 - [ ] **Step 6: CI.** The `go` job runs `go test ./...` without `-short`, so the installing tests run there; confirm the job has `pnpm` and `node` before the Go step (it does today).
 - [ ] **Step 7: Run the full suite** from `AGENTS.md`: `pnpm install`, `pnpm test`, `pnpm typecheck`, `scripts/playground.sh build`, `scripts/site.sh build`, `pnpm --filter weft-bench build`, `go vet ./...`, `go test ./...`. Expected: all pass, with no warning left unfixed.
 - [ ] **Step 8: Commit** `Releases: the binary carries the packages and the template; docs for weft create, dev and build`.
+
+### Task 9: `weft catalog`, and `/index.md` for agents
+
+Added after the plan was written, under the owner's rule that Weft is built for coding agents: `weft catalog` prints the component catalogue in pieces (a line per component, or one component as compact Markdown, or `--json`), reading the app's `.weft/` or the bundle. weft.base.al gains `/index.md`, the page an agent is sent to and can build an app from, generated from the docs, the skills, the catalogue, the template's rules and the version, and linked first from `llms.txt`.
 
 Cutting and publishing `0.0.6` is the owner's step and is not part of this plan.

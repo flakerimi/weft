@@ -90,7 +90,8 @@ stopped() {
 }
 trap stopped EXIT
 scripts/release.sh "$version" "$releases"
-scripts/site.sh build
+# The pages name the release they describe (/index.md).
+WEFT_SITE_VERSION="$version" scripts/site.sh build
 
 # The push tree: the weft package, the site's main package and its build, the
 # installer, every published release and this one, and a Dockerfile that

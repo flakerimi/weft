@@ -107,18 +107,24 @@ stylesheet, not a fork. Want Tailwind for your own components? Import
 
 Pre-alpha. What exists today:
 
-- `weft` CLI (`create`, `dev`, `build`, `upgrade`, `version`, `update`), which
-  carries Weft's packages, and the curl installer
-- tokens and the `neutral` and `lisa` themes
+- `weft` CLI (`create`, `dev`, `build`, `upgrade`, `catalog`, `version`,
+  `update`), which carries Weft's packages, and the curl installer
+- tokens and the `neutral`, `lisa` and `weft` themes
 - the adaptive core: `useWeft`, `WeftProvider`, `useWidth`
-- layout: `Stack`, `Grid`, `Page`, `Section`, `Card`, `Divider`
+- the Vapor components of `@weft/ui`, from layout and forms to dates,
+  overlays, navigation and a table, on a headless layer for focus, dismissal,
+  roving focus, floating and typeahead
+- `@weft/vite`: the page build, server rendering, islands, Markdown content
+  and a dev server
 - `weft.Serve` for embedded frontends, and a playground that uses all of it
+- weft.base.al: the docs, the component gallery, the skills, and the files
+  for agents, `/index.md` (the page to point an agent at, from the next
+  release) and `/llms.txt`
 
-Next, in order: the headless layer and primitives (buttons, inputs, select,
-date picker, upload, dialog…), the Go-to-Vue contract (types and validation
-generated from Go structs, `weft add crud`), login and permissions, app
-blocks and live charts, the agent kit
-(catalogue, skills, lint, MCP), and landing blocks. The full design is in
+Next, in order: the Go-to-Vue contract (types and validation generated from
+Go structs) with login and permissions, app routes, app blocks and live
+charts (`weft add crud`), the rest of the agent kit (lint rules, `weft check`,
+MCP), site features, and landing blocks. The full design is in
 [`docs/superpowers/specs/2026-11-20-weft-design.md`](docs/superpowers/specs/2026-11-20-weft-design.md).
 
 ## Develop

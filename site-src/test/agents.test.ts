@@ -1,11 +1,12 @@
 // The skills in skills/ (the repository's root) and the files for agents
-// the site writes from them, the docs and the catalogue: llms.txt and
-// llms-full.txt, as plain functions of what the pages read.
+// the site writes from them, the docs and the catalogue: llms.txt,
+// llms-full.txt and index.md, as plain functions of what the pages read.
 import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { loadContent } from '@weft/vite'
 import config from '../content.config.ts'
 import { installCommand, llmsFull, llmsTxt, repoFile, SITE } from '../agents/llms.ts'
+import { commandsNotYet, indexMd, NOT_YET, rulesOf, siteVersion } from '../agents/index-md.ts'
 import { slugOf, type Catalog } from '../gallery/model.ts'
 
 const site = new URL('..', import.meta.url).pathname
@@ -58,11 +59,16 @@ describe('llms.txt', () => {
   const text = llmsTxt(input)
   const section = (name: string) => text.split(`\n## ${name}\n`)[1]!.split('\n## ')[0]!
 
-  it('has a title, a summary, then the Docs, Components, Skills and Optional sections', () => {
-    expect(text).toMatch(/^# Weft\n\n> [^\n]+\n\n[^#\n][^\n]+\n\n## Docs\n/)
-    expect([...text.matchAll(/^## (.+)$/gm)].map((m) => m[1])).toEqual(['Docs', 'Components', 'Skills', 'Optional'])
+  it('has a title, a summary, then the Start here, Docs, Components, Skills and Optional sections', () => {
+    expect(text).toMatch(/^# Weft\n\n> [^\n]+\n\n[^#\n][^\n]+\n\n## Start here\n/)
+    expect([...text.matchAll(/^## (.+)$/gm)].map((m) => m[1])).toEqual(['Start here', 'Docs', 'Components', 'Skills', 'Optional'])
     expect(text).toContain(`${catalog.components.length} Vapor components`)
     expect(text.endsWith('\n')).toBe(true)
+  })
+
+  it('starts with /index.md, the page an agent builds an app from', () => {
+    expect(section('Start here').trim()).toMatch(new RegExp(`^- \\[Build an app with Weft\\]\\(${SITE}/index\\.md\\): [^\\n]+$`))
+    expect(text.indexOf('](')).toBe(text.indexOf(`](${SITE}/index.md)`))
   })
 
   it('lists every doc with its description', () => {
@@ -87,6 +93,107 @@ describe('llms.txt', () => {
   it('leaves the full text and the long references to Optional', () => {
     const body = section('Optional')
     for (const path of ['/llms-full.txt', '/skills', '/components/parity.md', '/components/sizes.md']) expect(body).toContain(`](${SITE}${path})`)
+  })
+})
+
+describe('index.md', () => {
+  const appAgents = readFileSync(new URL('../../templates/app/AGENTS.md.tmpl', import.meta.url), 'utf8')
+  const skill = readFileSync(new URL('../../skills/weft-components/SKILL.md', import.meta.url), 'utf8')
+  const comingNext = docs.find((d) => d.path === '/docs/coming-next')!.source
+  // The commands cmd/weft has, from its table of commands.
+  const commands = [...readFileSync(new URL('../../cmd/weft/main.go', import.meta.url), 'utf8').matchAll(/^\t"([a-z]+)": +\{/gm)].map((m) => m[1]!)
+  const text = indexMd({ ...input, version: '1.2.3', appAgents })
+  const section = (heading: string) => text.split(`\n## ${heading}\n`)[1]!.split('\n## ')[0]!
+
+  it('is a brief in six steps, with the version and the counts computed', () => {
+    expect(text.startsWith('# Build an app with Weft\n\n')).toBe(true)
+    expect([...text.matchAll(/^## (.+)$/gm)].map((m) => m[1])).toEqual([
+      '1. Check what is installed',
+      '2. Create the app',
+      '3. Build what was asked',
+      '4. Rules',
+      '5. Check your work',
+      '6. What is not built yet',
+      'More',
+    ])
+    expect(text).toContain('It describes Weft 1.2.3.')
+    expect(text).toContain('- Older than 1.2.3: `weft update`.')
+    const groups = new Set(catalog.components.map((c) => c.group)).size
+    expect(text).toContain(`${catalog.components.length} components that adapt`)
+    expect(text).toContain(`# ${catalog.components.length} components in ${groups} groups, one line each`)
+    for (const s of skills) expect(section('More')).toContain(s.slug)
+    expect(text.endsWith('\n')).toBe(true)
+    expect(text.length, 'an agent pays for every line').toBeLessThan(8 * 1024)
+  })
+
+  it('names only commands weft has, and tells the agent to look components up with weft catalog', () => {
+    expect(commands).toContain('catalog')
+    const run = [...text.matchAll(/^weft ([a-z]+)/gm)].map((m) => m[1]!)
+    expect(run).toEqual(expect.arrayContaining(['version', 'create', 'dev', 'catalog', 'build']))
+    for (const c of run) expect(commands, `weft ${c}`).toContain(c)
+    const step = section('3. Build what was asked')
+    expect(step).toMatch(/^weft catalog +#/m)
+    expect(step).toMatch(/^weft catalog [A-Z]\w+( [A-Z]\w+)* +#/m)
+    expect(step).toContain('Never read the catalogue file whole')
+    // The JSON is only the fallback, after the commands.
+    expect(step.indexOf('/catalog.json')).toBeGreaterThan(step.indexOf('Without `weft`'))
+    expect(text.indexOf('/catalog.json')).toBe(text.indexOf(`${SITE}/catalog.json`) + SITE.length)
+  })
+
+  it("repeats the rules of the app's AGENTS.md word for word, and the components skill agrees with them", () => {
+    const rules = rulesOf(appAgents)
+    expect(section('4. Rules')).toContain(rules.map((r) => `- ${r}`).join('\n'))
+    // Each rule's point, as the template and the skill both put it.
+    const points: [string, RegExp][] = [
+      ['raw controls', /raw `<button>`, `<input>`, `<select>` or `<dialog>`.*hand-roll a menu, a popover or a date field/],
+      ['the catalogue', /weft catalog/],
+      ['layout', /`(Page|Section|Stack|Grid)`.*`(Page|Section|Stack|Grid)`.*`(Page|Section|Stack|Grid)`.*`(Page|Section|Stack|Grid)`/],
+      ['Vapor', /<script setup vapor lang="ts">.*Options API.*getCurrentInstance/],
+      ['no imports', /need no import|without importing/],
+      ['tokens', /--weft-\*/],
+      ['no mobile variant', /mobile (variant|version)/],
+    ]
+    for (const [point, re] of points) {
+      expect(rules.some((r) => re.test(r)), `AGENTS.md.tmpl: ${point}`).toBe(true)
+      expect(skill.split('\n').some((l) => re.test(l)), `weft-components: ${point}`).toBe(true)
+    }
+    expect(rules.some((r) => /standard library/.test(r))).toBe(true)
+    expect(rules.some((r) => /Do not edit `\.weft\/`/.test(r))).toBe(true)
+  })
+
+  it('says as not built only what Coming next lists, and no command weft has', () => {
+    const headings = [...comingNext.matchAll(/^## (.+)$/gm)].map((m) => m[1]!)
+    const listed = commandsNotYet(comingNext)
+    const step = section('6. What is not built yet')
+    expect(step).toContain(`${SITE}/docs/coming-next`)
+    expect(step).toContain(`- The commands ${listed.slice(0, -1).join(', ')} and ${listed.at(-1)}.`)
+    for (const c of listed) expect(commands, c).not.toContain(c.replace(/`/g, '').split(' ')[1])
+    const names = new Set(catalog.components.map((c) => c.name))
+    for (const n of NOT_YET) {
+      expect(headings, n.see).toContain(n.see)
+      expect(step).toContain(`- ${n.missing}: ${n.instead}.`)
+      for (const [, code] of n.missing.matchAll(/`([^`]+)`/g)) {
+        expect(comingNext, `${n.see}: ${code}`).toContain(code)
+        const [, command] = /^weft ([a-z]+)/.exec(code!) ?? []
+        if (command) expect(commands, code).not.toContain(command)
+        expect(names.has(code!), `${code} is a component today`).toBe(false)
+      }
+      for (const [, code] of n.instead.matchAll(/`([A-Z]\w+)`/g)) expect(names.has(code!), `${n.see}: ${code}`).toBe(true)
+    }
+  })
+
+  it('reads the version from WEFT_SITE_VERSION, else the last published release', () => {
+    expect(siteVersion('0.0.6', '0.0.1\n0.0.5\n')).toBe('0.0.6')
+    expect(siteVersion(undefined, '0.0.1\n0.0.5\n')).toBe('0.0.5')
+    expect(siteVersion('', '0.1.0-alpha.1\n')).toBe('0.1.0-alpha.1')
+    expect(() => siteVersion('v1', '0.0.5\n')).toThrow(/^index\.md: WEFT_SITE_VERSION is "v1", not a release version; /)
+    expect(() => siteVersion(undefined, '')).toThrow(/^index\.md: site\/releases\.txt ends with "", not a release version; /)
+  })
+
+  it('refuses rules it cannot repeat', () => {
+    expect(() => rulesOf('# AGENTS.md\n')).toThrow(/has no "## Rules" section/)
+    expect(() => rulesOf('## Rules\n\n- [[.Name]] is an app\n')).toThrow(/\[\[ \]\]/)
+    expect(() => rulesOf('## Rules\n\n- one\n  two\n')).toThrow(/one line/)
   })
 })
 

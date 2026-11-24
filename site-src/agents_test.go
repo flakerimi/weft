@@ -14,8 +14,8 @@ import (
 
 // The pages and files for agents, as the build made them from skills/ (the
 // repository's root), the docs and the catalogue: /skills, /skills/<name>,
-// /skills/<name>.md, /llms.txt and /llms-full.txt (pages/skills/,
-// agents/llms.ts).
+// /skills/<name>.md, /llms.txt, /llms-full.txt and /index.md (pages/skills/,
+// agents/llms.ts, agents/index-md.ts).
 
 const site = "https://weft.base.al"
 
@@ -122,6 +122,9 @@ func TestSkillPages(t *testing.T) {
 			t.Errorf("/skills: the install commands do not fetch %s", name)
 		}
 	}
+	if !strings.Contains(index, `href="/index.md"`) {
+		t.Error("/skills does not link /index.md")
+	}
 	for _, dir := range []string{"~/.claude/skills", ".claude/skills"} {
 		if !strings.Contains(index, "do mkdir -p "+dir+"/$s &amp;&amp; curl -fsSL "+site+"/skills/$s.md -o "+dir+"/$s/SKILL.md; done") {
 			t.Errorf("/skills has no command that installs the skills into %s", dir)
@@ -205,8 +208,8 @@ func TestLLMsTxt(t *testing.T) {
 		sections[name] = body
 		order = append(order, name)
 	}
-	if strings.Join(order, ",") != "Docs,Components,Skills,Optional" {
-		t.Errorf("llms.txt has the sections %v, want Docs, Components, Skills, Optional", order)
+	if strings.Join(order, ",") != "Start here,Docs,Components,Skills,Optional" {
+		t.Errorf("llms.txt has the sections %v, want Start here, Docs, Components, Skills, Optional", order)
 	}
 	links := func(section string) map[string]string {
 		out := map[string]string{}
@@ -243,6 +246,9 @@ func TestLLMsTxt(t *testing.T) {
 	}
 	if len(skills) != len(skillNames(t)) {
 		t.Errorf("llms.txt lists %d skills for %d in skills/", len(skills), len(skillNames(t)))
+	}
+	if start := links("Start here"); len(start) != 1 || start[site+"/index.md"] == "" {
+		t.Errorf("llms.txt: Start here is not one link to /index.md: %v", start)
 	}
 	if _, ok := links("Optional")[site+"/llms-full.txt"]; !ok {
 		t.Error("llms.txt: Optional does not link llms-full.txt")
@@ -319,6 +325,57 @@ func TestSkillLinksResolve(t *testing.T) {
 			if !resolves(r, m, link) {
 				t.Errorf("skills/%s/SKILL.md links %s, which the build does not serve", name, link)
 			}
+		}
+	}
+}
+
+// /index.md is the page an agent starts from: a file of the build beside the
+// page /, served as Markdown, titled, naming the release it describes, and
+// linking only what the build serves.
+func TestIndexMd(t *testing.T) {
+	d := dist(t)
+	var m builtFiles
+	var r builtRoutes
+	readJSON(t, d, "manifest.json", &m)
+	readJSON(t, d, "routes.json", &r)
+	if _, ok := m.Files["/index.md"]; !ok {
+		t.Fatal("manifest.json does not list /index.md")
+	}
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
+	defer srv.Close()
+
+	res, text := get(t, srv, "/index.md", "Accept-Encoding", "identity")
+	if res.StatusCode != 200 || res.Header.Get("Content-Type") != "text/markdown; charset=utf-8" {
+		t.Errorf("GET /index.md: %d %s, want 200 text/markdown; charset=utf-8", res.StatusCode, res.Header.Get("Content-Type"))
+	}
+	if !strings.HasPrefix(text, "# Build an app with Weft\n\n") {
+		t.Errorf("/index.md does not start with its heading:\n%.120s", text)
+	}
+	// The page / is still the landing page.
+	if res, home := get(t, srv, "/", "Accept-Encoding", "identity"); res.StatusCode != 200 || !strings.HasPrefix(res.Header.Get("Content-Type"), "text/html") || strings.Contains(home, "# Build an app with Weft") {
+		t.Errorf("GET /: %d %s, want the landing page", res.StatusCode, res.Header.Get("Content-Type"))
+	}
+	// It names the release it describes: the one a publish builds it for,
+	// else the last one published.
+	version := os.Getenv("WEFT_SITE_VERSION")
+	if version == "" {
+		b, err := os.ReadFile("../site/releases.txt")
+		if err != nil {
+			t.Fatal(err)
+		}
+		lines := strings.Split(strings.TrimSpace(string(b)), "\n")
+		version = lines[len(lines)-1]
+	}
+	if !strings.Contains(text, "It describes Weft "+version+".") {
+		t.Errorf("/index.md does not name Weft %s", version)
+	}
+	for _, l := range anyLink.FindAllStringSubmatch(text, -1) {
+		link := l[1] + l[2]
+		if strings.Contains(link, "<") {
+			continue // a pattern, such as /components/<slug>.json
+		}
+		if !resolves(r, m, link) {
+			t.Errorf("/index.md links %s, which the build does not serve", link)
 		}
 	}
 }

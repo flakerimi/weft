@@ -361,8 +361,8 @@ type Customer struct {
   and the MCP server.
 - **Skills** in `skills/`: building a Weft app, building a page from blocks,
   adding a component to Weft itself, theming, Go API plus live data.
-- **Created apps** get an `AGENTS.md` and `CLAUDE.md` pointing at the catalogue
-  and the rules.
+- **Created apps** get an `AGENTS.md` and `CLAUDE.md` pointing at
+  `weft catalog` and the rules.
 - **Lint rules** (`@weft/eslint-plugin`, run by `weft check`): no raw
   interactive HTML elements where a Weft component exists (`<button>`,
   `<input>`, `<select>`, `<dialog>`), no third-party UI imports, no
@@ -397,11 +397,11 @@ checked at `pointer` and `touch` with both themes.
    primitives on it, each adaptive from the start, with keyboard and
    screen-reader tests, built as Vapor and as the virtual-DOM fallback.
 4. Go `server` package, `@weft/vite`, `weft create`, `dev`, `build`; playground runs.
+4b. Go-to-Vue contract: `weft gen`, `weft.Validate`, `weft.Resource`, `Form`
+   on generated schemas; `weft.Auth` and the template's login.
 4c. App routes: a client-side router and `layouts/` (added by the app-tooling
    plan, `docs/superpowers/plans/2026-11-23-weft-app-tooling.md`). Until then an
    app is pages rendered at build, with islands, and a Go API.
-4b. Go-to-Vue contract: `weft gen`, `weft.Validate`, `weft.Resource`, `Form`
-   on generated schemas; `weft.Auth` and the template's login.
 5. App blocks (`DataTable` on the wire format, `EntityDialog`, `weft add crud`)
    and charts with `useLive`.
 6. Agent kit: catalogue, skills, lint rules, `check`, `mcp`.
@@ -420,9 +420,10 @@ Weft is never published to npm. Everything ships as one versioned thing:
 - `curl -fsSL https://weft.base.al/install | sh` downloads the `weft` binary
   for the platform from `https://weft.base.al/releases/<version>/`, checks
   its SHA-256, and puts it on the path. Binaries are hosted on the site rather
-  than GitHub releases so installs work while the repository is private. (The
-  domain resolves today but serves nothing yet; the install script and site
-  are part of phase 1.)
+  than GitHub releases so installs work while the repository is private. The
+  site serves the install script, every published release, the docs, the
+  component gallery and catalogue, the skills, and the files for agents:
+  `/index.md`, the page an agent builds an app from, and `/llms.txt`.
 - The binary embeds a bundle, staged at release time by `scripts/bundle.sh`
   and carried with `go:embed`: the runtime files of Weft's JavaScript packages
   (`ui`, `vite`, `themes`), the `weft` Go package, the component catalogue and

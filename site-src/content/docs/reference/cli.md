@@ -94,7 +94,7 @@ Builds an app: runs `weft-build-pages --root web --out web/dist` with the app's 
 
 It prints the build's output, then `Built <file>`. First it checks the app:
 
-- An app recorded at another Weft version is refused: `weft build: this app is on Weft <a> and this weft is <b>; run weft upgrade to move the app, or weft update --version <a> to match it.` An app whose `"weft"` object has no `version` is refused with a sentence that says what to add.
+- An app recorded at another Weft version is refused: `weft build: this app is on Weft <a> and this weft is <b>; run weft upgrade to move the app, or weft update --version <a> to match it.` For an app on a newer Weft than this `weft`, which `weft upgrade` would refuse, the sentence ends `run weft update --version <a> to match it.` alone. An app whose `"weft"` object has no `version` is refused with a sentence that says what to add.
 - When `.weft/` is missing or holds another version, as in a fresh clone, it unpacks the packages into it and runs `pnpm install`. It runs `pnpm install` too when `node_modules/` is missing.
 
 Outside an app it says `weft build: no Weft app here; run it in a folder made by weft create.` Any failure is one sentence on standard error, with exit status 1; wrong usage exits with status 2.

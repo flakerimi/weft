@@ -13,7 +13,7 @@
 //     touch forms, inert previews; and AdaptiveDemo, an island that starts
 //     when it comes into view, to try the real one;
 //   - the benchmark: bars and facts from the newest bench/results/*.json;
-//   - for agents: the DatePicker's catalogue entry, the skills, llms.txt.
+//   - for agents: the DatePicker's catalogue entry, the skills, /index.md.
 // Everything but the two islands is HTML from the build.
 import { Calendar, Island, Link, WeftProvider, useHead } from '@weft/ui'
 import type { Component } from 'vue'
@@ -229,7 +229,7 @@ for (const s of scenes) {
               <span>
                 {{ skills.length }} Claude Code skills:
                 <template v-for="(s, i) in skills" :key="s.slug"><Link :to="s.path">{{ s.title }}</Link>{{ i < skills.length - 2 ? ', ' : i === skills.length - 2 ? ' and ' : '. ' }}</template>
-                <Link to="/skills">Install them</Link>, or point an agent at <Link to="/llms.txt">/llms.txt</Link>.
+                <Link to="/skills">Install them</Link>, or point an agent at <Link to="/index.md">/index.md</Link>.
               </span>
             </li>
           </ul>

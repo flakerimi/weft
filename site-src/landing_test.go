@@ -273,7 +273,7 @@ func TestLandingBenchmark(t *testing.T) {
 }
 
 // The agents section shows the DatePicker's catalogue entry, line for line,
-// and links the skills and llms.txt.
+// and links the skills and /index.md.
 func TestLandingAgents(t *testing.T) {
 	_, _, plain := readCatalog(t)
 	var entry map[string]any
@@ -298,7 +298,7 @@ func TestLandingAgents(t *testing.T) {
 	if !strings.Contains(code, `"input": `+strings.ReplaceAll(string(input), `>`, ">")) {
 		t.Error("the agents section does not show how the DatePicker adapts to input, as the catalogue has it")
 	}
-	for _, href := range []string{`href="/skills"`, `href="/llms.txt"`, `href="/components/date-picker.json"`, `href="/catalog.json"`} {
+	for _, href := range []string{`href="/skills"`, `href="/index.md"`, `href="/components/date-picker.json"`, `href="/catalog.json"`} {
 		if !strings.Contains(agents, href) {
 			t.Errorf("the agents section has no link %s", href)
 		}
@@ -571,4 +571,3 @@ func TestLandingScreens(t *testing.T) {
 		}
 	}
 }
-

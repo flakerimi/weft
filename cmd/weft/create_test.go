@@ -377,3 +377,27 @@ func TestReadAppNeedsAVersion(t *testing.T) {
 		}
 	}
 }
+
+// An app on another Weft is refused before anything is checked or written. An
+// older app is pointed at weft upgrade, a newer one only at weft update, since
+// weft upgrade never moves an app backwards.
+func TestEnsureRefusesOtherVersion(t *testing.T) {
+	for _, c := range []struct{ app, weft, want string }{
+		{"0.0.5", "0.1.0", "this app is on Weft 0.0.5 and this weft is 0.1.0; run weft upgrade to move the app, or weft update --version 0.0.5 to match it"},
+		{"0.0.0-dev", "0.0.6", "this app is on Weft 0.0.0-dev and this weft is 0.0.6; run weft upgrade to move the app, or weft update --version 0.0.0-dev to match it"},
+		{"0.2.0", "0.1.0", "this app is on Weft 0.2.0 and this weft is 0.1.0; run weft update --version 0.2.0 to match it"},
+		{"9.9.9", "0.0.0-dev", "this app is on Weft 9.9.9 and this weft is 0.0.0-dev; run weft update --version 9.9.9 to match it"},
+		{"0.1.0", "0.1.0-alpha.2", "this app is on Weft 0.1.0 and this weft is 0.1.0-alpha.2; run weft update --version 0.1.0 to match it"},
+	} {
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"a","weft":{"version":"`+c.app+`"}}`), 0o644)
+		setVersion(t, c.weft)
+		var out, errb bytes.Buffer
+		if _, err := ensure(dir, &out, &errb); err == nil || err.Error() != c.want {
+			t.Errorf("app %s, weft %s: %v, want %q", c.app, c.weft, err, c.want)
+		}
+		if exists(t, filepath.Join(dir, ".weft")) || out.Len()+errb.Len() != 0 {
+			t.Errorf("app %s, weft %s: the refusal wrote something", c.app, c.weft)
+		}
+	}
+}
