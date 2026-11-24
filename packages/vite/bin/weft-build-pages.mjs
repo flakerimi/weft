@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Build a Weft site's pages into a dist directory. The weft CLI has no build
-// command yet: a site runs this from its package.json (`weft-build-pages --root . --out dist`).
+// Build a Weft site's pages into a dist directory. `weft build` runs it in an
+// app; a site in this repository runs it from its package.json
+// (`weft-build-pages --root . --out dist`).
 // It imports the package's TypeScript source, so Node must strip types,
 // which it does by default from Node 22.18.
 import { parseArgs } from 'node:util'

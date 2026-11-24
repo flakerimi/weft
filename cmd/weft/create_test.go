@@ -283,3 +283,40 @@ func TestFindApp(t *testing.T) {
 		t.Error("findApp found an app in an empty folder")
 	}
 }
+
+func TestFindAppNeedsAnObject(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "sub")
+	os.MkdirAll(sub, 0o755)
+	os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"weft":{"version":"1"}}`), 0o644)
+	for _, weftValue := range []string{`null`, `"0.0.6"`, `[]`, `1`} {
+		os.WriteFile(filepath.Join(sub, "package.json"), []byte(`{"weft": `+weftValue+`}`), 0o644)
+		if got, err := findApp(sub); err != nil || got != root {
+			t.Errorf(`"weft": %s: findApp = %q, %v; want the folder above`, weftValue, got, err)
+		}
+	}
+}
+
+func TestWriteAppVersionRenames(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "package.json")
+	os.WriteFile(file, []byte(`{"weft":{"version":"0.0.5"}}`), 0o600)
+	before, _ := os.Stat(file)
+	if err := writeAppVersion(dir, "0.0.6"); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Stat(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if os.SameFile(before, after) {
+		t.Error("package.json was rewritten in place, not replaced by a renamed temp file")
+	}
+	if after.Mode().Perm() != 0o600 {
+		t.Errorf("mode %v, want 0600", after.Mode().Perm())
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 {
+		t.Errorf("left %v in the folder", entries)
+	}
+}

@@ -14,7 +14,10 @@ weft — one UI system for Go and Vue applications
 Usage: weft <command>
 
 Commands:
+  build      build the pages, then the app's binary (-o <file>)
+  create     make an app (weft create <name>)
   update     update weft to the latest release (--check, --version X)
+  upgrade    move the app to this weft's Weft version (--no-install)
   version    print the Weft version
 ```
 
@@ -46,6 +49,29 @@ It says `weft X is up to date.` when there is nothing to do, and `Updated weft X
 | Variable | What it does |
 | --- | --- |
 | `WEFT_BASE` | Where the releases are. Default `https://weft.base.al` |
+
+### weft build
+
+Builds an app: runs `weft-build-pages --root web --out web/dist` with the app's theme, then `go build`, which embeds `web/dist`. Run it anywhere inside the app; it finds the nearest `package.json` with a `"weft"` object.
+
+| Flag | What it does |
+| --- | --- |
+| `-o <file>` | The binary to write, from where you run it. Default: the app's `package.json` name, in the app's folder |
+
+It prints the build's output, then `Built <file>`. First it checks the app:
+
+- An app recorded at another Weft version is refused: `weft build: this app is on Weft <a> and this weft is <b>; run weft upgrade to move the app, or weft update --version <a> to match it.`
+- When `.weft/` is missing or holds another version, as in a fresh clone, it unpacks the packages into it and runs `pnpm install`. It runs `pnpm install` too when `node_modules/` is missing.
+
+Outside an app it says `weft build: no Weft app here; run it in a folder made by weft create.` Any failure is one sentence on standard error, with exit status 1; wrong usage exits with status 2.
+
+### weft upgrade
+
+Moves an app to the Weft version of the `weft` you run: it rewrites `weft.version` in `package.json`, changing no other byte, unpacks that version's packages into `.weft/`, and runs `pnpm install`. It prints `Moved <name> from Weft <a> to <b>`, or `<name> is already on Weft <b>` when there is nothing to do.
+
+| Flag | What it does |
+| --- | --- |
+| `--no-install` | Skip `pnpm install` |
 
 ## The installer
 

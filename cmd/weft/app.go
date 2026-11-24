@@ -5,20 +5,24 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/flakerimi/weft"
 )
 
-// appConfig is what an app's package.json records under "weft".
+// appConfig is what an app's package.json records: its name, and under "weft"
+// the Weft version and the theme.
 type appConfig struct {
-	Version, Theme string
+	Name, Version, Theme string
 }
 
-// readApp reads the "weft" object of dir/package.json.
+// readApp reads the name and the "weft" object of dir/package.json.
 func readApp(dir string) (appConfig, error) {
 	file := filepath.Join(dir, "package.json")
 	data, err := os.ReadFile(file)
@@ -26,6 +30,7 @@ func readApp(dir string) (appConfig, error) {
 		return appConfig{}, fmt.Errorf("cannot read %s; run the command inside a Weft app", file)
 	}
 	var pkg struct {
+		Name string `json:"name"`
 		Weft *struct {
 			Version string `json:"version"`
 			Theme   string `json:"theme"`
@@ -37,13 +42,17 @@ func readApp(dir string) (appConfig, error) {
 	if pkg.Weft == nil {
 		return appConfig{}, fmt.Errorf("%s has no \"weft\" key; run the command inside a Weft app", file)
 	}
-	return appConfig{Version: pkg.Weft.Version, Theme: pkg.Weft.Theme}, nil
+	return appConfig{Name: pkg.Name, Version: pkg.Weft.Version, Theme: pkg.Weft.Theme}, nil
 }
 
 // writeAppVersion sets weft.version in dir/package.json and changes no other
-// byte of the file.
+// byte of the file. It writes a temporary file beside it and renames that into
+// place, so the file is never half-written.
 func writeAppVersion(dir, version string) error {
 	file := filepath.Join(dir, "package.json")
+	if real, err := filepath.EvalSymlinks(file); err == nil {
+		file = real
+	}
 	data, err := os.ReadFile(file)
 	if err != nil {
 		return fmt.Errorf("cannot read %s; run the command inside a Weft app", file)
@@ -58,7 +67,25 @@ func writeAppVersion(dir, version string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(file, out, info.Mode().Perm())
+	tmp, err := os.CreateTemp(filepath.Dir(file), ".package.json.*")
+	if err != nil {
+		return fmt.Errorf("cannot write beside %s (%v); make its folder writable", file, err)
+	}
+	_, err = tmp.Write(out)
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Chmod(tmp.Name(), info.Mode().Perm())
+	}
+	if err == nil {
+		err = os.Rename(tmp.Name(), file)
+	}
+	if err != nil {
+		os.Remove(tmp.Name())
+		return fmt.Errorf("cannot write %s (%v); make it writable", file, err)
+	}
+	return nil
 }
 
 // versionSpan finds the byte range of the string value of the top-level
@@ -112,7 +139,7 @@ func versionSpan(data []byte) (int, int, error) {
 }
 
 // findApp returns the nearest folder at or above start whose package.json has
-// a "weft" key.
+// a "weft" object.
 func findApp(start string) (string, error) {
 	dir, err := filepath.Abs(start)
 	if err != nil {
@@ -123,7 +150,7 @@ func findApp(start string) (string, error) {
 			var pkg struct {
 				Weft json.RawMessage `json:"weft"`
 			}
-			if json.Unmarshal(data, &pkg) == nil && len(pkg.Weft) > 0 {
+			if json.Unmarshal(data, &pkg) == nil && bytes.HasPrefix(bytes.TrimSpace(pkg.Weft), []byte("{")) {
 				return dir, nil
 			}
 		}
@@ -173,6 +200,52 @@ func prerequisites() error {
 	}
 	if major, _, err := toolVersion("pnpm"); err != nil || major < 10 {
 		return errors.New("pnpm must be 10 or later; install a newer pnpm and run the command again")
+	}
+	return nil
+}
+
+// ensure is the gate every command that runs an app passes. It refuses an app
+// recorded at another Weft version, checks the prerequisites, unpacks the
+// bundle into .weft/ when that holds another version or nothing (a fresh
+// clone), and runs pnpm install when it unpacked or node_modules/ is missing.
+// Its errors carry no "weft <command>: " prefix; the command adds it.
+func ensure(appDir string, stdout, stderr io.Writer) (appConfig, error) {
+	cfg, err := readApp(appDir)
+	if err != nil {
+		return cfg, err
+	}
+	if cfg.Version != weft.Version {
+		return cfg, fmt.Errorf("this app is on Weft %s and this weft is %s; run weft upgrade to move the app, or weft update --version %s to match it", cfg.Version, weft.Version, cfg.Version)
+	}
+	if err := prerequisites(); err != nil {
+		return cfg, err
+	}
+	install := false
+	if unpacked(appDir) != cfg.Version {
+		bundle, err := openBundle()
+		if err != nil {
+			return cfg, err
+		}
+		if err := unpack(bundle, appDir, cfg.Version); err != nil {
+			return cfg, err
+		}
+		install = true
+	}
+	if info, err := os.Stat(filepath.Join(appDir, "node_modules")); err != nil || !info.IsDir() {
+		install = true
+	}
+	if install {
+		if err := pnpmInstall(appDir, stdout, stderr); err != nil {
+			return cfg, err
+		}
+	}
+	return cfg, nil
+}
+
+// pnpmInstall runs pnpm install in appDir, passing its output through.
+func pnpmInstall(appDir string, stdout, stderr io.Writer) error {
+	if err := runIn(appDir, stdout, stderr, "pnpm", "install"); err != nil {
+		return fmt.Errorf("pnpm install did not finish in %s; fix what its output above says and run the command again", appDir)
 	}
 	return nil
 }

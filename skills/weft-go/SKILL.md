@@ -143,7 +143,7 @@ weft update --version 0.0.2
 
 These are planned but not built (see https://weft.base.al/docs/coming-next):
 
-- `weft dev`, `weft build` and `weft deploy`;
+- `weft dev` and `weft deploy`;
 - `weft gen` and the Go-to-Vue contract: `weft.Validate`, `weft.Resource[T]` and the wire format;
 - `weft.Auth` and `weft.Require`;
 - `weft.SSE` with `useLive`.
