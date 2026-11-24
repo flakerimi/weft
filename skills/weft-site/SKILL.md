@@ -7,15 +7,22 @@ description: Use when building or changing a site made with Weft's page build - 
 
 A Weft site is a folder of Vue pages. `weft-build-pages` renders each page to HTML at build time, inlines the CSS of what it renders, and compresses everything. JavaScript ships only for what you wrap in an `Island`. Serving is the `weft-go` skill; choosing components is `weft-components`.
 
-## Where you work today
+## Where you work
 
-The packages are not on npm, so a site lives in a clone of the Weft repository, a pnpm workspace. You need Node 22.18 or later, pnpm 10 and Go 1.26. Run commands from the repository root.
+The packages are not on npm. An app is made with `weft create <name>`: the `weft` command carries Weft's packages and unpacks them into the app's `.weft/`, which you never edit. You need Go 1.26, Node 22.18 or later and pnpm 10. The app's site is `web/`, with its Go API beside it:
+
+- `weft dev` runs the page dev server beside the Go API. It renders each page when it is asked for and reloads the browser when a file changes;
+- `weft build` builds the pages into `web/dist`, then the binary.
+
+The way below, a site inside a clone of the Weft repository, a pnpm workspace, is for work on Weft itself. Run commands from the repository root.
 
 ```sh
 pnpm install
 pnpm --filter @weft/themes build
 pnpm --filter @weft/ui build
 ```
+
+There, `weft-dev --root <site>`, from `@weft/vite`, is the page dev server.
 
 ## The layout of a site
 
@@ -32,7 +39,9 @@ hello/
   main.go             the server (see weft-go)
 ```
 
-To add a site:
+The build writes the icon tags in every page's `<head>` by itself, one for each of `favicon.ico`, `favicon.svg` and `apple-touch-icon.png` that `public/` holds, with no setting. Drop the files in `public/` (`web/public/` in an app) and leave the tags out of `useHead`.
+
+To add a site to the repository:
 
 1. Add the folder to `pnpm-workspace.yaml`.
 2. Give it a `package.json` with:
@@ -169,7 +178,6 @@ Fix the cause. Never weaken the check.
 
 These are planned but not built (see https://weft.base.al/docs/coming-next):
 
-- `weft create`, `weft dev` and `weft build`. Today there is no dev server for a page build: rebuild with `pnpm --filter <site> build`;
-- auto-imported components;
+- app routes: a client-side router and `layouts/`. An app is pages rendered at build, with islands;
 - an `<Image>` component, actions, environment values, a development overlay and `weft deploy`;
 - `weft add <block>`.

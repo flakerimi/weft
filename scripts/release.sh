@@ -2,7 +2,10 @@
 # Build release binaries into RELEASES/<version>/, and name it in
 # RELEASES/latest; RELEASES is site/releases unless given (a dry run builds
 # elsewhere, leaving site/releases as it was). Does not tag, publish or list it
-# in site/releases.txt.
+# in site/releases.txt. Each binary carries the bundle (the packages, the Go
+# package, the catalogue and the app template): scripts/bundle.sh stages it
+# into cmd/weft/bundle for go:embed, and afterwards, failed or not, it is moved
+# out to a temporary folder, so the folder holds only its README.md again.
 # Usage: scripts/release.sh <version> [RELEASES]
 set -eu
 
@@ -13,8 +16,26 @@ scripts/version.sh "$version" || {
 	echo "release: give a version like 0.0.1 or 0.1.0-alpha.1" >&2
 	exit 2
 }
-# The CLI and the serving package; the playground needs a web build and is not shipped.
-go test . ./cmd/weft
+# The CLI and the serving package; the playground needs a web build and is not
+# shipped. -short: the full tests install apps from the registry and build a
+# release themselves, so they run in the suite and in CI, not here.
+go test -short . ./cmd/weft
+
+bundle="$root/cmd/weft/bundle"
+# restore moves what bundle.sh staged out of cmd/weft/bundle; nothing is
+# deleted. Without bundle.sh's mark the folder is not its output, and is left.
+restore() {
+	[ -e "$bundle/.weft-bundle" ] || return 0
+	kept=$(mktemp -d)
+	for f in "$bundle"/* "$bundle"/.[!.]* "$bundle"/..?*; do
+		[ -e "$f" ] || continue
+		[ "$(basename "$f")" = README.md ] || mv "$f" "$kept/"
+	done
+	echo "release: moved the staged bundle out of cmd/weft/bundle into $kept" >&2
+}
+trap restore EXIT
+trap 'exit 1' HUP INT TERM
+WEFT_VERSION="$version" scripts/bundle.sh "$bundle"
 
 releases="${2:-site/releases}"
 out="$releases/$version"

@@ -10,29 +10,17 @@ Check here whether something you want is built yet: this is what Weft's design p
 
 | Command | What it will do | Phase |
 | --- | --- | --- |
-| `weft create <name>` | Write a new app from a template and install its dependencies | 4 |
-| `weft dev` | Run Vite and Go together, proxy `/api`, restart Go on change | 4 |
-| `weft build` | Build the frontend, then `go build` with it embedded | 4 |
 | `weft gen` | Write TypeScript types and field schemas from tagged Go structs | 4b |
 | `weft add <block>` | Add a page or block, such as `weft add crud customers` | 5 |
-| `weft catalog [name]` | Print the component catalogue, or one component | 6 |
 | `weft check` | Run Weft's lint rules and type checks | 6 |
 | `weft mcp` | Serve the catalogue and `check` to agents over MCP | 6 |
 | `weft deploy` | Publish an app | 6b |
 
-Until then, build sites inside the repository as [Your first site](getting-started/first-site.md) shows, with `weft-build-pages` and `go build`. The catalogue itself exists today, as `catalog/components.json` in the repository.
+The commands that make, run, build and upgrade an app, and `weft catalog`, which prints the component catalogue, work today: see the [CLI reference](reference/cli.md).
 
-## Packages in the binary
+## App routes
 
-The `weft` binary will carry Weft's JavaScript packages, and `weft create` will unpack them, so apps need neither npm nor a clone of the repository. Phase 4, inferred: the design gives this no phase of its own, and `weft create`, which unpacks them, is phase 4.
-
-## Auto-imported components
-
-`@weft/vite` will import Weft's components for you, so a page can write `<Button>` without an `import` line. Phase 4, inferred: the design gives `@weft/vite` to phase 4 and no phase of its own to auto-imports. Until then, import each component from `@weft/ui`, as every example here does.
-
-## Tailwind in a new app
-
-`weft create` will set up `@weft/themes/tailwind.css` in an app that wants Tailwind for its own components. Phase 4, with `weft create`. The file itself works today: see [Themes](guides/themes.md#tailwind).
+A client-side router and `layouts/`, for an app whose pages the browser switches between without loading a new document, inside a layout they share. Phase 4c. Today an app made with `weft create` is pages rendered at build, with islands, and a Go API.
 
 ## The Go-to-Vue contract
 

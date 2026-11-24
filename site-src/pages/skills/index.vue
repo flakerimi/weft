@@ -2,22 +2,25 @@
 // /skills, For agents: Weft's Claude Code skills, each with when to use it
 // and its raw file, and how to install them. The page also writes the
 // site's files for agents, made from the docs, the components and the
-// skills: /llms.txt and /llms-full.txt (agents/llms.ts). It ships no script
+// skills: /llms.txt and /llms-full.txt (agents/llms.ts), and /index.md, the
+// page an agent starts from (agents/index-md.ts). It ships no script
 // but the install commands' copy buttons.
 import { Card, Grid, Island, Link, Page, Section, Stack, useHead } from '@weft/ui'
 import { useCollection, useContent } from 'virtual:weft/content'
 import { useFile } from 'virtual:weft/files'
 import catalogText from '../../../catalog/components.json?raw'
+import appAgents from '../../../templates/app/AGENTS.md.tmpl?raw'
 import '../../styles/fonts.css'
 import '../../styles/docs.css'
 import { installCommand, llmsFull, llmsTxt } from '../../agents/llms.ts'
+import { indexMd, siteVersion } from '../../agents/index-md.ts'
 import type { Catalog } from '../../gallery/model.ts'
 import CopyCommand from '../../components/CopyCommand.vue'
 import SiteFooter from '../../components/SiteFooter.vue'
 import SiteHeader from '../../components/SiteHeader.vue'
 import SkillsNav from '../../components/SkillsNav.vue'
 
-const description = 'Claude Code skills that teach an agent to build with Weft, and the files an agent reads: llms.txt, the full text and the component catalogue.'
+const description = 'Claude Code skills that teach an agent to build with Weft, and the files an agent reads: index.md to start from, llms.txt, the full text and the component catalogue.'
 useHead({ title: 'For agents — Weft', description })
 
 const skills = useCollection('skills').map((s) => useContent('skills', s.slug))
@@ -25,6 +28,8 @@ const docs = useCollection('docs').map((d) => useContent('docs', d.slug))
 const input = { docs, skills, components: (JSON.parse(catalogText) as Catalog).components }
 useFile('/llms.txt', llmsTxt(input))
 useFile('/llms-full.txt', llmsFull(input))
+// WEFT_SITE_VERSION is set by scripts/publish-site.sh to the release it publishes; without it the page names no version.
+useFile('/index.md', indexMd({ ...input, version: siteVersion(process.env.WEFT_SITE_VERSION), appAgents }))
 
 const names = skills.map((s) => s.frontmatter.title)
 const commands = [
@@ -66,6 +71,7 @@ const commands = [
           </Section>
           <Section title="Files for agents">
             <ul>
+              <li><Link to="/index.md">index.md</Link>: start here: the whole brief for an agent asked to build an app.</li>
               <li><Link to="/llms.txt">llms.txt</Link>: every doc, component and skill, with a line on each.</li>
               <li><Link to="/llms-full.txt">llms-full.txt</Link>: the docs and skills in full, in one file.</li>
               <li><Link to="/catalog.json">catalog.json</Link>: every component, and each one alone, such as <Link to="/components/date-picker.json">/components/date-picker.json</Link>.</li>

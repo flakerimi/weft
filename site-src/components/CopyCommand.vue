@@ -3,9 +3,12 @@
 // - `command`: a one-line command, shown in a bar with the button beside it.
 //   The command is in the server HTML, so it can be read and selected
 //   before the island starts.
-// - `from`: a block of code elsewhere on the page, named by its id; the
-//   button alone, which copies that element's text, so the code is sent
+// - `from`: a block of code or text elsewhere on the page, named by its id;
+//   the button alone, which copies that element's text, so the text is sent
 //   once, in the page.
+// `name`, where "Copy" alone would not say what it copies, is the button's
+// name until it is pressed ("Copy prompt"); it still reads Copy, and then
+// Copied, which a screen reader is told.
 // Until the island starts, and without JavaScript, the button is hidden: it
 // could do nothing. Without a clipboard (an insecure origin, a denied
 // permission) it selects the text instead.
@@ -17,6 +20,8 @@ const props = defineProps<{
   command?: string
   /** The id of the element whose text it copies, in place of `command`. */
   from?: string
+  /** The button's name until it is pressed, saying what it copies: "Copy prompt". */
+  name?: string
 }>()
 
 const label = ref('Copy')
@@ -44,6 +49,7 @@ async function copy(event: MouseEvent) {
       class="copy-button"
       :size="command !== undefined ? 'md' : 'sm'"
       :label="label"
+      :aria-label="name && label === 'Copy' ? name : undefined"
       :aria-controls="from"
       aria-live="polite"
       @click="copy"

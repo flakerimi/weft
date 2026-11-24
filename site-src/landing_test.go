@@ -146,7 +146,7 @@ func TestLandingPage(t *testing.T) {
 	for _, m := range islandTags.FindAllStringSubmatch(page, -1) {
 		islands = append(islands, m[1]+"@"+m[2])
 	}
-	if strings.Join(islands, " ") != "CopyCommand@idle AdaptiveDemo@visible CopyCommand@idle" {
+	if strings.Join(islands, " ") != "CopyCommand@idle CopyCommand@idle AdaptiveDemo@visible CopyCommand@idle" {
 		t.Errorf("the islands are %v, want the copy buttons when idle and the adaptive demo when visible", islands)
 	}
 	// A keyboard reaches the content first; nothing comes from another site.
@@ -155,6 +155,77 @@ func TestLandingPage(t *testing.T) {
 	}
 	if regexp.MustCompile(`(?i)(src|href)="https?:|url\(https?:`).MatchString(page) {
 		t.Error("the landing page links or loads something on another site")
+	}
+}
+
+// agentPrompt is AGENT_PROMPT as site-src/agents/index-md.ts exports it, with
+// SITE (agents/llms.ts) in its place: the prompt the hero offers.
+func agentPrompt(t *testing.T) string {
+	t.Helper()
+	read := func(file string, re *regexp.Regexp) string {
+		b, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := re.FindSubmatch(b)
+		if m == nil {
+			t.Fatalf("%s has no line matching %s; the landing tests read the prompt from it", file, re)
+		}
+		return string(m[1])
+	}
+	prompt := read("agents/index-md.ts", regexp.MustCompile("(?m)^export const AGENT_PROMPT = `([^`]*)`$"))
+	site := read("agents/llms.ts", regexp.MustCompile(`(?m)^export const SITE = '([^']*)'$`))
+	return strings.ReplaceAll(prompt, "${SITE}", site)
+}
+
+// The hero's first action is a prompt to hand a coding agent: a label, the
+// whole prompt in the HTML (selectable without JavaScript), and a copy
+// button after it, named for what it copies (it reads Copy, as the install
+// command's does; its name is Copy prompt); then, below, the install
+// command, labelled as the way by hand.
+func TestLandingAgentPrompt(t *testing.T) {
+	want := agentPrompt(t)
+	if !strings.HasPrefix(want, "Read https://weft.base.al/index.md ") || !strings.HasSuffix(want, "Then build: ") {
+		t.Fatalf("the prompt is %q", want)
+	}
+	_, page := landing(t)
+	hero := element(page, `class="landing-hero"`)
+	copyText := text(element(hero, `class="landing-hero__copy"`))
+	if n := strings.Count(text(page), want); n != 1 {
+		t.Errorf("the page has the whole prompt %d times, want once", n)
+	}
+	if n := strings.Count(page, "weft.base.al/index.md and follow it"); n != 1 {
+		t.Errorf("the page's HTML carries the prompt %d times, want once (the copy button reads it from the page)", n)
+	}
+	prompt := element(hero, `id="agent-prompt"`)
+	if text(prompt) != want {
+		t.Errorf("the hero's prompt reads %q, want %q", text(prompt), want)
+	}
+	at, install := strings.Index(copyText, want), strings.Index(copyText, "curl -fsSL https://weft.base.al/install | sh")
+	if at == -1 || install == -1 || at > install {
+		t.Errorf("the prompt (at %d) does not come before the install command (at %d) in the hero's copy", at, install)
+	}
+	for _, label := range []string{"Give this to your agent", "or install it yourself"} {
+		if !strings.Contains(copyText, label) {
+			t.Errorf("the hero has no label %q", label)
+		}
+	}
+	if strings.Index(copyText, "Give this to your agent") > at || strings.Index(copyText, "or install it yourself") < at {
+		t.Error("the labels are not the prompt's before it and the install command's after it")
+	}
+	// The copy button comes after the prompt and copies it by its id, and its name says what it copies.
+	after := hero[strings.Index(hero, `id="agent-prompt"`):]
+	island := element(after, `<weft-island data-id="CopyCommand"`)
+	if island == "" || strings.Index(after, `<weft-island data-id="CopyCommand"`) > strings.Index(after, `class="landing-install"`) {
+		t.Fatal("no copy button between the prompt and the install command")
+	}
+	if !strings.Contains(island, `aria-controls="agent-prompt"`) {
+		t.Error("the prompt's copy button does not copy the element with id agent-prompt")
+	}
+	// Its name says what it copies, and holds the word it shows (Copy).
+	button := element(island, "<button")
+	if !strings.Contains(button, `aria-label="Copy prompt"`) || strings.TrimSpace(text(button)) != "Copy" {
+		t.Errorf("the prompt's copy button is not named Copy prompt and labelled Copy: %.300s", button)
 	}
 }
 
@@ -274,7 +345,7 @@ func TestLandingBenchmark(t *testing.T) {
 }
 
 // The agents section shows the DatePicker's catalogue entry, line for line,
-// and links the skills and llms.txt.
+// and links the skills, /index.md and /llms.txt.
 func TestLandingAgents(t *testing.T) {
 	_, _, plain := readCatalog(t)
 	var entry map[string]any
@@ -299,7 +370,7 @@ func TestLandingAgents(t *testing.T) {
 	if !strings.Contains(code, `"input": `+strings.ReplaceAll(string(input), `>`, ">")) {
 		t.Error("the agents section does not show how the DatePicker adapts to input, as the catalogue has it")
 	}
-	for _, href := range []string{`href="/skills"`, `href="/llms.txt"`, `href="/components/date-picker.json"`, `href="/catalog.json"`} {
+	for _, href := range []string{`href="/skills"`, `href="/index.md"`, `href="/llms.txt"`, `href="/components/date-picker.json"`, `href="/catalog.json"`} {
 		if !strings.Contains(agents, href) {
 			t.Errorf("the agents section has no link %s", href)
 		}

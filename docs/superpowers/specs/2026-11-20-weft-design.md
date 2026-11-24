@@ -128,22 +128,28 @@ For the app framework:
 ```
 weft create myapp
 myapp/
-  main.go            Go server: API routes + weft.Serve(embedded frontend)
+  main.go, dist.go   Go server: API routes + weft.Serve(embedded pages)
   api/               the product's Go handlers
-  web/               the Vue app (Vite)
-    pages/           file-based routes
-    layouts/         landing, app, ... (declare the surface)
-    components/      product-specific components
-  weft.config.ts     theme, app name, options
-  go.mod, package.json
+  web/               the Vue pages (Vite)
+    pages/           file-based routes, rendered at build
+    layouts/         landing, app, ... (declare the surface; phase 4c)
+    components/      product-specific components and islands
+  package.json       "weft": the Weft version and the theme
+  .weft/             Weft's packages and Go package, unpacked by weft (git-ignored)
+  go.mod             replaces github.com/flakerimi/weft with ./.weft/go
 ```
 
-Production: `weft build` runs the Vite build into `web/dist`, then `go build`
-embeds it with `//go:embed`. The binary serves `/api/*` from Go and everything
-else from the embedded files, with a fallback to `index.html` for client routes.
+The app is a pnpm workspace whose members are `.weft/packages/*`, the same
+topology as this repository.
 
-Development: `weft dev` starts the Vite dev server and the Go server together,
-with Vite proxying `/api` to Go, and restarts Go on `.go` changes.
+Production: `weft build` runs the page build into `web/dist`, then `go build`
+embeds it with `//go:embed`. The binary serves `/api/*` from Go and everything
+else from the embedded files.
+
+Development: `weft dev` starts the page dev server (`weft-dev`, on Vite) and
+the Go server, built with the `dev` tag, together. The page server renders each
+page when it is asked for, reloads the browser on a change and sends `/api` to
+Go; Go is rebuilt and restarted on `.go` changes.
 
 ### Repository layout (monorepo)
 
@@ -241,7 +247,7 @@ Components are styled with plain CSS that reads only the token custom
 properties (`--weft-*`), one stylesheet per component, bundled into
 `weft.css`. Weft itself has no Tailwind dependency. Apps that want Tailwind
 for their own components import `@weft/themes/tailwind.css`, an `@theme`
-block mapping Tailwind's names to the same tokens; `weft create` sets it up.
+block mapping Tailwind's names to the same tokens; an app adds it by hand.
 
 ### Vapor
 
@@ -337,12 +343,12 @@ type Customer struct {
 
 | Command | Does |
 |---|---|
-| `weft create <name>` | writes a new app from `templates/`, installs dependencies |
-| `weft dev` | Vite and Go together, proxy, restart on change |
-| `weft build` | Vite build, then `go build` with the frontend embedded |
+| `weft create <name>` | writes a new app from the template the binary carries, unpacks Weft's packages into `.weft/`, installs dependencies |
+| `weft dev` | the page dev server and Go together, `/api` sent to Go, Go restarted on change, the page reloaded |
+| `weft build` | the page build, then `go build` with the pages embedded |
 | `weft add <block>` | adds a page or block scaffold (e.g. `weft add crud customers` writes Go and Vue) |
 | `weft gen` | generates TypeScript types and field schemas from tagged Go structs |
-| `weft upgrade` | moves the app to the installed Weft version |
+| `weft upgrade` | moves the app to the installed Weft version, never backwards |
 | `weft catalog [name]` | prints the component catalogue, or one component |
 | `weft check` | runs the Weft lint rules and type checks |
 | `weft mcp` | runs an MCP server exposing the catalogue and `check` |
@@ -355,8 +361,8 @@ type Customer struct {
   and the MCP server.
 - **Skills** in `skills/`: building a Weft app, building a page from blocks,
   adding a component to Weft itself, theming, Go API plus live data.
-- **Created apps** get an `AGENTS.md` and `CLAUDE.md` pointing at the catalogue
-  and the rules.
+- **Created apps** get an `AGENTS.md` and `CLAUDE.md` pointing at
+  `weft catalog` and the rules.
 - **Lint rules** (`@weft/eslint-plugin`, run by `weft check`): no raw
   interactive HTML elements where a Weft component exists (`<button>`,
   `<input>`, `<select>`, `<dialog>`), no third-party UI imports, no
@@ -393,6 +399,9 @@ checked at `pointer` and `touch` with both themes.
 4. Go `server` package, `@weft/vite`, `weft create`, `dev`, `build`; playground runs.
 4b. Go-to-Vue contract: `weft gen`, `weft.Validate`, `weft.Resource`, `Form`
    on generated schemas; `weft.Auth` and the template's login.
+4c. App routes: a client-side router and `layouts/` (added by the app-tooling
+   plan, `docs/superpowers/plans/2026-11-23-weft-app-tooling.md`). Until then an
+   app is pages rendered at build, with islands, and a Go API.
 5. App blocks (`DataTable` on the wire format, `EntityDialog`, `weft add crud`)
    and charts with `useLive`.
 6. Agent kit: catalogue, skills, lint rules, `check`, `mcp`.
@@ -400,8 +409,9 @@ checked at `pointer` and `touch` with both themes.
    `weft deploy`.
 7. Landing blocks; benchmark beats Astro on every row; first public release (`0.1.0`).
 
-Alpha releases (`0.0.x`) are cut from the end of phase 4. Before that,
-`weft create --local` points the app at the working repository.
+Alpha releases (`0.0.x`) are cut from the end of phase 4. A `weft` built
+without its packages, as in development, reads them from the folder
+`$WEFT_BUNDLE` names, staged by `scripts/bundle.sh`.
 
 ### Distribution: one source, no npm publishing
 
@@ -410,17 +420,24 @@ Weft is never published to npm. Everything ships as one versioned thing:
 - `curl -fsSL https://weft.base.al/install | sh` downloads the `weft` binary
   for the platform from `https://weft.base.al/releases/<version>/`, checks
   its SHA-256, and puts it on the path. Binaries are hosted on the site rather
-  than GitHub releases so installs work while the repository is private. (The
-  domain resolves today but serves nothing yet; the install script and site
-  are part of phase 1.)
-- The binary embeds Weft's JavaScript packages (`ui`, `vite`, `themes`,
-  `eslint-plugin`) and the templates, built at release time with `go:embed`.
-- `weft create` and `weft upgrade` unpack them into `~/.weft/<version>/`, and
-  the app's `package.json` refers to them with `file:` paths, so the CLI
-  version decides the Weft version. `weft.config.ts` records the version;
-  `weft upgrade` moves an app to the installed one.
-- The Go module stays `github.com/flakerimi/weft`, fetched from GitHub by Go
-  as usual, tagged with the same version.
+  than GitHub releases so installs work while the repository is private. The
+  site serves the install script, every published release, the docs, the
+  component gallery and catalogue, the skills, and the files for agents:
+  `/index.md`, the page an agent builds an app from, and `/llms.txt`.
+- The binary embeds a bundle, staged at release time by `scripts/bundle.sh`
+  and carried with `go:embed`: the runtime files of Weft's JavaScript packages
+  (`ui`, `vite`, `themes`), the `weft` Go package, the component catalogue and
+  the app template.
+- `weft create` writes the template and unpacks the bundle into the app's own
+  git-ignored `.weft/`, recording the version in `.weft/VERSION`. The app is a
+  pnpm workspace over `.weft/packages/*` with `workspace:*` dependencies, so
+  the CLI version decides the Weft version. `package.json` records it under
+  `"weft"`; `weft dev` and `weft build` refuse an app at another version and
+  restore `.weft/` when it is missing, as in a fresh clone; `weft upgrade`
+  moves an app to the installed version.
+- The Go module is `github.com/flakerimi/weft`. While the repository is
+  private, the Go package ships in the bundle too, and the app's `go.mod`
+  replaces the module with `./.weft/go`.
 - Third-party packages (Vue, Vite, Floating UI, Unovis) still come from the
   public npm registry through the package manager. No account or org is
   needed for that.
@@ -497,6 +514,12 @@ page, page budgets, and a capture of a page at `touch` or `landing`.
 - Neutral core with Lisa as one theme.
 - Name Weft; repository `flakerimi/weft`; plain component names without
   prefix.
+- No Tailwind in `weft create` (2026-11-24): Weft has no Tailwind inside, so a
+  new app is not set up for it; `@weft/themes/tailwind.css` stays for an app
+  that adds Tailwind by hand.
+- Docs pages may grow past 10 KB brotli, up to 20 KB (2026-11-24). The limit
+  is set at 14 KB, about what the first round trip on a new connection
+  carries, the figure the build already uses for inlining a page's CSS.
 - No npm publishing: one source, installed with curl from `weft.base.al`,
   hosted on the Lisa server.
 - New apps only; existing apps are out of scope.
@@ -524,6 +547,22 @@ page, page budgets, and a capture of a page at `touch` or `landing`.
 - GitHub repository private until `0.1.0`, then public.
 - Pages rendered at build (replaces per-route meta injection): owner asked for faster than Astro.
 - Next plan is phase 2b (fast pages), before primitives, to prove Vapor build-time rendering early.
+
+From the app-tooling plan (`docs/superpowers/plans/2026-11-23-weft-app-tooling.md`):
+
+1. **The packages are unpacked into the app, at `.weft/`, not into `~/.weft/<version>/`.** A `file:` path into a home folder puts one person's path in `package.json`, so a teammate's clone or a CI run cannot install. `.weft/` is git-ignored and any `weft` command restores it.
+2. **The app is a pnpm workspace over `.weft/packages/*`** with `workspace:*` dependencies, instead of `file:` paths. It is how `site-src` and `playground` already consume the packages, so everything the page build relies on (TypeScript source exports, `sideEffects`, CSS resolution) behaves as it is tested here.
+3. **The Go package ships in the bundle too**, used through a `replace` in the app's `go.mod`. The repository is private until `0.1.0`, so `go get github.com/flakerimi/weft` fails for anyone else; and the CLI version then decides the Go side as well.
+4. **App settings live in `package.json` under `"weft"`** (`version`, `theme`), not in `weft.config.ts`. The Go CLI reads them with `encoding/json` and no Node.
+5. **No `--local` flag.** A `weft` built without a bundle reads one from the folder `$WEFT_BUNDLE` names, staged by `scripts/bundle.sh`. One code path serves release and development.
+6. **`weft dev` reloads the page on a change; it does not hot-replace modules.** Pages are server-rendered on each request, so a reload is always correct.
+7. **`weft upgrade` is in this plan**: with call 1 it is a version rewrite, a re-unpack and an install.
+8. **Out of scope, and added to `coming-next.md`:** a client-side router and `layouts/` for app routes (given phase 4c). The template is a page build with islands and a Go API.
+
+Rulings made while the plan ran:
+
+- The template's files are rendered with the delimiters `[[` and `]]`, not `{{ }}`, because Vue templates use `{{ }}`.
+- In `weft dev`, a rebuilt Go server that stops right after a restart, such as one that panics as it starts, is reported and waited on, like a compile error, and is not fatal; the first start failing still ends `weft dev`.
 
 ## Left to the builder
 

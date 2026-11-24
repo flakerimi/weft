@@ -1,0 +1,977 @@
+//go:build unix
+
+package main
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"net"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
+	"syscall"
+	"testing"
+	"time"
+)
+
+// syncBuffer is an output buffer that weft dev's children and the test share.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+// devRun is a weft dev running in a goroutine.
+type devRun struct {
+	app            string
+	url            string
+	stdout, stderr *syncBuffer
+	cancel         context.CancelFunc
+	done           chan int
+	code           int
+}
+
+// freeLocalPort returns a port free on both 127.0.0.1 and ::1, since the page
+// server listens on localhost, which may be either.
+func freeLocalPort(t *testing.T) int {
+	t.Helper()
+	for range 20 {
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		port := l.Addr().(*net.TCPAddr).Port
+		l.Close()
+		if l6, err := net.Listen("tcp", net.JoinHostPort("::1", strconv.Itoa(port))); err == nil {
+			l6.Close()
+			return port
+		} else if !errors.Is(err, syscall.EADDRINUSE) {
+			return port
+		}
+	}
+	t.Fatal("no free port")
+	return 0
+}
+
+// devApp copies the installed app into a new temp folder and runs the test in
+// it, for a test that changes the app.
+func devApp(t *testing.T) string {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("weft dev runs the app's servers")
+	}
+	inTempDir(t, "work")
+	app := copyApp(t, ".")
+	t.Chdir(app)
+	return app
+}
+
+var (
+	sharedOnce sync.Once
+	sharedDir  string
+)
+
+// sharedDevApp runs the test in one copy of the installed app, made once for
+// this test binary, for the tests that change none of its files: a copy
+// takes seconds. Its folder has a space and a non-ASCII letter (Review
+// Focus 1).
+func sharedDevApp(t *testing.T) string {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("weft dev runs the app's servers")
+	}
+	inTempDir(t, "unused")
+	sharedOnce.Do(func() {
+		dir := filepath.Join(filepath.Dir(stagedBundle), "My Apps", "café")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		sharedDir = copyApp(t, dir)
+	})
+	if sharedDir == "" {
+		t.Fatal("the shared app was not copied")
+	}
+	t.Chdir(sharedDir)
+	return sharedDir
+}
+
+// startDev runs weft dev with args in the current folder; it returns once
+// weft dev prints its URL line, and stops it when the test ends.
+func startDev(t *testing.T, app string, args ...string) *devRun {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	r := &devRun{app: app, stdout: &syncBuffer{}, stderr: &syncBuffer{}, cancel: cancel, done: make(chan int, 1)}
+	done := r.done
+	go func() { done <- dev(ctx, args, r.stdout, r.stderr) }()
+	t.Cleanup(func() {
+		if r.done == nil {
+			return
+		}
+		cancel()
+		select {
+		case <-r.done:
+		case <-time.After(10 * time.Second):
+			t.Error("weft dev did not stop within 10 s of being cancelled")
+		}
+	})
+	lineRe := regexp.MustCompile(`(?m)^weft dev: (http://localhost:\d+)\n`)
+	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		if m := lineRe.FindStringSubmatch(r.stdout.String()); m != nil {
+			r.url = m[1]
+			return r
+		}
+		select {
+		case code := <-r.done:
+			r.done = nil
+			t.Fatalf("weft dev exited %d before its URL line: %s%s", code, r.stdout, r.stderr)
+		default:
+		}
+	}
+	t.Fatalf("weft dev printed no URL line within 60 s: %s%s", r.stdout, r.stderr)
+	return nil
+}
+
+// stop cancels weft dev, as SIGINT does, and returns its exit code.
+func (r *devRun) stop(t *testing.T) int {
+	t.Helper()
+	r.cancel()
+	select {
+	case r.code = <-r.done:
+		r.done = nil
+		return r.code
+	case <-time.After(10 * time.Second):
+		t.Fatal("weft dev did not stop within 10 s")
+		return -1
+	}
+}
+
+var apiFlagRe = regexp.MustCompile(`--api http://127\.0\.0\.1:(\d+)`)
+
+// findGoPort is the Go server's port, from the --api flag weft dev gives the
+// page server it started on pagePort, or "" while there is none.
+func findGoPort(t *testing.T, pagePort int) string {
+	t.Helper()
+	out, err := exec.Command("ps", "-A", "-ww", "-o", "command=").Output()
+	if err != nil {
+		t.Fatalf("ps: %v", err)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.Contains(line, "weft-dev --root web --port "+strconv.Itoa(pagePort)+" ") {
+			if m := apiFlagRe.FindStringSubmatch(line); m != nil {
+				return m[1]
+			}
+		}
+	}
+	return ""
+}
+
+// goPort is the Go server's port.
+func (r *devRun) goPort(t *testing.T) string {
+	t.Helper()
+	port, _ := strconv.Atoi(r.url[strings.LastIndexByte(r.url, ':')+1:])
+	p := findGoPort(t, port)
+	if p == "" {
+		t.Fatalf("found no page server on port %d", port)
+	}
+	return p
+}
+
+// otherAddress is an address of this machine that is not a loopback one, or
+// "" when it has none.
+func otherAddress(t *testing.T) string {
+	t.Helper()
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok && !n.IP.IsLoopback() && !n.IP.IsLinkLocalUnicast() && n.IP.To4() != nil {
+			return n.IP.String()
+		}
+	}
+	return ""
+}
+
+// appGroups returns the commands, by process group, other than the test's
+// own, of the processes whose command line names the app's folder (the Go
+// server) or the page port (pnpm and node, which run in the app's folder and
+// name it relatively).
+func appGroups(t *testing.T, app string, port int) map[int][]string {
+	t.Helper()
+	names := []string{app, "weft-dev --root web --port " + strconv.Itoa(port) + " "}
+	if real, err := filepath.EvalSymlinks(app); err == nil && real != app {
+		names = append(names, real)
+	}
+	out, err := exec.Command("ps", "-A", "-ww", "-o", "pgid=,command=").Output()
+	if err != nil {
+		t.Fatalf("ps: %v", err)
+	}
+	groups := map[int][]string{}
+	own := syscall.Getpgrp()
+	for _, line := range strings.Split(string(out), "\n") {
+		pgidText, command, ok := strings.Cut(strings.TrimSpace(line), " ")
+		pgid, err := strconv.Atoi(pgidText)
+		if !ok || err != nil || pgid == own {
+			continue
+		}
+		for _, n := range names {
+			if strings.Contains(command, n) {
+				groups[pgid] = append(groups[pgid], command)
+				break
+			}
+		}
+	}
+	return groups
+}
+
+// groupAlive says whether any process of the group is left.
+func groupAlive(pgid int) bool {
+	return !errors.Is(syscall.Kill(-pgid, 0), syscall.ESRCH)
+}
+
+// refuses says whether nothing answers on addr within 5 s.
+func refuses(addr string) bool {
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		c, err := net.DialTimeout("tcp", addr, time.Second)
+		if err != nil {
+			return true
+		}
+		c.Close()
+	}
+	return false
+}
+
+// eventually polls url until its body has want, for up to within.
+func eventually(t *testing.T, url, want string, within time.Duration) {
+	t.Helper()
+	last := ""
+	for deadline := time.Now().Add(within); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		res, err := http.Get(url)
+		if err != nil {
+			last = err.Error()
+			continue
+		}
+		var b bytes.Buffer
+		b.ReadFrom(res.Body)
+		res.Body.Close()
+		last = b.String()
+		if strings.Contains(last, want) {
+			return
+		}
+	}
+	t.Fatalf("GET %s did not have %q within %s; last %q", url, want, within, last)
+}
+
+// setMessage rewrites the API's message in api/api.go.
+func setMessage(t *testing.T, app, message string) {
+	t.Helper()
+	file := filepath.Join(app, "api", "api.go")
+	src, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	re := regexp.MustCompile(`"message": "[^"]*"`)
+	if !re.Match(src) {
+		t.Fatalf("api/api.go has no message: %s", src)
+	}
+	if err := os.WriteFile(file, re.ReplaceAll(src, []byte(`"message": "`+message+`"`)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The folder has a space and a non-ASCII letter (Review Focus 1).
+func TestDevServesPagesAndAPI(t *testing.T) {
+	app := sharedDevApp(t)
+	port := freeLocalPort(t)
+	r := startDev(t, app, "--port", strconv.Itoa(port))
+	if want := "weft dev: http://localhost:" + strconv.Itoa(port) + "\n"; r.stdout.String() != want {
+		t.Errorf("stdout %q, want only %q", r.stdout, want)
+	}
+	check := func() {
+		t.Helper()
+		if code, body := get(t, r.url+"/"); code != 200 || !strings.Contains(body, ">Welcome</h1>") {
+			t.Errorf("GET / = %d %q", code, body)
+		}
+		if code, body := get(t, r.url+"/api/hello"); code != 200 || strings.TrimSpace(body) != `{"message":"Hello from Go"}` {
+			t.Errorf("GET /api/hello = %d %q", code, body)
+		}
+	}
+	check()
+	// Each server's standard input is a pipe weft dev holds open: it reads
+	// it to see weft dev go, and must stay up while it is open.
+	time.Sleep(3 * time.Second)
+	check()
+	// The Go server prints no URL of its own, and answers on 127.0.0.1 only.
+	if got := strings.Count(r.stdout.String()+r.stderr.String(), "http://"); got != 1 {
+		t.Errorf("the output has %d URLs: %q", got, r.stdout.String()+r.stderr.String())
+	}
+	goPort := r.goPort(t)
+	if code, _ := get(t, "http://127.0.0.1:"+goPort+"/api/hello"); code != 200 {
+		t.Errorf("the Go server does not answer on 127.0.0.1: %d", code)
+	}
+	if addr := otherAddress(t); addr == "" {
+		t.Log("this machine has no address but loopback ones")
+	} else if c, err := net.DialTimeout("tcp", net.JoinHostPort(addr, goPort), time.Second); err == nil {
+		c.Close()
+		t.Errorf("the Go server answers on %s, not only on 127.0.0.1", addr)
+	}
+	if code := r.stop(t); code != 0 {
+		t.Errorf("exit %d: %s", code, r.stderr)
+	}
+}
+
+// An unreadable folder in the app, such as a database volume, is said once
+// and leaves restarts working.
+func TestDevRestartsGo(t *testing.T) {
+	app := devApp(t)
+	data := filepath.Join(app, "data")
+	unreadableDir(t, data)
+	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
+	eventually(t, r.url+"/api/hello", "Hello from Go", 5*time.Second)
+	setMessage(t, app, "Hello again")
+	eventually(t, r.url+"/api/hello", "Hello again", 10*time.Second)
+	setMessage(t, app, "Hello a third time")
+	eventually(t, r.url+"/api/hello", "Hello a third time", 10*time.Second)
+	if n := strings.Count(r.stderr.String(), "weft dev: cannot read "+data); n != 1 {
+		t.Errorf("the unreadable folder was named %d times, want once: %s", n, r.stderr)
+	}
+	if strings.Contains(r.stderr.String(), "stopped") {
+		t.Errorf("a restart was reported as a stop: %s", r.stderr)
+	}
+}
+
+// Review Focus 3: a compile error is shown and the next save recovers.
+func TestDevSurvivesCompileError(t *testing.T) {
+	app := devApp(t)
+	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
+	file := filepath.Join(app, "api", "api.go")
+	src, _ := os.ReadFile(file)
+	os.WriteFile(file, append(src, []byte("\nfunc broken( {\n")...), 0o644)
+	for deadline := time.Now().Add(15 * time.Second); !strings.Contains(r.stderr.String(), "weft dev: go build failed"); time.Sleep(50 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("no build failure within 15 s: %s", r.stderr)
+		}
+	}
+	if !strings.Contains(r.stderr.String(), "api.go:") {
+		t.Errorf("the compiler's output was not shown: %s", r.stderr)
+	}
+	eventually(t, r.url+"/api/hello", "Hello from Go", 5*time.Second)
+	os.WriteFile(file, src, 0o644)
+	setMessage(t, app, "Hello again")
+	eventually(t, r.url+"/api/hello", "Hello again", 10*time.Second)
+	if code := r.stop(t); code != 0 {
+		t.Errorf("exit %d: %s", code, r.stderr)
+	}
+}
+
+// A restarted Go server that stops at once, as one that panics at start, is
+// like a compile error: the page server stays, and the next save recovers.
+func TestDevSurvivesGoServerStopAfterRestart(t *testing.T) {
+	app := devApp(t)
+	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
+	file := filepath.Join(app, "main.go")
+	src, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	broken := bytes.Replace(src, []byte("func main() {\n"), []byte("func main() {\n\tpanic(\"boom\")\n"), 1)
+	if bytes.Equal(broken, src) {
+		t.Fatalf("main.go has no func main: %s", src)
+	}
+	os.WriteFile(file, broken, 0o644)
+	want := "weft dev: the Go server stopped after the restart; fix it and save again.\n"
+	for deadline := time.Now().Add(15 * time.Second); !strings.Contains(r.stderr.String(), want); time.Sleep(50 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("no %q within 15 s: %s", want, r.stderr)
+		}
+	}
+	if !strings.Contains(r.stderr.String(), "boom") {
+		t.Errorf("the panic was not shown: %s", r.stderr)
+	}
+	if code, body := get(t, r.url+"/"); code != 200 || !strings.Contains(body, ">Welcome</h1>") {
+		t.Errorf("the page server stopped answering: GET / = %d %q", code, body)
+	}
+	select {
+	case code := <-r.done:
+		r.done = nil
+		t.Fatalf("weft dev exited %d: %s", code, r.stderr)
+	default:
+	}
+	os.WriteFile(file, src, 0o644)
+	setMessage(t, app, "Hello again")
+	eventually(t, r.url+"/api/hello", "Hello again", 10*time.Second)
+	if code := r.stop(t); code != 0 {
+		t.Errorf("exit %d: %s", code, r.stderr)
+	}
+}
+
+// childGroups returns the process groups of pid's children.
+func childGroups(t *testing.T, pid int) []int {
+	t.Helper()
+	out, err := exec.Command("ps", "-A", "-o", "ppid=,pgid=").Output()
+	if err != nil {
+		t.Fatalf("ps: %v", err)
+	}
+	var groups []int
+	for _, line := range strings.Split(string(out), "\n") {
+		f := strings.Fields(line)
+		if len(f) == 2 && f[0] == strconv.Itoa(pid) {
+			pgid, _ := strconv.Atoi(f[1])
+			groups = append(groups, pgid)
+		}
+	}
+	return groups
+}
+
+// buildWeft builds weft from this package, for a test that runs weft dev as
+// a process of its own: a signal to the test binary would stop the test.
+func buildWeft(t *testing.T) string {
+	t.Helper()
+	pkg, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(t.TempDir(), "weft")
+	build := exec.Command("go", "build", "-o", bin, ".")
+	build.Dir = pkg
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v: %s", err, out)
+	}
+	return bin
+}
+
+// devProc is weft dev running as a process of its own; done is closed once
+// it has exited, and err is then what Wait returned.
+type devProc struct {
+	cmd       *exec.Cmd
+	out, errb *syncBuffer
+	done      chan struct{}
+	err       error
+	groups    []int
+}
+
+// startDevProc runs bin dev --port port in app and returns once it prints its
+// URL line, with the process groups of its two children. Whatever the test
+// finds, nothing it started is left: a weft dev still running is sent
+// SIGTERM, so it stops its children, and killed only if it does not exit,
+// and then the groups it had are killed.
+func startDevProc(t *testing.T, bin, app string, port int) *devProc {
+	t.Helper()
+	p := &devProc{out: &syncBuffer{}, errb: &syncBuffer{}, done: make(chan struct{})}
+	p.cmd = exec.Command(bin, "dev", "--port", strconv.Itoa(port))
+	p.cmd.Dir = app
+	p.cmd.Stdout, p.cmd.Stderr = p.out, p.errb
+	// Wait returns once weft dev has exited, even when a child it left holds
+	// its output open.
+	p.cmd.WaitDelay = time.Second
+	if err := p.cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		p.err = p.cmd.Wait()
+		close(p.done)
+	}()
+	t.Cleanup(func() {
+		select {
+		case <-p.done:
+		default:
+			p.cmd.Process.Signal(syscall.SIGTERM)
+			select {
+			case <-p.done:
+			case <-time.After(10 * time.Second):
+				p.cmd.Process.Kill()
+				<-p.done
+			}
+		}
+		for _, pgid := range p.groups {
+			if groupAlive(pgid) {
+				syscall.Kill(-pgid, syscall.SIGKILL)
+			}
+		}
+	})
+	for deadline := time.Now().Add(60 * time.Second); !strings.Contains(p.out.String(), "weft dev: http://localhost:"); time.Sleep(50 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("no URL line within 60 s: %s%s", p.out.String(), p.errb.String())
+		}
+	}
+	p.groups = childGroups(t, p.cmd.Process.Pid)
+	if len(p.groups) != 2 {
+		t.Fatalf("want the groups of the Go server and the page server, found %v", p.groups)
+	}
+	return p
+}
+
+// Closing the terminal (SIGHUP) or Ctrl-\ (SIGQUIT) stops the children too.
+func TestDevStopsOnHangUpAndQuit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("weft dev runs the app's servers")
+	}
+	bin := buildWeft(t)
+	app := sharedDevApp(t)
+	for _, sig := range []syscall.Signal{syscall.SIGHUP, syscall.SIGQUIT} {
+		port := freeLocalPort(t)
+		p := startDevProc(t, bin, app, port)
+		goPort := findGoPort(t, port)
+		if goPort == "" {
+			t.Fatalf("%v: found no page server on port %d", sig, port)
+		}
+		p.cmd.Process.Signal(sig)
+		select {
+		case <-p.done:
+			if p.err != nil {
+				t.Errorf("%v: weft dev: %v: %s", sig, p.err, p.errb.String())
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatalf("%v: weft dev did not exit within 10 s", sig)
+		}
+		for _, addr := range []string{"localhost:" + strconv.Itoa(port), "127.0.0.1:" + goPort} {
+			if !refuses(addr) {
+				t.Errorf("%v: %s still answers", sig, addr)
+			}
+		}
+		for _, pgid := range p.groups {
+			if groupAlive(pgid) {
+				t.Errorf("%v: process group %d is left", sig, pgid)
+			}
+		}
+	}
+}
+
+// weft dev killed so that it cannot stop its children (SIGKILL, as a
+// harness stops a command it ran in the background) leaves neither server
+// running: each reads the end of the pipe weft dev held as its standard
+// input, and exits.
+func TestDevStopsWhenKilled(t *testing.T) {
+	if testing.Short() {
+		t.Skip("weft dev runs the app's servers")
+	}
+	bin := buildWeft(t)
+	app := sharedDevApp(t)
+	port := freeLocalPort(t)
+	p := startDevProc(t, bin, app, port)
+	goPort := findGoPort(t, port)
+	if goPort == "" {
+		t.Fatalf("found no page server on port %d", port)
+	}
+	p.cmd.Process.Kill()
+	select {
+	case <-p.done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("weft dev did not die of SIGKILL within 10 s")
+	}
+	addrs := []string{"localhost:" + strconv.Itoa(port), "127.0.0.1:" + goPort}
+	left := func() []string {
+		var what []string
+		for _, addr := range addrs {
+			if c, err := net.DialTimeout("tcp", addr, time.Second); err == nil {
+				c.Close()
+				what = append(what, addr+" answers")
+			}
+		}
+		for _, pgid := range p.groups {
+			if groupAlive(pgid) {
+				what = append(what, "group "+strconv.Itoa(pgid)+" is alive")
+			}
+		}
+		return what
+	}
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+		what := left()
+		if len(what) == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("5 s after weft dev was killed: %v", what)
+		}
+	}
+}
+
+// Review Focus 3: stopping leaves no child process.
+func TestDevStopsChildren(t *testing.T) {
+	app := sharedDevApp(t)
+	port := freeLocalPort(t)
+	r := startDev(t, app, "--port", strconv.Itoa(port))
+	goPort := r.goPort(t)
+	groups := appGroups(t, app, port)
+	// The Go server alone; pnpm and the node it runs.
+	if len(groups) != 2 {
+		t.Fatalf("want the groups of the Go server and the page server, found %v", groups)
+	}
+	for pgid, commands := range groups {
+		if n := len(commands); n != 1 && n != 2 {
+			t.Errorf("group %d: %q", pgid, commands)
+		}
+	}
+	if code := r.stop(t); code != 0 {
+		t.Errorf("exit %d: %s", code, r.stderr)
+	}
+	for _, addr := range []string{"localhost:" + strconv.Itoa(port), "127.0.0.1:" + goPort} {
+		if !refuses(addr) {
+			t.Errorf("%s still answers", addr)
+		}
+	}
+	for pgid := range groups {
+		if groupAlive(pgid) {
+			t.Errorf("process group %d is left", pgid)
+		}
+	}
+	if left := appGroups(t, app, port); len(left) != 0 {
+		t.Errorf("processes are left: %v", left)
+	}
+	if strings.Contains(r.stderr.String(), "stopped") {
+		t.Errorf("a stop as asked was reported: %s", r.stderr)
+	}
+}
+
+// A signal sent to every process, as at a shutdown, reaches the children too,
+// so a child may stop before weft dev hears of it: that is still a clean stop.
+// (A Ctrl-C at a terminal reaches weft dev alone: each child is in a process
+// group of its own.)
+func TestDevChildStopsFirstOnCtrlC(t *testing.T) {
+	app := sharedDevApp(t)
+	port := freeLocalPort(t)
+	r := startDev(t, app, "--port", strconv.Itoa(port))
+	groups := appGroups(t, app, port)
+	if len(groups) != 2 {
+		t.Fatalf("want the groups of the Go server and the page server, found %v", groups)
+	}
+	for pgid := range groups {
+		syscall.Kill(-pgid, syscall.SIGINT)
+	}
+	// The Go server stops at once on SIGINT; weft dev hears of it after.
+	for deadline := time.Now().Add(5 * time.Second); len(appGroups(t, app, port)) == len(groups); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("no child stopped on SIGINT")
+		}
+	}
+	if code := r.stop(t); code != 0 {
+		t.Errorf("exit %d: %s", code, r.stderr)
+	}
+	if strings.Contains(r.stderr.String(), "stopped") {
+		t.Errorf("a child stopped by the signal was reported as a stop: %s", r.stderr)
+	}
+}
+
+// A Ctrl-C while the page server starts is a clean stop too.
+func TestDevStopsWhileStarting(t *testing.T) {
+	app := sharedDevApp(t)
+	port := freeLocalPort(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	var out, errb syncBuffer
+	var code int
+	finished := make(chan struct{})
+	go func() {
+		code = dev(ctx, []string{"--port", strconv.Itoa(port)}, &out, &errb)
+		close(finished)
+	}()
+	// On every path, a failure's too, weft dev is stopped and waited for, so
+	// it stops its children.
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-finished:
+		case <-time.After(10 * time.Second):
+			t.Error("weft dev did not stop within 10 s of being cancelled")
+		}
+	})
+	// The page server starts right after the Go server and takes a second to
+	// answer.
+	for deadline := time.Now().Add(30 * time.Second); findGoPort(t, port) == ""; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the page server did not start: %s%s", out.String(), errb.String())
+		}
+	}
+	cancel()
+	select {
+	case <-finished:
+		if code != 0 {
+			t.Errorf("exit %d", code)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("weft dev did not stop within 10 s")
+	}
+	if got := out.String(); got != "" && !regexp.MustCompile(`^weft dev: http://localhost:\d+\n$`).MatchString(got) {
+		t.Errorf("stdout %q", got)
+	}
+	if errb.String() != "" {
+		t.Errorf("stderr %q, want nothing", errb.String())
+	}
+	if left := appGroups(t, app, port); len(left) != 0 {
+		t.Errorf("processes are left: %v", left)
+	}
+}
+
+// A child that stops when nobody asked stops the other, and weft dev fails.
+func TestDevChildStopsByItself(t *testing.T) {
+	app := sharedDevApp(t)
+	port := freeLocalPort(t)
+	r := startDev(t, app, "--port", strconv.Itoa(port))
+	goPort := r.goPort(t)
+	killed := false
+	for pgid, commands := range appGroups(t, app, port) {
+		if strings.HasSuffix(commands[0], filepath.Join(".weft", "dev", "app")) {
+			syscall.Kill(-pgid, syscall.SIGKILL)
+			killed = true
+		}
+	}
+	if !killed {
+		t.Fatal("found no Go server")
+	}
+	select {
+	case code := <-r.done:
+		r.done = nil
+		if code != 1 {
+			t.Errorf("exit %d", code)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("weft dev did not stop within 10 s of its Go server")
+	}
+	if want := "weft dev: the Go server stopped; see its output above.\n"; !strings.HasSuffix(r.stderr.String(), want) {
+		t.Errorf("stderr ends %q, want %q", r.stderr, want)
+	}
+	if !refuses("localhost:"+strconv.Itoa(port)) || !refuses("127.0.0.1:"+goPort) {
+		t.Error("a server still answers")
+	}
+	if left := appGroups(t, app, port); len(left) != 0 {
+		t.Errorf("processes are left: %v", left)
+	}
+}
+
+// devWithin runs weft dev, which is expected to fail, and stops it if it is
+// still running after within, failing the test.
+func devWithin(t *testing.T, within time.Duration, stdout, stderr *syncBuffer, args ...string) int {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), within)
+	defer cancel()
+	code := dev(ctx, args, stdout, stderr)
+	if ctx.Err() != nil {
+		t.Errorf("weft dev was still running after %s: %s%s", within, stdout, stderr)
+	}
+	return code
+}
+
+// binTime is when weft dev last built the app's Go server, or zero.
+func binTime(t *testing.T, app string) time.Time {
+	t.Helper()
+	info, err := os.Stat(filepath.Join(app, ".weft", "dev", "app"))
+	if err != nil {
+		return time.Time{}
+	}
+	return info.ModTime()
+}
+
+// Review Focus 3: a taken port is one sentence, and no child is started.
+func TestDevPortTaken(t *testing.T) {
+	app := sharedDevApp(t)
+	// "" is the wildcard: on macOS a socket may bind 127.0.0.1 or ::1 beside it.
+	for _, host := range []string{"127.0.0.1", "::1", ""} {
+		l, err := net.Listen("tcp", net.JoinHostPort(host, "0"))
+		if err != nil {
+			t.Logf("%s: %v", host, err)
+			continue
+		}
+		port := l.Addr().(*net.TCPAddr).Port
+		var out, errb syncBuffer
+		before := binTime(t, app)
+		code := devWithin(t, 30*time.Second, &out, &errb, "--port", strconv.Itoa(port))
+		l.Close()
+		if code != 1 {
+			t.Errorf("%s: exit %d", host, code)
+		}
+		if want := "weft dev: port " + strconv.Itoa(port) + " is in use; stop what is using it or pass --port.\n"; errb.String() != want || out.String() != "" {
+			t.Errorf("%s: stdout %q, stderr %q, want only %q", host, out.String(), errb.String(), want)
+		}
+		if left := appGroups(t, app, port); len(left) != 0 {
+			t.Errorf("%s: processes are left: %v", host, left)
+		}
+		if !binTime(t, app).Equal(before) {
+			t.Errorf("%s: the Go server was built", host)
+		}
+	}
+}
+
+// The port is checked before anything else: in a fresh clone, before pnpm
+// install.
+func TestDevPortTakenBeforeInstall(t *testing.T) {
+	if testing.Short() {
+		t.Skip("weft dev runs the app's servers")
+	}
+	inTempDir(t, "work")
+	if code, _, errs := create(t, "myapp", "--no-install"); code != 0 {
+		t.Fatalf("exit %d: %s", code, errs)
+	}
+	t.Chdir("myapp")
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	port := l.Addr().(*net.TCPAddr).Port
+	var out, errb syncBuffer
+	code := devWithin(t, 30*time.Second, &out, &errb, "--port", strconv.Itoa(port))
+	if want := "weft dev: port " + strconv.Itoa(port) + " is in use; stop what is using it or pass --port.\n"; code != 1 || errb.String() != want || out.String() != "" {
+		t.Errorf("exit %d, stdout %q, stderr %q, want only %q", code, out.String(), errb.String(), want)
+	}
+	if exists(t, "node_modules") {
+		t.Error("pnpm install ran before the port was checked")
+	}
+}
+
+// A Go server that never answers on PORT stops weft dev after the deadline.
+func TestDevGoServerIgnoresPort(t *testing.T) {
+	app := devApp(t)
+	main := "package main\n\nimport \"net/http\"\n\nfunc main() { http.ListenAndServe(\"127.0.0.1:0\", nil) }\n"
+	if err := os.WriteFile(filepath.Join(app, "main.go"), []byte(main), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	was := devReadyWithin
+	devReadyWithin = 2 * time.Second
+	t.Cleanup(func() { devReadyWithin = was })
+	port := freeLocalPort(t)
+	var out, errb syncBuffer
+	code := devWithin(t, 30*time.Second, &out, &errb, "--port", strconv.Itoa(port))
+	want := "weft dev: the Go server did not answer within 2 s; make main.go listen on the port in the PORT variable.\n"
+	if code != 1 || !strings.HasSuffix(errb.String(), want) || out.String() != "" {
+		t.Errorf("exit %d, stdout %q, stderr %q, want it to end %q", code, out.String(), errb.String(), want)
+	}
+	if left := appGroups(t, app, port); len(left) != 0 {
+		t.Errorf("processes are left: %v", left)
+	}
+}
+
+// A page server that never answers, here one whose Vite config never
+// finishes loading, stops weft dev after the same deadline, in a sentence
+// that points at its output.
+func TestDevPageServerNeverAnswers(t *testing.T) {
+	app := devApp(t)
+	config := "await new Promise((done) => setTimeout(done, 60_000))\nexport default {}\n"
+	if err := os.WriteFile(filepath.Join(app, "web", "vite.config.mjs"), []byte(config), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	was := devReadyWithin
+	devReadyWithin = 5 * time.Second
+	t.Cleanup(func() { devReadyWithin = was })
+	port := freeLocalPort(t)
+	var out, errb syncBuffer
+	code := devWithin(t, 30*time.Second, &out, &errb, "--port", strconv.Itoa(port))
+	want := "weft dev: the page server did not answer within 5 s; see its output above.\n"
+	if code != 1 || !strings.HasSuffix(errb.String(), want) || out.String() != "" {
+		t.Errorf("exit %d, stdout %q, stderr %q, want it to end %q", code, out.String(), errb.String(), want)
+	}
+	if left := appGroups(t, app, port); len(left) != 0 {
+		t.Errorf("processes are left: %v", left)
+	}
+}
+
+func TestDevBuildFails(t *testing.T) {
+	app := devApp(t)
+	os.WriteFile(filepath.Join(app, "api", "broken.go"), []byte("package api\n\nfunc broken( {\n"), 0o644)
+	var out, errb syncBuffer
+	port := freeLocalPort(t)
+	code := devWithin(t, 30*time.Second, &out, &errb, "--port", strconv.Itoa(port))
+	if code != 1 {
+		t.Errorf("exit %d", code)
+	}
+	if want := "weft dev: go build failed; fix what its output above says and run weft dev again.\n"; !strings.HasSuffix(errb.String(), want) || !strings.Contains(errb.String(), "broken.go:") {
+		t.Errorf("stderr %q, want the compiler's output, then %q", errb.String(), want)
+	}
+	if left := appGroups(t, app, port); len(left) != 0 {
+		t.Errorf("processes are left: %v", left)
+	}
+}
+
+func TestDevUsage(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, args := range [][]string{{"dev", "extra"}, {"dev", "--nope"}, {"dev", "--port", "eighty"}, {"dev", "--port", "70000"}} {
+		code, _, errs := runCmd(args...)
+		if code != 2 || !strings.HasPrefix(errs, "weft dev: ") || strings.Count(strings.TrimSpace(errs), "\n") != 0 {
+			t.Errorf("%v: exit %d, stderr %q", args, code, errs)
+		}
+	}
+	code, out, errs := runCmd("dev")
+	if want := "weft dev: no Weft app here; run it in a folder made by weft create.\n"; code != 1 || errs != want || out != "" {
+		t.Errorf("outside an app: exit %d, stderr %q, want %q", code, errs, want)
+	}
+}
+
+// unreadableDir makes dir unreadable until the test ends, as a database
+// volume of another user is.
+func unreadableDir(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0); err != nil {
+		t.Fatal(err)
+	}
+	// Restored, so the temp folder can be removed.
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+	if _, err := os.ReadDir(dir); err == nil {
+		t.Skip("this user can read a folder with mode 000")
+	}
+}
+
+func TestGoFilesSkipsFolders(t *testing.T) {
+	dir := t.TempDir()
+	write := func(p string) {
+		t.Helper()
+		p = filepath.Join(dir, p)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("package x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, p := range []string{
+		"main.go", "dist_dev.go", "api/api.go", "api/web/web.go", "api/notes.txt",
+		".weft/go/serve.go", ".git/hooks/x.go", "node_modules/x/y.go", "web/pages/x.go",
+		"db/x.go",
+	} {
+		write(p)
+	}
+	unreadableDir(t, filepath.Join(dir, "db"))
+	var unreadable []string
+	files, err := goFiles(dir, func(d string) { unreadable = append(unreadable, d) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unreadable) != 1 || unreadable[0] != filepath.Join(dir, "db") {
+		t.Errorf("unreadable folders %q, want only db", unreadable)
+	}
+	var got []string
+	for p := range files {
+		rel, _ := filepath.Rel(dir, p)
+		got = append(got, filepath.ToSlash(rel))
+	}
+	want := map[string]bool{"main.go": true, "dist_dev.go": true, "api/api.go": true, "api/web/web.go": true}
+	if len(got) != len(want) {
+		t.Errorf("goFiles = %v, want %v", got, want)
+	}
+	for _, p := range got {
+		if !want[p] {
+			t.Errorf("goFiles has %s", p)
+		}
+	}
+	info, _ := os.Stat(filepath.Join(dir, "main.go"))
+	if !files[filepath.Join(dir, "main.go")].Equal(info.ModTime()) {
+		t.Error("goFiles does not keep the modification time")
+	}
+}

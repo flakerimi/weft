@@ -11,3 +11,9 @@ site-src/releases/
 # Where scripts/site.sh staged releases before they moved out of the binary.
 site-src/public/install
 site-src/public/releases/
+
+cmd/weft/bundle/*
+!cmd/weft/bundle/README.md
+
+# Written by weftAutoImport() into each site and app it builds.
+.weft-types/

@@ -43,3 +43,23 @@ func TestHelp(t *testing.T) {
 		}
 	}
 }
+
+// -h and --help ask for a command's usage: it is printed on stdout, with
+// exit 0, not reported as a wrong flag.
+func TestCommandHelp(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, c := range []struct{ command, usage string }{
+		{"create", "Usage is weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install].\n"},
+		{"build", "Usage is weft build [-o <file>].\n"},
+		{"dev", "Usage is weft dev [--port n].\n"},
+		{"upgrade", "Usage is weft upgrade [--no-install].\n"},
+		{"catalog", "Usage is weft catalog [<Name>...] [--examples] [--json], or weft catalog --find <word> [<word>...].\n"},
+	} {
+		for _, flag := range []string{"-h", "--help"} {
+			code, out, errs := runCmd(c.command, flag)
+			if code != 0 || out != c.usage || errs != "" {
+				t.Errorf("weft %s %s: exit %d, stdout %q, stderr %q, want only %q", c.command, flag, code, out, errs, c.usage)
+			}
+		}
+	}
+}

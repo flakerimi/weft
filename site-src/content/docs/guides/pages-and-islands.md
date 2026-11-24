@@ -67,6 +67,18 @@ A page with no island has no script that loads JavaScript.
 
 Files in `public/` are copied to the root of the build as they are: `public/robots.txt` is `/robots.txt`.
 
+### Icons
+
+Put the site's icon in `public/` (in an app `weft create` made, `web/public/`) and that is all it takes: every page's `<head>`, the not-found page's included, names the files that are there, in this order, and nothing for those that are not.
+
+| File | Tag |
+| --- | --- |
+| `favicon.ico` | `<link rel="icon" href="/favicon.ico" sizes="32x32">` |
+| `favicon.svg` | `<link rel="icon" href="/favicon.svg" type="image/svg+xml">` |
+| `apple-touch-icon.png` | `<link rel="apple-touch-icon" href="/apple-touch-icon.png">` |
+
+A browser takes the last icon it can draw, so one that draws SVG shows `favicon.svg` and one that does not shows `favicon.ico`. The files are served with their types and revalidated, not cached for a year, since their names carry no hash. `weft dev` writes the same tags.
+
 ### Files a page writes
 
 A page can also write a file of its own into the build, such as data it shows, for agents or other programs to read. Call `useFile(path, text)` from `virtual:weft/files` in the page's setup:
@@ -129,10 +141,35 @@ The server renders the button, so it shows before any script runs. The island ru
 
 A page with islands loads one small module script, the loader (about 0.5 KB), which sets each island's trigger. The first island that starts fetches the runtime, Vue and the hydration, once for the page; every island then shares it and loads its own code. A page with an island that starts on `load` preloads the runtime with the loader; one whose islands wait (`idle`, `visible`, `media`) fetches nothing more until one starts.
 
+## Components without imports
+
+A page, an island or any component of the site may use Weft's components without importing them. The build adds the import for each one the template uses, so this page needs no `<script>` at all:
+
+```vue
+<template>
+  <Page title="About">
+    <Section><Card>Made with Weft.</Card></Section>
+  </Page>
+</template>
+```
+
+It gets `import { Card, Page, Section } from '@weft/ui'` at the top of its `<script setup>`, or a `<script setup vapor lang="ts">` to hold it, and builds as if you had written the line: the page inlines the same CSS, and an island loads the same code. Writing the import yourself still works, as every example here does.
+
+Your own names come first. A tag gets no import when:
+
+- the file imports or declares that name itself, in `<script setup>` or a plain `<script>` beside it, as `import Card from '../components/Card.vue'` or `const Card = …` does;
+- it is the component's own name: `<Card>` inside `components/Card.vue` is the component itself, drawn recursively, as Vue has it (the page `pages/card.vue` showing `<Card>` gets Weft's);
+- it is lowercase (`<button>`, `<card>`), or inside an element marked `v-pre`;
+- it is not one of `@weft/ui`'s components.
+
+A component with only a plain `<script>`, and no `<script setup>`, is left as it is.
+
+For your editor and `vue-tsc`, the build writes `.weft-types/components.d.ts` in the site, which tells TypeScript what each name is. Add it to the `include` of your `tsconfig.json`, and keep it out of git: it is rewritten on each build, whenever the list changes. In an app, `weft create` and `weft build` write it too before any build, with `weft-types --root web`, so `pnpm typecheck` checks the components' props from the start.
+
 ## Before the first paint
 
 `usePrePaint(id, code)` adds a few lines of script to the top of the `<head>`, on the pages that render the calling component. Use it only to copy a stored preference onto `<html>` for CSS to read, as `AppShell` does for its collapsed sidebar. The server's markup must not depend on it.
 
 ## Your Vite config
 
-If the site has a `vite.config.ts`, the build uses it. It adds Vue, Weft's icons and [Markdown content](markdown.md) unless your config already has them.
+If the site has a `vite.config.ts`, the build uses it. It adds Vue, Weft's icons, [Markdown content](markdown.md) and the imports of Weft's components unless your config already has them. To write the declaration file elsewhere, or not at all, add `weftAutoImport({ dts: false })` from `@weft/vite` to your config's plugins.

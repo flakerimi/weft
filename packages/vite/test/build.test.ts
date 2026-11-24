@@ -18,7 +18,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, relative } from 'node:path'
+import { basename, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { brotliCompressSync, brotliDecompressSync, gunzipSync } from 'node:zlib'
@@ -46,14 +46,21 @@ function files(dir: string): string[] {
     .sort()
 }
 
-/** Everything under `dir` by lstat: a file's bytes, a symlink's target, a folder as "dir". */
-function snapshot(dir: string): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const e of readdirSync(dir, { recursive: true, withFileTypes: true })) {
-    const path = join(e.parentPath, e.name)
-    const key = relative(dir, path)
+/**
+ * Everything under `dir` by lstat: a file's bytes, a symlink's target, a folder as "dir".
+ * A symlink is not followed (readdirSync's `recursive` would follow one to a folder,
+ * such as a linked site's node_modules, which other tests' servers write to meanwhile).
+ */
+function snapshot(dir: string, out: Record<string, string> = {}, base = dir): Record<string, string> {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, e.name)
+    const key = relative(base, path)
     const stat = lstatSync(path)
-    out[key] = stat.isSymbolicLink() ? `-> ${readlinkSync(path)}` : stat.isDirectory() ? 'dir' : readFileSync(path, 'base64')
+    if (stat.isSymbolicLink()) out[key] = `-> ${readlinkSync(path)}`
+    else if (stat.isDirectory()) {
+      out[key] = 'dir'
+      snapshot(path, out, base)
+    } else out[key] = readFileSync(path, 'base64')
   }
   return out
 }
@@ -79,9 +86,17 @@ function expectFailureLogs() {
   }
 }
 
+/**
+ * A copy of a fixture's source, without the declaration file weftAutoImport()
+ * writes into a fixture another test built in place.
+ */
+function copyFixture(name: string, to: string) {
+  cpSync(fixture(name), to, { recursive: true, filter: (src) => basename(src) !== '.weft-types' })
+}
+
 function linkedSite(name: string): string {
   const root = join(tempDir(), name)
-  cpSync(fixture(name), root, { recursive: true })
+  copyFixture(name, root)
   symlinkSync(fileURLToPath(new URL('../node_modules', import.meta.url)), join(root, 'node_modules'))
   return root
 }
@@ -1319,7 +1334,7 @@ describe('buildSite refuses', { timeout: 30_000 }, () => {
   // refuse could not write into, or delete from, the fixtures.
   const site = () => {
     const root = join(tempDir(), 'site')
-    cpSync(fixture('static-site'), root, { recursive: true })
+    copyFixture('static-site', root)
     return root
   }
   const refused = async (root: string, outDir: string, fixtureFiles = ['env.d.ts', 'pages/index.vue', 'vite.config.ts']) => {
@@ -1379,7 +1394,7 @@ describe('buildSite refuses', { timeout: 30_000 }, () => {
     async () => {
       const parent = tempDir()
       const root = join(parent, 'caf\u00e9')
-      cpSync(fixture('static-site'), root, { recursive: true })
+      copyFixture('static-site', root)
       const nfd = join(parent, 'cafe\u0301')
       await refused(root, nfd)
       await refused(root, join(nfd, 'pages'))
@@ -1397,7 +1412,7 @@ describe('buildSite refuses', { timeout: 30_000 }, () => {
   it('an outDir that contains a root whose name starts with ".."', async () => {
     const parent = tempDir()
     const root = join(parent, '..site')
-    cpSync(fixture('static-site'), root, { recursive: true })
+    copyFixture('static-site', root)
     await refused(root, parent)
   })
 

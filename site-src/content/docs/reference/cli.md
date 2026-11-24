@@ -1,10 +1,10 @@
 ---
 title: CLI
-description: Every command and flag of weft and weft-build-pages, and the installer's settings.
+description: Every command, flag and error of weft, weft-build-pages and weft-dev, and the installer's settings.
 order: 30
 ---
 
-Look up here every command and flag the `weft` command has today, the page build's flags, and the installer's settings. Commands the design plans but the code does not have yet are under [Coming next](../coming-next.md).
+Look up here every command and flag the `weft` command has today, the flags of the page build and the page dev server, and the installer's settings. Commands the design plans but the code does not have yet are under [Coming next](../coming-next.md).
 
 ## weft
 
@@ -14,11 +14,16 @@ weft — one UI system for Go and Vue applications
 Usage: weft <command>
 
 Commands:
+  build      build the pages, then the app's binary (-o <file>)
+  catalog    list the components, print one (weft catalog <Name>) or search (--find)
+  create     make an app (weft create <name>)
+  dev        run the app, restarting Go when a .go file changes (--port n)
   update     update weft to the latest release (--check, --version X)
+  upgrade    move the app to this weft's Weft version (--no-install)
   version    print the Weft version
 ```
 
-`weft`, `weft help`, `weft -h` and `weft --help` print this. An unknown command prints `weft: unknown command "x". Run "weft help".` and exits with status 2.
+`weft`, `weft help`, `weft -h` and `weft --help` print this. An unknown command prints `weft: unknown command "x". Run "weft help".` and exits with status 2. `-h` or `--help` after a command prints that command's usage, such as `Usage is weft dev [--port n].`, with exit status 0.
 
 ### weft version
 
@@ -46,6 +51,146 @@ It says `weft X is up to date.` when there is nothing to do, and `Updated weft X
 | Variable | What it does |
 | --- | --- |
 | `WEFT_BASE` | Where the releases are. Default `https://weft.base.al` |
+
+### weft create
+
+Makes an app in a new folder named after it. It writes the app's files from the template that `weft` carries, unpacks Weft's packages and Go package into the app's `.weft/`, records the Weft version and the theme in `package.json`'s `"weft"` object, and runs `pnpm install`. Then it prints `Created <name>. Next: cd <name> && weft dev`. [Create an app](../getting-started/create-an-app.md) walks through what it writes.
+
+```text
+weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install]
+```
+
+| Flag | What it does |
+| --- | --- |
+| `--module <path>` | The Go module path in `go.mod`. Default: the name |
+| `--theme` | `neutral` (the default), `lisa` or `weft`. See [Themes](../guides/themes.md) |
+| `--no-install` | Skip `pnpm install`; `weft dev` or `weft build` runs it later |
+
+The name is a lowercase letter, then lowercase letters, digits and hyphens, at most 64 in all. It is also the binary's name, so `web`, `api`, `app` and `dist` are refused: the binary would be written into a folder of the app. Wrong usage, such as a bad name, theme or flag, is one sentence with exit status 2.
+
+Before it writes anything it checks that `go`, `node` 22.18 or later and `pnpm` 10 or later are on `PATH`, and that the folder is missing or empty; otherwise it says `weft create: <name> already exists and is not empty; choose another name or move it away.`, or names the missing tool, with exit status 1. If `pnpm install` fails, the app stays, and it says `weft create: pnpm install did not finish; run pnpm install in <name> to finish.`
+
+### weft dev
+
+Runs an app while you work. It builds the Go code with the `dev` tag into `.weft/dev/app` and runs it on a free port, starts [weft-dev](#weft-dev) beside it with the app's theme, which renders each page when it is asked for and sends `/api` to the Go server, and prints `weft dev: http://localhost:<n>` once both answer. Open that address with `localhost`, not `127.0.0.1`: the page server may listen on `::1` only. Run it anywhere inside the app; it checks the app first, as `weft build` does. It reads the theme once, as it starts: after you change `"theme"` in `package.json`, stop `weft dev`, then start `weft dev` again.
+
+| Flag | What it does |
+| --- | --- |
+| `--port n` | The page server's port. Default `5173`; `0` takes a free one |
+
+Every 300 ms it looks for a changed `.go` file outside `.weft/`, `.git/`, `node_modules/` and `web/`. When one changed it builds again and, if the build succeeds, replaces the running Go server. A failed build prints the compiler's output, and the last build keeps serving `/api` until you save the fix. A rebuilt server that stops by itself, such as one that panics as it starts, prints `weft dev: the Go server stopped after the restart; fix it and save again.`, and the next save builds and starts it again. A folder it may not read is skipped, and named once. A change under `web/` reloads the browser and needs no build; a change to `web/vite.config` needs `weft dev` to start again. The Go server's own output is passed through. Built with the `dev` tag, the template's server listens on `127.0.0.1` only and prints no address, so the one address shown is the page server's, which sends `/api` on.
+
+The Go server must listen on the port in the `PORT` variable. If it does not answer there within 30 s of starting, `weft dev` stops both servers and says `weft dev: the Go server did not answer within 30 s; make main.go listen on the port in the PORT variable.`, with exit status 1. The page server has the same 30 s, after which it says `weft dev: the page server did not answer within 30 s; see its output above.`
+
+Ctrl-C, SIGTERM, closing the terminal (SIGHUP) or `Ctrl-\` (SIGQUIT) stops both servers, with exit status 0. Killed so that it cannot stop them, as by SIGKILL, it leaves neither running: each server's standard input is a pipe `weft dev` holds open, and each exits when it ends. If the page server, or the Go server it started with, stops by itself, `weft dev` stops the other and says `weft dev: the page server stopped; see its output above.` (or `the Go server`), with exit status 1. A port in use is the sentence `weft dev: port <n> is in use; stop what is using it or pass --port.`, checked before anything else, so nothing is installed or started. Wrong usage exits with status 2.
+
+### weft build
+
+Builds an app: runs `weft-build-pages --root web --out web/dist` with the app's theme, then `go build`, which embeds `web/dist`. Run it anywhere inside the app; it finds the nearest `package.json` with a `"weft"` object. A `package.json` on the way that is not valid JSON stops the search: the command names it and says to fix it.
+
+| Flag | What it does |
+| --- | --- |
+| `-o <file>` | The binary to write, from where you run it. Default: the app's `package.json` name, in the app's folder |
+
+It prints the build's output, then `Built <file>`. First it checks the app:
+
+- An app recorded at another Weft version is refused: `weft build: this app is on Weft <a> and this weft is <b>; run weft upgrade to move the app, or weft update --version <a> to match it.` For an app on a newer Weft than this `weft`, which `weft upgrade` would refuse, the sentence ends `run weft update --version <a> to match it.` alone. An app whose `"weft"` object has no `version` is refused with a sentence that says what to add.
+- When `.weft/` is missing or holds another version, as in a fresh clone, it unpacks the packages into it and runs `pnpm install`. It runs `pnpm install` too when `node_modules/` is missing. A `.weft/` without the `VERSION` file `weft` writes is not its own and is left alone, with a sentence saying to move it out of the app folder. Nothing beside `.weft/` is touched.
+- After an install, or when `web/.weft-types/components.d.ts` is missing, it writes that file with [weft-types](#weft-types), so `pnpm typecheck` checks the components' props before any build.
+
+Outside an app it says `weft build: no Weft app here; run it in a folder made by weft create.` Any failure is one sentence on standard error, with exit status 1; wrong usage exits with status 2.
+
+### weft upgrade
+
+Moves an app to the Weft version of the `weft` you run: it rewrites `weft.version` in `package.json`, changing no other byte, unpacks that version's packages into `.weft/`, and runs `pnpm install`. It prints `Moved <name> from Weft <a> to <b>`, or `<name> is already on Weft <b>` when there is nothing to do. It never moves an app backwards: an app on a newer Weft is refused with `weft upgrade: this app is on Weft <a>, newer than this weft <b>; run weft update to get <a> or later.`, and exit status 1. A development build's `0.0.0-dev` is older than any release.
+
+| Flag | What it does |
+| --- | --- |
+| `--no-install` | Skip `pnpm install` |
+
+### weft catalog
+
+Prints the component catalogue in pieces, so an agent reads only the components it uses. Inside an app it reads `.weft/catalog/components.json`; outside one, or before `.weft/` is unpacked, the catalogue `weft` carries.
+
+```text
+weft catalog [<Name>...] [--examples] [--json]
+weft catalog --find <word> [<word>...] [--json]
+```
+
+With no name it lists every component under its group, its name and its purpose:
+
+```text
+76 components. Run weft catalog <Name> for one.
+
+disclosure
+  Accordion       Stacked sections whose content opens under its header.
+  Collapsible     Content shown and hidden by one trigger.
+```
+
+With names it prints each component as Markdown: its purpose, `Use:` and `Avoid:`, `Adapts:` on each axis, `Props:` as `name: type = default`, with `required` where it is, then what it does, `Emits:` with each payload, `Slots:` with each slot's props, `Notes:`, and its first example. A section it has nothing for is left out. Names match without regard to case or hyphens, so `date-picker` finds `DatePicker`:
+
+````text
+# Kbd
+
+A key on the keyboard, for showing shortcuts.
+
+Use: In help text, menus and tooltips, one Kbd per key of a shortcut.
+Avoid: For code or a value to copy, use a code element.
+
+Adapts:
+- input: Nothing changes; show shortcuts only where a keyboard is likely, which the page decides.
+- surface: Nothing changes; text follows the surface's type scale.
+- width: Nothing changes.
+
+Props:
+- value: string — The key: a character (`K`) or a name with a symbol (`command`, `shift`, `option`, `enter`, `backspace`, `tab`, `arrowup`…). The default slot replaces it.
+- size: 'sm' | 'md' | 'lg' = 'md' — `sm`, `md` or `lg`.
+
+Slots: default
+
+Notes:
+`value` is a character (`K`) or a key name. Names with a symbol draw the
+symbol and say the name to assistive technology, which reads symbols poorly:
+`command` (⌘), `shift` (⇧), `option` (⌥), `enter` (↵), `backspace` (⌫),
+`tab` (⇥) and the arrows `arrowup`, `arrowdown`, `arrowleft`, `arrowright`.
+Any other value is drawn as given. It draws what it is told and never guesses
+the reader's operating system, so the server and browser agree. The default
+slot replaces the value.
+
+Example: Basic
+
+```vue
+<script setup vapor lang="ts">
+import { Kbd } from '@weft/ui'
+</script>
+
+<template>
+  <p>Search with <Kbd value="command" /> <Kbd value="K" />, then press <Kbd value="enter" /> to open.</p>
+</template>
+```
+````
+
+| Flag | What it does |
+| --- | --- |
+| `--examples` | Every example of each component named, not only the first |
+| `--json` | The entries as the catalogue has them, as a JSON array: every one, the ones named, or the ones found |
+| `--find` | Search instead of naming: the components whose name has each word, or whose purpose, use or notes have it as a whole word, without regard to case. Words may be separate or in one argument. |
+
+`--find` prints the list's lines of the components that match every word, in the catalogue's order:
+
+```text
+$ weft catalog --find date
+  Calendar        A month of dates to choose one, several or a range from, in the locale's names, digits and first day of the week.
+  DatePicker      A date field where a date is typed as the locale writes it or chosen from a calendar that opens beside it.
+  DateRangePicker A field for a range of dates, a start and an end, typed in the locale or chosen in a calendar of two months.
+  InputTime       A time of day, typed part by part in the locale's order and hour cycle.
+  Separator       A rule that separates content, with an optional label or icon in its middle.
+  Timeline        Events in order, each a dot on a line with its date, title and description, the ones up to now marked done.
+```
+
+When nothing matches it says `weft catalog: nothing matches "<words>"; run weft catalog to list them.`, with exit status 1. `--find` with no words, or only blank ones, is wrong usage.
+
+An unknown name prints nothing for the others and exits with status 1, naming up to three components: the names it starts or is part of (`weft catalog: no component named "date"; did you mean DatePicker, DateRangePicker?`); when there are none, the components whose purpose, use or notes have it as a word, then names within a few edits (`weft catalog: no component named "modal"; did you mean Dialog, OverlayPanel, Sheet?`); or `…; run weft catalog to list them.` when none is close. It never prints another component in place of the one named. Wrong usage exits with status 2.
 
 ## The installer
 
@@ -76,3 +221,34 @@ weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app b
 | `--separate-runtime` | A section of the site, such as `/components`, whose pages' islands get a runtime of their own, with Vue cut down to what those islands use, so heavy islands there do not grow the one every other page loads. A page is in the longest section it is in or under: `/components` and `/components/button` are both in `/components`. Give it once per section, as a path with no trailing `/`. |
 
 It prints `weft: built N pages into <dist>`. It needs Node 22.18 or later, which runs TypeScript without a build step. Any error is one sentence, and the folder at `--out` is left as it was.
+
+## weft-dev
+
+The page dev server. It comes with `@weft/vite`, beside `weft-build-pages`.
+
+```text
+weft-dev --root <site> [--port n] [--host h] [--api <url>] [--theme neutral|lisa|weft] [--exit-with-parent]
+```
+
+| Flag | What it does |
+| --- | --- |
+| `--root` | The site's folder, which holds `pages/`. Required. Its `package.json` may be in a folder above. |
+| `--port` | The port to listen on. Default `5173`; `0` takes a free one. |
+| `--host` | The host to listen on. Default `localhost`. Any other host exposes Vite's own file serving, which includes the app's folder, to the network. |
+| `--api` | Where `/api` and every path under it go, such as `http://127.0.0.1:8081`. Without it they are pages like any other path. |
+| `--theme` | `neutral` (the default), `lisa` or `weft`, as for the build. |
+| `--exit-with-parent` | Stop, with exit status 0, when standard input ends. `weft dev` passes it with a pipe it holds open. Without it standard input is not read. |
+
+It prints `weft: dev server at <url>` once it listens. Each page is rendered when it is asked for, as the build renders it, so a saved edit shows on the next request. A dynamic page's `getPaths()` is called on each request. An unknown path gets `pages/404.vue` with status 404, or a plain 404 without one. A page that fails to render gets a 500 page naming its file and the error; the server keeps running, and the page reloads when you save the fix. A change to any file under `--root` reloads the browser; no module is replaced in place. Islands hydrate from Vite's modules, not from a client build. A file a page writes with `useFile` is served once that page has rendered.
+
+It stops on SIGTERM or Ctrl-C. A port in use is the sentence `weft dev: port <n> is in use; stop what is using it or pass --port.`, with exit status 1; a flag it does not know exits with status 2.
+
+## weft-types
+
+Writes a site's `.weft-types/components.d.ts`, which tells TypeScript what each auto-imported component is, as a build does, without building. It comes with `@weft/vite`; `weft create`, `weft build`, `weft dev` and `weft upgrade` run it in an app.
+
+```text
+weft-types --root <site>
+```
+
+It prints nothing once the file is written. When `@weft/ui` cannot be found from the site, it says so with exit status 1.

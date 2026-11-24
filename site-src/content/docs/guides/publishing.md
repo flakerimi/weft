@@ -55,7 +55,7 @@ Build it from the repository's root. Build the pages before `docker build`, so `
 `scripts/publish-site.sh <version>` publishes weft.base.al. It:
 
 1. builds a release of the `weft` command for four platforms, with `scripts/release.sh`;
-2. builds this site with `scripts/site.sh build`;
+2. builds this site with `scripts/site.sh build`, with `WEFT_SITE_VERSION` set to the version, which `/index.md` names (a build without it names no version);
 3. makes a tree with the Go sources, the built pages, a Dockerfile like the one above, the installer, every release `site/releases.txt` lists as published, and the new one;
 4. pushes the tree to the server, which builds the image and runs it, lists the version in `site/releases.txt` as soon as the push succeeds, so every later publish keeps it, and waits until the new version answers.
 
@@ -65,4 +65,4 @@ The releases are not in the binary. They are in the image under `/data/releases`
 
 ## Page weight
 
-This site holds each docs page to 10 KB brotli. That counts the HTML, its CSS, the loader every page with an island starts with (`boot-*.js`, about 0.5 KB), and the scripts of the page's own islands with the chunks they import. It does not count the shared Vue runtime, `client-*.js`, which a browser caches once for the whole site and fetches only when an island starts, nor fonts, which are cached and preloaded. `site-src/main_test.go` checks every docs page after each build.
+This site holds each docs page to 14 KB brotli, about what a browser receives in the first round trip on a new connection. That counts the HTML, its CSS, the loader every page with an island starts with (`boot-*.js`, about 0.5 KB), and the scripts of the page's own islands with the chunks they import. It does not count the shared Vue runtime, `client-*.js`, which a browser caches once for the whole site and fetches only when an island starts, nor fonts, which are cached and preloaded. `site-src/main_test.go` checks every docs page after each build.

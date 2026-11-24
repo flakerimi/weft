@@ -13,7 +13,8 @@ import (
 // its first three table rows; the thread passes behind both frames and
 // crosses no text; the desktop's open menu hangs from its trigger's cell,
 // as the component places it. And on a phone the install command stays on
-// one line, scrolling inside its box, its Copy button whole.
+// one line, scrolling inside its box, its Copy button whole; and the prompt
+// for agents, with its button, is in the first screen.
 func TestLandingHeroLayout(t *testing.T) {
 	dist(t)
 	b := startBrowser(t)
@@ -103,6 +104,50 @@ func TestLandingHeroLayout(t *testing.T) {
 	}
 	if cmd.Button < 60 {
 		t.Errorf("at 390 px the Copy button is %.0f px wide; it keeps its size", cmd.Button)
+	}
+
+	// The prompt for agents is the first thing to do: on a phone the headline,
+	// the prompt's box and its button are in the first screen, the box shows
+	// at most two lines of it (the rest is cut with an ellipsis, not lost:
+	// the whole text is in the page), and the button is whole.
+	for _, size := range [][2]int{{390, 844}, {320, 844}} {
+		b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": size[0], "height": size[1], "deviceScaleFactor": 1, "mobile": true})
+		b.open(srv.URL + "/")
+		b.doing, b.deadline = fmt.Sprintf("the prompt for agents at %d × %d", size[0], size[1]), time.Now().Add(pageTimeout)
+		b.eval(`document.fonts.ready.then(() => true)`, new(bool))
+		var p struct {
+			Below       []string
+			Lines       float64
+			Button      float64
+			ButtonWhole bool
+			Whole       string
+		}
+		b.eval(`(() => {
+			const text = document.getElementById('agent-prompt'), button = document.querySelector('.landing-prompt .copy-button')
+			const below = []
+			for (const [what, e] of [['the headline', document.querySelector('.landing-hero h1')], ['the prompt', document.querySelector('.landing-prompt')], ['its button', button]]) {
+				const r = e.getBoundingClientRect()
+				if (r.top < 0 || r.bottom > innerHeight || r.width === 0) below.push(what + ' (' + Math.round(r.top) + '–' + Math.round(r.bottom) + ')')
+			}
+			const style = getComputedStyle(text)
+			return {
+				below, whole: text.textContent,
+				lines: (text.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)) / parseFloat(style.lineHeight),
+				button: button.getBoundingClientRect().width, buttonWhole: button.scrollWidth <= button.clientWidth,
+			}
+		})()`, &p)
+		if len(p.Below) > 0 {
+			t.Errorf("%s: not in the first screen: %s", b.doing, strings.Join(p.Below, ", "))
+		}
+		if p.Lines > 2.2 {
+			t.Errorf("%s: the prompt's box is %.1f lines tall; it shows at most two", b.doing, p.Lines)
+		}
+		if p.Whole != agentPrompt(t) {
+			t.Errorf("%s: the prompt's text is %q, not the whole prompt", b.doing, p.Whole)
+		}
+		if p.Button < 60 || !p.ButtonWhole {
+			t.Errorf("%s: the prompt's button is %.0f px wide, its label whole %v", b.doing, p.Button, p.ButtonWhole)
+		}
 	}
 }
 

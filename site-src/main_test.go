@@ -575,7 +575,7 @@ func islandChunks(t *testing.T, d fs.FS, runtime string, islands []string) []str
 	return out
 }
 
-// Each docs page is at most 10 KB brotli: its HTML, with its CSS inlined, any
+// Each docs page is at most 14 KB brotli: its HTML, with its CSS inlined, any
 // stylesheet it links, the loader (boot-*.js) and whatever it preloads, and
 // the scripts of its own islands (each island's chunk and the chunks it
 // imports). The shared runtime, client-*.js, is not counted: it is cached
@@ -583,6 +583,13 @@ func islandChunks(t *testing.T, d fs.FS, runtime string, islands []string) []str
 // fonts: they are cached and preloaded. A docs page loads
 // no JavaScript, except one with a command marked copy, whose only island is
 // the copy button.
+//
+// The limit was 10 KB until the owner raised it on 2026-11-24. A flat limit
+// also counts a page's own text, so a long reference page went over without
+// any bloat. 14 KB is about what a browser receives in the first round trip
+// on a new connection, and is the figure the build already uses for
+// inlining a page's CSS (cssInlineLimit). The owner allowed up to 20 KB; 14
+// was chosen because it has that reason and every page fits with room.
 func TestDocsPageBudgets(t *testing.T) {
 	d := dist(t)
 	var m builtFiles
@@ -608,8 +615,8 @@ func TestDocsPageBudgets(t *testing.T) {
 			size += brotliSize(t, d, m, chunk)
 		}
 		t.Logf("%s: %d B brotli", path, size)
-		if size > 10*1024 {
-			t.Errorf("%s is %d B brotli, over 10 KB", path, size)
+		if size > 14*1024 {
+			t.Errorf("%s is %d B brotli, over 14 KB", path, size)
 		}
 		switch got := strings.Join(islands[path], ","); got {
 		case "":

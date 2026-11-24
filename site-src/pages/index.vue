@@ -1,9 +1,11 @@
 <script setup vapor lang="ts">
 // weft.base.al's landing page, after the approved design's second pass
 // (docs/design/site-2026-11-21-v2/). The hero is the night band: the
-// headline, the pitch and the install command with its copy button (an
-// island), and one app, Northline's device list, drawn twice by the real
-// components, on a desktop and on a phone (inert pictures from the server).
+// headline, the pitch, then its first action, the prompt to give a coding
+// agent (agents/index-md.ts, sending it to /index.md), and below it the
+// install command, each with its copy button (an island); and one app,
+// Northline's device list, drawn twice by the real components, on a
+// desktop and on a phone (inert pictures from the server).
 // A saffron thread pulls across it at the install command, under the
 // desktop and over the phone (CSS, the page's one automatic motion). Behind
 // them, in the band's ground, the owner's picture of a weave, drawn by the
@@ -15,7 +17,7 @@
 //     touch forms, inert previews; and AdaptiveDemo, an island that starts
 //     when it comes into view, to try the real one;
 //   - the benchmark: bars and facts from the newest bench/results/*.json;
-//   - for agents: the DatePicker's catalogue entry, the skills, llms.txt;
+//   - for agents: the DatePicker's catalogue entry, the skills, /index.md, llms.txt;
 //   - the close: the install command again, beside the owner's loom, a
 //     picture loaded lazily from public/ (docs/design/hero-2026-11-23/).
 // Everything but the islands is HTML from the build.
@@ -40,6 +42,7 @@ import Restore from '../components/landing/scenes/Restore.vue'
 import Search from '../components/landing/scenes/Search.vue'
 import Settings from '../components/landing/scenes/Settings.vue'
 import Window from '../components/landing/scenes/Window.vue'
+import { AGENT_PROMPT } from '../agents/index-md.ts'
 import { slugOf, type Catalog } from '../gallery/model.ts'
 import { benchFacts, benchRows, catalogExcerpt, formatBytes, formatCount, newestResults, type BenchResults } from '../landing/model.ts'
 
@@ -95,6 +98,12 @@ for (const s of scenes) {
           <div class="landing-hero__copy" data-weft-scheme="dark">
             <h1 id="landing-title">One component tree, every screen.</h1>
             <p class="landing-lead">Vue components that know when they’re under a finger or a mouse, served with your Go API from one binary.</p>
+            <p class="landing-label">Give this to your agent</p>
+            <div class="landing-prompt">
+              <p id="agent-prompt">{{ AGENT_PROMPT }}</p>
+              <Island when="idle" :component="CopyCommand" :props="{ from: 'agent-prompt', name: 'Copy prompt' }" />
+            </div>
+            <p class="landing-label">or install it yourself</p>
             <div class="landing-install">
               <Island when="idle" :component="CopyCommand" :props="{ command: install }" />
             </div>
@@ -233,7 +242,7 @@ for (const s of scenes) {
               <span>
                 {{ skills.length }} Claude Code skills:
                 <template v-for="(s, i) in skills" :key="s.slug"><Link :to="s.path">{{ s.title }}</Link>{{ i < skills.length - 2 ? ', ' : i === skills.length - 2 ? ' and ' : '. ' }}</template>
-                <Link to="/skills">Install them</Link>, or point an agent at <Link to="/llms.txt">/llms.txt</Link>.
+                <Link to="/skills">Install them</Link>, or point an agent at <Link to="/index.md">/index.md</Link> or <Link to="/llms.txt">/llms.txt</Link>.
               </span>
             </li>
           </ul>

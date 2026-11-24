@@ -1,0 +1,19 @@
+package api
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+func TestHello(t *testing.T) {
+	rec := httptest.NewRecorder()
+	Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/api/hello", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	if got := strings.TrimSpace(rec.Body.String()); got != `{"message":"Hello from Go"}` {
+		t.Fatalf("body %q", got)
+	}
+}

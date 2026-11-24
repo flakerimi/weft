@@ -2,7 +2,7 @@
 // read: llms.txt (the llms.txt convention: a title, a summary, then sections
 // of links), llms-full.txt (every doc and skill as its file has it), and the
 // commands that install a skill in Claude Code. The /skills page writes the
-// two files (pages/skills/index.vue).
+// two files, and /index.md (index-md.ts) beside them (pages/skills/index.vue).
 import { posix } from 'node:path'
 import { groupsOf, slugOf, type CatalogEntry } from '../gallery/model.ts'
 
@@ -30,7 +30,7 @@ export const repoFile = (file: string) => posix.normalize(`site-src/${file}`)
 /** A skill's name: the last segment of its route, /skills/<name>. */
 const nameOf = (skill: AgentPage) => skill.path.slice(skill.path.lastIndexOf('/') + 1)
 
-/** llms.txt: what Weft is, then every doc, component and skill, with a line on each. */
+/** llms.txt: what Weft is, the page to start from, then every doc, component and skill, with a line on each. */
 export function llmsTxt({ docs, skills, components }: AgentInput): string {
   const item = (label: string, path: string, note: string) => `- [${label}](${SITE}${path}): ${note}`
   const lines = [
@@ -38,7 +38,11 @@ export function llmsTxt({ docs, skills, components }: AgentInput): string {
     '',
     `> Weft is one UI system for Go and Vue apps: ${components.length} Vapor components in @weft/ui that adapt to touch or pointer, landing or app, and the width they get; @weft/vite, a page build that renders pages to HTML and ships JavaScript only for islands; and the weft Go package, whose weft.Serve serves the build and an API from one binary.`,
     '',
-    'Weft is pre-alpha: its packages are not on npm, so sites are built inside a clone of the Weft repository. The docs describe the code as it is; Coming next lists what is planned but not built, so check it before looking for a command or a component. The skills are Claude Code skills, raw Markdown to install as SKILL.md; each component has its catalogue entry as JSON.',
+    'Weft is pre-alpha: its packages are not on npm. The weft command carries them, and `weft create <name>` makes an app with them, which `weft dev` runs and `weft build` builds into one binary. The docs describe the code as it is; Coming next lists what is planned but not built, so check it before looking for a command or a component. The skills are Claude Code skills, raw Markdown to install as SKILL.md; each component has its catalogue entry as JSON.',
+    '',
+    '## Start here',
+    '',
+    item('Build an app with Weft', '/index.md', 'the whole brief for a coding agent asked to build an app: install weft, create the app, look components up, the rules, and what is not built yet.'),
     '',
     '## Docs',
     '',

@@ -88,10 +88,17 @@
 .landing-after { margin: 12px 0 0; font-size: 14px; color: var(--weft-color-text-muted); }
 .landing-after code { font-size: 13.5px; color: var(--weft-color-text); }
 
-/* The install command: CopyCommand, a deep bar with its saffron (warning)
-   button. It stays on one line, and scrolls in its box where it is longer. */
-.landing-install { max-inline-size: 480px; }
-.landing-install .copy-command {
+/* The hero's first action, the prompt to give an agent, then the install
+   command by hand: each a deep bar with CopyCommand's saffron (warning)
+   button, the prompt's edged in saffron. The prompt shows two lines at
+   most, cut with an ellipsis (the whole text is in the page, and its button
+   copies it whole); the command stays on one line, and scrolls in its box
+   where it is longer. */
+.landing-label { margin: 0 0 8px; font-size: 14px; color: var(--weft-color-text-muted); }
+.landing-prompt, .landing-install { max-inline-size: 480px; }
+.landing-prompt { margin-block-end: 20px; }
+.landing-prompt, .landing-install .copy-command {
+  display: flex;
   align-items: stretch;
   gap: 0;
   padding: 0;
@@ -99,6 +106,28 @@
   border: var(--weft-border-width, 1px) solid var(--weft-color-border);
   border-radius: 12px;
   overflow: hidden;
+}
+.landing-prompt { border-color: color-mix(in srgb, var(--site-saffron) 50%, var(--weft-color-border)); }
+.landing-prompt weft-island { display: flex; }
+#agent-prompt {
+  display: -webkit-box;
+  flex: 1;
+  min-inline-size: 0;
+  margin: 12px 16px;
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+#agent-prompt::before { content: "› " / ""; color: var(--site-saffron); }
+/* In the hero the prompt is the first action: the way by hand has a quiet button. */
+.landing-hero .landing-install .copy-command .copy-button {
+  --weft-tone: var(--weft-color-surface-raised);
+  --weft-tone-hover: color-mix(in srgb, var(--weft-color-text) 12%, var(--weft-color-surface-raised));
+  --weft-tone-active: var(--weft-tone-hover);
+  --weft-tone-fg: var(--weft-color-text);
 }
 .landing-install .copy-command__text {
   padding: 14px 16px;
@@ -109,7 +138,7 @@
   scrollbar-width: none;
 }
 .landing-install .copy-command__text::before { content: "$ "; color: var(--site-saffron); }
-.landing-install .copy-command .copy-button {
+.landing-prompt .copy-button, .landing-install .copy-command .copy-button {
   --weft-tone: var(--weft-color-warning);
   --weft-tone-hover: var(--weft-color-warning-hover);
   --weft-tone-active: var(--weft-color-warning-active);
@@ -472,9 +501,14 @@
   .landing-band { padding-block-start: 88px; }
   .landing-bench { padding: 20px; }
   .landing-install .copy-command__text { padding: 13px 12px; font-size: 13px; }
+  #agent-prompt { margin-inline: 12px; }
   .landing-tile__stage { padding: 24px 16px; }
   .landing-end { grid-template-columns: minmax(0, 1fr); }
-  /* On a phone the weave shows in the first screen: a band of it between the copy and the phone. */
-  .landing-hero__grid { gap: 180px; }
+  /* On a phone the weave shows in the first screen: a band of it between the
+     copy and the phone. The copy is set tighter, so the band and the prompt
+     both fit there, down to 320 px. */
+  .landing-hero__grid { gap: 180px; padding-block-start: 96px; }
+  .landing .landing-hero h1 { font-size: min(42px, 12vw); }
+  .landing-lead { margin-block-end: 24px; font-size: 18px; }
   .landing-hero__ground::after { block-size: 816px; mask-image: linear-gradient(transparent, black 14%); }
 }

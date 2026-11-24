@@ -43,6 +43,7 @@ func main() {
 - Write `//go:embed all:dist`, never a plain `dist`. Without `all:`, files whose names start with `.` or `_` are left out.
 - `/api` and everything under `/api/` go to `api`. With `nil`, they get a JSON 404: `{"error":{"code":"not_found","message":"no API"}}`.
 - A site inside the repository is part of the `github.com/flakerimi/weft` module. Run it with `go run ./hello`.
+- An app made with `weft create` has this program already, in `main.go` and `dist.go`, with its API in `api/`. Its `go.mod` points `github.com/flakerimi/weft` at the copy in `.weft/go`. `weft dev` builds it with `-tags dev`, where `dist_dev.go` embeds nothing and listens on `127.0.0.1` at `PORT`; `weft build` builds the binary that embeds `web/dist`. Run Go commands with `-tags dev` until the first `weft build`.
 
 ## What Serve answers
 
@@ -134,7 +135,7 @@ weft update --version 0.0.2
 
 ## Do not
 
-- Add a dependency to the Go side. The `weft` package and its users here use only the standard library.
+- Add a Go dependency the app does not need. Go: use the standard library and `github.com/flakerimi/weft`; add a dependency only for what the standard library cannot do, such as a database driver. The `weft` package itself uses only the standard library.
 - Compress, render or hash anything per request. Everything comes from the build's manifest.
 - Embed releases or large media. Serve them with `WithFiles`.
 - Run `scripts/publish-site.sh`, `scripts/rollback-site.sh` or `lisa` for weft.base.al without `--dry-run`. Publishing that site is the owner's step.
@@ -143,7 +144,7 @@ weft update --version 0.0.2
 
 These are planned but not built (see https://weft.base.al/docs/coming-next):
 
-- `weft dev`, `weft build` and `weft deploy`;
+- `weft deploy`;
 - `weft gen` and the Go-to-Vue contract: `weft.Validate`, `weft.Resource[T]` and the wire format;
 - `weft.Auth` and `weft.Require`;
 - `weft.SSE` with `useLive`.
