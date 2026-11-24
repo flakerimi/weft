@@ -194,3 +194,29 @@ func TestLandingWeaveLeavesTheCopyClear(t *testing.T) {
 		}
 	}
 }
+
+// The loom waits below the fold: at 1440 × 900 it is not fetched on load,
+// and when it is scrolled into view the hero, with its weave, is out of it,
+// so the two pictures are never on screen together.
+func TestLandingLoomBelowTheFold(t *testing.T) {
+	dist(t)
+	b := startBrowser(t)
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
+	defer srv.Close()
+	b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 1440, "height": 900, "deviceScaleFactor": 1, "mobile": false})
+	b.doing, b.deadline = "the loom at 1440 px", time.Now().Add(pageTimeout)
+	b.call(b.session, "Page.navigate", map[string]any{"url": srv.URL + "/"})
+	b.wait("Page.loadEventFired")
+	var early bool
+	b.eval(`performance.getEntriesByType('resource').some((e) => e.name.includes('/loom-'))`, &early)
+	if early {
+		t.Error("at 1440 × 900 the loom is fetched on load; it is below the fold, loaded lazily")
+	}
+	b.eval(`(document.querySelector('#start img').scrollIntoView({ block: 'end' }), true)`, new(bool))
+	b.until(`document.querySelector('#start img').complete && document.querySelector('#start img').naturalWidth > 0`)
+	var heroBottom float64
+	b.eval(`document.querySelector('.landing-hero').getBoundingClientRect().bottom`, &heroBottom)
+	if heroBottom > 0 {
+		t.Errorf("with the loom in view the hero is still %.0f px on screen", heroBottom)
+	}
+}

@@ -15,8 +15,10 @@
 //     touch forms, inert previews; and AdaptiveDemo, an island that starts
 //     when it comes into view, to try the real one;
 //   - the benchmark: bars and facts from the newest bench/results/*.json;
-//   - for agents: the DatePicker's catalogue entry, the skills, llms.txt.
-// Everything but the two islands is HTML from the build.
+//   - for agents: the DatePicker's catalogue entry, the skills, llms.txt;
+//   - the close: the install command again, beside the owner's loom, a
+//     picture loaded lazily from public/ (docs/design/hero-2026-11-23/).
+// Everything but the islands is HTML from the build.
 import { Calendar, Island, Link, WeftProvider, useHead } from '@weft/ui'
 import type { Component } from 'vue'
 import { highlightCode, useCollection } from 'virtual:weft/content'
@@ -239,6 +241,22 @@ for (const s of scenes) {
             <figcaption>{{ entryPath }}, shortened</figcaption>
             <div v-html="excerptHTML" />
           </figure>
+        </div>
+      </section>
+
+      <section id="start" class="landing-wrap landing-band" aria-labelledby="start-title">
+        <div class="landing-end" data-weft-scheme="dark">
+          <div>
+            <h2 id="start-title">Start with one command.</h2>
+            <p>It installs the <code>weft</code> command on macOS or Linux.</p>
+            <div class="landing-install">
+              <Island when="idle" :component="CopyCommand" :props="{ command: install }" />
+            </div>
+          </div>
+          <picture>
+            <source srcset="/loom-480.avif, /loom-960.avif 2x" type="image/avif" />
+            <img src="/loom-480.webp" srcset="/loom-960.webp 2x" width="480" height="480" alt="" loading="lazy" decoding="async" />
+          </picture>
         </div>
       </section>
     </main>

@@ -120,6 +120,7 @@ func TestLandingPage(t *testing.T) {
 		"Write a component once. It adapts.",
 		"One binary, nothing left to do per request.",
 		"Made to be built with an agent.",
+		"Start with one command.",
 	}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("the sections are %q, want %q", got, want)
@@ -145,8 +146,8 @@ func TestLandingPage(t *testing.T) {
 	for _, m := range islandTags.FindAllStringSubmatch(page, -1) {
 		islands = append(islands, m[1]+"@"+m[2])
 	}
-	if strings.Join(islands, " ") != "CopyCommand@idle AdaptiveDemo@visible" {
-		t.Errorf("the islands are %v, want the copy button when idle and the adaptive demo when visible", islands)
+	if strings.Join(islands, " ") != "CopyCommand@idle AdaptiveDemo@visible CopyCommand@idle" {
+		t.Errorf("the islands are %v, want the copy buttons when idle and the adaptive demo when visible", islands)
 	}
 	// A keyboard reaches the content first; nothing comes from another site.
 	if !strings.Contains(page, `<a class="site-skip" href="#main">`) || !regexp.MustCompile(`<main [^>]*id="main"`).MatchString(page) {
@@ -334,8 +335,8 @@ func TestLandingAgents(t *testing.T) {
 // only what they need: the copy button's chunk imports nothing of the
 // demo's, and the demo loads when it comes into view.
 //
-// The pictures on the page (the weave in the hero, from
-// docs/design/hero-2026-11-23/) are counted like the fonts, apart from the
+// The pictures on the page (the weave in the hero and the loom at the close,
+// from docs/design/hero-2026-11-23/) are counted like the fonts, apart from the
 // first view, each with a limit of its own: the ruling of 2026-11-23 holds
 // every served variant of a picture, AVIF or WebP at any width, to 60 KB.
 // The markup and CSS that show a picture are part of the first view.
@@ -696,5 +697,50 @@ func TestLandingWeave(t *testing.T) {
 	}
 	if regexp.MustCompile(`<link rel="preload"[^>]*weave`).MatchString(page) || strings.Contains(strings.Join(m.Hints["/"], " "), "weave") {
 		t.Error("the landing page preloads the weave; the headline paints first")
+	}
+}
+
+// The page ends where it began: the install command again, beside the
+// owner's loom (docs/design/hero-2026-11-23/loom-source.png) on a dark tile.
+// The loom is decoration below the fold: an <img> with an empty alt, its
+// size given, loaded lazily, AVIF first and WebP for the rest, at 1× and 2×.
+// It is on the landing page and no other.
+func TestLandingLoom(t *testing.T) {
+	d, files := servedImages(t)
+	_, page := landing(t)
+	end := element(page, `id="start"`)
+	if end == "" {
+		t.Fatal("the landing page has no closing section, id=start")
+	}
+	if !strings.Contains(text(element(end, `class="landing-install"`)), "curl -fsSL https://weft.base.al/install | sh") {
+		t.Error("the closing section has no install command")
+	}
+	picture := element(end, "<picture")
+	want := regexp.MustCompile(`^<picture[^>]*><source srcset="/loom-480\.avif, /loom-960\.avif 2x" type="image/avif"><img src="/loom-480\.webp" srcset="/loom-960\.webp 2x" width="480" height="480" alt="" loading="lazy" decoding="async"[^>]*></picture>$`)
+	if !want.MatchString(picture) {
+		t.Errorf("the closing section's loom is not a lazy, decorative picture of AVIF then WebP at 480 and 960 px: %.400s", picture)
+	}
+	for _, f := range []string{"/loom-480.avif", "/loom-960.avif", "/loom-480.webp", "/loom-960.webp"} {
+		typ := "image/" + f[strings.LastIndex(f, ".")+1:]
+		if files[f].Type != typ {
+			t.Errorf("%s is served as %q, want %s", f, files[f].Type, typ)
+		}
+	}
+	var r builtRoutes
+	readJSON(t, d, "routes.json", &r)
+	pages := []string{*r.NotFound}
+	for _, p := range r.Pages {
+		if p.Path != "/" {
+			pages = append(pages, p.HTML)
+		}
+	}
+	for _, p := range pages {
+		b, err := fs.ReadFile(d, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(b), "loom-") {
+			t.Errorf("%s shows the loom; it is the landing page's alone", p)
+		}
 	}
 }

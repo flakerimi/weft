@@ -407,6 +407,25 @@
 .landing-agents li span { font-size: 16px; color: var(--weft-color-text-muted); }
 .landing-agents .shiki { white-space: pre-wrap; overflow-wrap: anywhere; }
 
+/* The close: the install command again, beside the owner's loom
+   (docs/design/hero-2026-11-23/), so the page ends on the material it began
+   with. A dark tile, as the code panels are; the loom's own ground is near
+   the tile's, and fades into it where they meet, so no square shows. */
+.landing-end {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) min(480px, 45%);
+  align-items: center;
+  overflow: hidden;
+  color: var(--weft-color-text);
+  background: var(--weft-color-surface-raised);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border);
+  border-radius: 16px;
+}
+.landing-end > div { padding: 32px clamp(24px, 4vw, 56px); }
+.landing-end h2 { margin: 0 0 12px; font-size: clamp(34px, 3.6vw, 50px); line-height: 1.02; }
+.landing-end p { margin: 0 0 28px; font-size: 18px; color: var(--weft-color-text-muted); }
+.landing-end img { display: block; inline-size: 100%; block-size: auto; mask-image: linear-gradient(90deg, transparent, black 25%); }
+
 /* Under 1280 px the copy is above the frames, and the desktop keeps to the column's end. */
 @media (max-width: 1279.98px) {
   .landing-hero__grid { grid-template-columns: minmax(0, 1fr); gap: 80px; }
@@ -448,4 +467,6 @@
   .landing-bench { padding: 20px; }
   .landing-install .copy-command__text { padding: 13px 12px; font-size: 13px; }
   .landing-tile__stage { padding: 24px 16px; }
+  .landing-end { grid-template-columns: minmax(0, 1fr); }
+  .landing-end img { mask-image: linear-gradient(transparent, black 25%); }
 }
