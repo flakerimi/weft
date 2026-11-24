@@ -2,7 +2,7 @@
    least --weft-hit-min tall, its chevron turning when open. Panels animate
    with collapsible.css. */
 .weft-accordion { display: grid; }
-.weft-accordion__item { border-block-end: 1px solid var(--weft-color-border, GrayText); }
+.weft-accordion__item { border-block-end: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText); }
 .weft-accordion__header { margin: 0; font: inherit; }
 .weft-accordion__trigger {
   display: flex;
@@ -22,7 +22,7 @@
 }
 .weft-accordion__trigger:disabled { color: var(--weft-color-text-muted, GrayText); cursor: not-allowed; }
 .weft-accordion__trigger[aria-disabled="true"] { cursor: default; }
-.weft-accordion__trigger:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: -2px; border-radius: var(--weft-radius-control, 8px); }
+.weft-accordion__trigger:focus-visible { outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight); outline-offset: calc(-1 * var(--weft-focus-width, 2px)); border-radius: var(--weft-radius-control, 8px); }
 @media (hover: hover) {
   .weft-accordion__trigger:not(:disabled):hover .weft-accordion__label { text-decoration: underline; }
 }

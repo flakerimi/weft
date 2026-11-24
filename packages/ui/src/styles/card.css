@@ -12,8 +12,9 @@
   gap: var(--weft-space-3, 12px);
   background: var(--weft-color-surface, Canvas);
   color: var(--weft-color-text, CanvasText);
-  border: 1px solid var(--weft-color-border, GrayText);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   border-radius: var(--weft-radius-card, 12px);
+  box-shadow: var(--weft-shadow-card, none);
 }
 .weft-card[data-padding="0"] { padding: 0; }
 .weft-card[data-padding="2"] { padding: var(--weft-space-2, 8px); }

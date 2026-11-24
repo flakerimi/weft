@@ -18,9 +18,10 @@
 .weft-table__scroller {
   overflow: clip;
   overscroll-behavior-inline: contain;
-  border: 1px solid var(--weft-color-border, GrayText);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   border-radius: var(--weft-radius-card, 12px);
   background: var(--weft-color-surface, Canvas);
+  box-shadow: var(--weft-shadow-card, none);
 }
 /* It scrolls when it has a height, is windowed or is wider than its box (and
    until it is measured); then the header sticks inside it. Else it clips,
@@ -41,7 +42,7 @@
 .weft-table__table td {
   block-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
   padding: var(--weft-table-pad-block) var(--weft-table-pad-inline);
-  border-block-end: 1px solid var(--weft-color-border, GrayText);
+  border-block-end: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   text-align: start;
   vertical-align: middle;
 }
@@ -112,8 +113,8 @@
 /* Grid: the focused cell is ringed inside its edges. */
 .weft-table__table[role="grid"] td:focus-visible,
 .weft-table__table[role="grid"] th:focus-visible {
-  outline: 2px solid var(--weft-color-focus, Highlight);
-  outline-offset: -2px;
+  outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight);
+  outline-offset: calc(-1 * var(--weft-focus-width, 2px));
 }
 
 /* Cards, when narrow. */
@@ -141,9 +142,10 @@
   align-items: flex-start;
   gap: var(--weft-space-3, 12px);
   padding: var(--weft-space-3, 12px);
-  border: 1px solid var(--weft-color-border, GrayText);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   border-radius: var(--weft-radius-card, 12px);
   background: var(--weft-color-surface, Canvas);
+  box-shadow: var(--weft-shadow-card, none);
 }
 .weft-table__card[data-selected] { border-color: var(--weft-color-primary, LinkText); background: var(--weft-color-primary-soft, color-mix(in srgb, LinkText 10%, transparent)); }
 .weft-table__card.weft-table__skeleton { flex-direction: column; }

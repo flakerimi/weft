@@ -24,7 +24,7 @@
   -webkit-tap-highlight-color: transparent;
 }
 .weft-collapsible__trigger:disabled { color: var(--weft-color-text-muted, GrayText); cursor: not-allowed; }
-.weft-collapsible__trigger:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: 2px; }
+.weft-collapsible__trigger:focus-visible { outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight); outline-offset: 2px; }
 .weft-collapsible__chevron {
   flex: none;
   inline-size: 16px;

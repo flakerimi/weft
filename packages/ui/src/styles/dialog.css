@@ -11,11 +11,11 @@
   block-size: fit-content;
   max-block-size: calc(100% - 2 * var(--weft-space-4, 16px));
   margin: auto;
-  border: 1px solid var(--weft-color-border, GrayText);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   border-radius: var(--weft-radius-panel, 16px);
   background: var(--weft-color-surface-raised, Canvas);
   color: var(--weft-color-text, CanvasText);
-  box-shadow: 0 16px 48px color-mix(in srgb, CanvasText 24%, transparent);
+  box-shadow: var(--weft-shadow-dialog, 0 8px 32px color-mix(in srgb, CanvasText 24%, transparent));
   outline: none;
   transition-property: opacity, scale;
   transition-duration: var(--weft-duration-dialog, 260ms);

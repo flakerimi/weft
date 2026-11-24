@@ -13,7 +13,7 @@
 }
 .weft-empty-state[data-size="sm"] { padding: var(--weft-space-4, 16px) var(--weft-space-3, 12px); }
 .weft-empty-state[data-size="lg"] { padding: var(--weft-space-8, 32px) var(--weft-space-6, 24px); gap: var(--weft-space-3, 12px); }
-.weft-empty-state[data-variant="outline"] { border: 1px dashed var(--weft-color-border, GrayText); }
+.weft-empty-state[data-variant="outline"] { border: var(--weft-border-width, 1px) dashed var(--weft-color-border, GrayText); }
 .weft-empty-state[data-variant="soft"] { background: color-mix(in srgb, var(--weft-color-text, CanvasText) 4%, transparent); }
 .weft-empty-state__icon {
   display: inline-grid;

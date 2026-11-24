@@ -335,7 +335,7 @@ describe('NavigationMenu, vertical', () => {
     const unstyle = loadStyles()
     try {
       await cases({ orientation: 'vertical' })
-      expect(ruleFor('.weft-nav .weft-nav__item:focus-visible')!.style.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+      expect(ruleFor('.weft-nav .weft-nav__item:focus-visible')!.style.getPropertyValue('outline')).toBe('var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight)')
     } finally {
       unstyle()
     }

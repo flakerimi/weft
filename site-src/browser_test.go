@@ -260,8 +260,9 @@ func allPages(t *testing.T, d fs.FS) []string {
 }
 
 // No page scrolls sideways, from a phone to a wide screen: at 320, 390, 768,
-// 1024, 1440 and 2560 px (the landing hero reaches past its column and its
-// thread spans the page only above 900 px), the document is no wider than
+// 1024, 1280, 1440 and 2560 px (the landing hero reaches past its column, its
+// weave past the page's edge from 1280 to 1511 px, and its thread spans the
+// page only above 900 px), the document is no wider than
 // the viewport, and nothing on the root hides what would overflow
 // (overflow-x: clip or hidden on html or body).
 func TestNoPageScrollsSideways(t *testing.T) {
@@ -270,7 +271,7 @@ func TestNoPageScrollsSideways(t *testing.T) {
 	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
 	defer srv.Close()
 	pages := allPages(t, d)
-	for _, width := range []int{320, 390, 768, 1024, 1440, 2560} {
+	for _, width := range []int{320, 390, 768, 1024, 1280, 1440, 2560} {
 		b.doing, b.deadline = fmt.Sprintf("emulating %d px", width), time.Now().Add(pageTimeout)
 		b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": width, "height": 800, "deviceScaleFactor": 1, "mobile": width < 700})
 		for _, path := range pages {

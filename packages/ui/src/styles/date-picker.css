@@ -35,7 +35,7 @@
 }
 .weft-date-picker__button:hover:not(:disabled) { color: var(--weft-color-text, CanvasText); }
 .weft-date-picker__button:focus-visible {
-  outline: 2px solid var(--weft-color-focus, Highlight);
+  outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight);
   outline-offset: 1px;
 }
 .weft-date-picker__button:disabled,

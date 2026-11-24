@@ -527,7 +527,7 @@ describe('Calendar', () => {
     try {
       await cases()
       const ring = ruleFor('.weft-calendar__day:focus-visible')!.style
-      expect(ring.getPropertyValue('outline-color')).toBe('var(--weft-color-focus, Highlight)')
+      expect(ring.getPropertyValue('outline')).toBe('var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight)')
       expect(ruleFor('[dir="rtl"] .weft-calendar__nav svg')!.style.getPropertyValue('scale')).toBe('-1 1')
     } finally {
       unstyle()

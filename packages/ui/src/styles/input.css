@@ -18,7 +18,7 @@
   inline-size: 100%;
   block-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
   padding-inline: var(--weft-space-3, 12px);
-  border: 1px solid var(--weft-color-border, GrayText);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   border-radius: var(--weft-radius-control, 8px);
   background: var(--weft-color-surface, Field);
   color: var(--weft-color-text, FieldText);
@@ -69,8 +69,8 @@
   color: var(--weft-color-text-muted, GrayText);
 }
 .weft-input:focus-within {
-  outline: 2px solid var(--weft-color-focus, Highlight);
-  outline-offset: -1px;
+  outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight);
+  outline-offset: calc(-1 * var(--weft-border-width, 1px));
   border-color: var(--weft-color-focus, Highlight);
 }
 .weft-input[data-invalid] { border-color: var(--weft-color-danger, #DC2626); }

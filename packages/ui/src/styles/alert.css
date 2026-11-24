@@ -7,7 +7,7 @@
   align-items: flex-start;
   gap: var(--weft-space-3, 12px);
   padding: var(--weft-space-3, 12px) var(--weft-space-4, 16px);
-  border: 1px solid transparent;
+  border: var(--weft-border-width, 1px) solid transparent;
   border-radius: var(--weft-radius-card, 12px);
   color: var(--weft-color-text, CanvasText);
 }

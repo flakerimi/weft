@@ -24,7 +24,7 @@
 }
 .weft-nav[data-orientation="horizontal"] > .weft-nav__list:last-child:not(:first-child) { margin-inline-start: auto; }
 .weft-nav[data-orientation="vertical"] { flex-direction: column; gap: var(--weft-space-2, 8px); }
-.weft-nav[data-orientation="vertical"] > .weft-nav__list + .weft-nav__list { padding-block-start: var(--weft-space-2, 8px); border-block-start: 1px solid var(--weft-color-border, GrayText); }
+.weft-nav[data-orientation="vertical"] > .weft-nav__list + .weft-nav__list { padding-block-start: var(--weft-space-2, 8px); border-block-start: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText); }
 
 .weft-nav__menu-wrap { display: none; }
 .weft-nav[data-form="sheet"] > .weft-nav__menu-wrap { display: contents; }
@@ -66,7 +66,7 @@
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.weft-nav .weft-nav__item:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: -2px; }
+.weft-nav .weft-nav__item:focus-visible { outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight); outline-offset: calc(-1 * var(--weft-focus-width, 2px)); }
 @media (hover: hover) {
   .weft-nav .weft-nav__item:not(:disabled, [aria-disabled="true"]):hover { color: var(--weft-color-text, CanvasText); background: color-mix(in srgb, var(--weft-color-text, CanvasText) 6%, transparent); }
 }
@@ -82,7 +82,7 @@
   position: absolute;
   inset-inline: var(--weft-space-2, 8px);
   inset-block-end: 0;
-  block-size: 2px;
+  block-size: var(--weft-border-width-strong, 2px);
   border-radius: 1px;
   background: var(--weft-color-primary, LinkText);
 }
@@ -102,10 +102,10 @@
   min-inline-size: 12rem;
   max-inline-size: min(22rem, calc(100vw - 16px));
   padding: var(--weft-space-1, 4px);
-  border: 1px solid var(--weft-color-border, GrayText);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   border-radius: var(--weft-radius-card, 12px);
   background: var(--weft-color-surface-raised, Canvas);
-  box-shadow: 0 8px 24px color-mix(in srgb, CanvasText 16%, transparent);
+  box-shadow: var(--weft-shadow-popup, 0 8px 24px color-mix(in srgb, CanvasText 16%, transparent));
   transition: opacity var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease);
   @starting-style { opacity: 0; }
 }

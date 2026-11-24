@@ -6,7 +6,7 @@
   gap: var(--weft-space-1, 4px);
   block-size: 22px;
   padding-inline: var(--weft-space-2, 8px);
-  border: 1px solid transparent;
+  border: var(--weft-border-width, 1px) solid transparent;
   border-radius: var(--weft-radius-control, 8px);
   font-size: 0.857em;
   font-weight: var(--weft-weight-heading, 600);

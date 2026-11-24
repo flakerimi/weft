@@ -11,7 +11,7 @@
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.weft-input.weft-select__trigger:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: -1px; }
+.weft-input.weft-select__trigger:focus-visible { outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight); outline-offset: calc(-1 * var(--weft-border-width, 1px)); }
 .weft-input.weft-select__trigger[data-disabled] { cursor: not-allowed; }
 .weft-select__value {
   flex: 1;

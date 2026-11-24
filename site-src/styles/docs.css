@@ -16,14 +16,14 @@
 /* On this page. */
 .docs-toc { grid-area: toc; position: sticky; top: 88px; font-size: 0.9375rem; }
 .docs-toc p { font-weight: 600; margin-block-end: 8px; }
-.docs-toc ul { list-style: none; margin: 0; display: grid; gap: 6px; padding-inline-start: 14px; border-inline-start: 2px solid var(--site-saffron); }
+.docs-toc ul { list-style: none; margin: 0; display: grid; gap: 6px; padding-inline-start: 14px; border-inline-start: var(--weft-border-width-strong, 2px) solid var(--site-saffron); }
 .docs-toc [data-depth="3"] { padding-inline-start: 12px; }
 .docs-toc a.weft-link { color: var(--weft-color-text-muted); text-decoration: none; }
 
 /* The text. */
 .docs-prose { grid-area: text; font-size: 1.0625rem; line-height: 1.65; }
 .docs-prose > * > * + *, .docs-prose > * + * { margin-block-start: 1em; }
-.docs-prose h2 { font-size: 1.625rem; margin-block-start: 2em; padding-block-start: 0.6em; border-block-start: 2px solid var(--site-saffron); }
+.docs-prose h2 { font-size: 1.625rem; margin-block-start: 2em; padding-block-start: 0.6em; border-block-start: var(--weft-border-width-strong, 2px) solid var(--site-saffron); }
 .docs-prose h3 { font-size: 1.25rem; margin-block-start: 1.6em; }
 .docs-prose :is(h2, h3) { scroll-margin-block-start: 88px; }
 /* A Section's heading spans the text, so its rule does (the For agents page). */
@@ -33,7 +33,7 @@
 .docs-prose pre { font-size: 0.875rem; line-height: 1.6; }
 .docs-table { overflow-x: auto; }
 .docs-prose table { border-collapse: collapse; font-size: 0.9375rem; }
-.docs-prose :is(th, td) { text-align: start; vertical-align: top; padding: 8px 12px; border-block-end: 1px solid var(--weft-color-border); }
+.docs-prose :is(th, td) { text-align: start; vertical-align: top; padding: 8px 12px; border-block-end: var(--weft-border-width, 1px) solid var(--weft-color-border); }
 .docs-prose img { max-inline-size: 100%; block-size: auto; border-radius: 12px; }
 
 

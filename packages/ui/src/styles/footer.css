@@ -8,7 +8,7 @@
   max-inline-size: var(--weft-page-max, 72rem);
   margin-inline: auto;
   padding: var(--weft-space-6, 24px) var(--weft-space-4, 16px);
-  border-block-start: 1px solid var(--weft-color-border, GrayText);
+  border-block-start: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   color: var(--weft-color-text-muted, GrayText);
   font-size: 0.875em;
 }

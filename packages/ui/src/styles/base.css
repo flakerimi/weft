@@ -59,7 +59,7 @@ h1, h2, h3 { font-weight: var(--weft-weight-heading, 600); line-height: 1.25; ma
 p { margin: 0; }
 
 :focus-visible {
-  outline: 2px solid var(--weft-color-focus, Highlight);
+  outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight);
   outline-offset: 2px;
 }
 

@@ -66,6 +66,15 @@ export function lisa(tokens: LisaTokens, opts: { accent?: string } = {}): Theme 
     radius: { control: m('radius-control'), card: m('radius-card'), panel: m('radius-panel') },
     // A toolbar control, a standard control, a touch target.
     control: { sm: m('toolbar-control'), md: m('control-min'), lg: m('touch-target') },
+    // Weft's defaults, not the contract's: its shadow-*-y and -blur metrics
+    // and shadow-alpha-* are not mapped yet, so Lisa draws as the other themes do.
+    shadow: {
+      control: '0 1px 2px color-mix(in srgb, CanvasText 25%, transparent)',
+      card: 'none',
+      popup: '0 8px 24px color-mix(in srgb, CanvasText 16%, transparent)',
+      dialog: '0 8px 32px color-mix(in srgb, CanvasText 24%, transparent)',
+    },
+    border: { width: 1, strong: 2, focus: 2 },
     space: { 1: m('space-1'), 2: m('space-2'), 3: m('space-3'), 4: m('space-4'), 6: m('space-6'), 8: m('space-8') },
     motion: {
       control: pick<number>(tokens.motion, 'control', 'motion'),

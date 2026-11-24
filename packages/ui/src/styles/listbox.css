@@ -16,7 +16,7 @@
 }
 .weft-listbox:not([data-hosted]) {
   padding: var(--weft-space-1, 4px);
-  border: 1px solid var(--weft-color-border, GrayText);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
   border-radius: var(--weft-radius-control, 8px);
   background: var(--weft-color-surface, Field);
 }
@@ -32,7 +32,7 @@
 }
 .weft-listbox:not([data-hosted]) .weft-listbox__list { max-block-size: 18rem; }
 .weft-listbox[data-hosted] .weft-listbox__list { flex: 1; }
-.weft-listbox__list:focus-visible { outline: 2px solid var(--weft-color-focus, Highlight); outline-offset: 1px; }
+.weft-listbox__list:focus-visible { outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight); outline-offset: 1px; }
 .weft-listbox .weft-listbox__filter { inline-size: 100%; }
 .weft-listbox__search { flex: none; color: var(--weft-color-text-muted, GrayText); }
 
@@ -47,7 +47,7 @@
   font-weight: var(--weft-weight-heading, 600);
 }
 .weft-listbox__separator {
-  block-size: 1px;
+  block-size: var(--weft-border-width, 1px);
   margin: var(--weft-space-1, 4px) 0;
   background: var(--weft-color-border, GrayText);
 }

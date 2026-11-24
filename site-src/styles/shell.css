@@ -33,7 +33,7 @@
 
 /* Code on the white page: a shade of the ground, so a block reads as one. */
 .docs-page .shiki { --weft-code-background: color-mix(in srgb, var(--weft-color-bg) 45%, var(--weft-color-surface-raised)); }
-.docs-page.weft-page { max-inline-size: none; margin-block-start: 24px; padding: 40px 48px 64px; gap: 32px; background: var(--weft-color-surface-raised); border: 1px solid var(--weft-color-border); border-radius: 16px; }
+.docs-page.weft-page { max-inline-size: none; margin-block-start: 24px; padding: 40px 48px 64px; gap: 32px; background: var(--weft-color-surface-raised); border: var(--weft-border-width, 1px) solid var(--weft-color-border); border-radius: 16px; }
 .docs-page .weft-page__heading { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; max-inline-size: 46rem; min-inline-size: 0; }
 /* A long name (NavigationMenu) breaks rather than widen the page on a phone. */
 .docs-title { font-size: clamp(2.25rem, 4.4vw, 3rem); line-height: 1.04; overflow-wrap: anywhere; }
@@ -44,7 +44,7 @@
 .docs-pager a.weft-link {
   display: grid;
   padding: 16px 20px;
-  border: 1px solid var(--weft-color-border);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border);
   border-radius: 12px;
   background: var(--weft-color-surface);
   color: var(--weft-color-text);
@@ -57,7 +57,7 @@
 
 @media (max-width: 767.98px) {
   .docs { display: block; padding-inline: 0; background: none; }
-  .docs-page.weft-page { margin: 0; padding: 28px 16px 48px; border-width: 1px 0 0; border-radius: 0; }
+  .docs-page.weft-page { margin: 0; padding: 28px 16px 48px; border-width: var(--weft-border-width, 1px) 0 0; border-radius: 0; }
   /* The drawer: shut, the popover attribute hides it; open, it comes in from the start side. */
   .docs-nav[popover] {
     position: fixed;
@@ -69,7 +69,7 @@
     max-block-size: none;
     padding: 24px 16px;
     background: var(--weft-color-surface);
-    border-inline-end: 1px solid var(--weft-color-border);
+    border-inline-end: var(--weft-border-width, 1px) solid var(--weft-color-border);
   }
   .docs-nav:popover-open { display: block; }
   .docs-nav .docs-close { margin: 0 0 8px auto; display: flex; }
