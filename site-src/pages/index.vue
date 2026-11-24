@@ -5,7 +5,9 @@
 // island), and one app, Northline's device list, drawn twice by the real
 // components, on a desktop and on a phone (inert pictures from the server).
 // A saffron thread pulls across it at the install command, under the
-// desktop and over the phone (CSS, the page's one automatic motion). Then:
+// desktop and over the phone (CSS, the page's one automatic motion). Behind
+// them, in the band's ground, the owner's picture of a weave, drawn by the
+// CSS (docs/design/hero-2026-11-23/); it never moves. Then:
 //   - screens you'd ship: five scenes on tiles, drawn by the server from the
 //     real components, each caption linking the components it uses;
 //   - the adaptive demo: VisitDay.vue's source, highlighted at build time;

@@ -42,6 +42,23 @@
   z-index: -1;
   background: repeating-linear-gradient(90deg, var(--weft-color-surface-raised) 0 1px, transparent 1px 28px) var(--weft-color-bg);
 }
+/* The weave, the owner's picture (docs/design/hero-2026-11-23/): drawn into
+   the ground at its end and bottom, fading into it towards the copy and the
+   header, under the frames. Its own ground is the band's, so no edge shows;
+   until it loads, the band is the band. Beside the copy, its fade starts
+   where the copy ends (15 % of 988 px in, at 50vw - 118 px): narrower than
+   1448 px it moves out past the page's edge. */
+.landing-hero__ground::after {
+  content: "";
+  position: absolute;
+  inset: auto min(0px, 50vw - 724px) 0 auto;
+  block-size: min(100%, 1024px);
+  aspect-ratio: 1;
+  background-image: image-set(url(../images/weave-1024.avif) type("image/avif"), url(../images/weave-1024.webp) type("image/webp"));
+  background-size: 100%;
+  mask-image: linear-gradient(90deg, transparent 15%, 40%, black 55%), linear-gradient(transparent 4%, black 22%);
+  mask-composite: intersect;
+}
 .landing-hero__grid {
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
@@ -395,6 +412,7 @@
   .landing-hero__grid { grid-template-columns: minmax(0, 1fr); gap: 80px; }
   .landing-hero__copy { max-inline-size: 640px; }
   .hero-frame--desk { inset-inline: auto 0; inline-size: min(780px, 100% - 80px); }
+  .landing-hero__ground::after { block-size: min(100%, 920px); }
 }
 @media (max-width: 1099.98px) {
   .landing-adapt { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "code code" "pointer touch" "demo demo"; }
@@ -405,6 +423,13 @@
   .landing-frames { display: grid; justify-items: center; block-size: auto; }
   .hero-frame--desk { display: none; }
   .hero-frame--phone { position: relative; inset: auto; inline-size: min(300px, 100%); block-size: 580px; }
+  /* The weave under the phone and the gap above it (580 + 56 + 72 px), clear of the copy. */
+  .landing-hero__ground::after {
+    inline-size: 100%;
+    block-size: 708px;
+    background: image-set(url(../images/weave-640.avif) type("image/avif"), url(../images/weave-1024.avif) type("image/avif") 2x, url(../images/weave-640.webp) type("image/webp"), url(../images/weave-1024.webp) type("image/webp") 2x) 100% 100% / cover;
+    mask-image: linear-gradient(transparent, black 30%);
+  }
   .landing-intro { grid-template-columns: minmax(0, 1fr); }
   .landing-tile--settings, .landing-tile--search { grid-column: span 12; }
   .landing-tile--window, .landing-tile--activity, .landing-tile--restore { grid-column: span 6; }

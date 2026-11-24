@@ -333,7 +333,14 @@ func TestLandingAgents(t *testing.T) {
 // about 63.6 KB, leaving 20.3 KB, not 22, for the first view.) Islands load
 // only what they need: the copy button's chunk imports nothing of the
 // demo's, and the demo loads when it comes into view.
+//
+// The pictures on the page (the weave in the hero, from
+// docs/design/hero-2026-11-23/) are counted like the fonts, apart from the
+// first view, each with a limit of its own: the ruling of 2026-11-23 holds
+// every served variant of a picture, AVIF or WebP at any width, to 60 KB.
+// The markup and CSS that show a picture are part of the first view.
 const (
+	landingImageLimit     = 60 * 1024
 	landingFirstViewLimit = 22 * 1024
 	landingTotalLimit     = 82 * 1024
 	landingDemoLimit      = 16269 // 14,790 B plus 10 %
@@ -572,3 +579,122 @@ func TestLandingScreens(t *testing.T) {
 	}
 }
 
+// pixelSize is an AVIF's or a WebP's width and height, read from its header
+// (the AVIF's ispe property; the WebP's VP8, VP8L or VP8X chunk), or 0, 0.
+func pixelSize(b []byte) (int, int) {
+	le := func(p []byte) int {
+		n := 0
+		for i := len(p) - 1; i >= 0; i-- {
+			n = n<<8 | int(p[i])
+		}
+		return n
+	}
+	if len(b) > 30 && string(b[0:4]) == "RIFF" && string(b[8:12]) == "WEBP" {
+		switch string(b[12:16]) {
+		case "VP8 ":
+			return le(b[26:28]) & 0x3fff, le(b[28:30]) & 0x3fff
+		case "VP8L":
+			bits := le(b[21:25])
+			return bits&0x3fff + 1, (bits>>14)&0x3fff + 1
+		case "VP8X":
+			return le(b[24:27]) + 1, le(b[27:30]) + 1
+		}
+		return 0, 0
+	}
+	if at := strings.Index(string(b), "ispe"); at >= 0 && at+16 <= len(b) {
+		be := func(p []byte) int { return int(p[0])<<24 | int(p[1])<<16 | int(p[2])<<8 | int(p[3]) }
+		return be(b[at+8 : at+12]), be(b[at+12 : at+16])
+	}
+	return 0, 0
+}
+
+// servedImage is one picture file of the build: its manifest entry and bytes.
+type servedImage struct {
+	Type      string `json:"type"`
+	Immutable bool   `json:"immutable"`
+}
+
+func servedImages(t *testing.T) (fs.FS, map[string]servedImage) {
+	t.Helper()
+	d := dist(t)
+	var m struct {
+		Files map[string]servedImage `json:"files"`
+	}
+	readJSON(t, d, "manifest.json", &m)
+	return d, m.Files
+}
+
+var pictureFile = regexp.MustCompile(`^/(?:assets/)?(weave|loom)-(\d+)(?:-[0-9a-f]{8})?\.(avif|webp)$`)
+
+// Every picture the landing page shows, each variant at most 60 KB (the
+// limit is its own, apart from the first view), and as wide as its name says.
+func TestLandingImageSizes(t *testing.T) {
+	d, files := servedImages(t)
+	n := 0
+	for key := range files {
+		m := pictureFile.FindStringSubmatch(key)
+		if m == nil {
+			continue
+		}
+		n++
+		b, err := fs.ReadFile(d, strings.TrimPrefix(key, "/"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(b) > landingImageLimit {
+			t.Errorf("%s is %d B, over the pictures' limit of %d B; encode it smaller (docs/design/hero-2026-11-23/README.md has the commands)", key, len(b), landingImageLimit)
+		}
+		w, h := pixelSize(b)
+		if strconv.Itoa(w) != m[2] || w != h {
+			t.Errorf("%s is %d × %d px, not the %s px square its name says", key, w, h, m[2])
+		}
+	}
+	if n == 0 {
+		t.Fatal("the build has no picture of the weave or the loom")
+	}
+}
+
+// The hero's weave is decoration drawn by the CSS: an image-set of AVIF then
+// WebP at two widths, files named by their bytes and cached for good, nothing
+// a screen reader is given, and nothing preloaded (the headline paints first).
+func TestLandingWeave(t *testing.T) {
+	d, files := servedImages(t)
+	var m builtFiles
+	readJSON(t, d, "manifest.json", &m)
+	_, page := landing(t)
+	sets := regexp.MustCompile(`image-set\(([^;}]*weave[^;}]*)\)`).FindAllStringSubmatch(page, -1)
+	if len(sets) == 0 {
+		t.Fatal("the landing page's CSS draws no weave with image-set()")
+	}
+	widths := map[string]bool{}
+	ref := regexp.MustCompile(`(/assets/weave-(\d+)-[0-9a-f]{8}\.(avif|webp))"?\)?\s*(?:[\d.]+x\s*)?type\("image/(avif|webp)"\)`)
+	for _, set := range sets {
+		refs := ref.FindAllStringSubmatch(set[1], -1)
+		if len(refs) < 2 || refs[0][3] != "avif" || refs[len(refs)-1][3] != "webp" {
+			t.Errorf("an image-set of the weave does not offer AVIF first and WebP after: %.200s", set[1])
+		}
+		for _, r := range refs {
+			if r[3] != r[4] {
+				t.Errorf("%s is given the type image/%s", r[1], r[4])
+			}
+			widths[r[2]] = true
+			f, ok := files[r[1]]
+			if !ok {
+				t.Errorf("the CSS names %s, which the build did not write", r[1])
+				continue
+			}
+			if f.Type != "image/"+r[3] || !f.Immutable {
+				t.Errorf("%s is served as %q, immutable %v; want image/%s, cached for good", r[1], f.Type, f.Immutable, r[3])
+			}
+		}
+	}
+	if len(widths) != 2 {
+		t.Errorf("the weave is offered at widths %v, want two", keys(widths))
+	}
+	if strings.Contains(element(page, `class="landing-hero"`), "<img") {
+		t.Error("the hero has an <img>; the weave is decoration, drawn by the CSS")
+	}
+	if regexp.MustCompile(`<link rel="preload"[^>]*weave`).MatchString(page) || strings.Contains(strings.Join(m.Hints["/"], " "), "weave") {
+		t.Error("the landing page preloads the weave; the headline paints first")
+	}
+}

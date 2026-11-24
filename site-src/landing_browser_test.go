@@ -138,3 +138,59 @@ func TestDarkSurfaces(t *testing.T) {
 		t.Errorf("in dark the modal backdrop is a light colour (brightest channel %.2f); it is mixed from black, so it darkens", bright)
 	}
 }
+
+// The weave lies in the hero's ground, behind the copy only where its mask
+// has faded it out: no text of the copy (the headline, the lead, the install
+// command and the note under it) lies on the part of the picture that shows,
+// from a phone to a wide screen. And the picture loads at the width the CSS
+// gives each layout, never stretching the page.
+func TestLandingWeaveLeavesTheCopyClear(t *testing.T) {
+	dist(t)
+	b := startBrowser(t)
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
+	defer srv.Close()
+	b.call(b.session, "Emulation.setEmulatedMedia", map[string]any{"features": []map[string]string{{"name": "prefers-reduced-motion", "value": "reduce"}}})
+	for _, width := range []int{320, 390, 768, 1024, 1280, 1440, 2560} {
+		at := fmt.Sprintf("the weave at %d px", width)
+		b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": width, "height": 1000, "deviceScaleFactor": 1, "mobile": width < 700})
+		b.open(srv.URL + "/")
+		b.doing, b.deadline = at, time.Now().Add(pageTimeout)
+		b.eval(`document.fonts.ready.then(() => true)`, new(bool))
+		var got struct {
+			Image   string
+			OnWeave []string
+			Mask    string
+		}
+		b.eval(`(() => {
+			const ground = document.querySelector('.landing-hero__ground'), art = getComputedStyle(ground, '::after'), g = ground.getBoundingClientRect()
+			const w = parseFloat(art.width), h = parseFloat(art.height)
+			const left = g.right - parseFloat(art.right) - w, top = g.bottom - parseFloat(art.bottom) - h
+			// Where the mask is still transparent: before the first stop of each gradient.
+			let x0 = left, y0 = top
+			for (const m of art.maskImage.matchAll(/linear-gradient\((90deg, )?rgba\(0, 0, 0, 0\)(?: ([\d.]+)%)?/g)) {
+				const p = parseFloat(m[2] || '0') / 100
+				if (m[1]) x0 = left + p * w; else y0 = top + p * h
+			}
+			const onWeave = []
+			const walker = document.createTreeWalker(document.querySelector('.landing-hero__copy'), NodeFilter.SHOW_TEXT)
+			for (let n; (n = walker.nextNode()); ) {
+				if (!n.textContent.trim()) continue
+				const r = document.createRange()
+				r.selectNodeContents(n)
+				for (const rect of r.getClientRects()) if (rect.right > x0 + 1 && rect.bottom > y0 + 1) onWeave.push(n.textContent.trim().slice(0, 30))
+			}
+			const image = performance.getEntriesByType('resource').map((e) => e.name).find((n) => /weave-\d+-/.test(n)) || ''
+			return { image: image.replace(/^.*\/(weave-\d+)-.*$/, '$1'), onWeave, mask: art.maskImage + ' ' + [x0, y0, left, top, w, h].map(Math.round) }
+		})()`, &got)
+		if len(got.OnWeave) > 0 {
+			t.Errorf("%s: the copy lies on the weave (%s): %s", at, got.Mask, strings.Join(got.OnWeave, " | "))
+		}
+		want := "weave-1024"
+		if width <= 900 {
+			want = "weave-640"
+		}
+		if got.Image != want {
+			t.Errorf("%s: the page loaded %q, want %s at 1×", at, got.Image, want)
+		}
+	}
+}
