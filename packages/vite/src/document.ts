@@ -1,6 +1,7 @@
 // What a page's HTML document is made of, for the page build and the dev
-// server alike: the theme and base CSS, the head tags, the pre-paint script
-// and the document around the rendered body.
+// server alike: the theme and base CSS, the head tags, the icon tags, the
+// pre-paint script and the document around the rendered body.
+import { readdirSync, statSync } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
@@ -71,6 +72,35 @@ export function headTags({ title, description, image }: PageHead): string[] {
 }
 
 /**
+ * The icon files a site's `public/` folder may hold, each with its tag, in
+ * the order they go: the .ico first and the SVG after it, since a browser
+ * takes the last icon it understands, then the home-screen icon.
+ */
+const ICONS: [file: string, tag: string][] = [
+  ['favicon.ico', '<link rel="icon" href="/favicon.ico" sizes="32x32">'],
+  ['favicon.svg', '<link rel="icon" href="/favicon.svg" type="image/svg+xml">'],
+  ['apple-touch-icon.png', '<link rel="apple-touch-icon" href="/apple-touch-icon.png">'],
+]
+
+/**
+ * The icon tags for the files the site at `root` has in `public/`, the
+ * folder the build copies to its root: one for each that is there, a file
+ * by its exact name (or a symlink to one), and none for the others. Read
+ * each time, so the dev server sees a file dropped in.
+ */
+export function iconTags(root: string): string[] {
+  const dir = join(root, 'public')
+  let names: Set<string>
+  try {
+    names = new Set(readdirSync(dir))
+  } catch {
+    return []
+  }
+  const isFile = (name: string) => names.has(name) && (statSync(join(dir, name), { throwIfNoEntry: false })?.isFile() ?? false)
+  return ICONS.filter(([file]) => isFile(file)).map(([, tag]) => tag)
+}
+
+/**
  * The page's pre-paint snippets in one blocking inline script, or none.
  * A snippet that would end the script early is refused in a sentence that
  * `who` starts.
@@ -88,6 +118,8 @@ export function pageHTML(p: {
   head: PageHead
   /** Pre-paint snippets (usePrePaint), run before the CSS and the first paint. */
   prePaint: string[]
+  /** The icon tags (iconTags) for the site's public/ folder. */
+  icons: string[]
   /** The woff2 fonts the page's CSS names, preloaded. */
   fonts: string[]
   css: string
@@ -105,6 +137,7 @@ export function pageHTML(p: {
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     ...prePaintTag(p.prePaint, p.who),
     ...headTags(p.head),
+    ...p.icons,
     ...p.fonts.map((f) => `<link rel="preload" href="${f}" as="font" type="font/woff2" crossorigin>`),
     p.stylesheet === null ? `<style>${p.css}</style>` : `<link rel="stylesheet" href="${p.stylesheet}">`,
     ...p.tags,

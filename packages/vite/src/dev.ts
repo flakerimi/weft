@@ -1,9 +1,10 @@
 // The page dev server: each page is rendered when it is asked for, through one
 // Vite server that listens, so an edit shows on the next request; a change
 // to a file under the site reloads the browser. It writes the page as the
-// build does (the theme, base and page CSS inline, the head tags and
-// pre-paint script), with Vite's client, and a module script that hydrates
-// the page's islands from Vite's own modules, not a client build.
+// build does (the theme, base and page CSS inline, the head tags, the icon
+// tags and the pre-paint script), with Vite's client, and a module script
+// that hydrates the page's islands from Vite's own modules, not a client
+// build.
 import { realpathSync, statSync } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -12,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { createServer, isCSSRequest, normalizePath, type Plugin, type ViteDevServer } from 'vite'
 import { contentType, CSS_MODULE, dropStaticComments } from './build.ts'
 import { siteConfig } from './config.ts'
-import { escapeHTML, pageHTML, readStyles, THEMES, VIEW_TRANSITION, type Theme } from './document.ts'
+import { escapeHTML, iconTags, pageHTML, readStyles, THEMES, VIEW_TRANSITION, type Theme } from './document.ts'
 import { renderPage } from './render.ts'
 import { discoverRoutes, expandRoutes, type ExpandedRoute, type PageModule, type Route } from './routes.ts'
 
@@ -180,6 +181,8 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
       body: dropStaticComments(page.html),
       head: page.head,
       prePaint: page.prePaint,
+      // As the build has them; Vite serves public/ itself.
+      icons: iconTags(root),
       fonts: [],
       css: [baseCSS, page.css, VIEW_TRANSITION].filter(Boolean).join('\n') + '\n',
       stylesheet: null,

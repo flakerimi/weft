@@ -137,6 +137,24 @@ describe('devSite', { timeout: 30_000 }, () => {
     }
   })
 
+  it('writes the icon tags of the files in public/, as the build does, on a page and the 404 page', async () => {
+    const root = site('dev-site')
+    const icons = (html: string) => [...html.matchAll(/<link rel="(?:icon|apple-touch-icon)"[^>]*>/g)].map((m) => m[0])
+    const dev = await start(root)
+    // No public/ folder: no icon tag.
+    expect(icons((await get(dev.url)).body)).toEqual([])
+    mkdirSync(join(root, 'public'))
+    for (const name of ['favicon.svg', 'favicon.ico', 'apple-touch-icon.png']) writeFileSync(join(root, 'public', name), `bytes of ${name}`)
+    const want = [
+      '<link rel="icon" href="/favicon.ico" sizes="32x32">',
+      '<link rel="icon" href="/favicon.svg" type="image/svg+xml">',
+      '<link rel="apple-touch-icon" href="/apple-touch-icon.png">',
+    ]
+    // Read on each request: a file dropped in shows on the next one.
+    expect(icons((await get(dev.url)).body)).toEqual(want)
+    expect(icons((await get(dev.url + 'no-such-page')).body)).toEqual(want)
+  })
+
   it('answers 404 plainly without one', async () => {
     const dev = await start(site('static-site'))
     // The site's own vite.config is used: its define reaches the page.

@@ -67,6 +67,18 @@ A page with no island has no script that loads JavaScript.
 
 Files in `public/` are copied to the root of the build as they are: `public/robots.txt` is `/robots.txt`.
 
+### Icons
+
+Put the site's icon in `public/` (in an app `weft create` made, `web/public/`) and that is all it takes: every page's `<head>`, the not-found page's included, names the files that are there, in this order, and nothing for those that are not.
+
+| File | Tag |
+| --- | --- |
+| `favicon.ico` | `<link rel="icon" href="/favicon.ico" sizes="32x32">` |
+| `favicon.svg` | `<link rel="icon" href="/favicon.svg" type="image/svg+xml">` |
+| `apple-touch-icon.png` | `<link rel="apple-touch-icon" href="/apple-touch-icon.png">` |
+
+A browser takes the last icon it can draw, so one that draws SVG shows `favicon.svg` and one that does not shows `favicon.ico`. The files are served with their types and revalidated, not cached for a year, since their names carry no hash. `weft dev` writes the same tags.
+
 ### Files a page writes
 
 A page can also write a file of its own into the build, such as data it shows, for agents or other programs to read. Call `useFile(path, text)` from `virtual:weft/files` in the page's setup:

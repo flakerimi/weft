@@ -9,7 +9,7 @@ import { build, isCSSRequest, mergeConfig, normalizePath, type Plugin, type Reso
 import { siteConfig } from './config.ts'
 import { weft } from './plugin.ts'
 import type { ContentAsset } from './content.ts'
-import { pageHTML, readStyles, THEMES, VIEW_TRANSITION, type Theme } from './document.ts'
+import { iconTags, pageHTML, readStyles, THEMES, VIEW_TRANSITION, type Theme } from './document.ts'
 import { createRenderServer, renderPage, type RenderResult } from './render.ts'
 import { discoverRoutes, expandRoutes, type ExpandedRoute, type PageModule, type RoutesJson } from './routes.ts'
 
@@ -539,6 +539,8 @@ async function writeBuild(
   const sentSize = sentSizes()
   const minify = minifier(cssTarget)
   const named = cssFiles(root, outDir)
+  // The icon files of public/, which is copied below: the same tags on every page.
+  const icons = iconTags(root)
   for (const page of pages) {
     // The files the page's CSS names (fonts, images), copied in under hashed names.
     const { css: pageCSS, files: assets } = await named(page.css, `pages/${page.file}`)
@@ -577,7 +579,7 @@ async function writeBuild(
         : []),
     ]
     const file = htmlFile(page.path)
-    await write(file, pageHTML({ body: dropStaticComments(page.html), head: page.head, prePaint: page.prePaint, fonts, css, stylesheet, tags }))
+    await write(file, pageHTML({ body: dropStaticComments(page.html), head: page.head, prePaint: page.prePaint, icons, fonts, css, stylesheet, tags }))
 
     const links = [
       ...fonts.map((f) => `<${f}>; rel=preload; as=font; type="font/woff2"; crossorigin`),
