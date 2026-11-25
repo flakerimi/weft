@@ -393,6 +393,33 @@ func TestUpgradeMovesApp(t *testing.T) {
 	}
 }
 
+// An app made by 0.0.6, whose main.go calls weft.Serve, does not compile once
+// moved: weft upgrade says so, after its normal output, and still exits 0.
+func TestUpgradeNamesWeftServe(t *testing.T) {
+	otherVersionApp(t, "0.0.5")
+	setVersion(t, "0.1.0")
+	old := "package main\n\nimport \"github.com/flakerimi/weft\"\n\nfunc main() { _ = weft.Serve(nil, nil) }\n"
+	if err := os.WriteFile("main.go", []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const tail = " still calls weft.Serve, which moved; see https://weft.base.al/docs/reference/cli#moving-an-app-to-warp for the two lines to change.\n"
+	code, out, errs := runCmd("upgrade", "--no-install")
+	if code != 0 || out != "Moved myapp from Weft 0.0.5 to 0.1.0\n" || errs != "weft upgrade: main.go"+tail {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errs)
+	}
+	// Run again, on the same version, it still says so; and it names the file.
+	if err := os.WriteFile("main.go", []byte("package main\n\nfunc main() { serve() }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("serve.go", []byte(strings.Replace(old, "func main()", "func serve()", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs = runCmd("upgrade", "--no-install")
+	if code != 0 || out != "myapp is already on Weft 0.1.0\n" || errs != "weft upgrade: serve.go"+tail {
+		t.Fatalf("again: exit %d, stdout %q, stderr %q", code, out, errs)
+	}
+}
+
 // An app made by a development build moves forward to a release.
 func TestUpgradeMovesADevApp(t *testing.T) {
 	otherVersionApp(t, "0.0.0-dev")

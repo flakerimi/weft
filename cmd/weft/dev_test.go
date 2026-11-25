@@ -848,7 +848,7 @@ func TestDevGoServerIgnoresPort(t *testing.T) {
 	port := freeLocalPort(t)
 	var out, errb syncBuffer
 	code := devWithin(t, 30*time.Second, &out, &errb, "--port", strconv.Itoa(port))
-	want := "weft dev: the Go server did not answer within 2 s; make main.go listen on the port in the PORT variable.\n"
+	want := "weft dev: the Go server did not answer within 2 s; check that main.go serves the app (warp's Serve reads PORT), and run weft dev again.\n"
 	if code != 1 || !strings.HasSuffix(errb.String(), want) || out.String() != "" {
 		t.Errorf("exit %d, stdout %q, stderr %q, want it to end %q", code, out.String(), errb.String(), want)
 	}

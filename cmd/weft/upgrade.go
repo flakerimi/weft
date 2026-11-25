@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -39,6 +40,7 @@ func upgradeCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	if cfg.Version == weft.Version {
 		fmt.Fprintf(stdout, "%s is already on Weft %s\n", name, weft.Version)
+		sayWeftServe(appDir, stderr)
 		return 0
 	}
 	if newerVersion(cfg.Version, weft.Version) {
@@ -67,7 +69,29 @@ func upgradeCmd(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	fmt.Fprintf(stdout, "Moved %s from Weft %s to %s\n", name, cfg.Version, weft.Version)
+	sayWeftServe(appDir, stderr)
 	return 0
+}
+
+var weftServe = regexp.MustCompile(`\bweft\.Serve\b`)
+
+// sayWeftServe says how to move an app whose Go, in its folder's .go files,
+// still calls weft.Serve, which moved to warp: an app made by Weft 0.0.6 or
+// before does not compile once upgraded. main.go is looked at first.
+func sayWeftServe(appDir string, stderr io.Writer) {
+	entries, _ := os.ReadDir(appDir)
+	names := []string{"main.go"}
+	for _, e := range entries {
+		if n := e.Name(); strings.HasSuffix(n, ".go") && n != "main.go" && !e.IsDir() {
+			names = append(names, n)
+		}
+	}
+	for _, n := range names {
+		if b, err := os.ReadFile(filepath.Join(appDir, n)); err == nil && weftServe.Match(b) {
+			fmt.Fprintf(stderr, "weft upgrade: %s still calls weft.Serve, which moved; see https://weft.base.al/docs/reference/cli#moving-an-app-to-warp for the two lines to change.\n", n)
+			return
+		}
+	}
 }
 
 // newerVersion says whether version a is newer than b, by semantic

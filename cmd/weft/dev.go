@@ -47,9 +47,9 @@ func devCmd(args []string, stdout, stderr io.Writer) int {
 
 // dev runs the app's Go server, built with the dev tag, and the page server
 // (weft-dev), which proxies /api to it, until ctx is done: then it stops both
-// and returns 0. When a .go file or the app's .env changes it rebuilds the Go server and, if the
-// build succeeds, replaces the running one. A child that stops by itself
-// stops the other and makes it return 1.
+// and returns 0. When a .go file or the app's .env changes it rebuilds the Go
+// server and, if the build succeeds, replaces the running one. A child that
+// stops by itself stops the other and makes it return 1.
 func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	const usage = "usage is weft dev [--port n]."
 	stdout, stderr = locked(stdout), locked(stderr)
@@ -223,7 +223,7 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			pageOut.quiet.Store(true)
 			stopAll()
 			if !apiReady {
-				fmt.Fprintf(stderr, "weft dev: the Go server did not answer within %d s; make main.go listen on the port in the PORT variable.\n", int(devReadyWithin.Seconds()))
+				fmt.Fprintf(stderr, "weft dev: the Go server did not answer within %d s; check that main.go serves the app (warp's Serve reads PORT), and run weft dev again.\n", int(devReadyWithin.Seconds()))
 			} else {
 				fmt.Fprintf(stderr, "weft dev: the page server did not answer within %d s; see its output above.\n", int(devReadyWithin.Seconds()))
 			}
@@ -331,9 +331,10 @@ func goBuild(ctx context.Context, appDir, bin string, stderr io.Writer) bool {
 }
 
 // goFiles returns the modification time of every .go file in the app, and of
-// its .env at the top, by path, outside the folders at its top that hold no Go of the app's: .weft,
-// .git, node_modules and web. A folder it may not read, such as a database
-// volume of another user, is skipped and passed to unreadable, if not nil.
+// its .env at the top, by path, outside the folders at its top that hold no
+// Go of the app's: .weft, .git, node_modules and web. A folder it may not
+// read, such as a database volume of another user, is skipped and passed to
+// unreadable, if not nil.
 func goFiles(appDir string, unreadable func(dir string)) (map[string]time.Time, error) {
 	files := map[string]time.Time{}
 	err := filepath.WalkDir(appDir, func(p string, d fs.DirEntry, err error) error {
