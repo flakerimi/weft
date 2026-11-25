@@ -338,3 +338,42 @@ func TestValidateRequiredPointer(t *testing.T) {
 		t.Fatalf("a nil pointer must fail required: %v", got)
 	}
 }
+
+func TestValidateBlankIsNotEmpty(t *testing.T) {
+	type S struct {
+		Mail string `json:"mail" warp:"email"`
+		Kind string `json:"kind" warp:"enum=a|b"`
+		Site string `json:"site" warp:"url"`
+		Two  string `json:"two" warp:"min=2"`
+		Five string `json:"five" warp:"min=5"`
+	}
+	got := fieldsOf(t, S{Mail: "   ", Kind: "   ", Site: "   ", Two: "   ", Five: "   "})
+	want := map[string]string{
+		"mail": "Enter an email address.",
+		"kind": "Choose one of: a, b.",
+		"site": "Enter a web address that starts with http:// or https://.",
+		"five": "Use at least 5 characters.",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestCheckRulesDeclarationOrder(t *testing.T) {
+	type Inner struct {
+		X string `json:"x" warp:"inner"`
+	}
+	type Outer struct {
+		A  Inner  `json:"a"`
+		B  string `json:"b" warp:"outer"`
+		Cs []Inner
+	}
+	got := checkRules(reflect.TypeOf(Outer{}))
+	want := []string{
+		`Inner.X has the rule "inner", which warp does not know; use required, email, url, min=, max=, enum= or unique.`,
+		`Outer.B has the rule "outer", which warp does not know; use required, email, url, min=, max=, enum= or unique.`,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %q", got)
+	}
+}

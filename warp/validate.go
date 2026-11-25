@@ -132,10 +132,19 @@ func toFloat(v reflect.Value) float64 {
 	return v.Float()
 }
 
-func isZeroValue(v reflect.Value) bool {
-	switch v.Kind() {
-	case reflect.String:
+// isBlank is the test for required: a string is blank when it is empty once
+// trimmed.
+func isBlank(v reflect.Value) bool {
+	if v.Kind() == reflect.String {
 		return strings.TrimSpace(v.String()) == ""
+	}
+	return isEmpty(v)
+}
+
+// isEmpty is the test that lets every other rule pass: a value that was not
+// given. A string of spaces is not empty.
+func isEmpty(v reflect.Value) bool {
+	switch v.Kind() {
 	case reflect.Slice, reflect.Map:
 		return v.Len() == 0
 	case reflect.Struct:
@@ -155,13 +164,13 @@ func checkField(fv reflect.Value, rules []rule) string {
 			if fv.Kind() == reflect.Pointer && !fv.IsNil() {
 				continue
 			}
-			if !v.IsValid() || isZeroValue(v) {
+			if !v.IsValid() || isBlank(v) {
 				return "This is required."
 			}
 			continue
 		}
 		// Every other rule lets an empty value pass.
-		if !v.IsValid() || isZeroValue(v) {
+		if !v.IsValid() || isEmpty(v) {
 			continue
 		}
 		if msg := checkRule(v, r); msg != "" {
@@ -381,8 +390,6 @@ func checkType(t reflect.Type, visited map[reflect.Type]bool, out *[]string) {
 	specs := specsOf(t)
 	for _, spec := range specs {
 		*out = append(*out, spec.problems...)
-	}
-	for _, spec := range specs {
 		checkType(fieldTypeByIndex(t, spec.index), visited, out)
 	}
 }
