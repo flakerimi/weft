@@ -1,5 +1,5 @@
 // Command weft is the Weft side of the benchmark in bench/: the landing Weft
-// builds from this folder, embedded in one Go binary and served by weft.Serve,
+// builds from this folder, embedded in one Go binary and served by warp.Serve,
 // as site-src serves weft.base.al.
 //
 // Build the page first (bench/run.sh does, or pnpm --filter weft-bench build).
@@ -14,6 +14,7 @@ import (
 	"os"
 
 	"github.com/flakerimi/weft"
+	"github.com/flakerimi/weft/warp"
 )
 
 //go:embed all:dist
@@ -24,7 +25,7 @@ func handler() http.Handler {
 	if err != nil {
 		panic(err)
 	}
-	return weft.Serve(dist, nil)
+	return warp.Serve(dist, nil)
 }
 
 func main() {

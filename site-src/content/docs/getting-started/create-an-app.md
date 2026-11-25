@@ -24,8 +24,10 @@ The app has:
 | --- | --- |
 | `web/pages/` | The pages. `index.vue` is `/`, and `404.vue` is the page for an unknown path. |
 | `web/components/` | The app's own components. `Hello.vue` is an island that asks the API for a message. |
-| `api/` | The Go API, served under `/api`, with a test. |
-| `main.go`, `dist.go`, `dist_dev.go` | The Go server. `dist.go` embeds the built pages. |
+| `app/modules.go` | The one list of the app's Go modules. |
+| `app/hello/` | The first module: `routes.go` has the route `GET /api/hello`, and `hello_test.go` its test. |
+| `main.go`, `dist.go`, `dist_dev.go` | The Go server, a `warp.App` from `github.com/flakerimi/weft/warp`. `dist.go` embeds the built pages. |
+| `.env`, `.env.sample` | The server's settings, such as `PORT`. Git ignores `.env`; `.env.sample` is committed. |
 | `package.json` | Its `"weft"` object records the Weft version and the theme. |
 | `.weft/` | Weft's packages and Go package, at the app's version. Git ignores it, and every `weft` command puts it back when it is missing. |
 | `AGENTS.md`, `CLAUDE.md` | What an agent working on the app needs to know. |
@@ -55,7 +57,7 @@ In `web/pages/index.vue`, change `title="Welcome"` to `title="My app"` and save.
 
 ## Change the API
 
-In `api/api.go`, change `"Hello from Go"` to `"Hello from my API"` and save. `weft dev` builds the Go code again and restarts the server, and `/api/hello` answers `{"message":"Hello from my API"}`. If the build fails, `weft dev` prints the compiler's output, the last build keeps serving `/api`, and the next save tries again.
+In `app/hello/routes.go`, change `"Hello from Go"` to `"Hello from my API"` and save. `weft dev` builds the Go code again and restarts the server, and `/api/hello` answers `{"message":"Hello from my API"}`. If the build fails, `weft dev` prints the compiler's output, the last build keeps serving `/api`, and the next save tries again.
 
 Ctrl-C stops both servers.
 
@@ -79,10 +81,10 @@ Built myapp
 ```
 
 ```text
-2026/11/24 22:05:14 myapp on http://localhost:8080
+2026/11/25 17:40:59 listening on http://localhost:8080
 ```
 
-It serves the pages and `/api` from one file, and needs no Node. Set `PORT` to listen on another port.
+It serves the pages and `/api` from one file, and needs no Node. It reads `PORT` from `.env`, and the environment wins over it: `PORT=3000 ./myapp` listens on port 3000. Ctrl-C stops it.
 
 ## In a clone of the app
 
@@ -90,6 +92,6 @@ Commit the app without `.weft/` and `node_modules/`, as its `.gitignore` says. W
 
 ## Next
 
-- [Pages and islands](../guides/pages-and-islands.md): what a page can do, and when a part of it should be an island.
-- [Serving from Go](../guides/go-serving.md): `weft.Serve` and the API beside it.
+- [Your first page](first-site.md): add a page of your own.
+- [Your first Go route](first-go-handler.md): add a route that checks what it is sent.
 - [The CLI](../reference/cli.md): every command, flag and error.

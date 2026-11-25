@@ -9,46 +9,31 @@ A Weft site is a folder of Vue pages. `weft-build-pages` renders each page to HT
 
 ## Where you work
 
-The packages are not on npm. An app is made with `weft create <name>`: the `weft` command carries Weft's packages and unpacks them into the app's `.weft/`, which you never edit. You need Go 1.26, Node 22.18 or later and pnpm 10. The app's site is `web/`, with its Go API beside it:
+The packages are not on npm. An app is made with `weft create <name>`: the `weft` command carries Weft's packages and unpacks them into the app's `.weft/`, which you never edit. You need Go 1.26, Node 22.18 or later and pnpm 10. The app's site is `web/`, with its Go API beside it in `app/`:
 
 - `weft dev` runs the page dev server beside the Go API. It renders each page when it is asked for and reloads the browser when a file changes;
-- `weft build` builds the pages into `web/dist`, then the binary.
-
-The way below, a site inside a clone of the Weft repository, a pnpm workspace, is for work on Weft itself. Run commands from the repository root.
-
-```sh
-pnpm install
-pnpm --filter @weft/themes build
-pnpm --filter @weft/ui build
-```
-
-There, `weft-dev --root <site>`, from `@weft/vite`, is the page dev server.
+- `weft build` builds the pages into `web/dist` with `weft-build-pages --root web --out web/dist` and the app's theme, then the binary. It prints `weft: built N pages into web/dist`.
 
 ## The layout of a site
 
 ```text
-hello/
-  package.json        "build": "weft-build-pages --root . --out dist"
-  pages/              one .vue file per route
-  components/         your components and islands
-  content/<name>/     Markdown collections, declared in content.config.ts
-  content.config.ts   only if the site has content/
-  public/             copied to the build's root as it is
-  vite.config.ts      optional; the build adds Vue, icons and content itself
-  tsconfig.json       "types": ["vite/client", "@weft/vite/virtual"]
-  main.go             the server (see weft-go)
+myapp/
+  package.json          "weft": {"version", "theme"}; weft build and weft dev read it
+  web/
+    pages/              one .vue file per route
+    components/         your components and islands
+    content/<name>/     Markdown collections, declared in content.config.ts
+    content.config.ts   only if the site has content/
+    public/             copied to the build's root as it is
+    vite.config.ts      optional; the build adds Vue, icons and content itself
+    tsconfig.json       written by weft create
+  app/                  the Go API (see weft-go)
+  main.go               the server (see weft-go)
 ```
 
-The build writes the icon tags in every page's `<head>` by itself, one for each of `favicon.ico`, `favicon.svg` and `apple-touch-icon.png` that `public/` holds, with no setting. Drop the files in `public/` (`web/public/` in an app) and leave the tags out of `useHead`.
+The build writes the icon tags in every page's `<head>` by itself, one for each of `favicon.ico`, `favicon.svg` and `apple-touch-icon.png` that `public/` holds, with no setting. Drop the files in `web/public/` and leave the tags out of `useHead`.
 
-To add a site to the repository:
-
-1. Add the folder to `pnpm-workspace.yaml`.
-2. Give it a `package.json` with:
-   - dependencies `"@weft/ui": "workspace:*"` and `"vue": "3.6.0-rc.16"`, pinned exactly;
-   - dev dependencies `"@weft/vite": "workspace:*"`, `"@vitejs/plugin-vue": "^6.0.11"` and `"vite": "^8.3.8"`.
-3. Run `pnpm install`.
-4. Run `pnpm --filter hello build`. It prints `weft: built N pages into dist`.
+Inside the Weft repository, for work on Weft itself, a site is a workspace package whose `build` script runs `weft-build-pages --root . --out dist`, as `site-src/` does; `weft-dev --root <site>`, from `@weft/vite`, is its page dev server.
 
 ## Pages and routes
 
@@ -110,7 +95,7 @@ Render static content directly. Wrap only what must run in the browser, such as 
 A page with no island loads no JavaScript. To list the pages that do load it:
 
 ```sh
-grep -rl '<script type="module"' hello/dist/pages --include=index.html
+grep -rl '<script type="module"' web/dist/pages --include=index.html
 ```
 
 ## Markdown content
@@ -180,4 +165,4 @@ These are planned but not built (see https://weft.base.al/docs/coming-next):
 
 - app routes: a client-side router and `layouts/`. An app is pages rendered at build, with islands;
 - an `<Image>` component, actions, environment values, a development overlay and `weft deploy`;
-- `weft add <block>`.
+- `weft scaffold`, `DataTable` and `EntityDialog`.

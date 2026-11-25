@@ -1,80 +1,113 @@
 ---
-title: Your first Go handler
-description: Serve the built pages and an API from one Go binary.
+title: Your first Go route
+description: Add a typed route that checks its input to the app's Go module, test it, and build the binary.
 order: 13
 ---
 
-On this page you write a Go program that serves the pages you built in [Your first site](first-site.md) and answers one API route. Both come from one binary.
+On this page you add a second route to the app's Go side: one that takes a JSON body, checks it, and answers. You test it, call it while `weft dev` runs, and build the binary. Run every command in the app's folder, `myapp`.
 
-## Write the program
+## The module you have
 
-The site's folder lives in the repository, so its Go code is part of the `github.com/flakerimi/weft` module and imports the `weft` package directly. Write `hello/main.go`:
+The app's Go code is a `warp.App` (from `github.com/flakerimi/weft/warp`) with a list of modules, in `app/modules.go`. The first module is `app/hello/routes.go`. Its `Register` adds one route:
 
 ```go
-// Command hello serves the pages in dist and a small API, from one binary.
-package main
-
-import (
-	"embed"
-	"encoding/json"
-	"io/fs"
-	"log"
-	"net/http"
-
-	"github.com/flakerimi/weft"
-)
-
-//go:embed all:dist
-var site embed.FS
-
-func main() {
-	dist, err := fs.Sub(site, "dist")
-	if err != nil {
-		log.Fatal(err)
-	}
-	api := http.NewServeMux()
-	api.HandleFunc("GET /api/hello", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"message": "Hello from Go"})
-	})
-	log.Print("hello on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", weft.Serve(dist, api)))
+func (module) Register(app *warp.App) error {
+	warp.Get(app, "/hello", hello)
+	return nil
 }
 ```
 
-- `//go:embed all:dist` puts the build in the binary. `all:` also takes files whose names start with `.` or `_`, which a plain `embed` leaves out.
-- `weft.Serve(dist, api)` sends paths under `/api/` to `api` and everything else to the build.
-- `api` is a plain `http.Handler`, so any router works.
+`warp.Get` registers `hello` for `GET /api/hello`: the app puts `/api` in front of every route. `hello` is a typed function, `func(ctx context.Context, _ warp.None) (Message, error)`: it takes nothing, and what it returns is answered as JSON.
 
-## Run it
+## Add a route
 
-Build the pages first, since the binary embeds them, then run the program:
+In `app/hello/routes.go`, register a second route, `POST /api/greetings`, in `Register`:
 
-```sh
-pnpm --filter hello build
-go run ./hello
+```go
+func (module) Register(app *warp.App) error {
+	warp.Get(app, "/hello", hello)
+	warp.Post(app, "/greetings", greet)
+	return nil
+}
 ```
 
-In another terminal, ask for the API and the page:
+and add its input and its function at the end of the file:
 
-```sh
-curl http://localhost:8080/api/hello
-curl -I -H 'Accept-Encoding: br' http://localhost:8080/
+```go
+// Greeting is the body of POST /api/greetings.
+type Greeting struct {
+	Name  string `json:"name" warp:"required,max=40"`
+	Email string `json:"email" warp:"email"`
+}
+
+func greet(ctx context.Context, in Greeting) (Message, error) {
+	return Message{Message: "Hello, " + in.Name}, nil
+}
 ```
 
-The API answers `{"message":"Hello from Go"}`. The page comes back with `Content-Encoding: br`: the server sends the brotli file the build made, and compresses nothing itself. Its `ETag` lets a browser that has the page get a `304 Not Modified` instead.
+- `json:"name"` says the field comes from the JSON body, under the key `name`.
+- `warp:"required,max=40"` are its rules: it must be there, not blank, and at most 40 characters. `email` checks an address, and lets an empty one pass, so `email` is optional.
+- Warp fills `Greeting` from the body and checks the rules before `greet` runs. When a rule fails, `greet` is not called, and the answer is a 422 that names each field.
+- `warp.Post` answers 201.
 
-A path with no page, such as `/nope`, gets a 404. Add `pages/404.vue` to give it a page of its own.
+## Test it
+
+Add a test to `app/hello/hello_test.go`, under `TestHello`:
+
+```go
+func TestGreet(t *testing.T) {
+	app := warp.New(warp.Config{})
+	app.Use(Module())
+	if err := app.Err(); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		body   string
+		status int
+		want   string
+	}{
+		{`{"name":"Ada"}`, 201, `{"message":"Hello, Ada"}`},
+		{`{"name":" ","email":"ada"}`, 422, `{"error":{"code":"validation","message":"2 fields need attention.","fields":{"email":"Enter an email address.","name":"This is required."}}}`},
+	} {
+		req := httptest.NewRequest("POST", "/api/greetings", strings.NewReader(c.body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		app.Handler().ServeHTTP(rec, req)
+		if got := strings.TrimSpace(rec.Body.String()); rec.Code != c.status || got != c.want {
+			t.Errorf("%s: %d %s, want %d %s", c.body, rec.Code, got, c.status, c.want)
+		}
+	}
+}
+```
+
+`app.Handler()` is the app's API alone, so the test needs no server. `app.Err()` reports any mistake made while registering, such as a field with no tag, one sentence each. Run the tests:
+
+```sh
+go test -tags dev ./...
+```
+
+`-tags dev` builds the app as `weft dev` does, without the embedded pages, so the tests run before any `weft build`.
+
+## Call it
+
+With `weft dev` running, send a greeting:
+
+```sh
+curl -i -H 'Content-Type: application/json' -d '{"name":"Ada"}' http://localhost:5173/api/greetings
+```
+
+It answers `201 Created` with `{"message":"Hello, Ada"}`. Send `{"name":"","email":"ada"}` and it answers 422 with the two messages, in the shape every Warp error has. A body sent without `Content-Type: application/json` is a 415, and a key the route does not take, such as `nme`, is a 400 that names it.
 
 ## Build one binary
 
 ```sh
-go build -o hello-site ./hello
+weft build
+./myapp
 ```
 
-`hello-site` is the whole site: pages, API and server. Copy it to a machine and run it; it needs no Node and no files beside it. [Publishing](../guides/publishing.md) says more.
+`myapp` is the whole app: the pages, the API and the server. Copy it to a machine and run it; it needs no Node and no files beside it. [Publishing](../guides/publishing.md) says more.
 
 ## Next
 
-- [Pages and islands](../guides/pages-and-islands.md): more pages, and the parts that run in the browser.
-- [Serving from Go](../guides/go-serving.md): everything `weft.Serve` does.
+- [Warp, the Go side](../guides/warp.md): modules, every tag and rule, the errors, and `.env`.
+- [Pages and islands](../guides/pages-and-islands.md): the parts of a page that run in the browser, which can call this route.

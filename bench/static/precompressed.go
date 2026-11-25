@@ -19,7 +19,7 @@ type stored struct {
 }
 
 // precompressed serves a folder that bench/tools/precompress.mjs prepared,
-// the way weft.Serve serves a Weft build: every file is read into memory
+// the way warp.Serve serves a Weft build: every file is read into memory
 // once, here, and a request is answered with the stored brotli or gzip the
 // client accepts, or the file as it is. Nothing is compressed per request.
 // It is how the benchmark puts every framework's static output on the same

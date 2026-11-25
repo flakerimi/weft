@@ -8,7 +8,7 @@ section: Guides
 ## ETags
 
 ```go
-func main() { weft.Serve(dist) }
+func main() { warp.Serve(dist, nil) }
 ```
 
 ![The flow](./flow.png)

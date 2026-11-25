@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -279,19 +280,19 @@ func eventually(t *testing.T, url, want string, within time.Duration) {
 	t.Fatalf("GET %s did not have %q within %s; last %q", url, want, within, last)
 }
 
-// setMessage rewrites the API's message in api/api.go.
+// setMessage rewrites the API's message in app/hello/routes.go.
 func setMessage(t *testing.T, app, message string) {
 	t.Helper()
-	file := filepath.Join(app, "api", "api.go")
+	file := filepath.Join(app, "app", "hello", "routes.go")
 	src, err := os.ReadFile(file)
 	if err != nil {
 		t.Fatal(err)
 	}
-	re := regexp.MustCompile(`"message": "[^"]*"`)
+	re := regexp.MustCompile(`Message: "[^"]*"`)
 	if !re.Match(src) {
-		t.Fatalf("api/api.go has no message: %s", src)
+		t.Fatalf("app/hello/routes.go has no message: %s", src)
 	}
-	if err := os.WriteFile(file, re.ReplaceAll(src, []byte(`"message": "`+message+`"`)), 0o644); err != nil {
+	if err := os.WriteFile(file, re.ReplaceAll(src, []byte(`Message: "`+message+`"`)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -361,7 +362,7 @@ func TestDevRestartsGo(t *testing.T) {
 func TestDevSurvivesCompileError(t *testing.T) {
 	app := devApp(t)
 	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
-	file := filepath.Join(app, "api", "api.go")
+	file := filepath.Join(app, "app", "hello", "routes.go")
 	src, _ := os.ReadFile(file)
 	os.WriteFile(file, append(src, []byte("\nfunc broken( {\n")...), 0o644)
 	for deadline := time.Now().Add(15 * time.Second); !strings.Contains(r.stderr.String(), "weft dev: go build failed"); time.Sleep(50 * time.Millisecond) {
@@ -369,7 +370,7 @@ func TestDevSurvivesCompileError(t *testing.T) {
 			t.Fatalf("no build failure within 15 s: %s", r.stderr)
 		}
 	}
-	if !strings.Contains(r.stderr.String(), "api.go:") {
+	if !strings.Contains(r.stderr.String(), "routes.go:") {
 		t.Errorf("the compiler's output was not shown: %s", r.stderr)
 	}
 	eventually(t, r.url+"/api/hello", "Hello from Go", 5*time.Second)
@@ -847,7 +848,7 @@ func TestDevGoServerIgnoresPort(t *testing.T) {
 	port := freeLocalPort(t)
 	var out, errb syncBuffer
 	code := devWithin(t, 30*time.Second, &out, &errb, "--port", strconv.Itoa(port))
-	want := "weft dev: the Go server did not answer within 2 s; make main.go listen on the port in the PORT variable.\n"
+	want := "weft dev: the Go server did not answer within 2 s; check that main.go serves the app (warp's Serve reads PORT), and run weft dev again.\n"
 	if code != 1 || !strings.HasSuffix(errb.String(), want) || out.String() != "" {
 		t.Errorf("exit %d, stdout %q, stderr %q, want it to end %q", code, out.String(), errb.String(), want)
 	}
@@ -882,7 +883,7 @@ func TestDevPageServerNeverAnswers(t *testing.T) {
 
 func TestDevBuildFails(t *testing.T) {
 	app := devApp(t)
-	os.WriteFile(filepath.Join(app, "api", "broken.go"), []byte("package api\n\nfunc broken( {\n"), 0o644)
+	os.WriteFile(filepath.Join(app, "app", "hello", "broken.go"), []byte("package hello\n\nfunc broken( {\n"), 0o644)
 	var out, errb syncBuffer
 	port := freeLocalPort(t)
 	code := devWithin(t, 30*time.Second, &out, &errb, "--port", strconv.Itoa(port))
@@ -941,8 +942,9 @@ func TestGoFilesSkipsFolders(t *testing.T) {
 		}
 	}
 	for _, p := range []string{
-		"main.go", "dist_dev.go", "api/api.go", "api/web/web.go", "api/notes.txt",
-		".weft/go/serve.go", ".git/hooks/x.go", "node_modules/x/y.go", "web/pages/x.go",
+		"main.go", "dist_dev.go", "app/modules.go", "app/hello/routes.go", "app/notes.txt",
+		".env", ".env.sample", "app/.env", "web/.env", ".weft/.env",
+		".weft/go/warp/serve.go", ".git/hooks/x.go", "node_modules/x/y.go", "web/pages/x.go",
 		"db/x.go",
 	} {
 		write(p)
@@ -961,7 +963,7 @@ func TestGoFilesSkipsFolders(t *testing.T) {
 		rel, _ := filepath.Rel(dir, p)
 		got = append(got, filepath.ToSlash(rel))
 	}
-	want := map[string]bool{"main.go": true, "dist_dev.go": true, "api/api.go": true, "api/web/web.go": true}
+	want := map[string]bool{"main.go": true, "dist_dev.go": true, "app/modules.go": true, "app/hello/routes.go": true, ".env": true}
 	if len(got) != len(want) {
 		t.Errorf("goFiles = %v, want %v", got, want)
 	}
@@ -973,5 +975,95 @@ func TestGoFilesSkipsFolders(t *testing.T) {
 	info, _ := os.Stat(filepath.Join(dir, "main.go"))
 	if !files[filepath.Join(dir, "main.go")].Equal(info.ModTime()) {
 		t.Error("goFiles does not keep the modification time")
+	}
+}
+
+// goServerPID is the process id of the app's Go server, the binary weft dev
+// built into app/.weft/dev/app, or 0 while there is none.
+func goServerPID(t *testing.T, app string) int {
+	t.Helper()
+	out, err := exec.Command("ps", "-A", "-ww", "-o", "pid=,command=").Output()
+	if err != nil {
+		t.Fatalf("ps: %v", err)
+	}
+	bin := filepath.Join(app, ".weft", "dev", "app")
+	for _, line := range strings.Split(string(out), "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 2 && strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), f[0])) == bin {
+			pid, _ := strconv.Atoi(f[0])
+			return pid
+		}
+	}
+	return 0
+}
+
+// processEnv is the environment of process pid, as one string.
+func processEnv(t *testing.T, pid int) string {
+	t.Helper()
+	if b, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/environ"); err == nil {
+		return strings.ReplaceAll(string(b), "\x00", "\n")
+	}
+	out, err := exec.Command("ps", "-E", "-ww", "-p", strconv.Itoa(pid), "-o", "command=").Output()
+	if err != nil {
+		t.Fatalf("ps -E: %v", err)
+	}
+	return strings.ReplaceAll(string(out), " ", "\n")
+}
+
+// A change to the app's .env restarts the Go server, as a change to a .go
+// file does.
+func TestDevRestartsOnEnvChange(t *testing.T) {
+	app := devApp(t)
+	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
+	before := goServerPID(t, app)
+	if before == 0 {
+		t.Fatal("found no Go server")
+	}
+	f, err := os.OpenFile(filepath.Join(app, ".env"), os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString("# touched\n")
+	f.Close()
+	changed := false
+	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		if pid := goServerPID(t, app); pid != 0 && pid != before {
+			changed = true
+			break
+		}
+	}
+	if !changed {
+		t.Fatalf("the Go server (pid %d) was not restarted within 15 s of a .env change: %s", before, r.stderr)
+	}
+	eventually(t, r.url+"/api/hello", "Hello from Go", 10*time.Second)
+	if code := r.stop(t); code != 0 {
+		t.Errorf("exit %d: %s", code, r.stderr)
+	}
+}
+
+// The Go server weft dev runs answers on 127.0.0.1 only, and is given
+// HOST=127.0.0.1 to say so.
+func TestDevGoServerIsLocalOnly(t *testing.T) {
+	app := sharedDevApp(t)
+	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
+	goPort := r.goPort(t)
+	if code, _ := get(t, "http://127.0.0.1:"+goPort+"/api/hello"); code != 200 {
+		t.Errorf("the Go server does not answer on 127.0.0.1: %d", code)
+	}
+	if addr := otherAddress(t); addr == "" {
+		t.Log("this machine has no address but loopback ones")
+	} else if c, err := net.DialTimeout("tcp", net.JoinHostPort(addr, goPort), time.Second); err == nil {
+		c.Close()
+		t.Errorf("the Go server answers on %s, not only on 127.0.0.1", addr)
+	}
+	pid := goServerPID(t, app)
+	if pid == 0 {
+		t.Fatal("found no Go server")
+	}
+	if !slices.Contains(strings.Split(processEnv(t, pid), "\n"), "HOST=127.0.0.1") {
+		t.Errorf("the Go server's environment has no HOST=127.0.0.1")
+	}
+	if code := r.stop(t); code != 0 {
+		t.Errorf("exit %d: %s", code, r.stderr)
 	}
 }

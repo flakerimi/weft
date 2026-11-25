@@ -66,9 +66,10 @@ export function commandsNotYet(comingNext: string): string[] {
  * use today. A test checks each against Coming next and the catalogue.
  */
 export const NOT_YET: { see: string; missing: string; instead: string }[] = [
-  { see: 'Login and permissions', missing: 'Login, sessions and permissions (`weft.Auth`, `weft.Require`)', instead: 'write them in `api/` yourself' },
-  { see: 'The Go-to-Vue contract', missing: 'Types and form schemas made from Go structs (`weft gen`, `weft.Validate`, `weft.Resource`)', instead: "write the TypeScript types and the `Form`'s schema by hand" },
-  { see: 'App blocks and live data', missing: '`DataTable`, `EntityDialog`, the charts and `useLive`', instead: 'use `Table`, a `Dialog` with a `Form`, and `StatCard`' },
+  { see: 'Login and permissions', missing: 'Login, sessions and permissions (the `auth` module, `auth.Can`)', instead: 'write them as a module of your own in `app/`' },
+  { see: 'Types from Go', missing: 'TypeScript types and form schemas made from the Go types (`weft gen`)', instead: "write the TypeScript types and the `Form`'s schema by hand" },
+  { see: 'Scaffolding and app blocks', missing: '`DataTable` and `EntityDialog`', instead: 'use `Table`, and a `Dialog` with a `Form`' },
+  { see: 'Attachments and live data', missing: 'Attachments, `useLive` and the charts', instead: 'use `FileUpload` with a handler of your own mounted with `app.Handle`, and `StatCard`' },
   { see: 'App routes', missing: 'A client-side router and `layouts/`', instead: 'each page is a document of its own; share a layout as a component the pages use' },
   { see: 'Landing blocks', missing: '`Hero`, `Pricing` and the other landing blocks', instead: 'compose them from `Section`, `Grid` and `Card`' },
 ]
@@ -107,7 +108,7 @@ export function indexMd({ docs, skills, components, version, appAgents }: IndexI
     'weft dev             # runs until stopped: start it in the background',
     '```',
     '',
-    '`weft create` writes the app and runs `pnpm install`. `weft dev` prints the address to open, such as `weft dev: http://localhost:5173`: use `localhost`, not `127.0.0.1`, as the page server may listen on `::1` only. It builds the Go code again when a `.go` file changes, and reloads the browser when a file in `web/` does. Then read the app\'s `AGENTS.md`: the layout, the commands and the rules of that app.',
+    '`weft create` writes the app and runs `pnpm install`. `weft dev` prints the address to open, such as `weft dev: http://localhost:5173`: use `localhost`, not `127.0.0.1`, as the page server may listen on `::1` only. It builds the Go code again when a `.go` file or `.env` changes, and reloads the browser when a file in `web/` does. Then read the app\'s `AGENTS.md`: the layout, the commands and the rules of that app.',
     '',
     '## 3. Build what was asked',
     '',
@@ -126,7 +127,7 @@ export function indexMd({ docs, skills, components, version, appAgents }: IndexI
     '| --- | --- |',
     '| A page | Add `web/pages/<path>.vue`. Its path is the route: `index.vue` is the folder, and `[slug].vue` is one page per value its `getPaths()` returns. |',
     '| Something interactive | Write it in `web/components/<Name>.vue`, import it in the page, and render it with `<Island when="load" :component="Name" />`. Only islands run in the browser: a page without one ships no JavaScript. |',
-    '| An API route | Add a handler in `api/api.go` on its `http.ServeMux`, with the whole path, such as `GET /api/items`. Everything under `/api` goes to it. |',
+    `| An API route | In a module's \`Register\`, in \`app/<module>/routes.go\`, add a typed route: \`warp.Get(app, "/items", list)\` answers \`GET /api/items\`. Its input is a struct whose fields are tagged \`json\`, \`query\` or \`path\`, with rules in \`warp:"required,max=120"\`; return \`warp.NotFound(...)\` and the like for errors. A new module goes in \`app/<name>/\` and in \`app/modules.go\`. See ${SITE}/docs/guides/warp. |`,
     '| A look | Set `"theme"` in the `"weft"` object of `package.json` to `neutral`, `lisa` or `weft`, then start `weft dev` again, as it reads the theme once. Set `--weft-*` tokens in a stylesheet a page imports. |',
     '',
     '## 4. Rules',
@@ -150,7 +151,7 @@ export function indexMd({ docs, skills, components, version, appAgents }: IndexI
     '',
     `- The commands ${list(commands.map((c) => `\`${c.replace(/`/g, '')}\``))}.`,
     ...NOT_YET.map((n) => `- ${n.missing}: ${n.instead}.`),
-    "- Storing data is the app's own code today: `database/sql` and a driver, in `api/`.",
+    "- Storing data is the app's own code today: `database/sql` and a driver, in a module in `app/`.",
     '',
     '## More',
     '',

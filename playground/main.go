@@ -11,6 +11,7 @@ import (
 	"os"
 
 	"github.com/flakerimi/weft"
+	"github.com/flakerimi/weft/warp"
 )
 
 //go:embed all:web/dist
@@ -26,7 +27,7 @@ func handler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"version": weft.Version})
 	})
-	return weft.Serve(dist, api)
+	return warp.Serve(dist, api)
 }
 
 func main() {

@@ -1,7 +1,7 @@
 ---
 title: Themes
 description: Pick a theme, follow light and dark, and change colours, type and spacing with tokens.
-order: 23
+order: 24
 ---
 
 On this page you pick a theme for your site, switch between light and dark, and change the look with tokens. A theme is one stylesheet of CSS custom properties. Weft's components read nothing else.

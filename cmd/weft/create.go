@@ -116,7 +116,8 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 
 // writeTemplate writes the bundle's template/ folder into dir. A file ending
 // .tmpl is rendered with the delimiters [[ and ]] (Vue uses {{ }}) and loses
-// the suffix; gitignore.tmpl becomes .gitignore.
+// the suffix; gitignore.tmpl, env.tmpl and env.sample.tmpl become .gitignore,
+// .env and .env.sample.
 func writeTemplate(bundle fs.FS, dir string, data templateData) error {
 	src, err := fs.Sub(bundle, "template")
 	if err != nil {
@@ -130,8 +131,10 @@ func writeTemplate(bundle fs.FS, dir string, data templateData) error {
 			return err
 		}
 		target := filepath.Join(dir, filepath.FromSlash(p))
+		// A folder is made when a file is written into it, so a folder with
+		// no file is not written: an embedded bundle has none either.
 		if d.IsDir() {
-			return os.MkdirAll(target, 0o755)
+			return nil
 		}
 		content, err := fs.ReadFile(src, p)
 		if err != nil {
@@ -148,14 +151,20 @@ func writeTemplate(bundle fs.FS, dir string, data templateData) error {
 			}
 			content = []byte(b.String())
 			p = strings.TrimSuffix(p, ".tmpl")
-			if path.Base(p) == "gitignore" {
-				p = path.Join(path.Dir(p), ".gitignore")
+			// The template's dotfiles are kept without the dot, as a tool
+			// that reads a folder may treat .gitignore and .env as its own.
+			switch base := path.Base(p); base {
+			case "gitignore", "env", "env.sample":
+				p = path.Join(path.Dir(p), "."+base)
 			}
 			target = filepath.Join(dir, filepath.FromSlash(p))
 		}
 		mode := os.FileMode(0o644)
 		if info, err := d.Info(); err == nil && info.Mode()&0o111 != 0 {
 			mode = 0o755
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
 		}
 		return os.WriteFile(target, content, mode)
 	})

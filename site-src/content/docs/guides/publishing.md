@@ -1,54 +1,58 @@
 ---
 title: Publishing
-description: Build one binary that holds your site, and run it on a server.
-order: 25
+description: Build one binary that holds your app with weft build, and run it on a server or in a container.
+order: 26
 ---
 
-On this page you build your site into one binary and run it on a server. The binary holds the pages, the API and the web server. It needs no Node and no files beside it, unless you serve some from disk.
+On this page you build your app into one binary and run it on a server. The binary holds the pages, the API and the web server. It needs no Node and no files beside it, unless you serve some from disk.
 
 ## Build
 
-Build the pages, then the binary:
+In the app's folder:
 
 ```sh
-pnpm --filter hello build
-CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o hello-site ./hello
+weft build
 ```
 
-- `CGO_ENABLED=0` makes a static binary, which runs on a bare Linux image.
-- `-trimpath` leaves your machine's paths out of it.
-- `-s -w` leaves out the debug tables, so it is smaller.
+It builds the pages into `web/dist`, then the Go binary, which embeds them, and names it after the app: `myapp` for an app made with `weft create myapp`. `-o <file>` writes it elsewhere. The binary embeds `web/dist` as the page build left it, which is why `weft build` always builds the pages first.
 
-Build for another system with `GOOS` and `GOARCH`. For a Linux server on arm64:
+`weft build` builds the binary with:
+
+- `-trimpath`, which leaves your machine's paths out of it;
+- `-ldflags "-s -w"`, which leaves out the debug tables, so it is smaller;
+- `CGO_ENABLED=0`, which makes a static binary that runs on a bare Linux image. When your environment sets `CGO_ENABLED`, its value is used instead.
+
+## For another system
+
+`GOOS` and `GOARCH` pass through to Go. For a Linux server on arm64:
 
 ```sh
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o hello-site ./hello
+GOOS=linux GOARCH=arm64 weft build -o myapp-linux-arm64
 ```
-
-Always build the pages first. The binary embeds `dist/` as it is when `go build` runs.
 
 ## Run
 
-Copy the binary to the server and start it. The `hello` program listens on port 8080; put it behind your server's proxy for TLS, or listen on another port. Every page and file is in memory from the start, already compressed, so a request costs a map lookup and a write.
+Copy the binary to the server and start it. It listens on port 8080 on every interface; set `PORT` and `HOST` in the environment, or in a `.env` file in the folder it runs in, to change that (see [Configuration](warp.md#configuration)). Put it behind your server's proxy for TLS. Every page and file is in memory from the start, already compressed, so a request costs a map lookup and a write.
+
+On SIGTERM or Ctrl-C it stops taking requests, lets the ones in flight finish for up to 10 seconds, stops its modules, and exits with status 0.
 
 ## In a container
 
-The binary runs on an empty image. This Dockerfile builds it and copies only the binary into the final image:
+The binary runs on an empty image. Build it for Linux, then copy only the binary into the image:
 
-```dockerfile
-FROM golang:1.26 AS build
-WORKDIR /src
-COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/hello-site ./hello
-
-FROM scratch
-COPY --from=build /out/hello-site /hello-site
-USER 65534:65534
-EXPOSE 8080
-ENTRYPOINT ["/hello-site"]
+```sh
+GOOS=linux GOARCH=amd64 weft build -o myapp
 ```
 
-Build it from the repository's root. Build the pages before `docker build`, so `hello/dist` is in the context, and put `**/node_modules` in a `.dockerignore`, so the context stays small.
+```dockerfile
+FROM scratch
+COPY myapp /myapp
+USER 65534:65534
+EXPOSE 8080
+ENTRYPOINT ["/myapp"]
+```
+
+Build the image from the app's folder, after `weft build`. A `.dockerignore` with the two lines `*` and `!myapp` keeps the build context to the binary alone. Build for the architecture the image runs on: `GOARCH=arm64` for an arm64 host.
 
 ## How this site is published
 
@@ -56,12 +60,12 @@ Build it from the repository's root. Build the pages before `docker build`, so `
 
 1. builds a release of the `weft` command for four platforms, with `scripts/release.sh`;
 2. builds this site with `scripts/site.sh build`, with `WEFT_SITE_VERSION` set to the version, which `/index.md` names (a build without it names no version);
-3. makes a tree with the Go sources, the built pages, a Dockerfile like the one above, the installer, every release `site/releases.txt` lists as published, and the new one;
+3. makes a tree with the Go sources, the built pages, a Dockerfile that compiles the site's binary in the image and copies it onto `scratch`, the installer, every release `site/releases.txt` lists as published, and the new one;
 4. pushes the tree to the server, which builds the image and runs it, lists the version in `site/releases.txt` as soon as the push succeeds, so every later publish keeps it, and waits until the new version answers.
 
 A version that is already released, listed or in `site/releases`, is refused: building it again would change tarballs its users have checksums for. The release is built in a temporary folder and copied into `site/releases` only once it is pushed, so a publish that fails earlier leaves `site/releases` as it was and can be run again with the same version. `--dry-run` builds the same way and stops before the push.
 
-The releases are not in the binary. They are in the image under `/data/releases`, served with [`weft.WithFiles`](go-serving.md#files-from-disk), so the binary does not grow with each release. `scripts/rollback-site.sh <version>` pushes an earlier version's tree again.
+The releases are not in the binary. They are in the image under `/data/releases`, served with [`warp.WithFiles`](go-serving.md#files-from-disk), so the binary does not grow with each release. `scripts/rollback-site.sh <version>` pushes an earlier version's tree again.
 
 ## Page weight
 

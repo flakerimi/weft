@@ -174,7 +174,7 @@ describe('index.md', () => {
       expect(skill.split('\n').some((l) => re.test(l)), `weft-components: ${point}`).toBe(true)
     }
     // Go, as the app's rules and the weft-go skill put it.
-    const go = 'Go: use the standard library and `github.com/flakerimi/weft`; add a dependency only for what the standard library cannot do, such as a database driver.'
+    const go = 'Go: use the standard library and `github.com/flakerimi/weft/warp`; add a dependency only for what the standard library cannot do, such as a database driver.'
     expect(rules).toContain(go)
     expect(weftGo).toContain(go)
     expect(rules.some((r) => /Do not edit `\.weft\/`/.test(r))).toBe(true)
@@ -185,7 +185,7 @@ describe('index.md', () => {
     const listed = commandsNotYet(comingNext)
     const step = section('6. What is not built yet')
     expect(step).toContain(`${SITE}/docs/coming-next`)
-    expect(step).toContain("- Storing data is the app's own code today: `database/sql` and a driver, in `api/`.")
+    expect(step).toContain("- Storing data is the app's own code today: `database/sql` and a driver, in a module in `app/`.")
     expect(step).toContain(`- The commands ${listed.slice(0, -1).join(', ')} and ${listed.at(-1)}.`)
     for (const c of listed) expect(commands, c).not.toContain(c.replace(/`/g, '').split(' ')[1])
     const names = new Set(catalog.components.map((c) => c.name))

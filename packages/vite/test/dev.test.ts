@@ -174,7 +174,7 @@ describe('devSite', { timeout: 30_000 }, () => {
     expect(await get(dev.url + 'api')).toMatchObject({ status: 200, body: 'api got GET /api' })
     const posted = await fetch(dev.url + 'api/items', { method: 'POST', body: 'x' })
     expect(await posted.text()).toBe('api got POST /api/items')
-    // Only /api and what is under it, as weft.Serve sends to the API.
+    // Only /api and what is under it, as warp.Serve sends to the API.
     const other = await get(dev.url + 'apiary')
     expect(other.status).toBe(404)
     expect(text(other.body)).toContain('Nothing here')

@@ -54,9 +54,9 @@ The `weft` command carries Weft's packages, and puts them in each app it makes. 
 
 `weft create`, `weft dev` and `weft build` check for all three before they write anything.
 
-## In a clone of the repository
+## Working on Weft itself
 
-To work on Weft itself, or to follow [Your first site](first-site.md), which builds inside the repository, clone it. It is private for now, so you need access to it. Install its packages, and build the themes, which the page build reads:
+You need none of this to build an app. To work on Weft itself, clone the repository. It is private for now, so you need access to it. Install its packages, and build the themes, which the page build reads:
 
 ```sh
 git clone git@github.com:flakerimi/weft.git

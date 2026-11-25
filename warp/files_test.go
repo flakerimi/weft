@@ -1,4 +1,4 @@
-package weft
+package warp
 
 import (
 	"net/http"
@@ -160,7 +160,7 @@ func TestWithFilesRefusesASymlink(t *testing.T) {
 	if err := os.Symlink(filepath.Join(dir, "..", "secret"), filepath.Join(dir, "releases", "leak")); err != nil {
 		t.Skip(err)
 	}
-	wantPanic(t, "weft.WithFiles: releases/leak in the folder served at / is a symlink; put the file itself there.", func() {
+	wantPanic(t, "warp.WithFiles: releases/leak in the folder served at / is a symlink; put the file itself there.", func() {
 		Serve(pageBuild(t), nil, WithFiles("/", os.DirFS(dir)))
 	})
 }
@@ -169,23 +169,23 @@ func TestWithFilesRefusesASymlink(t *testing.T) {
 // server never reaches, stops the server from starting, naming it.
 func TestWithFilesConflictsPanic(t *testing.T) {
 	files := fstest.MapFS{"robots.txt": {Data: []byte("x")}}
-	wantPanic(t, "weft.WithFiles: /robots.txt is a file of the build too; serve it from one place only.", func() {
+	wantPanic(t, "warp.WithFiles: /robots.txt is a file of the build too; serve it from one place only.", func() {
 		Serve(pageBuild(t), nil, WithFiles("/", files))
 	})
-	wantPanic(t, "weft.WithFiles: /favicon.svg is a file of the build too; serve it from one place only.", func() {
+	wantPanic(t, "warp.WithFiles: /favicon.svg is a file of the build too; serve it from one place only.", func() {
 		Serve(dist, nil, WithFiles("/", fstest.MapFS{"favicon.svg": {Data: []byte("x")}}))
 	})
-	wantPanic(t, "weft.WithFiles: /about is a page of the build too; serve it from one place only.", func() {
+	wantPanic(t, "warp.WithFiles: /about is a page of the build too; serve it from one place only.", func() {
 		Serve(pageBuild(t), nil, WithFiles("/", fstest.MapFS{"about": {Data: []byte("x")}}))
 	})
-	wantPanic(t, "weft.WithFiles: /x/a is served from two folders; serve it from one place only.", func() {
+	wantPanic(t, "warp.WithFiles: /x/a is served from two folders; serve it from one place only.", func() {
 		Serve(pageBuild(t), nil, WithFiles("/x/", fstest.MapFS{"a": {}}), WithFiles("/", fstest.MapFS{"x/a": {}}))
 	})
-	wantPanic(t, "weft.WithFiles: /api/a is under /api/, which goes to the API; serve the folder at another prefix.", func() {
+	wantPanic(t, "warp.WithFiles: /api/a is under /api/, which goes to the API; serve the folder at another prefix.", func() {
 		Serve(pageBuild(t), nil, WithFiles("/api/", fstest.MapFS{"a": {}}))
 	})
 	for _, prefix := range []string{"", "releases/", "/releases", "/a/../b/", "/a//b/"} {
-		wantPanic(t, `weft.WithFiles: the prefix "`+prefix+`" is not a path that starts and ends with "/", like "/releases/".`, func() {
+		wantPanic(t, `warp.WithFiles: the prefix "`+prefix+`" is not a path that starts and ends with "/", like "/releases/".`, func() {
 			Serve(pageBuild(t), nil, WithFiles(prefix, files))
 		})
 	}
@@ -240,7 +240,7 @@ func TestWithFilesRefusesDotNames(t *testing.T) {
 		} else {
 			hidden = strings.SplitN(name, "/", 2)[0]
 		}
-		wantPanic(t, "weft.WithFiles: "+hidden+" in the folder served at / is named with a leading dot; move it out.", func() {
+		wantPanic(t, "warp.WithFiles: "+hidden+" in the folder served at / is named with a leading dot; move it out.", func() {
 			Serve(pageBuild(t), nil, WithFiles("/", files))
 		})
 	}

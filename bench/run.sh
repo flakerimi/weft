@@ -2,7 +2,7 @@
 # Weft against Astro, Nuxt, Next.js and SvelteKit: build the same landing with
 # each, serve them, measure them.
 #
-#   Weft       bench/weft, built by Weft and served by its own binary (weft.Serve)
+#   Weft       bench/weft, built by Weft and served by its own binary (warp.Serve)
 #   Astro      bench/astro, a static build, served by `astro preview`
 #   Nuxt       bench/nuxt, prerendered, served by its Node server (Nitro)
 #   Next.js    bench/next, prerendered, served by `next start`
@@ -10,7 +10,7 @@
 #
 # Each of the four also has a static build, which is served twice by a plain
 # Go file server (bench/static): gzipped on the fly, and from memory with the
-# brotli and gzip stored at build, the terms weft.Serve gives Weft.
+# brotli and gzip stored at build, the terms warp.Serve gives Weft.
 #
 # Writes bench/results/<date>.json and the table in bench/README.md.
 # Needs Node 22.23.4 or later, pnpm, Go and Google Chrome (CHROME_PATH).

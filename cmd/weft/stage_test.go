@@ -356,6 +356,18 @@ func TestReleaseRefusesAMultiLineVersion(t *testing.T) {
 	}
 }
 
+// release.sh tests the Go packages it ships before it builds: the root
+// package, warp and everything under it, and the CLI.
+func TestReleaseTestsWarp(t *testing.T) {
+	b, err := os.ReadFile("../../scripts/release.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "\ngo test -short . ./warp/... ./cmd/weft\n") {
+		t.Fatal("scripts/release.sh does not run go test -short . ./warp/... ./cmd/weft before it builds")
+	}
+}
+
 // A staged release that differs from the one in SITE/releases (a file added
 // or changed) is refused, not merged, and left as it was.
 func TestStageReleasesRefusesADifferentStagedRelease(t *testing.T) {
@@ -440,10 +452,27 @@ echo "${WEFT_SITE_VERSION:-}" >"$FAKE/site-version"
 mkdir -p site-src/dist
 echo "<p>home</p>" >site-src/dist/index.html
 `, 0o755)
-	write(r.root, "go.mod", "module github.com/flakerimi/weft\n", 0o644)
-	write(r.root, "weft.go", "package weft\n", 0o644)
-	write(r.root, "weft_test.go", "package weft\n", 0o644)
-	write(r.root, "site-src/main.go", "package main\n", 0o644)
+	// The Go of the repository as it is laid out: the root package holds
+	// Version, warp (with a package under it, as later phases add) is what
+	// site-src/main.go imports, and each has a test the tree must leave out.
+	write(r.root, "go.mod", "module github.com/flakerimi/weft\n\ngo 1.26\n", 0o644)
+	write(r.root, "version.go", "package weft\n\nvar Version = \"0.0.0-dev\"\n", 0o644)
+	write(r.root, "version_test.go", "package weft\n\nimport \"testing\"\n\nfunc TestNothing(t *testing.T) { t.Fatal(\"a test file was pushed\") }\n", 0o644)
+	write(r.root, "warp/warp.go", "package warp\n\nimport \"github.com/flakerimi/weft/warp/data\"\n\nfunc Name() string { return data.Name }\n", 0o644)
+	write(r.root, "warp/warp_test.go", "package warp\n\nthis does not compile\n", 0o644)
+	write(r.root, "warp/data/data.go", "package data\n\nconst Name = \"warp\"\n", 0o644)
+	write(r.root, "warp/data/data_test.go", "package data\n\nthis does not compile\n", 0o644)
+	write(r.root, "site-src/main.go", `package main
+
+import (
+	"fmt"
+
+	"github.com/flakerimi/weft"
+	"github.com/flakerimi/weft/warp"
+)
+
+func main() { fmt.Println(weft.Version, warp.Name()) }
+`, 0o644)
 	write(r.root, "site/releases.txt", "0.0.1\n0.0.2\n", 0o644)
 	write(r.root, "site/install", "#!/bin/sh\n", 0o644)
 	for _, v := range []string{"0.0.1", "0.0.2"} {
@@ -529,7 +558,8 @@ func TestPublishSiteKeepsOneTreePerVersion(t *testing.T) {
 		df := r.read("site/pushed/" + v + "/Dockerfile")
 		if !strings.Contains(df, "weft.Version="+v+`"`) || !strings.Contains(df, "COPY site-src/releases /data/releases\nRUN chmod -R u=rwX,go=rX /data/releases\n") ||
 			!strings.Contains(df, "COPY --from=build /data/releases /data/releases\n") ||
-			strings.Contains(df, "COPY . .") {
+			strings.Contains(df, "COPY . .") || !strings.Contains(df, "COPY warp warp\n") ||
+			strings.Index(df, "COPY warp warp\n") > strings.Index(df, "go build") {
 			t.Fatalf("site/pushed/%s/Dockerfile:\n%s", v, df)
 		}
 		if got := r.read("site/pushed/" + v + "/site-src/releases/releases/latest"); got != v+"\n" {
@@ -539,7 +569,7 @@ func TestPublishSiteKeepsOneTreePerVersion(t *testing.T) {
 	got := files(t, pushed)
 	for _, want := range []string{"0.0.3/site-src/releases/install", "0.0.3/site-src/releases/releases/0.0.1/SHA256SUMS",
 		"0.0.3/site-src/releases/releases/0.0.3/SHA256SUMS", "0.0.4/site-src/releases/releases/0.0.4/SHA256SUMS", "0.0.4/go.mod",
-		"0.0.4/site-src/dist/index.html", "0.0.4/site-src/main.go"} {
+		"0.0.4/site-src/dist/index.html", "0.0.4/site-src/main.go", "0.0.4/version.go", "0.0.4/warp/warp.go", "0.0.4/warp/data/data.go"} {
 		if !strings.Contains(","+got+",", ","+want+",") {
 			t.Errorf("site/pushed lacks %s", want)
 		}
@@ -971,6 +1001,31 @@ func TestPublishSiteDryRunPushesNothing(t *testing.T) {
 	}
 	if out, err := r.run("publish-site.sh", "0.0.3"); err != nil {
 		t.Fatalf("publishing 0.0.3 after its dry run: %v\n%s", err, out)
+	}
+}
+
+// The push tree holds all the Go the site's binary needs, warp and the
+// packages under it included, and no test: it compiles with nothing but the
+// tree, as the server compiles it.
+func TestPublishSiteTreeCompiles(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	if out, err := r.run("publish-site.sh", "--dry-run", "0.0.3"); err != nil {
+		t.Fatalf("dry run: %v\n%s", err, out)
+	}
+	trees, _ := filepath.Glob(filepath.Join(r.tmp, "weft-site-push.*"))
+	if len(trees) != 1 {
+		t.Fatalf("dry run trees %v", trees)
+	}
+	got := files(t, trees[0])
+	if strings.Contains(got, "_test.go") || !strings.Contains(","+got+",", ",warp/data/data.go,") {
+		t.Fatalf("the tree holds %s", got)
+	}
+	build := exec.Command("go", "build", "-o", filepath.Join(t.TempDir(), "weft-site"), "./site-src")
+	build.Dir = trees[0]
+	build.Env = append(os.Environ(), "GOFLAGS=-mod=mod", "GOPROXY=off", "GOWORK=off")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("go build ./site-src in the push tree: %v\n%s", err, out)
 	}
 }
 

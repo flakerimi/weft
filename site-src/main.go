@@ -17,6 +17,7 @@ import (
 	"os"
 
 	"github.com/flakerimi/weft"
+	"github.com/flakerimi/weft/warp"
 )
 
 //go:embed all:dist
@@ -66,7 +67,7 @@ func handler(releases fs.FS) http.Handler {
 	if err != nil {
 		panic(err)
 	}
-	return weft.Serve(dist, nil, weft.WithFiles("/", releases))
+	return warp.Serve(dist, nil, warp.WithFiles("/", releases))
 }
 
 func main() {

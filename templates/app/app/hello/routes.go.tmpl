@@ -1,0 +1,29 @@
+// Package hello is the app's first module: one route, GET /api/hello.
+package hello
+
+import (
+	"context"
+
+	"github.com/flakerimi/weft/warp"
+)
+
+// Message is the answer of GET /api/hello.
+type Message struct {
+	Message string `json:"message"`
+}
+
+type module struct{}
+
+func (module) Name() string { return "hello" }
+
+func (module) Register(app *warp.App) error {
+	warp.Get(app, "/hello", hello)
+	return nil
+}
+
+// Module returns the module, for app/modules.go to list.
+func Module() warp.Module { return module{} }
+
+func hello(ctx context.Context, _ warp.None) (Message, error) {
+	return Message{Message: "Hello from Go"}, nil
+}

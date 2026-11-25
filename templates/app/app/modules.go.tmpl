@@ -1,0 +1,15 @@
+// Package app lists the modules of the app.
+package app
+
+import (
+	"github.com/flakerimi/weft/warp"
+
+	"[[.Module]]/app/hello"
+)
+
+// Modules is the one list of the app's modules, in the order they start.
+func Modules() []warp.Module {
+	return []warp.Module{
+		hello.Module(),
+	}
+}

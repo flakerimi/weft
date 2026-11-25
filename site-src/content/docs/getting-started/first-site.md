@@ -1,73 +1,30 @@
 ---
-title: Your first site
-description: Make a site with one page, build it, and see what the build writes.
+title: Your first page
+description: Add a page to the app, see it under weft dev, build it, and see what the build writes.
 order: 12
 ---
 
-On this page you make a site with one page, build it, and look at what the build writes. You need the repository set up as [Install](install.md) describes. Run every command from the repository's root.
-
-## Make the site
-
-A Weft site is a folder with a `package.json` and a `pages/` folder. Make one called `hello`:
-
-```sh
-mkdir -p hello/pages
-```
-
-Add it to the workspace, at the end of `pnpm-workspace.yaml`:
-
-```yaml
-packages:
-  - packages/*
-  - playground/web
-  - site-src
-  - bench/weft
-  - hello
-```
-
-Write `hello/package.json`:
-
-```json
-{
-  "name": "hello",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "build": "weft-build-pages --root . --out dist"
-  },
-  "dependencies": {
-    "@weft/ui": "workspace:*",
-    "vue": "3.6.0-rc.16"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-vue": "^6.0.11",
-    "@weft/vite": "workspace:*",
-    "vite": "^8.3.8"
-  }
-}
-```
-
-`weft-build-pages` comes from `@weft/vite`. Vue is pinned to the release candidate Weft is built on.
+On this page you add a page to the app you made in [Create an app](create-an-app.md), see it while `weft dev` runs, build it, and look at what the build writes. Run every command in the app's folder, `myapp`.
 
 ## Write a page
 
-Each `.vue` file in `pages/` is a page. `pages/index.vue` is `/`. Write `hello/pages/index.vue`:
+Each `.vue` file in `web/pages/` is a page, and its path is its route: `web/pages/index.vue` is `/`, and `web/pages/about.vue` is `/about`. Write `web/pages/about.vue`:
 
 ```vue
 <script setup vapor lang="ts">
-import { Card, Grid, Page, Section, useHead } from '@weft/ui'
+import { useHead } from '@weft/ui'
 
-useHead({ title: 'Hello', description: 'My first Weft site.' })
+useHead({ title: 'About', description: 'What this app is for.' })
 
 const notes = [
-  { title: 'Built ahead', text: 'This page was rendered when you built it.' },
+  { title: 'Built ahead', text: 'This page is rendered when the app is built.' },
   { title: 'No script', text: 'It has no island, so it loads no JavaScript.' },
 ]
 </script>
 
 <template>
   <div data-weft-surface="landing">
-    <Page title="Hello" description="My first Weft site.">
+    <Page title="About" description="What this app is for.">
       <Section title="What you see">
         <Grid>
           <Card v-for="note in notes" :key="note.title">
@@ -82,32 +39,40 @@ const notes = [
 ```
 
 - `vapor` on the script makes it a Vapor component. Weft's components are all Vapor; write yours the same way.
-- `useHead` sets the page's title and description.
+- `Page`, `Section`, `Grid` and `Card` are Weft's components, which need no import in a `.vue` file. `useHead` is a function, so it is imported from `@weft/ui`; it sets the page's title and description.
 - `data-weft-surface="landing"` gives the page the landing surface: larger text and a capped width. See [the adaptive model](../guides/adaptive.md).
+
+## See it
+
+```sh
+weft dev
+```
+
+Open `http://localhost:5173/about`. The page's title is `About`, and it shows the two cards. `weft dev` renders each page when it is asked for, so a page you add or save shows on the next request, with no restart. A path with no page, such as `/nope`, gets `web/pages/404.vue` with status 404.
+
+Ctrl-C stops `weft dev`.
 
 ## Build it
 
-Install, so pnpm links the new site, then build:
-
 ```sh
-pnpm install
-pnpm --filter hello build
+weft build
 ```
 
-It prints `weft: built 1 page into dist`.
+It prints `weft: built 3 pages into web/dist`, for `index`, `about` and `404`, then `Built myapp`.
 
 ## What the build writes
 
-`hello/dist/` now holds:
+`web/dist/` now holds, among the rest:
 
 | File | What it is |
 | --- | --- |
-| `pages/index/index.html` | The page, rendered, with its CSS inlined |
-| `pages/index/index.html.br`, `.gz` | The same page, compressed with brotli and gzip |
+| `pages/about/index.html` | The page, rendered, with its CSS inlined |
+| `pages/about/index.html.br`, `.gz` | The same page, compressed with brotli and gzip |
+| `assets/` | The scripts of the islands, such as `Hello` on the front page, and their compressed copies |
 | `routes.json` | Each page's path and file |
 | `manifest.json` | Every file to serve, with its type and ETag |
 | `.weft-build` | The list of files the build wrote, so the next build can replace them safely |
 
-The page has the theme, Weft's base styles and the CSS of the components it renders, and nothing else. It has no island, so it has no script tag that loads JavaScript.
+The page has the theme, Weft's base styles and the CSS of the components it renders, and nothing else. It has no island, so it has no script tag that loads JavaScript. The binary embeds `web/dist`, and `./myapp` serves the page at `/about`. [Pages and islands](../guides/pages-and-islands.md) says more about pages.
 
-Nothing serves `dist/` yet. Next, [add a Go handler](first-go-handler.md) that does.
+Next, [add a Go route](first-go-handler.md) that the pages can call.

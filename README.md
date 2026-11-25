@@ -43,14 +43,41 @@ Weft is the set of pieces, built once:
 ## A taste
 
 ```go
-//go:embed all:web/dist
-var web embed.FS
+// app/stats/routes.go: a module with one typed route, GET /api/stats/{id}.
+package stats
 
-func main() {
-	dist, _ := fs.Sub(web, "web/dist")
-	api := http.NewServeMux()
-	api.HandleFunc("GET /api/stats", stats)
-	http.ListenAndServe(":8080", weft.Serve(dist, api))
+import (
+	"context"
+	"fmt"
+
+	"github.com/flakerimi/weft/warp"
+)
+
+type Stat struct {
+	Name  string `json:"name"`
+	Value int    `json:"value"`
+}
+
+type StatIn struct {
+	ID int `path:"id"`
+}
+
+type module struct{}
+
+func (module) Name() string { return "stats" }
+
+func (module) Register(app *warp.App) error {
+	warp.Get(app, "/stats/{id}", show)
+	return nil
+}
+
+func Module() warp.Module { return module{} }
+
+func show(ctx context.Context, in StatIn) (Stat, error) {
+	if in.ID != 1 {
+		return Stat{}, warp.NotFound(fmt.Sprintf("No stat has id %d.", in.ID))
+	}
+	return Stat{Name: "ONTs online", Value: 1284}, nil
 }
 ```
 
@@ -72,9 +99,11 @@ const stats = [{ name: 'ONTs online', value: 1284 }, { name: 'Open tickets', val
 </template>
 ```
 
-`weft.Serve` sends `/api/*` to your handlers, serves hashed assets with a
-year-long cache, and answers every other path with `index.html` so the router
-can take it.
+The Go side is Warp (`github.com/flakerimi/weft/warp`): an app is a list of
+modules, each route is a typed Go function whose input is filled from the
+request and validated before it runs, and every error answers in one JSON
+shape. `warp.Serve` serves the built pages from memory, already compressed,
+beside the API under `/api`.
 
 ## How it adapts
 
@@ -116,16 +145,21 @@ Pre-alpha. What exists today:
   roving focus, floating and typeahead
 - `@weft/vite`: the page build, server rendering, islands, Markdown content
   and a dev server
-- `weft.Serve` for embedded frontends, and a playground that uses all of it
+- Warp, the Go side (`github.com/flakerimi/weft/warp`): an app of modules,
+  typed routes with validation, one error shape, `.env` configuration, and
+  `warp.Serve` for the embedded pages; and a playground that uses all of it
 - weft.base.al: the docs, the component gallery, the skills, and the files
   for agents, `/index.md` (the page to point an agent at, from the next
   release) and `/llms.txt`
 
-Next, in order: the Go-to-Vue contract (types and validation generated from
-Go structs) with login and permissions, app routes, app blocks and live
-charts (`weft add crud`), the rest of the agent kit (lint rules, `weft check`,
-MCP), site features, and landing blocks. The full design is in
-[`docs/superpowers/specs/2026-11-20-weft-design.md`](docs/superpowers/specs/2026-11-20-weft-design.md).
+Next: Warp's phases W2 to W7 (TypeScript types from the Go types, data on
+`database/sql`, login and permissions, `weft scaffold` with app blocks,
+attachments and live data, and more modules), app routes, the rest of the
+agent kit (lint rules, `weft check`, MCP), site features, and landing blocks.
+The designs are
+[`docs/superpowers/specs/2026-11-20-weft-design.md`](docs/superpowers/specs/2026-11-20-weft-design.md)
+and, for the Go side,
+[`docs/superpowers/specs/2026-11-23-warp-design.md`](docs/superpowers/specs/2026-11-23-warp-design.md).
 
 ## Develop
 

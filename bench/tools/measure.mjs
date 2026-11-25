@@ -47,7 +47,7 @@ if (!args.load || !args.out) {
 // The servers bench/run.sh starts, by port. Every framework has three: its
 // own production server, a plain Go file server that gzips on the fly, and the
 // same Go server answering from memory with the brotli and gzip stored at
-// build (the terms weft.Serve gives Weft).
+// build (the terms warp.Serve gives Weft).
 const at = (port) => `http://127.0.0.1:${port}`
 const GZIP = 'Go static + gzip, GOMAXPROCS=1'
 const PACKED = 'Go, pre-compressed in memory, GOMAXPROCS=1'
@@ -60,7 +60,7 @@ const astro = { own: 4321, gzip: 4302, packed: 4303 }
 const preview = { id: 'preview', server: 'astro preview' }
 
 const targets = [
-  { id: 'weft', label: 'Weft', server: 'weft binary (weft.Serve), GOMAXPROCS=1', kind: 'own', url: `${at(4301)}/` },
+  { id: 'weft', label: 'Weft', server: 'weft binary (warp.Serve), GOMAXPROCS=1', kind: 'own', url: `${at(4301)}/` },
   ...site('astro-vue', 'Astro, Vue island', preview, astro),
   ...site('astro-plain', 'Astro, no framework island', preview, astro, '/no-framework/'),
   ...site('nuxt', 'Nuxt', { id: 'node', server: 'its Node server (Nitro)' }, { own: 4313, gzip: 4311, packed: 4312 }),

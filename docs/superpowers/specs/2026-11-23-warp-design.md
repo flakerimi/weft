@@ -101,9 +101,11 @@ shop/
 ### The core
 
 ```go
-app := warp.New(warp.FromEnv())
-app.Use(auth.Module(), storage.Module(), products.Module())
-log.Fatal(app.Serve(dist))
+server := warp.New(warp.FromEnv())
+server.Use(app.Modules()...) // auth.Module(), storage.Module(), products.Module(), listed in app/modules.go
+if err := server.Serve(dist); err != nil {
+	log.Fatal(err)
+}
 ```
 
 - **A module** is `Name() string` and `Register(app *warp.App) error`. Optional interfaces add a step: `Migrator` (tables), `Starter` and `Stopper` (background work). The app starts modules in the order listed and stops them in reverse.
@@ -199,7 +201,7 @@ These replace phases 4b and 5 of the Weft design. Each gets its own plan.
 
 | Phase | Contents |
 | --- | --- |
-| W1 | The core: `warp.App`, modules, env configuration, typed routes on `ServeMux`, the error shape, validation; `weft.Serve` becomes `warp.Serve`; the template's `main.go` and `app/` move to this shape |
+| W1 | Delivered (plan `docs/superpowers/plans/2026-11-25-warp-core.md`). The core: `warp.App`, modules, env configuration, typed routes on `ServeMux`, the error shape, validation; `weft.Serve` becomes `warp.Serve`; the template's `main.go` and `app/` move to this shape |
 | W2 | `warp/describe`, `weft gen` (types, the typed client, form schemas), `weft routes`; `weft dev` regenerates on a Go change |
 | W3 | `warp/data`: `Store`, additive migrations, list queries, `warp.Resource`; SQLite, then PostgreSQL, then MySQL |
 | W4 | `auth`: sessions, users, roles, permissions; `useSession`, the login page, `perm`, the route guard; `mail` with the `log` and `smtp` drivers |
@@ -227,6 +229,40 @@ W1 starts after phase 4 (app tooling) lands, because it changes the template tha
 - SQLite by default through a pure-Go driver.
 - Modules are listed explicitly in `app/modules.go`; nothing registers itself from an `init` function.
 - Scaffolding never deletes: there is no `destroy` command.
+
+Made while planning and building W1 (2026-11-25):
+
+- No `weft.Serve` is left behind: the root package keeps only `Version`. Nothing is published, so a forwarding function would only be a second name.
+- `warp.Serve(dist, api, opts...)` is the handler, as `weft.Serve` was; `app.Serve(dist)` builds it over the app's own API, listens, and stops cleanly on SIGINT or SIGTERM. The template calls `log.Fatal` only when `Serve` returns an error, since a clean stop returns nil.
+- Mistakes in registration are collected, not panicked: `app.Use`, `app.Handle` and `warp.Get` return nothing, and `app.Err()` and `app.Serve` report every mistake, one sentence each. `warp.Get(app, ...)` has no error to check, and a panic at import time has no place to name the file.
+- Route paths are written without `/api`, which the app adds: `warp.Get(app, "/products/{id}", show)` answers at `/api/products/{id}`.
+- Every exported field of an input struct has exactly one `json`, `query` or `path` tag. A field without one is a registration mistake, so no field gets Go's default name in a snake_case API.
+- Struct types inside a body field are checked at registration too: every exported field needs a usable `json` name, and a `query` or `path` tag inside is a mistake. An input that embeds a pointer to a struct is a mistake, since a body that leaves its fields out would leave it nil and a promoted field would panic.
+- An unknown field in a JSON body is a 400. A misspelt field that is silently dropped is how an update loses data.
+- Typed routes take JSON bodies only: a body that is not empty must be `application/json` or a `+json` type, else 415 `unsupported_media_type`. A page on another site can send a form or `text/plain` with the visitor's cookies and no preflight, and sessions in cookies come in W4. This keeps another site from sending a route a body; it does not protect a route that takes no body (see the W4 note below). A body that is JSON but not an object is a 400.
+- `POST` answers 201 unless the route says `warp.Status(200)`; an output of `warp.None` answers 204.
+- A path value that does not convert is a 404, not a 400: `/api/products/abc` names nothing.
+- `required` on a pointer passes whenever the pointer is not nil: a pointer is how an input says "present, and it may be zero". Every other rule passes an empty value, except behind a pointer that is not nil (see the fix wave below).
+- `unique` is parsed in W1 and enforced in W3, by `warp/data`, which is the first thing that can look.
+- `weft dev` sets `HOST=127.0.0.1`, and `warp` watches for the dev parent, so `dist_dev.go` keeps no logic.
+- `weft build` makes the binary to ship (the owner, 2026-11-25: the docs say `weft build`, not `go build`). It builds with `-trimpath -ldflags "-s -w"`, and with `CGO_ENABLED=0` unless the environment sets it; `GOOS` and `GOARCH` come from the environment. No doc page builds a site by hand inside the Weft repository.
+- Out of W1: `filter[...]` and list queries (W3), present-or-absent `PATCH` fields (W3), `auth.Can` and a route's permission (W4), `warp/describe` (W2). `Route` is shaped so each can add a field.
+
+Made in W1's final fix wave (2026-11-25):
+
+- What a 422 lists is bounded: at most 100 fields, at most 16 KiB of key bytes in all, counted before JSON escaping (a map key of escaped characters can make the answer up to about 100 KB), and no field whose key is longer than 1 KiB; when one is left out the message is `More fields need attention than are listed; the first N are listed.` (`More fields need attention than can be listed.` when none is). The walk stops once the 100 or the 16 KiB are spent, and lists in a fixed order: struct fields as declared, list entries by index, map entries by sorted key. A typed route also refuses a body nested more than 64 levels deep, before decoding: 400, `The body is nested more than 64 levels deep.` Before these, a 103 KB body could make a 100 MB answer.
+- A rule on a pointer that is not nil applies to what it points at, even a zero: the pointer says the value was sent, so `min=1` on a `*int` holding 0 fails. `required` on it still passes, and a zero not behind a pointer is still empty.
+- `warp.Option`, the page-serving option, is `warp.ServeOption`, leaving `Option` free for the app's own options later. No alias is kept.
+- `warp.Status` takes 200 to 599: a 1xx is not an answer a route can give.
+
+## Notes from W1 for later phases
+
+- **W2.** `Route` has no name or metadata, and the typed client needs a name per route. The parsed rules are unexported, so `warp/describe` needs them exported. `Out` types are not checked at registration. A wrong-typed value inside a list or map is reported without its index or key (`lines.qty`), which the form schema will need.
+- **W3.** A present-or-absent `PATCH` needs the raw body, which `Request(ctx)` no longer has. `float32` fields are compared with their rules after widening, so `float32(0.1)` fails `max=0.1`.
+- **W4.** `RouteOption` is a func over an unexported struct, so `auth.Can` in another package can only compose `With`: it needs an exported way to attach a permission to a route. A route that takes no body is open cross-site, so the session cookie must be `SameSite=Lax` or stricter, or state-changing routes need an `Origin` check.
+- **W6.** `Shutdown` does not cancel request contexts, so an open SSE stream makes each stop take the full 10 s: it needs a `BaseContext` cancelled at the drain. `Start`'s context ends at the stop signal, before the drain. Shutdown's error is always reported as a timeout.
+- **W7.** There is no body-read or idle timeout.
+- **Validation's cost, if `MAX_BODY_MB` is raised far above 1.** Validating a map whose entries fail costs about one allocation per failing entry (about 24 MB for 100,000), and a nested map is probed again for each failing map above it. Both are bounded by the body limit.
 
 ## Open for the owner
 

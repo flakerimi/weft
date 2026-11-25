@@ -1,4 +1,5 @@
-package weft
+// Package warp is the Go side of a Weft app: its modules, typed routes and serving.
+package warp
 
 import (
 	"io/fs"
@@ -39,7 +40,7 @@ const (
 // Serve panics if dist has no index.html.
 //
 // Options add to what is served: WithFiles serves a folder on disk beside dist.
-func Serve(dist fs.FS, api http.Handler, opts ...Option) http.Handler {
+func Serve(dist fs.FS, api http.Handler, opts ...ServeOption) http.Handler {
 	if api == nil {
 		api = http.HandlerFunc(noAPI)
 	}
@@ -80,7 +81,7 @@ func Serve(dist fs.FS, api http.Handler, opts ...Option) http.Handler {
 func spa(dist fs.FS) http.Handler {
 	index, err := fs.ReadFile(dist, "index.html")
 	if err != nil {
-		panic("weft.Serve: dist has no index.html")
+		panic("warp.Serve: dist has no index.html")
 	}
 	files := http.FileServerFS(dist)
 
@@ -108,8 +109,6 @@ func spa(dist fs.FS) http.Handler {
 	})
 }
 
-func noAPI(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotFound)
-	w.Write([]byte(`{"error":{"code":"not_found","message":"no API"}}` + "\n"))
+func noAPI(w http.ResponseWriter, r *http.Request) {
+	WriteError(w, r, NotFound("This app has no API."))
 }

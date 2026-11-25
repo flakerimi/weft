@@ -227,7 +227,7 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
     } catch {
       return next()
     }
-    // A page at its path, with or without a trailing slash, as weft.Serve has it.
+    // A page at its path, with or without a trailing slash, as warp.Serve has it.
     const path = exact.length > 1 && exact.endsWith('/') ? exact.slice(0, -1) : exact
     const done = queue.then(() => answer(path, exact))
     queue = done.catch(() => {})

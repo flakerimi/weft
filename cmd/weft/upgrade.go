@@ -4,9 +4,14 @@ import (
 	"cmp"
 	"flag"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
+	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/flakerimi/weft"
@@ -39,6 +44,7 @@ func upgradeCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	if cfg.Version == weft.Version {
 		fmt.Fprintf(stdout, "%s is already on Weft %s\n", name, weft.Version)
+		sayWeftServe(appDir, stderr)
 		return 0
 	}
 	if newerVersion(cfg.Version, weft.Version) {
@@ -67,7 +73,71 @@ func upgradeCmd(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	fmt.Fprintf(stdout, "Moved %s from Weft %s to %s\n", name, cfg.Version, weft.Version)
+	sayWeftServe(appDir, stderr)
 	return 0
+}
+
+// sayWeftServe says how to move an app whose Go, in its folder's .go files,
+// still uses weft.Serve, which moved to warp: an app made by Weft 0.0.6 or
+// before does not compile once upgraded. main.go is looked at first.
+func sayWeftServe(appDir string, stderr io.Writer) {
+	entries, _ := os.ReadDir(appDir)
+	names := []string{"main.go"}
+	for _, e := range entries {
+		if n := e.Name(); strings.HasSuffix(n, ".go") && n != "main.go" && !e.IsDir() {
+			names = append(names, n)
+		}
+	}
+	for _, n := range names {
+		if usesWeftServe(filepath.Join(appDir, n)) {
+			fmt.Fprintf(stderr, "weft upgrade: %s still calls weft.Serve, which moved; see https://weft.base.al/docs/reference/cli#moving-an-app-to-warp for the two lines to change.\n", n)
+			return
+		}
+	}
+}
+
+// usesWeftServe reports whether the Go file at path uses Serve from the root
+// package, github.com/flakerimi/weft, under whatever name it is imported:
+// the code is parsed, so a comment naming weft.Serve is not a use. A file
+// that does not parse is left to the Go compiler.
+func usesWeftServe(path string) bool {
+	f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution)
+	if err != nil {
+		return false
+	}
+	name := ""
+	for _, imp := range f.Imports {
+		if p, _ := strconv.Unquote(imp.Path.Value); p == "github.com/flakerimi/weft" {
+			name = "weft"
+			if imp.Name != nil {
+				name = imp.Name.Name
+			}
+		}
+	}
+	if name == "" || name == "_" {
+		return false
+	}
+	found := false
+	var look func(n ast.Node) bool
+	look = func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.SelectorExpr:
+			if x, ok := n.X.(*ast.Ident); ok && x.Name == name && n.Sel.Name == "Serve" {
+				found = true
+			}
+			// What follows the dot is another package's or a value's own name.
+			ast.Inspect(n.X, look)
+			return false
+		case *ast.Ident:
+			// Imported with a dot, Serve is named alone.
+			if name == "." && n.Name == "Serve" {
+				found = true
+			}
+		}
+		return !found
+	}
+	ast.Inspect(f, look)
+	return found
 }
 
 // newerVersion says whether version a is newer than b, by semantic

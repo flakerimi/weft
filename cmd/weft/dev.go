@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	// devPoll is how often weft dev looks for a changed .go file.
+	// devPoll is how often weft dev looks for a changed .go file or .env.
 	devPoll = 300 * time.Millisecond
 	// devGrace is how long a child that stopped may wait for weft dev's own
 	// stop: a signal sent to every process, as at a shutdown, may reach a
@@ -47,9 +47,9 @@ func devCmd(args []string, stdout, stderr io.Writer) int {
 
 // dev runs the app's Go server, built with the dev tag, and the page server
 // (weft-dev), which proxies /api to it, until ctx is done: then it stops both
-// and returns 0. When a .go file changes it rebuilds the Go server and, if the
-// build succeeds, replaces the running one. A child that stops by itself
-// stops the other and makes it return 1.
+// and returns 0. When a .go file or the app's .env changes it rebuilds the Go
+// server and, if the build succeeds, replaces the running one. A child that
+// stops by itself stops the other and makes it return 1.
 func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	const usage = "usage is weft dev [--port n]."
 	stdout, stderr = locked(stdout), locked(stderr)
@@ -140,7 +140,7 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	goServer := func() (*child, error) {
 		cmd := exec.Command(bin)
 		cmd.Dir = appDir
-		cmd.Env = append(os.Environ(), "PORT="+strconv.Itoa(goPort), "WEFT_DEV_PARENT=1")
+		cmd.Env = append(os.Environ(), "PORT="+strconv.Itoa(goPort), "HOST=127.0.0.1", "WEFT_DEV_PARENT=1")
 		cmd.Stdin = parentIn
 		cmd.Stdout, cmd.Stderr = stdout, stderr
 		return startChild("the Go server", cmd)
@@ -223,7 +223,7 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			pageOut.quiet.Store(true)
 			stopAll()
 			if !apiReady {
-				fmt.Fprintf(stderr, "weft dev: the Go server did not answer within %d s; make main.go listen on the port in the PORT variable.\n", int(devReadyWithin.Seconds()))
+				fmt.Fprintf(stderr, "weft dev: the Go server did not answer within %d s; check that main.go serves the app (warp's Serve reads PORT), and run weft dev again.\n", int(devReadyWithin.Seconds()))
 			} else {
 				fmt.Fprintf(stderr, "weft dev: the page server did not answer within %d s; see its output above.\n", int(devReadyWithin.Seconds()))
 			}
@@ -330,10 +330,11 @@ func goBuild(ctx context.Context, appDir, bin string, stderr io.Writer) bool {
 	return cmd.Run() == nil
 }
 
-// goFiles returns the modification time of every .go file in the app, by
-// path, outside the folders at its top that hold no Go of the app's: .weft,
-// .git, node_modules and web. A folder it may not read, such as a database
-// volume of another user, is skipped and passed to unreadable, if not nil.
+// goFiles returns the modification time of every .go file in the app, and of
+// its .env at the top, by path, outside the folders at its top that hold no
+// Go of the app's: .weft, .git, node_modules and web. A folder it may not
+// read, such as a database volume of another user, is skipped and passed to
+// unreadable, if not nil.
 func goFiles(appDir string, unreadable func(dir string)) (map[string]time.Time, error) {
 	files := map[string]time.Time{}
 	err := filepath.WalkDir(appDir, func(p string, d fs.DirEntry, err error) error {
@@ -359,7 +360,7 @@ func goFiles(appDir string, unreadable func(dir string)) (map[string]time.Time, 
 			}
 			return nil
 		}
-		if !strings.HasSuffix(d.Name(), ".go") {
+		if !strings.HasSuffix(d.Name(), ".go") && !(d.Name() == ".env" && filepath.Dir(p) == appDir) {
 			return nil
 		}
 		info, err := d.Info()

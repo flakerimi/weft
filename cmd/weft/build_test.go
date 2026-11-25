@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -138,6 +140,41 @@ func assertServes(t *testing.T, bin string) {
 	if code, body := get(t, url+"/nope"); code != 404 || !strings.Contains(body, "Not found") {
 		t.Errorf("GET /nope = %d %q", code, body)
 	}
+	if code, body := get(t, url+"/api/nope"); code != 404 || !strings.Contains(body, `"code":"not_found"`) {
+		t.Errorf("GET /api/nope = %d %q", code, body)
+	}
+	// A PORT that is no number stops the binary, with a sentence.
+	cmd := exec.Command(bin)
+	cmd.Env = append(os.Environ(), "PORT=abc")
+	out, err := cmd.CombinedOutput()
+	if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 1 {
+		t.Errorf("PORT=abc: %v, want exit 1", err)
+	}
+	if want := `PORT is "abc"; set it to a number from 1 to 65535 in .env or the environment.`; !strings.Contains(string(out), want) {
+		t.Errorf("PORT=abc printed %q, want %q", out, want)
+	}
+}
+
+func TestGoBuildArgs(t *testing.T) {
+	want := []string{"build", "-trimpath", "-ldflags", "-s -w", "-o", "x", "."}
+	if got := goBuildArgs("x"); !slices.Equal(got, want) {
+		t.Errorf("goBuildArgs = %q, want %q", got, want)
+	}
+}
+
+func TestGoBuildEnv(t *testing.T) {
+	in := []string{"PATH=/bin", "GOOS=linux"}
+	want := []string{"PATH=/bin", "GOOS=linux", "CGO_ENABLED=0"}
+	if got := goBuildEnv(in); !slices.Equal(got, want) {
+		t.Errorf("goBuildEnv(%q) = %q, want %q", in, got, want)
+	}
+	if len(in) != 2 {
+		t.Error("goBuildEnv changed its argument")
+	}
+	set := []string{"PATH=/bin", "CGO_ENABLED=1"}
+	if got := goBuildEnv(set); !slices.Equal(got, set) {
+		t.Errorf("goBuildEnv(%q) = %q, want it unchanged", set, got)
+	}
 }
 
 func TestBuildMakesBinary(t *testing.T) {
@@ -155,6 +192,19 @@ func TestBuildMakesBinary(t *testing.T) {
 		t.Errorf("the page build's output was not passed through: %q", out)
 	}
 	assertServes(t, filepath.Join(app, "myapp"))
+
+	// A build for another system is one command: GOOS and GOARCH pass through.
+	t.Setenv("GOOS", "linux")
+	t.Setenv("GOARCH", "arm64")
+	if code, out, errs := build(t, "-o", "cross"); code != 0 {
+		t.Fatalf("cross build: exit %d: %s%s", code, out, errs)
+	}
+	head, err := os.ReadFile(filepath.Join(app, "cross"))
+	if err != nil || len(head) < 4 || string(head[:4]) != "\x7fELF" {
+		t.Errorf("GOOS=linux GOARCH=arm64 weft build -o cross wrote no ELF file: %v", err)
+	}
+	t.Setenv("GOOS", runtime.GOOS)
+	t.Setenv("GOARCH", runtime.GOARCH)
 
 	// The pages typecheck once the build has written web/.weft-types.
 	if out, err := exec.Command("pnpm", "typecheck").CombinedOutput(); err != nil {
@@ -340,6 +390,62 @@ func TestUpgradeMovesApp(t *testing.T) {
 	out.Reset()
 	if code := run([]string{"upgrade", "--no-install"}, &out, &errb); code != 0 || out.String() != "myapp is already on Weft 0.1.0\n" {
 		t.Errorf("second upgrade: exit %d, stdout %q", code, out.String())
+	}
+}
+
+// An app made by 0.0.6, whose main.go calls weft.Serve, does not compile once
+// moved: weft upgrade says so, after its normal output, and still exits 0.
+func TestUpgradeNamesWeftServe(t *testing.T) {
+	otherVersionApp(t, "0.0.5")
+	setVersion(t, "0.1.0")
+	old := "package main\n\nimport \"github.com/flakerimi/weft\"\n\nfunc main() { _ = weft.Serve(nil, nil) }\n"
+	if err := os.WriteFile("main.go", []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const tail = " still calls weft.Serve, which moved; see https://weft.base.al/docs/reference/cli#moving-an-app-to-warp for the two lines to change.\n"
+	code, out, errs := runCmd("upgrade", "--no-install")
+	if code != 0 || out != "Moved myapp from Weft 0.0.5 to 0.1.0\n" || errs != "weft upgrade: main.go"+tail {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errs)
+	}
+	// Run again, on the same version, it still says so; and it names the file.
+	if err := os.WriteFile("main.go", []byte("package main\n\nfunc main() { serve() }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("serve.go", []byte(strings.Replace(old, "func main()", "func serve()", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs = runCmd("upgrade", "--no-install")
+	if code != 0 || out != "myapp is already on Weft 0.1.0\n" || errs != "weft upgrade: serve.go"+tail {
+		t.Fatalf("again: exit %d, stdout %q, stderr %q", code, out, errs)
+	}
+}
+
+// The check reads the Go, not the text: a comment naming weft.Serve is not a
+// call, and the root package under another name is still the root package.
+func TestSayWeftServeReadsTheGo(t *testing.T) {
+	const say = " still calls weft.Serve, which moved; see https://weft.base.al/docs/reference/cli#moving-an-app-to-warp for the two lines to change.\n"
+	for _, c := range []struct {
+		name, src, want string
+	}{
+		{"a comment", "package main\n\nimport \"github.com/flakerimi/weft/warp\"\n\n// was weft.Serve(dist, api.Handler())\n/* weft.Serve */\nfunc main() { warp.Serve(nil, nil) }\n", ""},
+		{"a call", "package main\n\nimport \"github.com/flakerimi/weft\"\n\nfunc main() { weft.Serve(nil, nil) }\n", "weft upgrade: main.go" + say},
+		{"another name", "package main\n\nimport w \"github.com/flakerimi/weft\"\n\nfunc main() { w.Serve(nil, nil) }\n", "weft upgrade: main.go" + say},
+		{"Version only", "package main\n\nimport \"github.com/flakerimi/weft\"\n\nfunc main() { println(weft.Version) }\n", ""},
+		{"a dot import", "package main\n\nimport . \"github.com/flakerimi/weft\"\n\nfunc main() { Serve(nil, nil) }\n", "weft upgrade: main.go" + say},
+		{"a dot import, and warp.Serve", "package main\n\nimport (\n\t. \"github.com/flakerimi/weft\"\n\t\"github.com/flakerimi/weft/warp\"\n)\n\nfunc main() { println(Version); warp.Serve(nil, nil) }\n", ""},
+		{"another package named weft", "package main\n\nimport weft \"example.com/weft\"\n\nfunc main() { weft.Serve() }\n", ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(c.src), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			var errb bytes.Buffer
+			sayWeftServe(dir, &errb)
+			if errb.String() != c.want {
+				t.Fatalf("stderr %q, want %q", errb.String(), c.want)
+			}
+		})
 	}
 }
 

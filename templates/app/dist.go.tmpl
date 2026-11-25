@@ -5,8 +5,6 @@ package main
 import (
 	"embed"
 	"io/fs"
-	"log"
-	"net/http"
 )
 
 //go:embed all:web/dist
@@ -18,10 +16,4 @@ func init() {
 		panic(err)
 	}
 	dist = sub
-}
-
-// listen serves h at port on every interface, and says where.
-func listen(port string, h http.Handler) error {
-	log.Printf("[[.Name]] on http://localhost:%s", port)
-	return http.ListenAndServe(":"+port, h)
 }

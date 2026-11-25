@@ -5,7 +5,7 @@
 //
 // With -precompressed it serves a folder that bench/tools/precompress.mjs
 // prepared from memory, sending the brotli or gzip stored beside each file
-// (precompressed.go): the same serving terms as weft.Serve, for any site.
+// (precompressed.go): the same serving terms as warp.Serve, for any site.
 //
 // Usage: static -dir bench/astro/dist [-addr 127.0.0.1:4302] [-precompressed]
 package main

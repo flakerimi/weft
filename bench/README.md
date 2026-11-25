@@ -8,7 +8,7 @@ counter. The text is one file, [`content.json`](content.json), that every site i
 
 | Folder | What it is |
 |---|---|
-| [`weft/`](weft) | The Weft site: `pages/index.vue` with `@weft/ui`, the counter as a Vapor island, built by `weft-build-pages` and embedded in a Go binary that serves it with `weft.Serve` (like `site-src`). Part of the pnpm workspace. |
+| [`weft/`](weft) | The Weft site: `pages/index.vue` with `@weft/ui`, the counter as a Vapor island, built by `weft-build-pages` and embedded in a Go binary that serves it with `warp.Serve` (like `site-src`). Part of the pnpm workspace. The results below, from 2026-11-25, label its server `weft binary (weft.Serve)`, as their results file recorded it before `weft.Serve` became `warp.Serve`; later runs label it `weft binary (warp.Serve)`. |
 | [`astro/`](astro) | The Astro site: `/` with the counter as a Vue island (`@astrojs/vue`, `client:idle`), and `/no-framework/` with the counter as a plain `<script>` in an `.astro` component. |
 | [`nuxt/`](nuxt) | The Nuxt site: `app/pages/index.vue`, the counter a Vue component. Built twice: `nuxt generate` (static) and `nuxt build` (its Node server, Nitro, with the page prerendered). |
 | [`next/`](next) | The Next.js site: the App Router, the page a server component and the counter its one client component. Built twice: a static export and the build `next start` serves, the page prerendered in both. |
@@ -55,7 +55,7 @@ to `<file>` and leaves `results/` and this page alone.
      SvelteKit's `adapter-node` server, which stores brotli and gzip at build as Weft does;
   2. **`static/`, gzip on the fly**: a plain Go file server, so no framework is judged only by its own server;
   3. **`static/ -precompressed`**: the same Go server answering from memory with brotli (quality 11) and gzip made
-     once by `tools/precompress.mjs`. These are the serving terms `weft.Serve` gives a Weft build, so this row
+     once by `tools/precompress.mjs`. These are the serving terms `warp.Serve` gives a Weft build, so this row
      compares the pages and not the servers.
 
   The Go servers run with `GOMAXPROCS=1`. The frameworks' own servers are Node: one JavaScript thread, but
@@ -132,7 +132,7 @@ The numbers in the prose below are from the run in the table (2026-11-25).
 - **Requests per second is a result about servers, not frameworks.** Behind the same Go server, answering from
   memory with brotli stored at build, the four other frameworks' pages do 126,285 to 131,974 requests per second.
   Weft's own binary does 111,249 [108,824–123,643]: the same order, and in this run below all of them. What
-  `weft.Serve` gives is that serving in the binary, with nothing to set up. It does not make pages faster to send
+  `warp.Serve` gives is that serving in the binary, with nothing to set up. It does not make pages faster to send
   than a pre-compressed static site behind an equally careful server.
 - **Each framework behind the server it ships with** is where the gap is: Weft 111,249; Nuxt's Node server 50,085;
   SvelteKit's 38,099; `astro preview` 19,354 (Vue island) and 21,304 (no framework); `next start` 10,053. Weft's
@@ -165,7 +165,7 @@ In the run of 2026-11-25:
 
 | Measure | Weft | Who is ahead | Why, as best we can tell | Next step |
 |---|--:|---|---|---|
-| Requests per second | 111,249 | Every other site behind the pre-compressed Go server: 126,285 to 131,974 | Not measured. That server does less per request than `weft.Serve`: it sends no 103 Early Hints, no ETag and does no `If-None-Match` check. Hypothesis: the 103 before each page, an extra write, is most of the difference. | Run `load` against Weft with Early Hints off, and profile `weft.Serve` under load, before changing anything. |
+| Requests per second | 111,249 | Every other site behind the pre-compressed Go server: 126,285 to 131,974 | Not measured. That server does less per request than `warp.Serve`: it sends no 103 Early Hints, no ETag and does no `If-None-Match` check. Hypothesis: the 103 before each page, an extra write, is most of the difference. | Run `load` against Weft with Early Hints off, and profile `warp.Serve` under load, before changing anything. |
 | TTFB | 0.20 ms | The pre-compressed Go server, 0.12 ms, and SvelteKit's Node server, 0.17 ms | The same hypothesis: the timer runs to the final response's headers, past the 103. | As above. |
 | HTML and CSS | 3.1 KB br | Astro with no framework (1.7 KB), Nuxt (1.9 KB), SvelteKit (2.0 KB) | Weft inlines its theme and the stylesheets of the components the page renders; the others carry one hand-written stylesheet. See the HTML and CSS row below. | As below. |
 | JavaScript, total transfer, requests, LCP | 20.8 KB, 82.4 KB, 5, 1276 ms | Astro with no framework island: 237 B inline, 60.2 KB, 2, 750 ms | Astro's default island ships no framework. See the table below. | As below. |
@@ -192,7 +192,7 @@ Weft loses to Astro with a Vue island, in the side experiment.
 A labelled side experiment, run after the main run of 2026-11-20 on the same machine, with no change to Weft's code
 ([`tools/lcp-experiment.mjs`](tools/lcp-experiment.mjs); every run is in `results/2026-11-20.json` under
 `side_experiments.lcp_script_placement`). Hand-edited copies of the built Weft page and the two Astro pages are all
-served by `static/` (gzip on the fly, so here Weft's files go out as gzip, not the brotli `weft.Serve` sends). Each
+served by `static/` (gzip on the fly, so here Weft's files go out as gzip, not the brotli `warp.Serve` sends). Each
 page gets five Lighthouse mobile runs, interleaved, with the default simulated throttling (Lantern) and with
 DevTools throttling, where the page really loads on a throttled network and CPU. LCP, median [min–max]:
 
