@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -23,12 +25,27 @@ type testMod struct {
 	register                                   func(app *App)
 }
 
+// logMu guards the logs testMod and the tests' handlers write to.
+var logMu sync.Mutex
+
+func note(log *[]string, entry string) {
+	logMu.Lock()
+	defer logMu.Unlock()
+	*log = append(*log, entry)
+}
+
+func notes(log *[]string) []string {
+	logMu.Lock()
+	defer logMu.Unlock()
+	return slices.Clone(*log)
+}
+
 func mod(name string, log *[]string) *testMod { return &testMod{name: name, log: log} }
 
 func (m *testMod) Name() string { return m.name }
 
 func (m *testMod) Register(app *App) error {
-	*m.log = append(*m.log, "register:"+m.name)
+	note(m.log, "register:"+m.name)
 	if m.register != nil {
 		m.register(app)
 	}
@@ -36,17 +53,17 @@ func (m *testMod) Register(app *App) error {
 }
 
 func (m *testMod) Migrate(ctx context.Context) error {
-	*m.log = append(*m.log, "migrate:"+m.name)
+	note(m.log, "migrate:"+m.name)
 	return m.migrateErr
 }
 
 func (m *testMod) Start(ctx context.Context) error {
-	*m.log = append(*m.log, "start:"+m.name)
+	note(m.log, "start:"+m.name)
 	return m.startErr
 }
 
 func (m *testMod) Stop(ctx context.Context) error {
-	*m.log = append(*m.log, "stop:"+m.name)
+	note(m.log, "stop:"+m.name)
 	if _, ok := ctx.Deadline(); !ok {
 		return errors.New("Stop got a context with no deadline")
 	}

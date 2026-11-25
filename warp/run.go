@@ -106,18 +106,25 @@ func (a *App) Run(ctx context.Context, ln net.Listener, dist fs.FS, opts ...Opti
 	var errs []error
 	select {
 	case err := <-served:
-		errs = append(errs, fmt.Errorf("warp: the server stopped serving: %w", err))
+		errs = append(errs, fmt.Errorf("warp: the server stopped serving (%w); start the app again.", err))
+		errs = append(errs, drain(srv)...)
 	case <-ctx.Done():
-		shutdown, cancel := context.WithTimeout(context.Background(), stopLimit)
-		err := srv.Shutdown(shutdown)
-		cancel()
-		if err != nil {
-			srv.Close()
-			errs = append(errs, errors.New("warp: requests were still running 10 s after the app was told to stop, so they were cut off; make long handlers watch their request's context."))
-		}
+		errs = append(errs, drain(srv)...)
 		<-served
 	}
 	return errors.Join(append(errs, stopAll(modules)...)...)
+}
+
+// drain shuts srv down, letting the requests in flight finish for up to 10
+// seconds before it cuts them off.
+func drain(srv *http.Server) []error {
+	ctx, cancel := context.WithTimeout(context.Background(), stopLimit)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		srv.Close()
+		return []error{errors.New("warp: requests were still running 10 s after the app was told to stop, so they were cut off; make long handlers watch their request's context.")}
+	}
+	return nil
 }
 
 // stopAll stops every Stopper in modules, last first, and returns what

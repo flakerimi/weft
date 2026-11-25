@@ -142,18 +142,66 @@ func TestRunStopFailuresAreJoined(t *testing.T) {
 	}
 }
 
+// failingListener accepts one connection, then fails its next Accept once
+// fail is closed.
+type failingListener struct {
+	net.Listener
+	accepted int
+	fail     chan struct{}
+}
+
+var errListenerBroke = errors.New("the listener broke")
+
+func (l *failingListener) Accept() (net.Conn, error) {
+	if l.accepted++; l.accepted > 1 {
+		<-l.fail
+		return nil, errListenerBroke
+	}
+	return l.Listener.Accept()
+}
+
 func TestRunServeFailureStopsModules(t *testing.T) {
 	var log []string
+	entered, release := make(chan struct{}), make(chan struct{})
 	app := New(Config{})
 	app.Use(mod("a", &log))
-	ln := listenLocal(t)
-	ln.Close()
-	err := app.Run(context.Background(), ln, nil)
-	if !strings.HasPrefix(errText(err), "warp: the server stopped serving: ") || !errors.Is(err, net.ErrClosed) {
-		t.Fatalf("Run = %v", err)
+	app.Handle("GET /slow", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(entered)
+		<-release
+		note(&log, "request:done")
+		io.WriteString(w, "done")
+	}))
+	ln := &failingListener{Listener: listenLocal(t), fail: make(chan struct{})}
+	done := make(chan error, 1)
+	go func() { done <- app.Run(context.Background(), ln, nil) }()
+	got := make(chan int, 1)
+	go func() {
+		resp, err := http.Get("http://" + ln.Addr().String() + "/api/slow")
+		if err != nil {
+			got <- 0
+			return
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		got <- resp.StatusCode
+	}()
+	<-entered
+	close(ln.fail)
+	select {
+	case err := <-done:
+		t.Fatalf("Run returned %v with a request in flight", err)
+	case <-time.After(50 * time.Millisecond):
 	}
-	if log[len(log)-1] != "stop:a" {
-		t.Fatalf("log %v", log)
+	close(release)
+	if status := <-got; status != 200 {
+		t.Fatalf("status %d", status)
+	}
+	err := <-done
+	if want := "warp: the server stopped serving (the listener broke); start the app again."; errText(err) != want || !errors.Is(err, errListenerBroke) {
+		t.Fatalf("Run = %q, want %q", errText(err), want)
+	}
+	if got := notes(&log); !reflect.DeepEqual(got[len(got)-2:], []string{"request:done", "stop:a"}) {
+		t.Fatalf("log %v", got)
 	}
 }
 
