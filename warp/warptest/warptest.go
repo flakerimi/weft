@@ -81,6 +81,10 @@ func (c *Client) Fork() *Client {
 	return &Client{App: c.App, t: c.t, jar: map[string]*http.Cookie{}}
 }
 
+// send builds the request and calls Do. The cookie jar is keyed by name only:
+// it does not model a browser's path, domain or expiry rules (beyond deleting
+// a cookie with Max-Age below zero or an Expires in the past), so do not rely
+// on it for them.
 func (c *Client) send(method, path string, body any, hasBody bool) *Response {
 	c.t.Helper()
 	var rd io.Reader
@@ -147,9 +151,13 @@ type Response struct {
 	path   string
 }
 
-// JSON decodes the body into v and fails the test when it cannot.
+// JSON decodes the body into v and fails the test when the status is not 2xx
+// or the body does not decode.
 func (r *Response) JSON(v any) {
 	r.t.Helper()
+	if r.Status < 200 || r.Status > 299 {
+		r.t.Fatalf("warptest: %s %s answered %d, not a 2xx, so its body is not the value to decode, use Error() for a failing answer: %s", r.method, r.path, r.Status, r.Body)
+	}
 	if err := json.Unmarshal(r.Body, v); err != nil {
 		r.t.Fatalf("warptest: %s %s answered %d with a body that is not the JSON expected (%v), check the route: %s", r.method, r.path, r.Status, err, r.Body)
 	}
@@ -166,7 +174,7 @@ func (r *Response) Error() *warp.Error {
 	var b struct {
 		Error *warp.Error `json:"error"`
 	}
-	if err := json.Unmarshal(r.Body, &b); err != nil || b.Error == nil {
+	if err := json.Unmarshal(r.Body, &b); err != nil || b.Error == nil || b.Error.Code == "" {
 		r.t.Fatalf("warptest: %s %s answered %d with a body that is not the error shape, make the route answer with a warp.Error: %s", r.method, r.path, r.Status, r.Body)
 	}
 	b.Error.Status = r.Status

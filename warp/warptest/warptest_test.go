@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/flakerimi/weft/warp"
 )
@@ -57,6 +59,22 @@ func (m mod) Register(app *warp.App) error {
 	app.Handle("POST /origin", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(r.Header.Get("Origin") + "|" + r.Host))
 	}))
+	app.Handle("GET /raw", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(404)
+		w.Write([]byte(r.URL.Query().Get("body")))
+	}))
+	app.Handle("GET /plain", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("not json"))
+	}))
+	app.Handle("GET /expired", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{Name: "who", Value: "", Path: "/", Expires: time.Now().Add(-time.Hour)})
+	}))
+	app.Handle("PATCH /verb", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(r.Method))
+	}))
+	app.Handle("DELETE /verb", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(r.Method))
+	}))
 	app.Handle("POST /bare", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("[" + r.Header.Get("Content-Type") + "]"))
 	}))
@@ -93,7 +111,7 @@ func TestClientKeepsCookies(t *testing.T) {
 		t.Fatalf("a Secure cookie must be kept and sent, name = %q", h.Name)
 	}
 	c.Post("/api/logout", nil).Want(201)
-	c.Get("/api/hello").JSON(&h)
+	c.Get("/api/hello").Want(200).JSON(&h)
 	if h.Name != "nobody" {
 		t.Fatalf("Max-Age=0 must delete the cookie, name = %q", h.Name)
 	}
@@ -104,11 +122,11 @@ func TestForkHasNone(t *testing.T) {
 	c.Post("/api/login", nil).Want(201)
 	f := c.Fork()
 	var h hello
-	f.Get("/api/hello").JSON(&h)
+	f.Get("/api/hello").Want(200).JSON(&h)
 	if h.Name != "nobody" || f.App != c.App {
 		t.Fatalf("fork: name %q, same app %v", h.Name, f.App == c.App)
 	}
-	c.Get("/api/hello").JSON(&h)
+	c.Get("/api/hello").Want(200).JSON(&h)
 	if h.Name != "ada" {
 		t.Fatalf("the original lost its cookie: %q", h.Name)
 	}
@@ -221,5 +239,77 @@ func TestNewStartsAndStops(t *testing.T) {
 	}
 	if stopped != 1 {
 		t.Fatalf("stopped %d after cleanup", stopped)
+	}
+}
+
+// fails runs fn against a fake TB and returns the failure message.
+func fails(t *testing.T, fn func(c *Client)) string {
+	t.Helper()
+	c := New(t, nil, mod{})
+	f := &fake{TB: t}
+	c.t = f
+	run(f, func() { fn(c) })
+	if !f.failed {
+		t.Fatal("the test did not fail")
+	}
+	return f.msg
+}
+
+func TestJSONFailsOnNonJSON(t *testing.T) {
+	msg := fails(t, func(c *Client) {
+		var h hello
+		c.Get("/api/plain").JSON(&h)
+	})
+	if !strings.Contains(msg, "not json") {
+		t.Fatalf("message %q", msg)
+	}
+}
+
+func TestJSONFailsOnFailingStatus(t *testing.T) {
+	msg := fails(t, func(c *Client) {
+		var h hello
+		c.Get("/api/missing").JSON(&h)
+	})
+	for _, s := range []string{"404", "No such thing.", "Error()"} {
+		if !strings.Contains(msg, s) {
+			t.Fatalf("message %q lacks %q", msg, s)
+		}
+	}
+}
+
+func TestErrorFailsOnOtherShapes(t *testing.T) {
+	for _, body := range []string{"not json", "{}", `{"error":null}`, `{"error":{}}`} {
+		msg := fails(t, func(c *Client) { c.Get("/api/raw?body=" + url.QueryEscape(body)).Error() })
+		if !strings.Contains(msg, "error shape") {
+			t.Fatalf("body %q: message %q", body, msg)
+		}
+	}
+}
+
+func TestErrorIsNilFor2xx(t *testing.T) {
+	c := New(t, nil, mod{})
+	if e := c.Get("/api/plain").Error(); e != nil {
+		t.Fatalf("error = %v", e)
+	}
+}
+
+func TestPatchAndDelete(t *testing.T) {
+	c := New(t, nil, mod{})
+	if got := string(c.Patch("/api/verb", nil).Want(200).Body); got != "PATCH" {
+		t.Fatalf("patch: %q", got)
+	}
+	if got := string(c.Delete("/api/verb").Want(200).Body); got != "DELETE" {
+		t.Fatalf("delete: %q", got)
+	}
+}
+
+func TestPastExpiresDeletesCookie(t *testing.T) {
+	c := New(t, nil, mod{})
+	var h hello
+	c.Post("/api/login", nil).Want(201)
+	c.Get("/api/expired").Want(200)
+	c.Get("/api/hello").Want(200).JSON(&h)
+	if h.Name != "nobody" {
+		t.Fatalf("a past Expires must delete the cookie, name = %q", h.Name)
 	}
 }
