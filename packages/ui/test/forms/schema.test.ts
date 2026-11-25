@@ -10,7 +10,7 @@ describe('validateField', () => {
 
   it('requires a value: not undefined, null, blank text, an empty list or an unticked box', () => {
     for (const empty of [undefined, null, '', '   ', [], false]) {
-      expect(validateField(empty, { required: true }), JSON.stringify(empty)).toBe('This field is required.')
+      expect(validateField(empty, { required: true }), JSON.stringify(empty)).toBe('This is required.')
     }
     for (const value of ['a', 0, true, ['x']]) expect(validateField(value, { required: true })).toBeUndefined()
   })
@@ -71,22 +71,36 @@ describe('validateField', () => {
     expect(validateField('other', { enum: ['a'], message: 'Pick one.' })).toBe('Pick one.')
   })
 
-  it('checks url: an absolute http or https address with a host', () => {
+  it('checks url as Go does: no blanks, http(s)://, a host, and a port of one to five digits', () => {
     const sentence = 'Enter a web address that starts with http:// or https://.'
-    for (const good of ['http://example.com', 'https://example.com/a?b=1#c', 'https://localhost:8080']) {
-      expect(validateField(good, { url: true }), good).toBeUndefined()
-    }
-    for (const bad of ['example.com', 'ftp://example.com', 'https://', '//example.com', 'javascript:alert(1)', 'mailto:a@b.c', 'http:/x']) {
-      expect(validateField(bad, { url: true }), bad).toBe(sentence)
-    }
+    const accept = ['http://x.com', 'HTTPS://X.COM/a?b#c', 'http://u:p@x.com', 'http://x.com:8080', 'http://[::1]:8080/']
+    const refuse = ['ftp://x', 'http://', '//x.com', 'http:x.com', 'http://a b.com', 'http://x.com/a b', 'http://:8080', 'https:///x.com', 'http://x.com ', 'http://x.com/a\tb', 'http://x.com/a\nb', 'http://x.com\\a', 'http://x:999999']
+    for (const good of accept) expect(validateField(good, { url: true }), good).toBeUndefined()
+    for (const bad of refuse) expect(validateField(bad, { url: true }), JSON.stringify(bad)).toBe(sentence)
     expect(validateField('nope', { url: true, message: 'Bad.' })).toBe('Bad.')
   })
 
+  it('checks a blank value (only spaces) against every rule but required', () => {
+    expect(validateField('  ', { url: true })).toBe('Enter a web address that starts with http:// or https://.')
+    expect(validateField('  ', { enum: ['a', 'b'] })).toBe('Choose one of: a, b.')
+    expect(validateField('  ', { email: true })).toBe('Enter an email address.')
+    expect(validateField('  ', { min: 3 })).toBe('Use at least 3 characters.')
+    expect(validateField('  ', { pattern: '[0-9]+' })).toBe('Use the format asked for.')
+    expect(validateField('  ', { required: true, email: true })).toBe('This is required.')
+  })
+
+  it('checks enum exactly: an empty string in the list is allowed, spaces around a value are not ignored', () => {
+    expect(validateField('', { enum: ['', 'a'] })).toBeUndefined()
+    expect(validateField('a', { enum: ['', 'a'] })).toBeUndefined()
+    expect(validateField('b', { enum: ['', 'a'] })).toBe('Choose one of: , a.')
+    expect(validateField(' live ', { enum: ['draft', 'live'] })).toBe('Choose one of: draft, live.')
+  })
+
   it('lets an empty optional value pass url and enum, and still requires when asked', () => {
-    for (const empty of ['', '  ', undefined, null]) {
-      expect(validateField(empty, { url: true, enum: ['a'] })).toBeUndefined()
+    for (const empty of ['', undefined, null]) {
+      expect(validateField(empty, { url: true, enum: ['a'], email: true, min: 2, pattern: 'x' })).toBeUndefined()
     }
-    expect(validateField('', { url: true, enum: ['a'], required: true })).toBe('This field is required.')
+    expect(validateField('', { url: true, enum: ['a'], required: true })).toBe('This is required.')
   })
 
   it('gives the first failing rule: email, then url, then enum', () => {
@@ -114,6 +128,6 @@ describe('validateFields', () => {
   })
 
   it('checks a field the values do not have as empty', () => {
-    expect(validateFields({ terms: { required: true } }, {})).toEqual({ terms: 'This field is required.' })
+    expect(validateFields({ terms: { required: true } }, {})).toEqual({ terms: 'This is required.' })
   })
 })

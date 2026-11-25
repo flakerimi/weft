@@ -30,8 +30,10 @@
  *
  * (A boolean, a date, a file: only `required` applies.)
  *
- * An empty value that is not required passes every other rule. A field's
- * first failing rule, in the order above (`url` and `enum` last, `email` before them), gives its error.
+ * Only a missing value (undefined, null or '') passes every rule but
+ * `required`; text of only spaces is checked by each of them, as the server
+ * does. A field's first failing rule, in the order above (`url` and `enum`
+ * last, `email` before them), gives its error.
  */
 
 /** The rules for one field. */
@@ -84,7 +86,9 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 /** The error for `value` under `rule`, or undefined when it passes. */
 export function validateField(value: unknown, rule: FieldRule): string | undefined {
   const fail = (sentence: string) => rule.message ?? sentence
-  if (isEmpty(value)) return rule.required ? fail('This field is required.') : undefined
+  if (rule.required && isEmpty(value)) return fail('This is required.')
+  // Every other rule skips only a missing or empty value; text of only spaces is checked like any other.
+  if (value === undefined || value === null || value === '') return undefined
   if (typeof value === 'number') {
     if (rule.min !== undefined && value < rule.min) return fail(`Enter ${rule.min} or more.`)
     if (rule.max !== undefined && value > rule.max) return fail(`Enter ${rule.max} or less.`)
@@ -101,27 +105,37 @@ export function validateField(value: unknown, rule: FieldRule): string | undefin
   return undefined
 }
 
-/** `url` and `enum`, for text only (as the Go side checks them). */
-function webRules(text: string, rule: FieldRule, fail: (sentence: string) => string): string | undefined {
-  if (rule.url && !isWebAddress(text)) return fail('Enter a web address that starts with http:// or https://.')
-  if (rule.enum && !rule.enum.includes(text)) return fail(`Choose one of: ${rule.enum.join(', ')}.`)
-  return undefined
-}
-
-function isWebAddress(text: string): boolean {
-  if (!/^https?:\/\//i.test(text)) return false
-  try {
-    return new URL(text).hostname !== ''
-  } catch {
-    return false
-  }
-}
-
 /** `pattern` and `email`, for text and numbers written out. */
 function textRules(text: string, rule: FieldRule, fail: (sentence: string) => string): string | undefined {
   if (rule.pattern !== undefined && !compiled(rule.pattern).test(text)) return fail('Use the format asked for.')
   if (rule.email && !EMAIL.test(text)) return fail('Enter an email address.')
   return undefined
+}
+
+/** `url` and `enum`, for text only (as the Go side checks them). */
+function webRules(text: string, rule: FieldRule, fail: (sentence: string) => string): string | undefined {
+  if (rule.url && !isWebAddress(text)) {
+    return fail('Enter a web address that starts with http:// or https://.')
+  }
+  if (rule.enum && !rule.enum.includes(text)) return fail(`Choose one of: ${rule.enum.join(', ')}.`)
+  return undefined
+}
+
+/**
+ * An absolute web address, as the Go side reads it: no whitespace, control
+ * character or backslash; `http://` or `https://` (any case); then an
+ * authority (up to the first `/`, `?` or `#`) of `host` or `host:port`,
+ * after any `user:password@`. The host is not empty; a port is one to five
+ * digits. An IPv6 host in brackets is a host.
+ */
+function isWebAddress(text: string): boolean {
+  if (/[\s\x00-\x1f\x7f\\]/u.test(text)) return false
+  const m = /^https?:\/\/([^/?#]*)/i.exec(text)
+  if (!m) return false
+  const authority = m[1]!.slice(m[1]!.lastIndexOf('@') + 1)
+  const port = /:([^:\]]*)$/.exec(authority)
+  const host = port ? authority.slice(0, port.index) : authority
+  return host !== '' && (!port || /^[0-9]{1,5}$/.test(port[1]!))
 }
 
 /** The first error of each field in `schema` that fails, by name; `{}` when all pass. */

@@ -19,15 +19,18 @@ row's checkbox ("Select Ada").
 the WeftProvider's `locale`, en-US without one, numbers and dates by
 amount), or
 `fetch(query)`, which receives `{ page, perPage, sort, q, filters }`
-(`sort` is `name` or `-since`; `q`, `filters` and `sort` are absent when
-there is none) and answers `{ items, total, page, per_page }` (`page` and
-`per_page` are optional), so paging, sorting, searching and filtering happen
-on the server. Give the search text as `search` and the filters as
-`filters` (`{ plan: 'pro' }`); a change asks again. `tableSearch(query)`
-writes the query as the wire format's search parameters:
-`page=2&per_page=20&sort=-since&q=ada&filter[plan]=pro`.
-It asks once mounted (the server draws skeleton rows),
-again whenever the page, the sort, the search or the filters change, ignores an answer a newer query
+(each but `page` and `perPage` is absent when there is none; `sort` is
+`name` or `-since`) and answers the wire format's whole list, `{ items,
+total, page, per_page }` (`page` and `per_page` are optional), so paging,
+sorting, searching and filtering happen on the server. Give the search text
+as `search` and the filters as `filters` (`{ plan: 'pro' }`); a change asks
+again. Clearing a filter is setting it to an empty string or leaving it out:
+a filter with no value is not sent, and `{ status: '' }` is the same query as
+`{}`. With `rows` and no `fetch`, `search` and `filters` do nothing.
+`tableSearch(query)` writes the query as the wire format's search
+parameters: `page=2&per_page=20&sort=-since&q=ada&filter[plan]=pro`. It asks
+once mounted (the server draws skeleton rows), again whenever the page, the
+sort, the search or the filters change, ignores an answer a newer query
 overtook, and shows a message with a Try again button (and emits `error`)
 when the promise rejects; `refresh()` asks again. `rowKey` (a property name
 or a function; default the row's `id`, else its place) keys the rows. The
@@ -37,8 +40,9 @@ data source is `useTableData`, exported for a view of its own.
 as given. The sort is `v-model:sort` in the wire format. On the client it is
 stable (equal rows keep their order both ways), numbers and dates by amount,
 text numeric-aware and case-blind, empty values last. A press on a header
-goes back to page 1; a parent that sets the page and the sort together keeps
-its page. The sorted header says `aria-sort`; the others say nothing (APG
+goes back to page 1, as does a new `search` or new `filters` (with `fetch`); a
+parent that sets the page and the sort, the search or the filters together
+keeps its page. The sorted header says `aria-sort`; the others say nothing (APG
 sortable table).
 
 **Selection.** `selectable` adds a checkbox per row and one in the header,

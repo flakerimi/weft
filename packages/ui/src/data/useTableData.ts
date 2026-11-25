@@ -21,7 +21,7 @@
  * or a fetch under way, or no answer yet.
  */
 import { computed, ref, shallowRef, watch, type ComputedRef, type Ref, type ShallowRef } from 'vue'
-import { keyOf, sortRows, valueOf, type RowKey, type TableColumn, type TableFetch, type TableQuery } from './table.ts'
+import { activeFilters, keyOf, sortRows, valueOf, type RowKey, type TableColumn, type TableFetch, type TableQuery } from './table.ts'
 
 export interface TableDataOptions<T> {
   rows: () => T[] | undefined
@@ -77,13 +77,13 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
     fetching.value = true
     failed.value = null
     const q = opts.search?.()
-    const filters = opts.filters?.()
+    const filters = activeFilters(opts.filters?.())
     const query: TableQuery = {
       page: opts.page.value,
       perPage: perPage.value!,
       ...(opts.sort.value ? { sort: opts.sort.value } : {}),
       ...(q ? { q } : {}),
-      ...(filters && Object.keys(filters).length ? { filters: { ...filters } } : {}),
+      ...(filters ? { filters } : {}),
     }
     try {
       const answer = await fetch(query)
@@ -99,7 +99,7 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
   }
   // Primitive sources: asking again only when a value of the query changes.
   watch(
-    [opts.active, () => opts.page.value, () => perPage.value, () => opts.sort.value, () => opts.search?.(), () => JSON.stringify(opts.filters?.() ?? {}), opts.fetch],
+    [opts.active, () => opts.page.value, () => perPage.value, () => opts.sort.value, () => opts.search?.(), () => JSON.stringify(activeFilters(opts.filters?.()) ?? {}), opts.fetch],
     ([on]) => {
       if (on) void load()
     },

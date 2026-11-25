@@ -101,6 +101,8 @@ describe('table helpers', () => {
     expect(all.get('filter[city]')).toBe('A&B')
     expect(all.toString()).toBe('page=1&per_page=10&sort=name&q=ada+lovelace&filter%5Bplan%5D=pro&filter%5Bcity%5D=A%26B')
     expect(tableSearch({ page: 1, perPage: 10, q: '', filters: {} }).toString()).toBe('page=1&per_page=10')
+    expect(tableSearch({ page: 1, perPage: 10, filters: { status: '', kind: 'a' } }).toString()).toBe('page=1&per_page=10&filter%5Bkind%5D=a')
+    expect(tableSearch({ page: 1, perPage: 10, filters: { status: '' } }).toString()).toBe('page=1&per_page=10')
   })
 
   it('selects a range between the anchor and the target, in the order shown', () => {
@@ -607,6 +609,58 @@ describe('Table', () => {
       await settle()
       expect(calls.at(-1)).toEqual({ page: 1, perPage: 10, q: 'P1', filters: { city: 'X' } })
       expect(calls).toHaveLength(2)
+    })
+
+    it('goes back to page 1 when the search or the filters change, unless the parent sets the page too', async () => {
+      const { fetch, calls } = server()
+      const m = await cases({ rows: undefined, fetch: fn(fetch), perPage: 10, search: 'P', filters: { city: 'X' } })
+      const exposed = m.exposed as { page: number; searchText: string; filterValues: Record<string, string> }
+      exposed.page = 3
+      await settle()
+      expect(calls.at(-1)).toMatchObject({ page: 3 })
+      const before = calls.length
+      exposed.searchText = 'P1'
+      await settle()
+      expect(exposed.page).toBe(1)
+      expect(calls.slice(before)).toEqual([{ page: 1, perPage: 10, q: 'P1', filters: { city: 'X' } }])
+      exposed.page = 3
+      await settle()
+      exposed.filterValues = { city: 'Y' }
+      await settle()
+      expect(exposed.page).toBe(1)
+      expect(calls.at(-1)).toEqual({ page: 1, perPage: 10, q: 'P1', filters: { city: 'Y' } })
+      // Together: the parent's page is kept.
+      exposed.page = 2
+      exposed.searchText = 'P2'
+      await settle()
+      expect(exposed.page).toBe(2)
+      expect(calls.at(-1)).toEqual({ page: 2, perPage: 10, q: 'P2', filters: { city: 'Y' } })
+    })
+
+    it('asks again for changed filters, not for a fresh object with the same filters', async () => {
+      const { fetch, calls } = server()
+      const m = await cases({ rows: undefined, fetch: fn(fetch), perPage: 10, filters: { city: 'X' } })
+      const exposed = m.exposed as { filterValues: Record<string, string> }
+      expect(calls).toHaveLength(1)
+      exposed.filterValues = { city: 'X' }
+      await settle()
+      expect(calls).toHaveLength(1)
+      exposed.filterValues = { city: 'Z' }
+      await settle()
+      expect(calls).toHaveLength(2)
+      expect(calls.at(-1)!.filters).toEqual({ city: 'Z' })
+    })
+
+    it('sends no empty filter, and does not ask again for {} becoming { status: \'\' }', async () => {
+      const { fetch, calls } = server()
+      const m = await cases({ rows: undefined, fetch: fn(fetch), perPage: 10, filters: {} })
+      const exposed = m.exposed as { filterValues: Record<string, string> }
+      exposed.filterValues = { status: '' }
+      await settle()
+      expect(calls).toEqual([{ page: 1, perPage: 10 }])
+      exposed.filterValues = { status: '', kind: 'a' }
+      await settle()
+      expect(calls.at(-1)).toEqual({ page: 1, perPage: 10, filters: { kind: 'a' } })
     })
 
     it('sends the sort to the server, in the wire format, from page 1, and does not sort on the client', async () => {

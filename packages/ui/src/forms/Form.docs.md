@@ -19,9 +19,11 @@ lists, bounds for numbers), `pattern` (matched against the whole text, as the
 HTML attribute does), `email`, `url` (an absolute `http:` or `https:`
 address with a host: "Enter a web address that starts with http:// or
 https://."), `enum` (a list of the values allowed: "Choose one of: a, b."),
-and `message` in place of the default sentences. An empty value that is not
-required passes every rule but `required`. Its TypeScript type is `FieldSchema`, and `validateFields` checks
-values against one anywhere.
+and `message` in place of the default sentences. `required` counts text of
+only spaces as empty; every other rule skips only a missing or empty value
+(`undefined`, `null` or `''`), so spaces alone fail `enum`, `url` and `email`.
+Its TypeScript type is `FieldSchema`, and `validateFields` checks values
+against one anywhere.
 
 **When it checks.** On submit every field is checked. With errors, `error`
 fires with them, each FormField with a matching `name` shows its error, and

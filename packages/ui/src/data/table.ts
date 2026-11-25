@@ -165,12 +165,18 @@ export function keyOf<T>(row: T, rowKey: string | ((row: T) => RowKey) | undefin
   return typeof value === 'string' || typeof value === 'number' ? value : fallback
 }
 
+/** The filters that say something: a value of `''`, undefined or null is no filter; undefined when none is left. */
+export function activeFilters(filters: Record<string, string | null | undefined> | undefined): Record<string, string> | undefined {
+  const kept = Object.entries(filters ?? {}).filter((e): e is [string, string] => e[1] !== '' && e[1] != null)
+  return kept.length ? Object.fromEntries(kept) : undefined
+}
+
 /** A query as URL search parameters, as the wire format reads them: `page=2&per_page=20&sort=-since&q=ada&filter[plan]=pro`. */
 export function tableSearch(query: TableQuery): URLSearchParams {
   const params = new URLSearchParams({ page: String(query.page), per_page: String(query.perPage) })
   if (query.sort) params.set('sort', query.sort)
   if (query.q) params.set('q', query.q)
-  for (const [field, value] of Object.entries(query.filters ?? {})) params.set(`filter[${field}]`, value)
+  for (const [field, value] of Object.entries(activeFilters(query.filters) ?? {})) params.set(`filter[${field}]`, value)
   return params
 }
 

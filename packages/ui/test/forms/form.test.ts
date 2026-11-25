@@ -49,9 +49,9 @@ describe('Form', () => {
   it('on submit with errors shows each, marks the controls invalid, emits error and focuses the first invalid control', async () => {
     const f = render()
     await f.submit()
-    expect(f.error('email')).toBe('This field is required.')
-    expect(f.error('terms')).toBe('This field is required.')
-    expect(f.error('plan')).toBe('This field is required.')
+    expect(f.error('email')).toBe('This is required.')
+    expect(f.error('terms')).toBe('This is required.')
+    expect(f.error('plan')).toBe('This is required.')
     expect(f.error('age')).toBeUndefined()
     expect(f.error('nick')).toBeUndefined()
     const email = f.q('.email input')
@@ -59,7 +59,7 @@ describe('Form', () => {
     expect(email.getAttribute('aria-describedby')).toBe(f.q('.email .weft-form-field__error').id)
     expect(f.q('.plan [role="radiogroup"]').getAttribute('aria-invalid')).toBe('true')
     expect(f.exposed.submitted).toEqual([])
-    expect(f.exposed.failed).toEqual([{ email: 'This field is required.', terms: 'This field is required.', plan: 'This field is required.' }])
+    expect(f.exposed.failed).toEqual([{ email: 'This is required.', terms: 'This is required.', plan: 'This is required.' }])
     expect(document.activeElement).toBe(email)
   })
 
@@ -195,7 +195,7 @@ describe('Form', () => {
     const f = render()
     expect((f.exposed.validate as () => boolean)()).toBe(false)
     await settle()
-    expect(f.error('email')).toBe('This field is required.')
+    expect(f.error('email')).toBe('This is required.')
   })
 
   it('while disabled disables every control in it, in a FormField or not, buttons too, and ignores a submit', async () => {
