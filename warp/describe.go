@@ -30,8 +30,9 @@ type Description struct {
 // names the type in Types its JSON body is read as, "" when it reads none.
 // When that type has readonly fields, at any depth, Body names its twin, the
 // type's name with Input after it. Partial is true for a route registered
-// with Patch: every field of its body may then be left out. Output is nil
-// when the route answers None (with 204) and for Handle.
+// with Patch: every top-level field of its body may then be left out, while
+// a nested object that is sent is checked whole. Output is nil when the
+// route answers None (with 204) and for Handle.
 type RouteInfo struct {
 	Module     string      `json:"module"`
 	Name       string      `json:"name"`
@@ -62,7 +63,8 @@ type ParamInfo struct {
 }
 
 // OutputInfo describes what a route answers: TS is a TypeScript type (a
-// name in Types for a struct), of each element when List is true.
+// name in Types for a struct), of each element when List is true. A
+// generator writes a list of nullable elements as (T | null)[].
 type OutputInfo struct {
 	TS   string `json:"ts"`
 	List bool   `json:"list"`
@@ -81,8 +83,12 @@ type TypeInfo struct {
 }
 
 // FieldInfo describes one field of a type: its JSON name, its TypeScript
-// type, whether it may be absent (a pointer), whether it is readonly
-// (answered and never read), and its rules as its warp tag has them.
+// type, whether it is optional, whether it is readonly (answered and never
+// read), and its rules as its warp tag has them. Optional means the field may
+// be absent or, for a pointer, null: it is a pointer, or its json tag has
+// omitempty or omitzero (on a type's own entry, which is what is answered;
+// not on its Input twin, since those options never change what is read).
+// A 64-bit integer is number, and loses precision above 2^53.
 type FieldInfo struct {
 	Name     string     `json:"name"`
 	TS       string     `json:"ts"`
@@ -102,14 +108,21 @@ type RuleInfo struct {
 // type they take and answer, in the order first used, each followed by its
 // twin when it has one. It reads what registration made, so it may be called
 // before or after Start; it runs no module. Two types with one name, an
-// unnamed struct and a field JSON cannot carry are mistakes, returned joined.
+// unnamed struct, a field JSON cannot carry, a map keyed by anything but text
+// or a whole number, a field with json ",string" and a type with half an
+// encoding are mistakes, returned joined.
 func (a *App) Describe() (Description, error) {
 	a.mu.Lock()
 	routes := slices.Clone(a.routes)
 	plans := slices.Clone(a.plans)
 	a.mu.Unlock()
 
-	d := &describer{fields: map[reflect.Type][]descField{}}
+	d := &describer{fields: map[reflect.Type][]descField{}, read: map[reflect.Type]bool{}, half: map[reflect.Type]bool{}}
+	for _, p := range plans {
+		if p != nil && p.bodyType != nil {
+			d.markRead(p.bodyType)
+		}
+	}
 	out := Description{Routes: make([]RouteInfo, 0, len(routes)), Types: []TypeInfo{}}
 	bodies := make([]reflect.Type, len(routes))
 	for i, rt := range routes {
@@ -133,21 +146,21 @@ func (a *App) Describe() (Description, error) {
 			}
 			if p.bodyType != nil {
 				bodies[i] = p.bodyType
-				d.use(p.bodyType, at+" takes", "give the route another input")
+				d.use(p.bodyType, at, at+" takes", "give the route another input")
 			}
 			if rt.Out != noneType {
 				t, list := rt.Out, isList(rt.Out)
 				if list {
 					t = t.Elem()
 				}
-				d.use(t, at+" answers", "give the route another output")
+				d.use(t, at, at+" answers", "give the route another output")
 				info.Output = &OutputInfo{TS: d.ts(t, nil), List: list}
 			}
 		}
 		out.Routes = append(out.Routes, info)
 	}
 
-	twin := d.twins(bodies)
+	twin := d.twins()
 	for i, b := range bodies {
 		if b != nil {
 			out.Routes[i].Body = d.ts(b, twin)
@@ -166,7 +179,7 @@ func (a *App) Describe() (Description, error) {
 		full := TypeInfo{Name: tsName(t), Go: goName, Fields: []FieldInfo{}}
 		name(full.Name, goName)
 		for _, f := range d.fields[t] {
-			full.Fields = append(full.Fields, d.fieldInfo(f, nil))
+			full.Fields = append(full.Fields, d.fieldInfo(f, nil, false))
 		}
 		out.Types = append(out.Types, full)
 		if !twin[t] {
@@ -176,7 +189,7 @@ func (a *App) Describe() (Description, error) {
 		name(input.Name, "the input of "+goName)
 		for _, f := range d.fields[t] {
 			if !f.readonly {
-				input.Fields = append(input.Fields, d.fieldInfo(f, twin))
+				input.Fields = append(input.Fields, d.fieldInfo(f, twin, true))
 			}
 		}
 		out.Types = append(out.Types, input)
@@ -191,17 +204,38 @@ func (a *App) Describe() (Description, error) {
 type describer struct {
 	types    []reflect.Type // in order of first use
 	fields   map[reflect.Type][]descField
+	read     map[reflect.Type]bool // the types a body is read into, at any depth
+	half     map[reflect.Type]bool // the types with half an encoding, reported once
 	mistakes []error
 }
 
 // descField is a field of a type's JSON: its key, its Go name, its type,
-// where it sits, whether it is readonly and its rules.
+// where it sits, whether it is readonly, whether its json tag has omitempty
+// or omitzero, whether it has ,string, and its rules.
 type descField struct {
 	key, goName string
 	typ         reflect.Type
 	index       []int
 	readonly    bool
+	omits       bool
+	quoted      bool
 	rules       []RuleInfo
+}
+
+// markRead marks the struct type a value of type t holds as one a body is
+// read into, and the struct types its fields that are not readonly hold: a
+// readonly field is never read, so what it holds is only answered.
+func (d *describer) markRead(t reflect.Type) {
+	t = leaf(t)
+	if t.Kind() != reflect.Struct || t == timeType || selfEncoded(t) != "" || t.Name() == "" || d.read[t] {
+		return
+	}
+	d.read[t] = true
+	for _, f := range readFields(t) {
+		if !f.readonly {
+			d.markRead(f.typ)
+		}
+	}
 }
 
 func (d *describer) fail(format string, args ...any) {
@@ -209,13 +243,32 @@ func (d *describer) fail(format string, args ...any) {
 }
 
 // use adds the struct type a value of type t holds, and every struct type
-// its fields hold, to the types described. where begins the sentence of a
-// mistake ("GET /products answers"), and fix ends it when JSON cannot carry
-// the type.
-func (d *describer) use(t reflect.Type, where, fix string) {
+// its fields hold, to the types described. A type a body is read into has
+// its fields as the binder lists them; any other, as encoding/json writes
+// them. route is the route that first reaches it ("GET /products"); where
+// begins the sentence of a mistake ("GET /products answers"), and fix ends
+// it when JSON cannot carry the type.
+func (d *describer) use(t reflect.Type, route, where, fix string) {
+	// encoding/json writes a map only when its key is text, a whole number
+	// or writes itself as text; the generated TypeScript has Record<string, T>
+	// for one keyed by text or a whole number alone.
+	for k := t; k != timeType && selfEncoded(k) == "" && isContainer(k.Kind()) && !isBytes(k); k = k.Elem() {
+		if k.Kind() == reflect.Map && k.Key().Kind() != reflect.String && !isIntegerKind(k.Key().Kind()) {
+			lead := where
+			if !strings.HasPrefix(where, route+" ") {
+				lead = route + ": " + where
+			}
+			d.fail("%s a map keyed by %s; key it by text or a whole number, since JSON object keys are text.", lead, typeName(k.Key()))
+		}
+	}
 	t = leaf(t)
 	switch {
-	case t == timeType || selfEncoded(t) != "":
+	case t == timeType:
+	case selfEncoded(t) != "":
+		if m := halfEncoded(t); m != "" && !d.half[t] {
+			d.half[t] = true
+			d.fail("%s", m)
+		}
 	case t.Kind() == reflect.Struct:
 		if t.Name() == "" {
 			d.fail("%s an unnamed struct; give the type a name, since the generated TypeScript needs one.", where)
@@ -224,11 +277,20 @@ func (d *describer) use(t reflect.Type, where, fix string) {
 		if _, ok := d.fields[t]; ok {
 			return
 		}
-		fields := jsonFields(t)
+		var fields []descField
+		if d.read[t] {
+			fields = readFields(t)
+		} else {
+			fields = jsonFields(t)
+		}
 		d.fields[t] = fields
 		d.types = append(d.types, t)
 		for _, f := range fields {
-			d.use(f.typ, typeName(t)+"."+f.goName+" is", `give it another type, or tag it json:"-"`)
+			at := typeName(t) + "." + f.goName
+			if f.quoted {
+				d.fail("%s: %s", route, stringOption(at))
+			}
+			d.use(f.typ, route, at+" is", `give it another type, or tag it json:"-"`)
 		}
 	case t.Kind() == reflect.Chan || t.Kind() == reflect.Func || t.Kind() == reflect.UnsafePointer ||
 		t.Kind() == reflect.Complex64 || t.Kind() == reflect.Complex128:
@@ -245,10 +307,9 @@ func (d *describer) structOf(t reflect.Type) reflect.Type {
 	return nil
 }
 
-// twins returns the types that get a twin: those a body reaches through
-// fields that are not readonly, and that have a readonly field or reach,
-// so, a type that has one.
-func (d *describer) twins(bodies []reflect.Type) map[reflect.Type]bool {
+// twins returns the types that get a twin: those a body is read into that
+// have a readonly field or reach, so, a type that has one.
+func (d *describer) twins() map[reflect.Type]bool {
 	deep := map[reflect.Type]bool{}
 	// A type can hold itself, so this marks until nothing changes.
 	for changed := true; changed; {
@@ -266,31 +327,19 @@ func (d *describer) twins(bodies []reflect.Type) map[reflect.Type]bool {
 		}
 	}
 	twin := map[reflect.Type]bool{}
-	reached := map[reflect.Type]bool{}
-	var reach func(t reflect.Type)
-	reach = func(t reflect.Type) {
-		if t == nil || reached[t] {
-			return
-		}
-		reached[t] = true
-		twin[t] = deep[t]
-		for _, f := range d.fields[t] {
-			if !f.readonly {
-				reach(d.structOf(f.typ))
-			}
-		}
-	}
-	for _, b := range bodies {
-		if b != nil {
-			reach(d.structOf(b))
-		}
+	for _, t := range d.types {
+		twin[t] = d.read[t] && deep[t]
 	}
 	return twin
 }
 
-func (d *describer) fieldInfo(f descField, twin map[reflect.Type]bool) FieldInfo {
+// fieldInfo describes f in a type's entry, or with input in its twin's,
+// where twin names the types that have one. omitempty and omitzero change
+// what the server writes, never what it reads, so on a twin only a pointer
+// is optional.
+func (d *describer) fieldInfo(f descField, twin map[reflect.Type]bool, input bool) FieldInfo {
 	return FieldInfo{
-		Name: f.key, TS: d.ts(f.typ, twin), Optional: f.typ.Kind() == reflect.Pointer,
+		Name: f.key, TS: d.ts(f.typ, twin), Optional: f.typ.Kind() == reflect.Pointer || f.omits && !input,
 		Readonly: f.readonly, Rules: f.rules,
 	}
 }
@@ -339,6 +388,11 @@ func (d *describer) ts(t reflect.Type, twin map[reflect.Type]bool) string {
 	return kindTS(t.Kind())
 }
 
+// isIntegerKind reports whether k is an int or uint kind, uintptr included.
+func isIntegerKind(k reflect.Kind) bool {
+	return k >= reflect.Int && k <= reflect.Uintptr
+}
+
 // kindTS is the TypeScript type of a string, bool or number kind, and
 // unknown for any other.
 func kindTS(k reflect.Kind) string {
@@ -366,6 +420,37 @@ func selfEncoded(t reflect.Type) string {
 		return "unknown"
 	case implements(textMarshaler) || implements(textUnmarshaler):
 		return "string"
+	}
+	return ""
+}
+
+// halfEncoded returns the sentence for a type that writes itself and does
+// not read itself, or the reverse, as JSON or, when it has neither JSON half,
+// as text; "" for any other type. The generated TypeScript has one type for
+// both directions, so such a type cannot be described.
+func halfEncoded(t reflect.Type) string {
+	if t.Kind() == reflect.Pointer || t.Kind() == reflect.Interface || t == timeType {
+		return ""
+	}
+	pt := reflect.PointerTo(t)
+	implements := func(i reflect.Type) bool { return t.Implements(i) || pt.Implements(i) }
+	for _, e := range []struct {
+		as                    string
+		writer, reader        reflect.Type
+		writeName, readerName string
+	}{
+		{"JSON", jsonMarshaler, jsonUnmarshaler, "MarshalJSON", "UnmarshalJSON"},
+		{"text", textMarshaler, textUnmarshaler, "MarshalText", "UnmarshalText"},
+	} {
+		const both = ", since the generated TypeScript has one type for both directions."
+		switch w, r := implements(e.writer), implements(e.reader); {
+		case w && r:
+			return ""
+		case w:
+			return fmt.Sprintf("%s writes itself as %s but does not read itself; give it %s too%s", typeName(t), e.as, e.readerName, both)
+		case r:
+			return fmt.Sprintf("%s reads itself as %s but does not write itself; give it %s too%s", typeName(t), e.as, e.writeName, both)
+		}
 	}
 	return ""
 }
@@ -424,12 +509,48 @@ func rulesOf(t reflect.Type) map[string][]RuleInfo {
 
 func indexKey(index []int) string { return fmt.Sprint(index) }
 
+// readFields returns the json fields of t, a type a body is read into (an
+// input with json fields of its own, a body field's type, or a struct type
+// inside one), as the binder lists them: the fields inputFields gives that
+// have a json name the binder takes, readonly ones included. Registration
+// has refused any other field of such a type, so these are what the plan's
+// view holds, with the readonly fields beside them.
+func readFields(t reflect.Type) []descField {
+	inner, _ := inputFields(t, nil)
+	rules := rulesOf(t)
+	fields := []descField{}
+	for _, f := range inner {
+		key, opts, ok := jsonTagOf(f.StructField)
+		if !ok || !validJSONName(key) {
+			continue
+		}
+		fields = append(fields, descField{
+			key: key, goName: f.Name, typ: f.Type, index: f.index, readonly: isReadonly(f.StructField),
+			omits: hasJSONOption(opts, "omitempty") || hasJSONOption(opts, "omitzero"), quoted: hasJSONOption(opts, "string"),
+			rules: rulesFor(rules, f.index),
+		})
+	}
+	return fields
+}
+
+func rulesFor(rules map[string][]RuleInfo, index []int) []RuleInfo {
+	if r := rules[indexKey(index)]; r != nil {
+		return r
+	}
+	return []RuleInfo{}
+}
+
 // jsonFields returns the fields encoding/json writes for the struct type t,
 // in its order, with their rules: an embedded struct's fields are t's own, a
 // field with no json name has its Go name, and of two fields with one name
 // the shallower wins, else the one with a json tag, else neither. A field
 // with no json tag that is tagged query, path or body is a route's, not the
 // JSON's, and is left out.
+//
+// It exists for the types the binder never plans: a type only answered, and
+// what a readonly field holds. Nothing checked such a type at registration,
+// so its fields are found as encoding/json finds them; a type a body is read
+// into has its fields from readFields, the binder's own list.
 func jsonFields(t reflect.Type) []descField {
 	type candidate struct {
 		descField
@@ -448,7 +569,8 @@ func jsonFields(t reflect.Type) []descField {
 			if tag == "-" {
 				continue
 			}
-			key, _, _ := strings.Cut(tag, ",")
+			key, opts, _ := strings.Cut(tag, ",")
+			opts = "," + opts
 			index := append(slices.Clone(prefix), i)
 			ft := f.Type
 			if ft.Kind() == reflect.Pointer {
@@ -474,7 +596,10 @@ func jsonFields(t reflect.Type) []descField {
 				}
 				key = f.Name
 			}
-			all = append(all, candidate{descField{key: key, goName: f.Name, typ: f.Type, index: index, readonly: isReadonly(f)}, depth, tagged})
+			all = append(all, candidate{descField{
+				key: key, goName: f.Name, typ: f.Type, index: index, readonly: isReadonly(f),
+				omits: hasJSONOption(opts, "omitempty") || hasJSONOption(opts, "omitzero"), quoted: hasJSONOption(opts, "string"),
+			}, depth, tagged})
 		}
 	}
 	walk(t, nil, 0)
@@ -515,9 +640,7 @@ func jsonFields(t reflect.Type) []descField {
 	for i, c := range all {
 		if keep[i] {
 			f := c.descField
-			if f.rules = rules[indexKey(f.index)]; f.rules == nil {
-				f.rules = []RuleInfo{}
-			}
+			f.rules = rulesFor(rules, f.index)
 			fields = append(fields, f)
 		}
 	}

@@ -1482,3 +1482,38 @@ func TestFilterMapMistake(t *testing.T) {
 		t.Fatalf("Err() =\n%s\nwant\n%s", got, want)
 	}
 }
+
+// Warp does not take ,string: a number is sent and read as a number, as the
+// description says.
+func TestJSONStringOption(t *testing.T) {
+	const fix = ` has json:",string"; remove ,string, since Warp sends and reads a number as a number.`
+	type Inner struct {
+		N int `json:"n,omitempty,string"`
+	}
+	type ShowIn struct {
+		Count int   `json:"count,string"`
+		ID    int64 `json:"id,string" warp:"readonly"`
+		Inner Inner `json:"inner"`
+	}
+	type BodyOf struct {
+		Flag bool `json:"flag,string"`
+	}
+	type WithBody struct {
+		Body BodyOf `body:"json"`
+	}
+	app := New(Config{})
+	Post(app, "/show", func(context.Context, ShowIn) (None, error) { return None{}, nil })
+	Put(app, "/body", func(context.Context, WithBody) (None, error) { return None{}, nil })
+	want := strings.Join([]string{
+		"warp: POST /show: ShowIn.Count" + fix,
+		"warp: POST /show: ShowIn.ID" + fix,
+		"warp: POST /show: Inner.N" + fix,
+		"warp: PUT /body: BodyOf.Flag" + fix,
+	}, "\n")
+	if errText(app.Err()) != want {
+		t.Fatalf("Err =\n%s\nwant\n%s", errText(app.Err()), want)
+	}
+	if len(app.Routes()) != 0 {
+		t.Fatalf("routes %v registered", app.Routes())
+	}
+}

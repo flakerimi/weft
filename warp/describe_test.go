@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"maps"
 	"net"
 	"net/url"
 	"reflect"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -197,12 +201,16 @@ type descKinds struct {
 	hidden     int
 }
 
-func TestDescribeTypes(t *testing.T) {
+func typesApp() *App {
 	app := New(Config{})
 	Get(app, "/kinds", func(context.Context, None) (descKinds, error) { return descKinds{}, nil })
 	Post(app, "/gadgets", func(context.Context, Gadget) (Gadget, error) { return Gadget{}, nil })
 	Get(app, "/lists", func(context.Context, None) (descList[Gadget], error) { return descList[Gadget]{}, nil })
-	d := describe(t, app)
+	return app
+}
+
+func TestDescribeTypes(t *testing.T) {
+	d := describe(t, typesApp())
 
 	none := []RuleInfo{}
 	f := func(name, ts string) FieldInfo { return FieldInfo{Name: name, TS: ts, Rules: none} }
@@ -260,15 +268,19 @@ func TestDescribeTypes(t *testing.T) {
 }
 
 // A body type with no readonly field anywhere has no twin.
-func TestDescribeNoTwin(t *testing.T) {
+func leafApp() *App {
 	app := New(Config{})
 	Post(app, "/shops/{shop}/leaves", func(context.Context, withShop[descLeaf]) (descLeaf, error) { return descLeaf{}, nil })
-	d := describe(t, app)
+	return app
+}
+
+func TestDescribeNoTwin(t *testing.T) {
+	d := describe(t, leafApp())
 	if d.Routes[0].Body != "descLeaf" || len(d.Types) != 1 || d.Types[0].Name != "descLeaf" {
 		t.Fatalf("body %q, types %+v", d.Routes[0].Body, d.Types)
 	}
 	// Gadget answered alone gets no twin either.
-	app = New(Config{})
+	app := New(Config{})
 	Get(app, "/gadgets", func(context.Context, None) (Gadget, error) { return Gadget{}, nil })
 	for _, ti := range describe(t, app).Types {
 		if strings.HasSuffix(ti.Name, "Input") {
@@ -516,14 +528,18 @@ type descBase struct {
 	Shade string `json:"shade"`
 }
 
-// descOwn writes itself as text, and descRaw as JSON.
+// descOwn writes and reads itself as text, and descRaw as JSON.
 type descOwn struct{ v string }
 
 func (o descOwn) MarshalText() ([]byte, error) { return []byte(o.v), nil }
 
+func (o *descOwn) UnmarshalText(b []byte) error { o.v = string(b); return nil }
+
 type descRaw struct{ v int }
 
 func (r descRaw) MarshalJSON() ([]byte, error) { return []byte("1"), nil }
+
+func (r *descRaw) UnmarshalJSON([]byte) error { return nil }
 
 // descEncodings is answered as encoding/json writes it.
 type descEncodings struct {
@@ -531,8 +547,6 @@ type descEncodings struct {
 	Shade     int             `json:"shade"` // shallower than descBase's, so it wins
 	Own       descOwn         `json:"own"`
 	Raw       descRaw         `json:"raw"`
-	Money     Money           `json:"money"`
-	Code      Code            `json:"code"`
 	Number    json.Number     `json:"number"`
 	Message   json.RawMessage `json:"message"`
 	Page      int             `query:"page"` // a route's, not the JSON's
@@ -547,7 +561,7 @@ func TestDescribeEncodings(t *testing.T) {
 	for _, f := range d.Types[0].Fields {
 		got = append(got, f.Name+": "+f.TS)
 	}
-	want := []string{"name: string", "shade: number", "own: string", "raw: unknown", "money: unknown", "code: string", "number: number", "message: unknown", "leaf: descLeaf"}
+	want := []string{"name: string", "shade: number", "own: string", "raw: unknown", "number: number", "message: unknown", "leaf: descLeaf"}
 	if !reflect.DeepEqual(got, want) || len(d.Types) != 2 {
 		t.Fatalf("fields %q, want %q; types %+v", got, want, d.Types)
 	}
@@ -559,10 +573,14 @@ type descOrder struct {
 	Parts []GadgetPart `json:"parts"`
 }
 
-func TestDescribeNestedTwin(t *testing.T) {
+func orderApp() *App {
 	app := New(Config{})
 	Post(app, "/orders", func(context.Context, descOrder) (None, error) { return None{}, nil })
-	d := describe(t, app)
+	return app
+}
+
+func TestDescribeNestedTwin(t *testing.T) {
+	d := describe(t, orderApp())
 	var got []string
 	for _, ti := range d.Types {
 		got = append(got, ti.Name)
@@ -570,7 +588,418 @@ func TestDescribeNestedTwin(t *testing.T) {
 	if want := []string{"descOrder", "descOrderInput", "GadgetPart", "GadgetPartInput"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("types %v, want %v", got, want)
 	}
-	if d.Routes[0].Body != "descOrderInput" || d.Types[1].Fields[1].TS != "GadgetPartInput[]" {
+	if d.Routes[0].Body != "descOrderInput" || len(d.Types[1].Fields) != 2 || d.Types[1].Fields[1].TS != "GadgetPartInput[]" {
 		t.Fatalf("body %q, twin %+v", d.Routes[0].Body, d.Types[1])
+	}
+}
+
+// Half of an encoding cannot be described for both directions.
+type descWritesJSON struct{}
+
+func (descWritesJSON) MarshalJSON() ([]byte, error) { return []byte("1"), nil }
+
+type descWritesText struct{}
+
+func (descWritesText) MarshalText() ([]byte, error) { return nil, nil }
+
+type descHalves struct {
+	A Money          `json:"a"`
+	B descWritesJSON `json:"b"`
+	C Code           `json:"c"`
+	D descWritesText `json:"d"`
+	E []Money        `json:"e"` // named once
+}
+
+func TestDescribeHalfEncodings(t *testing.T) {
+	app := New(Config{})
+	Get(app, "/halves", func(context.Context, None) (descHalves, error) { return descHalves{}, nil })
+	_, err := app.Describe()
+	const both = ", since the generated TypeScript has one type for both directions."
+	want := strings.Join([]string{
+		"warp: Money reads itself as JSON but does not write itself; give it MarshalJSON too" + both,
+		"warp: descWritesJSON writes itself as JSON but does not read itself; give it UnmarshalJSON too" + both,
+		"warp: Code reads itself as text but does not write itself; give it MarshalText too" + both,
+		"warp: descWritesText writes itself as text but does not read itself; give it UnmarshalText too" + both,
+	}, "\n")
+	if errText(err) != want {
+		t.Fatalf("Describe =\n%s\nwant\n%s", errText(err), want)
+	}
+	// As a body too, where the binder takes Money.
+	app = New(Config{})
+	Post(app, "/shops/{shop}/money", func(context.Context, withShop[descMoneyBody]) (None, error) { return None{}, nil })
+	if err := app.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.Describe(); !strings.HasPrefix(errText(err), "warp: Money reads itself as JSON") {
+		t.Fatalf("Describe = %v", err)
+	}
+}
+
+type descMoneyBody struct {
+	Price Money `json:"price"`
+}
+
+// descCount is answered with a number written as a string.
+type descCount struct {
+	N int `json:"n,string"`
+}
+
+type descCounts struct {
+	Counts []descCount `json:"counts"`
+}
+
+func TestDescribeStringOption(t *testing.T) {
+	app := New(Config{})
+	Get(app, "/counts", func(context.Context, None) (descCounts, error) { return descCounts{}, nil })
+	_, err := app.Describe()
+	want := `warp: GET /counts: descCount.N has json:",string"; remove ,string, since Warp sends and reads a number as a number.`
+	if errText(err) != want {
+		t.Fatalf("Describe = %q, want %q", errText(err), want)
+	}
+}
+
+// descOmits has fields an answer may leave out.
+type descOmits struct {
+	A int       `json:"a,omitempty"`
+	B time.Time `json:"b,omitzero"`
+	C *int      `json:"c"`
+	D int       `json:"d"`
+}
+
+func omitsApp() *App {
+	app := New(Config{})
+	Get(app, "/omits", func(context.Context, None) (descOmits, error) { return descOmits{}, nil })
+	Post(app, "/omits", func(context.Context, descOmits) (None, error) { return None{}, nil })
+	return app
+}
+
+func TestDescribeOmitempty(t *testing.T) {
+	var got []string
+	for _, f := range describe(t, omitsApp()).Types[0].Fields {
+		got = append(got, f.Name+" "+strconv.FormatBool(f.Optional))
+	}
+	if want := []string{"a true", "b true", "c true", "d false"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("optional %v, want %v", got, want)
+	}
+}
+
+// sample makes JSON values of the types a description names, from the
+// description alone.
+type sample map[string]TypeInfo
+
+// value is a value of the TypeScript type ts: a string that is also a time,
+// 1, true, a list of one, a record of one, an object of every field that is
+// not readonly. Past depth 3 a nullable value is null and a list is empty, so
+// a type that holds itself ends.
+func (s sample) value(ts string, depth int) any {
+	switch {
+	case strings.HasSuffix(ts, " | null"):
+		if depth > 3 {
+			return nil
+		}
+		return s.value(strings.TrimSuffix(ts, " | null"), depth)
+	case strings.HasPrefix(ts, "(") && strings.HasSuffix(ts, ")[]"):
+		return s.value(ts[1:len(ts)-3]+"[]", depth)
+	case strings.HasSuffix(ts, "[]"):
+		if depth > 3 {
+			return []any{}
+		}
+		return []any{s.value(strings.TrimSuffix(ts, "[]"), depth+1)}
+	case strings.HasPrefix(ts, "Record<string, "):
+		return map[string]any{"k": s.value(strings.TrimSuffix(strings.TrimPrefix(ts, "Record<string, "), ">"), depth+1)}
+	case ts == "string":
+		return "2026-01-01T00:00:00Z"
+	case ts == "number":
+		return 1
+	case ts == "boolean":
+		return true
+	case ts == "unknown":
+		return nil
+	}
+	ti, ok := s[ts]
+	if !ok {
+		panic("the description has no type " + ts)
+	}
+	obj := map[string]any{}
+	for _, f := range ti.Fields {
+		if !f.Readonly {
+			obj[f.Name] = s.value(f.TS, depth+1)
+		}
+	}
+	return obj
+}
+
+// full is the type a twin leaves readonly fields out of: the type itself
+// when it is no twin.
+func (s sample) full(name string) TypeInfo {
+	if base, ok := s[strings.TrimSuffix(name, "Input")]; ok && name != base.Name && base.Go == s[name].Go {
+		return base
+	}
+	return s[name]
+}
+
+// readonly returns copies of v, a value of ts, each with one readonly field
+// of the full types added, at any depth, and that field's name.
+func (s sample) readonly(ts string, v any) (out []any, keys []string) {
+	ts = strings.TrimSuffix(ts, " | null")
+	switch {
+	case v == nil:
+	case strings.HasPrefix(ts, "(") && strings.HasSuffix(ts, ")[]"):
+		return s.readonly(ts[1:len(ts)-3]+"[]", v)
+	case strings.HasSuffix(ts, "[]"):
+		list := v.([]any)
+		if len(list) == 0 {
+			return nil, nil
+		}
+		inner, ks := s.readonly(strings.TrimSuffix(ts, "[]"), list[0])
+		for _, x := range inner {
+			out = append(out, []any{x})
+		}
+		return out, ks
+	case strings.HasPrefix(ts, "Record<string, "):
+		inner, ks := s.readonly(strings.TrimSuffix(strings.TrimPrefix(ts, "Record<string, "), ">"), v.(map[string]any)["k"])
+		for _, x := range inner {
+			out = append(out, map[string]any{"k": x})
+		}
+		return out, ks
+	}
+	obj, ok := v.(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	twin := s[ts]
+	for _, f := range s.full(ts).Fields {
+		if f.Readonly {
+			c := maps.Clone(obj)
+			c[f.Name] = s.value(f.TS, 9)
+			out, keys = append(out, c), append(keys, f.Name)
+			continue
+		}
+		for _, tf := range twin.Fields {
+			if tf.Name != f.Name {
+				continue
+			}
+			inner, ks := s.readonly(tf.TS, obj[f.Name])
+			for _, x := range inner {
+				c := maps.Clone(obj)
+				c[f.Name] = x
+				out = append(out, c)
+			}
+			keys = append(keys, ks...)
+		}
+	}
+	return out, keys
+}
+
+// The description and the binder agree: a body made from the described
+// fields is taken, and each readonly field the description shows is refused
+// as the binder refuses a field it does not take.
+func TestDescriptionMatchesBinder(t *testing.T) {
+	apps := map[string]func() *App{
+		"gadgets": gadgetApp, "types": typesApp, "leaves": leafApp, "orders": orderApp, "omits": omitsApp,
+	}
+	sent := 0
+	for _, name := range slices.Sorted(maps.Keys(apps)) {
+		app := apps[name]()
+		d := describe(t, app)
+		s := sample{}
+		for _, ti := range d.Types {
+			s[ti.Name] = ti
+		}
+		h := app.Handler()
+		for _, rt := range d.Routes {
+			if !rt.Typed || rt.Body == "" {
+				continue
+			}
+			path := rt.Path
+			for _, p := range rt.PathParams {
+				path = strings.ReplaceAll(path, "{"+p.Name+"}", fmt.Sprint(s.value(p.TS, 0)))
+			}
+			body := s.value(rt.Body, 0)
+			encoded, _ := json.Marshal(body)
+			w := send(t, h, rt.Method, path, string(encoded))
+			if w.Code == 400 || w.Code == 415 {
+				t.Errorf("%s: %s %s %s: %d %s", name, rt.Method, path, encoded, w.Code, w.Body)
+			}
+			sent++
+			variants, keys := s.readonly(rt.Body, body)
+			for i, v := range variants {
+				encoded, _ := json.Marshal(v)
+				w := send(t, h, rt.Method, path, string(encoded))
+				want := fmt.Sprintf("The body has the field %q, which this route does not take.", keys[i])
+				if _, msg, _ := apiError(t, w); w.Code != 400 || msg != want {
+					t.Errorf("%s: %s %s %s: %d %q, want 400 %q", name, rt.Method, path, encoded, w.Code, msg, want)
+				}
+				sent++
+			}
+		}
+	}
+	if sent < 12 {
+		t.Fatalf("only %d bodies were sent", sent)
+	}
+}
+
+// typeOf is the name of the struct type a TypeScript type holds, or "".
+func typeOf(ts string) string {
+	for changed := true; changed; {
+		before := ts
+		ts = strings.TrimSuffix(ts, " | null")
+		ts = strings.TrimSuffix(ts, "[]")
+		ts = strings.TrimSuffix(strings.TrimPrefix(ts, "("), ")")
+		if strings.HasPrefix(ts, "Record<string, ") {
+			ts = strings.TrimSuffix(strings.TrimPrefix(ts, "Record<string, "), ">")
+		}
+		changed = ts != before
+	}
+	switch ts {
+	case "string", "number", "boolean", "unknown":
+		return ""
+	}
+	return ts
+}
+
+// structIn is the struct type a Go type holds through pointers, lists and
+// maps, or nil.
+func structIn(t reflect.Type) reflect.Type {
+	for t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice || t.Kind() == reflect.Array || t.Kind() == reflect.Map {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct || t == timeType {
+		return nil
+	}
+	return t
+}
+
+// The other direction: what the binder takes is what the description lists,
+// at the top from the plan's own keys and inside from the binder's objects.
+func TestDescriptionListsWhatBinderTakes(t *testing.T) {
+	for _, mk := range []func() *App{gadgetApp, typesApp, leafApp, orderApp, omitsApp} {
+		app := mk()
+		d := describe(t, app)
+		s := sample{}
+		for _, ti := range d.Types {
+			s[ti.Name] = ti
+		}
+		checked := map[string]bool{}
+		var check func(name string, st reflect.Type)
+		check = func(name string, st reflect.Type) {
+			if checked[name] {
+				return
+			}
+			checked[name] = true
+			o := objects{}.objectOf(st)
+			full := s.full(name)
+			var got, want []string
+			for _, f := range full.Fields {
+				got = append(got, f.Name+" "+strconv.FormatBool(f.Readonly))
+			}
+			for i, n := range o.names {
+				want = append(want, n+" "+strconv.FormatBool(o.readonly[i]))
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("%s: described %v, the binder takes %v", name, got, want)
+			}
+			for _, f := range s[name].Fields {
+				sf, ok := fieldByKey(st, f.Name)
+				if inner := typeOf(f.TS); ok && inner != "" && structIn(sf) != nil {
+					check(inner, structIn(sf))
+				}
+			}
+		}
+		for i, rt := range d.Routes {
+			p := app.plans[i]
+			if rt.Body == "" {
+				continue
+			}
+			var got []string
+			for _, f := range s[rt.Body].Fields {
+				got = append(got, f.Name)
+			}
+			if !reflect.DeepEqual(got, p.keys.names) {
+				t.Errorf("%s %s: body described %v, the binder takes %v", rt.Method, rt.Path, got, p.keys.names)
+			}
+			for j, f := range s[rt.Body].Fields {
+				if inner := typeOf(f.TS); inner != "" && j < p.view.NumField() {
+					if st := structIn(p.view.Field(j).Type); st != nil {
+						check(inner, st)
+					}
+				}
+			}
+		}
+	}
+}
+
+// fieldByKey is the type of the field of st whose json key is key.
+func fieldByKey(st reflect.Type, key string) (reflect.Type, bool) {
+	fields, _ := inputFields(st, nil)
+	for _, f := range fields {
+		if k, _, ok := jsonTagOf(f.StructField); ok && k == key {
+			return f.Type, true
+		}
+	}
+	return nil, false
+}
+
+type descPoint struct {
+	X int `json:"x"`
+}
+
+type descReport struct {
+	ByPoint map[descPoint]int    `json:"by_point"`
+	ByID    map[int64]string     `json:"by_id"`
+	ByState map[descStatus]int   `json:"by_state"`
+	Nested  []map[descPoint]bool `json:"nested"`
+}
+
+func TestDescribeMapKeys(t *testing.T) {
+	const fix = "; key it by text or a whole number, since JSON object keys are text."
+	app := New(Config{})
+	Get(app, "/reports", func(context.Context, None) (descReport, error) { return descReport{}, nil })
+	Get(app, "/points", func(context.Context, None) (map[descPoint]int, error) { return nil, nil })
+	_, err := app.Describe()
+	want := strings.Join([]string{
+		"warp: GET /reports: descReport.ByPoint is a map keyed by descPoint" + fix,
+		"warp: GET /reports: descReport.Nested is a map keyed by descPoint" + fix,
+		"warp: GET /points answers a map keyed by descPoint" + fix,
+	}, "\n")
+	if errText(err) != want {
+		t.Fatalf("Describe =\n%s\nwant\n%s", errText(err), want)
+	}
+	// Text and whole-number keys are a record.
+	app = New(Config{})
+	Get(app, "/counts", func(context.Context, None) (descKeyed, error) { return descKeyed{}, nil })
+	var got []string
+	for _, f := range describe(t, app).Types[0].Fields {
+		got = append(got, f.TS)
+	}
+	if want := []string{"Record<string, string>", "Record<string, number>", "Record<string, boolean>"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("fields %v, want %v", got, want)
+	}
+}
+
+type descKeyed struct {
+	ByID    map[int64]string   `json:"by_id"`
+	ByState map[descStatus]int `json:"by_state"`
+	ByCount map[uint8]bool     `json:"by_count"`
+}
+
+// descTitled has a field the server may leave out of an answer, and must be
+// sent.
+type descTitled struct {
+	ID    int64  `json:"id" warp:"readonly"`
+	Title string `json:"title,omitempty" warp:"required"`
+}
+
+// omitempty changes what is written, never what is read: an answer may leave
+// the field out, and an input must send it.
+func TestDescribeOmitemptyOnTwin(t *testing.T) {
+	app := New(Config{})
+	Post(app, "/titles", func(context.Context, descTitled) (descTitled, error) { return descTitled{}, nil })
+	d := describe(t, app)
+	if len(d.Types) != 2 || d.Types[1].Name != "descTitledInput" {
+		t.Fatalf("types %+v", d.Types)
+	}
+	if full, input := d.Types[0].Fields[1], d.Types[1].Fields[0]; !full.Optional || input.Optional {
+		t.Fatalf("title optional on descTitled %v, on descTitledInput %v; want true, false", full.Optional, input.Optional)
 	}
 }

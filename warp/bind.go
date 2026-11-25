@@ -195,6 +195,10 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 			} else {
 				ok = claim("json", jsonKey, at)
 			}
+			if hasJSONOption(jsonOpts, "string") {
+				mistakes = append(mistakes, stringOption(at))
+				ok = false
+			}
 			if readonly {
 				continue // never read, so what is inside it is not the body's
 			}
@@ -354,9 +358,12 @@ func bodyMistakes(t reflect.Type, visited map[reflect.Type]bool) []string {
 	owner := map[string]string{}
 	for _, f := range fields {
 		at := name + "." + f.Name
-		key, _, hasJSON := jsonTagOf(f.StructField)
+		key, opts, hasJSON := jsonTagOf(f.StructField)
 		if !hasJSON && f.Tag.Get("json") == "-" {
 			continue
+		}
+		if hasJSONOption(opts, "string") {
+			mistakes = append(mistakes, stringOption(at))
 		}
 		bad := false
 		if _, ok := f.Tag.Lookup("body"); ok {
@@ -416,6 +423,24 @@ func jsonTagOf(f reflect.StructField) (key, opts string, ok bool) {
 		opts = "," + opts
 	}
 	return key, opts, true
+}
+
+// hasJSONOption reports whether opts, a json tag's options as jsonTagOf gives
+// them (",omitempty,string"), have option.
+func hasJSONOption(opts, option string) bool {
+	for o := range strings.SplitSeq(opts, ",") {
+		if o == option {
+			return true
+		}
+	}
+	return false
+}
+
+// stringOption is the mistake of the field at, whose json tag has ,string:
+// encoding/json would send and read its number or bool as a quoted string,
+// and the generated TypeScript says number.
+func stringOption(at string) string {
+	return fmt.Sprintf("%s has json:\",string\"; remove ,string, since Warp sends and reads a number as a number.", at)
 }
 
 // validJSONName reports whether name can be a json key: letters, digits, _,
