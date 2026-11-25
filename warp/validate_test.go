@@ -377,3 +377,71 @@ func TestCheckRulesDeclarationOrder(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestValidateDescendsIntoMapValues(t *testing.T) {
+	type Line struct {
+		SKU string `json:"sku" warp:"required"`
+	}
+	type Order struct {
+		ByName  map[string]Line         `json:"by_name"`
+		ByPtr   map[string]*Line        `json:"by_ptr"`
+		Lists   map[string][]Line       `json:"lists"`
+		Nested  map[string]map[int]Line `json:"nested"`
+		Nothing map[string]*Line        `json:"nothing"`
+		Any     any                     `json:"any"`
+		Anys    map[string]any          `json:"anys"`
+	}
+	got := fieldsOf(t, Order{
+		ByName:  map[string]Line{"x": {}, "y": {SKU: "ok"}},
+		ByPtr:   map[string]*Line{"p": {}},
+		Lists:   map[string][]Line{"l": {{SKU: "ok"}, {}}},
+		Nested:  map[string]map[int]Line{"a": {7: {}}},
+		Nothing: map[string]*Line{"n": nil},
+		Any:     Line{},
+		Anys:    map[string]any{"q": &Line{}, "r": 3},
+	})
+	want := map[string]string{
+		"by_name.x.sku":  "This is required.",
+		"by_ptr.p.sku":   "This is required.",
+		"lists.l.1.sku":  "This is required.",
+		"nested.a.7.sku": "This is required.",
+		"any.sku":        "This is required.",
+		"anys.q.sku":     "This is required.",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("fields %v, want %v", got, want)
+	}
+}
+
+func TestRulesReachMapValues(t *testing.T) {
+	type Line struct {
+		SKU string `json:"sku" warp:"emal"`
+	}
+	type Order struct {
+		ByName map[string][]*Line `json:"by_name"`
+	}
+	got := checkRules(reflect.TypeOf(Order{}))
+	want := []string{`Line.SKU has the rule "emal", which warp does not know; use ` + ruleList + "."}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("checkRules = %q, want %q", got, want)
+	}
+}
+
+func TestSelfReferenceThroughMap(t *testing.T) {
+	type Tree struct {
+		Name string          `json:"name" warp:"required,emal"`
+		Kids map[string]Tree `json:"kids"`
+	}
+	got := checkRules(reflect.TypeOf(Tree{}))
+	if want := []string{`Tree.Name has the rule "emal", which warp does not know; use ` + ruleList + "."}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("checkRules = %q, want %q", got, want)
+	}
+	type Good struct {
+		Name string          `json:"name" warp:"required"`
+		Kids map[string]Good `json:"kids"`
+	}
+	fields := fieldsOf(t, Good{Name: "root", Kids: map[string]Good{"a": {Name: "a", Kids: map[string]Good{"b": {}}}}})
+	if want := map[string]string{"kids.a.kids.b.name": "This is required."}; !reflect.DeepEqual(fields, want) {
+		t.Fatalf("fields %v, want %v", fields, want)
+	}
+}

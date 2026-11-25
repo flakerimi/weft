@@ -6,6 +6,7 @@ import (
 	"net/mail"
 	"net/url"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -66,18 +67,47 @@ func validateStruct(rv reflect.Value, prefix string, fields map[string]string) {
 		if msg := checkField(fv, spec.rules); msg != "" {
 			fields[key] = msg
 		}
-		inner := derefValue(fv)
-		switch {
-		case isDescendable(inner):
-			validateStruct(inner, key, fields)
-		case inner.IsValid() && (inner.Kind() == reflect.Slice || inner.Kind() == reflect.Array):
-			for i := 0; i < inner.Len(); i++ {
-				if el := derefValue(inner.Index(i)); isDescendable(el) {
-					validateStruct(el, key+"."+strconv.Itoa(i), fields)
-				}
-			}
+		if holdsStructs(fv.Type()) {
+			validateInside(fv, key, fields)
 		}
 	}
+}
+
+// validateInside validates the structs in v, a struct, or a pointer, slice,
+// array or map that holds them. A list's entries are keyed by their index
+// after key, a map's by its keys, formatted with fmt.Sprint and visited in
+// sorted order.
+func validateInside(v reflect.Value, key string, fields map[string]string) {
+	v = derefValue(v)
+	switch {
+	case isDescendable(v):
+		validateStruct(v, key, fields)
+	case !v.IsValid():
+	case v.Kind() == reflect.Slice || v.Kind() == reflect.Array:
+		for i := 0; i < v.Len(); i++ {
+			validateInside(v.Index(i), key+"."+strconv.Itoa(i), fields)
+		}
+	case v.Kind() == reflect.Map:
+		keys := v.MapKeys()
+		names := make(map[reflect.Value]string, len(keys))
+		for _, k := range keys {
+			names[k] = fmt.Sprint(k.Interface())
+		}
+		slices.SortFunc(keys, func(a, b reflect.Value) int { return strings.Compare(names[a], names[b]) })
+		for _, k := range keys {
+			validateInside(v.MapIndex(k), key+"."+names[k], fields)
+		}
+	}
+}
+
+// holdsStructs reports whether a value of type t may be, or hold through
+// pointers, slices, arrays and map values, a struct to validate. An interface
+// may hold one.
+func holdsStructs(t reflect.Type) bool {
+	for isContainer(t.Kind()) {
+		t = t.Elem()
+	}
+	return t.Kind() == reflect.Interface || t.Kind() == reflect.Struct && t != timeType
 }
 
 func isDescendable(v reflect.Value) bool {
@@ -379,7 +409,7 @@ func checkRules(t reflect.Type) []string {
 }
 
 func checkType(t reflect.Type, visited map[reflect.Type]bool, out *[]string) {
-	for t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice || t.Kind() == reflect.Array {
+	for isContainer(t.Kind()) {
 		t = t.Elem()
 	}
 	if t.Kind() != reflect.Struct || t == timeType || visited[t] {

@@ -821,3 +821,90 @@ func TestNestedBodyBindsAndValidates(t *testing.T) {
 		t.Fatalf("input %+v", got)
 	}
 }
+
+func TestMapValuesAreValidated(t *testing.T) {
+	type Line struct {
+		SKU string `json:"sku" warp:"required"`
+	}
+	type OrderIn struct {
+		ByName map[string]Line `json:"by_name"`
+	}
+	ran := false
+	app := New(Config{})
+	Post(app, "/orders", func(ctx context.Context, in OrderIn) (Item, error) {
+		ran = true
+		return Item{}, nil
+	})
+	w := send(t, mustRegister(t, app), "POST", "/api/orders", `{"by_name":{"x":{"sku":""}}}`)
+	if _, _, fields := apiError(t, w); w.Code != 422 || !reflect.DeepEqual(fields, map[string]string{"by_name.x.sku": "This is required."}) || ran {
+		t.Fatalf("status %d, fields %v, ran %v", w.Code, fields, ran)
+	}
+}
+
+func TestRuleMistakeInMapValue(t *testing.T) {
+	type Line struct {
+		SKU string `json:"sku" warp:"min=x"`
+	}
+	type OrderIn struct {
+		ByName map[string]Line `json:"by_name"`
+	}
+	app := New(Config{})
+	Post(app, "/orders", func(context.Context, OrderIn) (Item, error) { return Item{}, nil })
+	if got, want := errText(app.Err()), `warp: POST /orders: Line.SKU has "min=x"; write a number after min=.`; got != want {
+		t.Fatalf("Err() = %q, want %q", got, want)
+	}
+}
+
+func TestTaggedEmbedIsRefused(t *testing.T) {
+	const tail = `; give the field a name, or drop the tag to make %s's fields the input's own.`
+	t.Run("top level", func(t *testing.T) {
+		type Base struct {
+			Note string `json:"note"`
+		}
+		type ShowIn struct {
+			Base `json:"base"`
+			Name string `json:"name"`
+		}
+		app := New(Config{})
+		Post(app, "/products", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
+		want := `warp: POST /products: ShowIn embeds Base with the json name "base"` + strings.Replace(tail, "%s", "Base", 1)
+		if got := errText(app.Err()); got != want {
+			t.Fatalf("Err() = %q\nwant %q", got, want)
+		}
+	})
+	t.Run("nested", func(t *testing.T) {
+		type Geo struct {
+			Lat float64 `json:"lat"`
+		}
+		type Address struct {
+			Geo  `json:"geo,omitempty"`
+			City string `json:"city"`
+		}
+		type ShowIn struct {
+			Address Address `json:"address"`
+		}
+		app := New(Config{})
+		Post(app, "/products", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
+		want := `warp: POST /products: Address embeds Geo with the json name "geo"` + strings.Replace(tail, "%s", "Geo", 1)
+		if got := errText(app.Err()); got != want {
+			t.Fatalf("Err() = %q\nwant %q", got, want)
+		}
+	})
+	t.Run("an embed tagged with no name is flattened", func(t *testing.T) {
+		type Base struct {
+			Note string `json:"note"`
+		}
+		type ShowIn struct {
+			Base `json:",omitempty"`
+		}
+		var got ShowIn
+		app := New(Config{})
+		Post(app, "/products", func(ctx context.Context, in ShowIn) (Item, error) {
+			got = in
+			return Item{}, nil
+		})
+		if w := send(t, mustRegister(t, app), "POST", "/api/products", `{"note":"n"}`); w.Code != 201 || got.Note != "n" {
+			t.Fatalf("status %d, body %q, input %+v", w.Code, w.Body.String(), got)
+		}
+	})
+}

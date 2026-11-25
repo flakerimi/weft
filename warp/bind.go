@@ -194,7 +194,9 @@ type inputField struct {
 // An embedded struct's fields are t's own, and an unexported field is left
 // out. An embedded pointer to a struct is a mistake, returned as a sentence:
 // when the body leaves its fields out it stays nil, and reading a promoted
-// field panics.
+// field panics. So is an embedded struct with a json name, which
+// encoding/json reads as a named object while warp makes its fields the
+// input's own.
 func inputFields(t reflect.Type, prefix []int) ([]inputField, []string) {
 	var out []inputField
 	var mistakes []string
@@ -208,6 +210,11 @@ func inputFields(t reflect.Type, prefix []int) ([]inputField, []string) {
 				continue
 			}
 			if f.Type.Kind() == reflect.Struct && f.Type != timeType {
+				if key, _, ok := jsonTagOf(f); ok && key != "" {
+					mistakes = append(mistakes, fmt.Sprintf("%s embeds %s with the json name %q; give the field a name, or drop the tag to make %s's fields the input's own.",
+						typeName(t), typeName(f.Type), key, typeName(f.Type)))
+					continue
+				}
 				fields, more := inputFields(f.Type, index)
 				out, mistakes = append(out, fields...), append(mistakes, more...)
 				continue
