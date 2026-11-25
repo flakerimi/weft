@@ -93,9 +93,10 @@ scripts/release.sh "$version" "$releases"
 # The pages name the release they describe (/index.md).
 WEFT_SITE_VERSION="$version" scripts/site.sh build
 
-# The push tree: the weft package, the site's main package and its build, the
-# installer, every published release and this one, and a Dockerfile that
-# compiles the binary on an empty image beside the releases. It is made where it will be kept, so
+# The push tree: the root package, warp and every package under it (without
+# tests), the site's main package and its build, the installer, every
+# published release and this one, and a Dockerfile that compiles the binary
+# on an empty image beside the releases. It is made where it will be kept, so
 # a release kept before is a hard link to it there; a dry run's goes to TMPDIR.
 if [ -n "$dry" ]; then
 	tree=$(mktemp -d "${tmp%/}/weft-site-push.XXXXXX")
@@ -108,6 +109,7 @@ for f in *.go; do
 	case "$f" in *_test.go) continue ;; esac
 	cp "$f" "$tree/"
 done
+tar -cf - --exclude '*_test.go' --exclude .DS_Store warp | tar -C "$tree" -xf -
 mkdir "$tree/site-src"
 cp site-src/main.go "$tree/site-src/"
 cp -R site-src/dist "$tree/site-src/dist"
@@ -116,6 +118,7 @@ cat >"$tree/Dockerfile" <<EOF
 FROM golang:1.26 AS build
 WORKDIR /src
 COPY go.mod *.go ./
+COPY warp warp
 COPY site-src/main.go site-src/
 COPY site-src/dist site-src/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/flakerimi/weft.Version=$version" -o /out/weft-site ./site-src

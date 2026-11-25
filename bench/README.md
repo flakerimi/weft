@@ -9,7 +9,7 @@ import.
 
 | Folder | What it is |
 |---|---|
-| [`weft/`](weft) | The Weft site: `pages/index.vue` with `@weft/ui`, the counter as a Vapor island, built by `weft-build-pages` and embedded in a Go binary that serves it with `warp.Serve` (like `site-src`). Part of the pnpm workspace. The results below label its server `weft binary (weft.Serve)`, as the results file recorded it before `weft.Serve` became `warp.Serve`. |
+| [`weft/`](weft) | The Weft site: `pages/index.vue` with `@weft/ui`, the counter as a Vapor island, built by `weft-build-pages` and embedded in a Go binary that serves it with `warp.Serve` (like `site-src`). Part of the pnpm workspace. The results below, from 2026-11-20, label its server `weft binary (weft.Serve)`, as their results file recorded it before `weft.Serve` became `warp.Serve`; later runs label it `weft binary (warp.Serve)`. |
 | [`astro/`](astro) | The Astro site: `/` with the counter as a Vue island (`@astrojs/vue`, `client:idle`), and `/no-framework/` with the counter as a plain `<script>` in an `.astro` component. Not part of the workspace: its own `package.json` and `package-lock.json`. |
 | [`static/`](static) | A plain Go static file server: `net/http.FileServer`, text gzipped on the fly. |
 | [`load/`](load) | The load generator and TTFB timer, a Go `main` (standard library only), run as its own process. |

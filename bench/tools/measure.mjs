@@ -49,7 +49,7 @@ const preview = process.env.ASTRO_PREVIEW_URL ?? 'http://127.0.0.1:4321'
 const plain = process.env.ASTRO_STATIC_URL ?? 'http://127.0.0.1:4302'
 
 const targets = [
-  { id: 'weft', label: 'Weft', server: 'weft binary (weft.Serve), GOMAXPROCS=1', url: `${weft}/` },
+  { id: 'weft', label: 'Weft', server: 'weft binary (warp.Serve), GOMAXPROCS=1', url: `${weft}/` },
   { id: 'astro-vue-preview', label: 'Astro, Vue island', server: 'astro preview', url: `${preview}/` },
   { id: 'astro-vue-static', label: 'Astro, Vue island', server: 'Go static + gzip, GOMAXPROCS=1', url: `${plain}/` },
   { id: 'astro-plain-preview', label: 'Astro, no framework island', server: 'astro preview', url: `${preview}/no-framework/` },

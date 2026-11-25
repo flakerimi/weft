@@ -87,11 +87,8 @@ for p in ui themes vite; do
 	keep_fields "$pkg/$p/package.json" $fields
 done
 
-mkdir -p "$out/weft/go/warp"
-for f in warp/*.go; do
-	case "$f" in *_test.go) continue ;; esac
-	cp "$f" "$out/weft/go/warp/"
-done
+# warp and every package under it, without tests.
+tar -cf - --exclude '*_test.go' --exclude .DS_Store warp | tar -C "$out/weft/go" -xf -
 # go:embed leaves out a folder that holds a go.mod (it is another module), so
 # the bundle keeps it as go.mod.bundle and weft unpacks it as go.mod.
 cp go.mod "$out/weft/go/go.mod.bundle"

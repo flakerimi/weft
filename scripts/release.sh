@@ -16,10 +16,11 @@ scripts/version.sh "$version" || {
 	echo "release: give a version like 0.0.1 or 0.1.0-alpha.1" >&2
 	exit 2
 }
-# The CLI and the serving package; the playground needs a web build and is not
-# shipped. -short: the full tests install apps from the registry and build a
-# release themselves, so they run in the suite and in CI, not here.
-go test -short . ./cmd/weft
+# The Go the release ships: the root package (Version), warp and every
+# package under it, and the CLI; the playground needs a web build and is not
+# shipped. -short: the full CLI tests install apps from the registry and build
+# a release themselves, so they run in the suite and in CI, not here.
+go test -short . ./warp/... ./cmd/weft
 
 bundle="$root/cmd/weft/bundle"
 # restore moves what bundle.sh staged out of cmd/weft/bundle; nothing is
