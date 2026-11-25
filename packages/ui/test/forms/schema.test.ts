@@ -80,6 +80,13 @@ describe('validateField', () => {
     expect(validateField('nope', { url: true, message: 'Bad.' })).toBe('Bad.')
   })
 
+  it('lets an empty list skip every rule but required', () => {
+    expect(validateField([], { min: 1 })).toBeUndefined()
+    expect(validateField([], { max: 0 })).toBeUndefined()
+    expect(validateField([], { required: true })).toBe('This is required.')
+    expect(validateField(['a'], { min: 2 })).toBe('Choose at least 2.')
+  })
+
   it('checks a blank value (only spaces) against every rule but required', () => {
     expect(validateField('  ', { url: true })).toBe('Enter a web address that starts with http:// or https://.')
     expect(validateField('  ', { enum: ['a', 'b'] })).toBe('Choose one of: a, b.')

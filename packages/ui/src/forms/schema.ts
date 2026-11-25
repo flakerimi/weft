@@ -30,7 +30,7 @@
  *
  * (A boolean, a date, a file: only `required` applies.)
  *
- * Only a missing value (undefined, null or '') passes every rule but
+ * Only a missing value (undefined, null, '' or an empty list) passes every rule but
  * `required`; text of only spaces is checked by each of them, as the server
  * does. A field's first failing rule, in the order above (`url` and `enum`
  * last, `email` before them), gives its error.
@@ -87,8 +87,9 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 export function validateField(value: unknown, rule: FieldRule): string | undefined {
   const fail = (sentence: string) => rule.message ?? sentence
   if (rule.required && isEmpty(value)) return fail('This is required.')
-  // Every other rule skips only a missing or empty value; text of only spaces is checked like any other.
+  // Every other rule skips only a missing or empty value or an empty list; text of only spaces is checked like any other.
   if (value === undefined || value === null || value === '') return undefined
+  if (Array.isArray(value) && value.length === 0) return undefined
   if (typeof value === 'number') {
     if (rule.min !== undefined && value < rule.min) return fail(`Enter ${rule.min} or more.`)
     if (rule.max !== undefined && value > rule.max) return fail(`Enter ${rule.max} or less.`)

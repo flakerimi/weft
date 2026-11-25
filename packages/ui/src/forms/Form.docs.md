@@ -21,7 +21,7 @@ address with a host: "Enter a web address that starts with http:// or
 https://."), `enum` (a list of the values allowed: "Choose one of: a, b."),
 and `message` in place of the default sentences. `required` counts text of
 only spaces as empty; every other rule skips only a missing or empty value
-(`undefined`, `null` or `''`), so spaces alone fail `enum`, `url` and `email`.
+(`undefined`, `null`, `''` or an empty list), so spaces alone fail `enum`, `url` and `email`.
 Its TypeScript type is `FieldSchema`, and `validateFields` checks values
 against one anywhere.
 
