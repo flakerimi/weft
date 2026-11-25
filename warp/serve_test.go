@@ -91,7 +91,7 @@ func TestServeNilAPI(t *testing.T) {
 	if r.StatusCode != 404 {
 		t.Fatalf("status %d", r.StatusCode)
 	}
-	if got := strings.TrimSpace(body(r)); got != `{"error":{"code":"not_found","message":"no API"}}` {
+	if got := strings.TrimSpace(body(r)); got != `{"error":{"code":"not_found","message":"This app has no API."}}` {
 		t.Fatalf("body %q", got)
 	}
 	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
@@ -446,7 +446,7 @@ func TestManifestAPI(t *testing.T) {
 			t.Errorf("%s: body %q", path, r.body)
 		}
 	}
-	if r := do(t, Serve(pageBuild(t), nil), "GET", "/api/x"); r.StatusCode != 404 || !strings.Contains(r.body, "no API") {
+	if r := do(t, Serve(pageBuild(t), nil), "GET", "/api/x"); r.StatusCode != 404 || !strings.Contains(r.body, "This app has no API.") {
 		t.Fatalf("nil api: status %d body %q", r.StatusCode, r.body)
 	}
 }

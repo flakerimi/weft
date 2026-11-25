@@ -109,8 +109,6 @@ func spa(dist fs.FS) http.Handler {
 	})
 }
 
-func noAPI(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotFound)
-	w.Write([]byte(`{"error":{"code":"not_found","message":"no API"}}` + "\n"))
+func noAPI(w http.ResponseWriter, r *http.Request) {
+	WriteError(w, r, NotFound("This app has no API."))
 }
