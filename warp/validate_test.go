@@ -318,3 +318,23 @@ func TestCheckRulesNestedAndEmbedded(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestValidateRequiredPointer(t *testing.T) {
+	type S struct {
+		N *int     `json:"n" warp:"required"`
+		B *bool    `json:"b" warp:"required"`
+		S *string  `json:"s" warp:"required"`
+		M *string  `json:"m" warp:"required,email"`
+		F *float64 `json:"f" warp:"required,min=1"`
+	}
+	zero, off, empty, bad, half := 0, false, "", "nope", 0.5
+	got := fieldsOf(t, S{N: &zero, B: &off, S: &empty, M: &bad, F: &half})
+	want := map[string]string{"m": "Enter an email address.", "f": "Enter 1 or more."}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	got = fieldsOf(t, S{})
+	if len(got) != 5 || got["n"] != "This is required." {
+		t.Fatalf("a nil pointer must fail required: %v", got)
+	}
+}

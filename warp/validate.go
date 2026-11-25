@@ -151,6 +151,10 @@ func checkField(fv reflect.Value, rules []rule) string {
 	v := derefValue(fv)
 	for _, r := range rules {
 		if r.name == "required" {
+			// A pointer says "present, and it may be zero".
+			if fv.Kind() == reflect.Pointer && !fv.IsNil() {
+				continue
+			}
 			if !v.IsValid() || isZeroValue(v) {
 				return "This is required."
 			}
