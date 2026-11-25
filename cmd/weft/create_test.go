@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io/fs"
 	"net"
 	"os"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 )
 
@@ -512,5 +514,28 @@ func TestEnsureRefusesOtherVersion(t *testing.T) {
 		if exists(t, filepath.Join(dir, ".weft")) || out.Len()+errb.Len() != 0 {
 			t.Errorf("app %s, weft %s: the refusal wrote something", c.app, c.weft)
 		}
+	}
+}
+
+// A folder of the template with no file in it is not written: a release
+// bundle is embedded, which has no empty folders, so a bundle read from a
+// folder must make the same app. A file's folders are made.
+func TestWriteTemplateWritesNoEmptyFolders(t *testing.T) {
+	bundle := fstest.MapFS{
+		"template/api":                 {Mode: fs.ModeDir | 0o755},
+		"template/app":                 {Mode: fs.ModeDir | 0o755},
+		"template/app/hello":           {Mode: fs.ModeDir | 0o755},
+		"template/app/hello/x.go.tmpl": {Data: []byte("package [[.Name]]\n")},
+		"template/README.md":           {Data: []byte("x")},
+	}
+	dir := filepath.Join(t.TempDir(), "demo")
+	if err := writeTemplate(bundle, dir, templateData{Name: "demo"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(filepath.Join(dir, "app", "hello", "x.go")); err != nil || string(got) != "package demo\n" {
+		t.Errorf("app/hello/x.go = %q, %v", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "api")); err == nil {
+		t.Error("the empty template folder api was written")
 	}
 }
