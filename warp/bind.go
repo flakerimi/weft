@@ -2,6 +2,7 @@ package warp
 
 import (
 	"bytes"
+	"encoding"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -77,7 +78,10 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 		return true
 	}
 	var view, raw []reflect.StructField
-	for _, f := range inputFields(t, nil, map[reflect.Type]bool{}) {
+	fields, embedded := inputFields(t, nil)
+	mistakes = append(mistakes, embedded...)
+	visited := map[reflect.Type]bool{} // the struct types inside json fields, checked once
+	for _, f := range fields {
 		at := name + "." + f.Name
 		jsonKey, jsonOpts, isJSON := jsonTagOf(f.StructField)
 		pathKey, queryKey := tagName(f.StructField, "path"), tagName(f.StructField, "query")
@@ -100,17 +104,18 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 		case len(tags) == 3:
 			mistakes = append(mistakes, fmt.Sprintf("%s has a json, a path and a query tag; keep one.", at))
 		case isJSON:
-			switch {
-			case !p.readBody:
+			if !p.readBody {
 				mistakes = append(mistakes, fmt.Sprintf("%s is tagged json, and %s reads no body; tag it query or path.", at, method))
 				continue
-			case jsonKey == "":
-				mistakes = append(mistakes, fmt.Sprintf("%s has a json tag with no name; name it, as in json:%q.", at, snakeCase(f.Name)))
-				continue
-			case !validJSONName(jsonKey):
-				mistakes = append(mistakes, fmt.Sprintf("%s has the json name %q, which JSON tags cannot carry; use letters, digits and underscores.", at, jsonKey))
-				continue
-			case !claim("json", jsonKey, at):
+			}
+			ok := false
+			if m := jsonNameMistake(at, f.Name, jsonKey); m != "" {
+				mistakes = append(mistakes, m)
+			} else {
+				ok = claim("json", jsonKey, at)
+			}
+			mistakes = append(mistakes, bodyMistakes(f.Type, visited)...)
+			if !ok {
 				continue
 			}
 			view = append(view, reflect.StructField{
@@ -185,28 +190,26 @@ type inputField struct {
 	index []int
 }
 
-// inputFields lists the fields of t that a request can fill. An embedded
-// struct's fields are t's own; an unexported field is left out, and so is an
-// embedded pointer to an unexported struct, which cannot be set.
-func inputFields(t reflect.Type, prefix []int, seen map[reflect.Type]bool) []inputField {
-	if seen[t] {
-		return nil
-	}
-	seen[t] = true
-	defer delete(seen, t)
+// inputFields lists the fields of the struct type t that a request can fill.
+// An embedded struct's fields are t's own, and an unexported field is left
+// out. An embedded pointer to a struct is a mistake, returned as a sentence:
+// when the body leaves its fields out it stays nil, and reading a promoted
+// field panics.
+func inputFields(t reflect.Type, prefix []int) ([]inputField, []string) {
 	var out []inputField
+	var mistakes []string
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
 		index := append(slices.Clone(prefix), i)
 		if f.Anonymous {
-			ft := f.Type
-			if ft.Kind() == reflect.Pointer {
-				ft = ft.Elem()
+			if f.Type.Kind() == reflect.Pointer && f.Type.Elem().Kind() == reflect.Struct && f.Type.Elem() != timeType {
+				elem := typeName(f.Type.Elem())
+				mistakes = append(mistakes, fmt.Sprintf("%s embeds *%s, a pointer; embed %s by value.", typeName(t), elem, elem))
+				continue
 			}
-			if ft.Kind() == reflect.Struct && ft != timeType {
-				if f.Type.Kind() != reflect.Pointer || f.IsExported() {
-					out = append(out, inputFields(ft, index, seen)...)
-				}
+			if f.Type.Kind() == reflect.Struct && f.Type != timeType {
+				fields, more := inputFields(f.Type, index)
+				out, mistakes = append(out, fields...), append(mistakes, more...)
 				continue
 			}
 		}
@@ -214,7 +217,82 @@ func inputFields(t reflect.Type, prefix []int, seen map[reflect.Type]bool) []inp
 			out = append(out, inputField{f, index})
 		}
 	}
-	return out
+	return out, mistakes
+}
+
+var (
+	jsonUnmarshaler = reflect.TypeFor[json.Unmarshaler]()
+	textUnmarshaler = reflect.TypeFor[encoding.TextUnmarshaler]()
+)
+
+// decodesItself reports whether t reads itself from JSON or from text, so
+// that what is inside it is its own affair.
+func decodesItself(t reflect.Type) bool {
+	pt := reflect.PointerTo(t)
+	return t.Implements(jsonUnmarshaler) || pt.Implements(jsonUnmarshaler) ||
+		t.Implements(textUnmarshaler) || pt.Implements(textUnmarshaler)
+}
+
+// bodyMistakes returns the mistakes in the struct types a json field of type
+// t holds, through pointers, slices, arrays and map values, each type checked
+// once. Inside the body only json tags make sense: every exported field needs
+// a usable json name, json:"-" leaves a field out, and a query or path tag is
+// a mistake. time.Time and a type that decodes itself are not looked inside.
+func bodyMistakes(t reflect.Type, visited map[reflect.Type]bool) []string {
+	for !decodesItself(t) && isContainer(t.Kind()) {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct || t == timeType || decodesItself(t) || visited[t] {
+		return nil
+	}
+	visited[t] = true
+	name := typeName(t)
+	fields, mistakes := inputFields(t, nil)
+	owner := map[string]string{}
+	for _, f := range fields {
+		at := name + "." + f.Name
+		key, _, hasJSON := jsonTagOf(f.StructField)
+		if !hasJSON && f.Tag.Get("json") == "-" {
+			continue
+		}
+		bad := false
+		for _, tag := range []string{"query", "path"} {
+			if tagName(f.StructField, tag) != "" {
+				mistakes = append(mistakes, fmt.Sprintf("%s is tagged %s inside a body field; only the route's input itself takes query and path tags.", at, tag))
+				bad = true
+			}
+		}
+		switch {
+		case !hasJSON:
+			if !bad {
+				mistakes = append(mistakes, fmt.Sprintf("%s has no json tag; add one.", at))
+			}
+		case jsonNameMistake(at, f.Name, key) != "":
+			mistakes = append(mistakes, jsonNameMistake(at, f.Name, key))
+		case owner[key] != "":
+			mistakes = append(mistakes, fmt.Sprintf("%s and %s both have the json key %q; rename one.", owner[key], at, key))
+		default:
+			owner[key] = at
+		}
+		mistakes = append(mistakes, bodyMistakes(f.Type, visited)...)
+	}
+	return mistakes
+}
+
+func isContainer(k reflect.Kind) bool {
+	return k == reflect.Pointer || k == reflect.Slice || k == reflect.Array || k == reflect.Map
+}
+
+// jsonNameMistake returns the sentence for a json key that the field at, whose
+// Go name is field, cannot use, or "".
+func jsonNameMistake(at, field, key string) string {
+	switch {
+	case key == "":
+		return fmt.Sprintf("%s has a json tag with no name; name it, as in json:%q.", at, snakeCase(field))
+	case !validJSONName(key):
+		return fmt.Sprintf("%s has the json name %q, which JSON tags cannot carry; use letters, digits and underscores.", at, key)
+	}
+	return ""
 }
 
 // jsonTagOf returns the key and options of f's json tag, the key "" when the
@@ -380,7 +458,7 @@ func (p *plan) fill(w http.ResponseWriter, r *http.Request, dst reflect.Value, l
 			if len(vals) == 0 {
 				continue
 			}
-			field := fieldAt(dst, q.index)
+			field := dst.FieldByIndex(q.index)
 			switch {
 			case q.list:
 				field.Set(reflect.ValueOf(slices.Clone(vals)).Convert(q.typ))
@@ -404,7 +482,7 @@ func (p *plan) fill(w http.ResponseWriter, r *http.Request, dst reflect.Value, l
 		}
 	}
 	for _, pp := range p.path {
-		if !pp.set(fieldAt(dst, pp.index), r.PathValue(pp.key)) {
+		if !pp.set(dst.FieldByIndex(pp.index), r.PathValue(pp.key)) {
 			return NotFound(fmt.Sprintf("Nothing is at %s.", r.URL.Path))
 		}
 	}
@@ -442,9 +520,7 @@ func (p *plan) decode(w http.ResponseWriter, r *http.Request, dst reflect.Value,
 		return p.bodyError(data, err)
 	}
 	for i, index := range p.body {
-		if fv := view.Elem().Field(i); !fv.IsZero() {
-			fieldAt(dst, index).Set(fv)
-		}
+		dst.FieldByIndex(index).Set(view.Elem().Field(i))
 	}
 	return nil
 }
@@ -544,19 +620,4 @@ func sizeOf(limit int64) string {
 		return fmt.Sprintf("%d MB", limit>>20)
 	}
 	return fmt.Sprintf("%d bytes", limit)
-}
-
-// fieldAt returns the field at index in v, making each embedded pointer it
-// passes through.
-func fieldAt(v reflect.Value, index []int) reflect.Value {
-	for i, x := range index {
-		if i > 0 && v.Kind() == reflect.Pointer {
-			if v.IsNil() {
-				v.Set(reflect.New(v.Type().Elem()))
-			}
-			v = v.Elem()
-		}
-		v = v.Field(x)
-	}
-	return v
 }

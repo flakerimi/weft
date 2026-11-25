@@ -260,10 +260,16 @@ type Owner struct {
 	OwnerID int `path:"owner"`
 }
 
+type Stock struct {
+	Count int  `json:"count"`
+	Max   *int `json:"max"`
+}
+
 func TestEmbeddedFieldsAreTheInputs(t *testing.T) {
 	type In struct {
 		Paging
-		*Owner
+		Owner
+		Stock
 		Name   string `json:"name"`
 		hidden string
 	}
@@ -277,8 +283,15 @@ func TestEmbeddedFieldsAreTheInputs(t *testing.T) {
 	if w := send(t, h, "POST", "/api/owners/4/items?page=2", `{"name":"lamp"}`); w.Code != 201 {
 		t.Fatalf("status %d, body %q", w.Code, w.Body.String())
 	}
-	if got.Page != 2 || got.Owner == nil || got.OwnerID != 4 || got.Name != "lamp" {
+	if got.Page != 2 || got.OwnerID != 4 || got.Name != "lamp" || got.Count != 0 || got.Max != nil {
 		t.Fatalf("input %+v", got)
+	}
+	got = In{Stock: Stock{Count: 5}}
+	if w := send(t, h, "POST", "/api/owners/4/items?page=2", `{"count":0,"max":0}`); w.Code != 201 {
+		t.Fatalf("explicit zeros: status %d, body %q", w.Code, w.Body.String())
+	}
+	if got.Count != 0 || got.Max == nil || *got.Max != 0 {
+		t.Fatalf("explicit zeros: input %+v", got)
 	}
 	if w := send(t, h, "POST", "/api/owners/4/items?page=0", `{"hidden":"x"}`); w.Code != 400 {
 		t.Fatalf("an unexported field is not in the body: status %d, body %q", w.Code, w.Body.String())
@@ -606,5 +619,205 @@ func TestTypedRouteAfterStart(t *testing.T) {
 	want := `warp: route "GET /products/{id}" was registered after the app started serving; register every route before Serve.`
 	if got := errText(app.Err()); got != want {
 		t.Fatalf("Err() = %q\nwant %q", got, want)
+	}
+}
+
+// Money reads itself from JSON, so registration does not look inside it.
+type Money struct{ Cents int }
+
+func (m *Money) UnmarshalJSON(b []byte) error {
+	m.Cents = len(b)
+	return nil
+}
+
+// Code reads itself from text, so registration does not look inside it.
+type Code struct{ V string }
+
+func (c *Code) UnmarshalText(b []byte) error {
+	c.V = string(b)
+	return nil
+}
+
+func TestNestedBodyMistakes(t *testing.T) {
+	const at = "warp: POST /orders: "
+	const inBody = "; only the route's input itself takes query and path tags."
+	for _, c := range []struct {
+		name     string
+		register func(app *App)
+		want     []string
+	}{
+		{"a nested struct", func(app *App) {
+			type Address struct {
+				Street string `json:"street"`
+				City   string
+				Secret string `json:"-"`
+			}
+			type OrderIn struct {
+				Address Address `json:"address"`
+			}
+			Post(app, "/orders", func(context.Context, OrderIn) (Item, error) { return Item{}, nil })
+		}, []string{"Address.City has no json tag; add one."}},
+		{"a slice of structs", func(app *App) {
+			type Line struct {
+				SKU string `query:"sku"`
+			}
+			type OrderIn struct {
+				Lines []Line `json:"lines"`
+			}
+			Post(app, "/orders", func(context.Context, OrderIn) (Item, error) { return Item{}, nil })
+		}, []string{"Line.SKU is tagged query inside a body field" + inBody}},
+		{"a pointer to a struct", func(app *App) {
+			type Ship struct {
+				ID int `json:"id" path:"id"`
+			}
+			type OrderIn struct {
+				Ship *Ship `json:"ship"`
+			}
+			Post(app, "/orders", func(context.Context, OrderIn) (Item, error) { return Item{}, nil })
+		}, []string{"Ship.ID is tagged path inside a body field" + inBody}},
+		{"a map of structs", func(app *App) {
+			type Note struct {
+				Text string `json:",omitempty"`
+			}
+			type OrderIn struct {
+				Notes map[string]Note `json:"notes"`
+			}
+			Post(app, "/orders", func(context.Context, OrderIn) (Item, error) { return Item{}, nil })
+		}, []string{`Note.Text has a json tag with no name; name it, as in json:"text".`}},
+		{"an array of pointers to structs", func(app *App) {
+			type Part struct {
+				Name string `json:"it's"`
+			}
+			type OrderIn struct {
+				Pair [2]*Part `json:"pair"`
+			}
+			Post(app, "/orders", func(context.Context, OrderIn) (Item, error) { return Item{}, nil })
+		}, []string{`Part.Name has the json name "it's", which JSON tags cannot carry; use letters, digits and underscores.`}},
+		{"one key twice, through an embedded struct", func(app *App) {
+			type Inner struct {
+				A string `json:"a"`
+			}
+			type Box struct {
+				Inner
+				B string `json:"a"`
+			}
+			type OrderIn struct {
+				Boxes map[string][]Box `json:"boxes"`
+			}
+			Post(app, "/orders", func(context.Context, OrderIn) (Item, error) { return Item{}, nil })
+		}, []string{`Box.A and Box.B both have the json key "a"; rename one.`}},
+		{"deeper, and in field order", func(app *App) {
+			type Geo struct {
+				Lat float64
+			}
+			type Address struct {
+				Geo  Geo `json:"geo"`
+				Zone string
+			}
+			type OrderIn struct {
+				Address Address `json:"address"`
+				Note    string
+			}
+			Post(app, "/orders", func(context.Context, OrderIn) (Item, error) { return Item{}, nil })
+		}, []string{
+			"Geo.Lat has no json tag; add one.",
+			"Address.Zone has no json tag; add one.",
+			"OrderIn.Note has no json, query or path tag; add one.",
+		}},
+		{"a self-referencing type", func(app *App) {
+			type Node struct {
+				City     string
+				Children []Node `json:"children"`
+				Parent   *Node  `json:"parent"`
+			}
+			type OrderIn struct {
+				Root  Node   `json:"root"`
+				Other []Node `json:"other"`
+			}
+			Post(app, "/orders", func(context.Context, OrderIn) (Item, error) { return Item{}, nil })
+		}, []string{"Node.City has no json tag; add one."}},
+		{"an embedded pointer, nested", func(app *App) {
+			type Meta struct {
+				Tag string `json:"tag"`
+			}
+			type Address struct {
+				*Meta
+				City string `json:"city"`
+			}
+			type OrderIn struct {
+				Address Address `json:"address"`
+			}
+			Post(app, "/orders", func(context.Context, OrderIn) (Item, error) { return Item{}, nil })
+		}, []string{"Address embeds *Meta, a pointer; embed Meta by value."}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			app := New(Config{})
+			c.register(app)
+			var want []string
+			for _, w := range c.want {
+				want = append(want, at+w)
+			}
+			if got := strings.Split(errText(app.Err()), "\n"); !reflect.DeepEqual(got, want) {
+				t.Fatalf("Err() =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+			}
+			if routes := app.Routes(); len(routes) != 0 {
+				t.Fatalf("Routes() = %v, want none", routes)
+			}
+		})
+	}
+}
+
+func TestEmbeddedPointerInInput(t *testing.T) {
+	type Meta struct {
+		Tag string `query:"tag"`
+	}
+	type ShowIn struct {
+		*Meta
+		ID int `path:"id"`
+	}
+	app := New(Config{})
+	Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
+	want := "warp: GET /products/{id}: ShowIn embeds *Meta, a pointer; embed Meta by value."
+	if got := errText(app.Err()); got != want {
+		t.Fatalf("Err() = %q, want %q", got, want)
+	}
+}
+
+func TestNestedBodyBindsAndValidates(t *testing.T) {
+	type Address struct {
+		City string `json:"city" warp:"required"`
+		Zip  string `json:"zip"`
+	}
+	type Line struct {
+		SKU string `json:"sku" warp:"required"`
+	}
+	type OrderIn struct {
+		Address Address         `json:"address"`
+		Lines   []Line          `json:"lines"`
+		ByName  map[string]Line `json:"by_name"`
+		When    time.Time       `json:"when"`
+		Money   Money           `json:"money"`
+		Code    Code            `json:"code"`
+	}
+	var got OrderIn
+	app := New(Config{})
+	Post(app, "/orders", func(ctx context.Context, in OrderIn) (Item, error) {
+		got = in
+		return Item{}, nil
+	})
+	h := mustRegister(t, app)
+	w := send(t, h, "POST", "/api/orders", `{"address":{"zip":"1"},"lines":[{"sku":""}]}`)
+	want := map[string]string{"address.city": "This is required.", "lines.0.sku": "This is required."}
+	if _, _, fields := apiError(t, w); w.Code != 422 || !reflect.DeepEqual(fields, want) {
+		t.Fatalf("status %d, fields %v", w.Code, fields)
+	}
+	body := `{"address":{"city":"Oslo"},"lines":[{"sku":"a"}],"by_name":{"x":{"sku":"b"}},` +
+		`"when":"2026-11-25T10:00:00Z","money":"1.50","code":"ab"}`
+	if w := send(t, h, "POST", "/api/orders", body); w.Code != 201 {
+		t.Fatalf("status %d, body %q", w.Code, w.Body.String())
+	}
+	if got.Address.City != "Oslo" || got.Lines[0].SKU != "a" || got.ByName["x"].SKU != "b" ||
+		got.When.Year() != 2026 || got.Money.Cents != 6 || got.Code.V != "ab" {
+		t.Fatalf("input %+v", got)
 	}
 }
