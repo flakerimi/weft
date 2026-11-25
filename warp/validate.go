@@ -67,42 +67,95 @@ func validateStruct(rv reflect.Value, prefix string, fields map[string]string) {
 		if msg := checkField(fv, spec.rules); msg != "" {
 			fields[key] = msg
 		}
-		if holdsStructs(fv.Type()) {
-			validateInside(fv, key, fields)
+		if !holdsStructs(fv.Type()) {
+			continue
+		}
+		if inner, ok := reachable(fv); ok {
+			validateInside(inner, key, fields)
 		}
 	}
 }
 
-// validateInside validates the structs in v, a struct, or a pointer, slice,
-// array or map that holds them. A list's entries are keyed by their index
-// after key, a map's by its keys, formatted with fmt.Sprint and visited in
-// sorted order.
+// validateInside validates the structs in v, a struct, or a slice, array or
+// map whose element type can hold them, as reachable gives it. A list's
+// entries are keyed by their index after key, a map's by its keys, formatted
+// with fmt.Sprint and visited in sorted order. An entry's key is made only
+// for an entry that holds something to validate, so a long list of anything
+// else costs nothing.
 func validateInside(v reflect.Value, key string, fields map[string]string) {
-	v = derefValue(v)
-	switch {
-	case isDescendable(v):
+	switch v.Kind() {
+	case reflect.Struct:
 		validateStruct(v, key, fields)
-	case !v.IsValid():
-	case v.Kind() == reflect.Slice || v.Kind() == reflect.Array:
+	case reflect.Slice, reflect.Array:
+		if !holdsStructs(v.Type().Elem()) {
+			return
+		}
 		for i := 0; i < v.Len(); i++ {
-			validateInside(v.Index(i), key+"."+strconv.Itoa(i), fields)
+			if inner, ok := reachable(v.Index(i)); ok {
+				validateInside(inner, key+"."+strconv.Itoa(i), fields)
+			}
 		}
-	case v.Kind() == reflect.Map:
-		keys := v.MapKeys()
-		names := make(map[reflect.Value]string, len(keys))
-		for _, k := range keys {
-			names[k] = fmt.Sprint(k.Interface())
+	case reflect.Map:
+		if !holdsStructs(v.Type().Elem()) {
+			return
 		}
-		slices.SortFunc(keys, func(a, b reflect.Value) int { return strings.Compare(names[a], names[b]) })
-		for _, k := range keys {
-			validateInside(v.MapIndex(k), key+"."+names[k], fields)
+		type entry struct {
+			name  string
+			value reflect.Value
+		}
+		var entries []entry
+		probe := reflect.New(v.Type().Elem()).Elem()
+		for iter := v.MapRange(); iter.Next(); {
+			probe.SetIterValue(iter) // reused, so an entry with nothing in it costs nothing
+			if _, ok := reachable(probe); ok {
+				inner, _ := reachable(iter.Value())
+				entries = append(entries, entry{fmt.Sprint(iter.Key().Interface()), inner})
+			}
+		}
+		slices.SortFunc(entries, func(a, b entry) int { return strings.Compare(a.name, b.name) })
+		for _, e := range entries {
+			validateInside(e.value, key+"."+e.name, fields)
 		}
 	}
 }
 
-// holdsStructs reports whether a value of type t may be, or hold through
+// reachable returns what validation looks inside in v, following non-nil
+// pointers, and false when v holds nothing to validate. An interface is
+// looked inside only when it holds a struct or a non-nil pointer to one, a
+// value built by hand: decoded JSON never puts a struct in an interface, so a
+// decoded any is a leaf whatever its size.
+func reachable(v reflect.Value) (reflect.Value, bool) {
+	for v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return reflect.Value{}, false
+		}
+		v = v.Elem()
+	}
+	if v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return reflect.Value{}, false
+		}
+		v = v.Elem()
+		if v.Kind() == reflect.Pointer {
+			if v.IsNil() {
+				return reflect.Value{}, false
+			}
+			v = v.Elem()
+		}
+		return v, isDescendable(v)
+	}
+	switch v.Kind() {
+	case reflect.Struct:
+		return v, isDescendable(v)
+	case reflect.Slice, reflect.Array, reflect.Map:
+		return v, v.Len() > 0
+	}
+	return reflect.Value{}, false
+}
+
+// holdsStructs reports whether a value of type t can be, or hold through
 // pointers, slices, arrays and map values, a struct to validate. An interface
-// may hold one.
+// can, when a struct was put in it by hand.
 func holdsStructs(t reflect.Type) bool {
 	for isContainer(t.Kind()) {
 		t = t.Elem()

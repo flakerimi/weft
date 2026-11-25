@@ -1,9 +1,13 @@
 package warp
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -389,7 +393,10 @@ func TestValidateDescendsIntoMapValues(t *testing.T) {
 		Nested  map[string]map[int]Line `json:"nested"`
 		Nothing map[string]*Line        `json:"nothing"`
 		Any     any                     `json:"any"`
+		AnyPtr  any                     `json:"any_ptr"`
+		AnyList any                     `json:"any_list"`
 		Anys    map[string]any          `json:"anys"`
+		Grid    [][]Line                `json:"grid"`
 	}
 	got := fieldsOf(t, Order{
 		ByName:  map[string]Line{"x": {}, "y": {SKU: "ok"}},
@@ -398,7 +405,10 @@ func TestValidateDescendsIntoMapValues(t *testing.T) {
 		Nested:  map[string]map[int]Line{"a": {7: {}}},
 		Nothing: map[string]*Line{"n": nil},
 		Any:     Line{},
-		Anys:    map[string]any{"q": &Line{}, "r": 3},
+		AnyPtr:  &Line{},
+		AnyList: []Line{{}}, // an interface holding a list is a leaf
+		Anys:    map[string]any{"q": &Line{}, "r": 3, "s": []any{Line{}}},
+		Grid:    [][]Line{{{SKU: "ok"}}, {{}, {SKU: "ok"}}},
 	})
 	want := map[string]string{
 		"by_name.x.sku":  "This is required.",
@@ -406,7 +416,9 @@ func TestValidateDescendsIntoMapValues(t *testing.T) {
 		"lists.l.1.sku":  "This is required.",
 		"nested.a.7.sku": "This is required.",
 		"any.sku":        "This is required.",
+		"any_ptr.sku":    "This is required.",
 		"anys.q.sku":     "This is required.",
+		"grid.1.0.sku":   "This is required.",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("fields %v, want %v", got, want)
@@ -443,5 +455,88 @@ func TestSelfReferenceThroughMap(t *testing.T) {
 	fields := fieldsOf(t, Good{Name: "root", Kids: map[string]Good{"a": {Name: "a", Kids: map[string]Good{"b": {}}}}})
 	if want := map[string]string{"kids.a.kids.b.name": "This is required."}; !reflect.DeepEqual(fields, want) {
 		t.Fatalf("fields %v, want %v", fields, want)
+	}
+}
+
+// nestedLists is JSON of lists nested depth deep, each holding perLevel
+// numbers.
+func nestedLists(depth, perLevel int) []byte {
+	var b bytes.Buffer
+	for range depth {
+		b.WriteByte('[')
+		for j := range perLevel {
+			fmt.Fprintf(&b, "%d,", j)
+		}
+	}
+	b.WriteString("0")
+	for range depth {
+		b.WriteByte(']')
+	}
+	return b.Bytes()
+}
+
+func TestValidateDecodedAnyCostsNothing(t *testing.T) {
+	type Doc struct {
+		Name string `json:"name" warp:"required"`
+		Data any    `json:"data"`
+	}
+	var doc Doc
+	body := `{"name":"n","data":` + string(nestedLists(2000, 50)) + `}`
+	if err := json.Unmarshal([]byte(body), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if err := Validate(doc); err != nil {
+		t.Fatal(err)
+	}
+	if allocs := testing.AllocsPerRun(5, func() { Validate(&doc) }); allocs >= 50 {
+		t.Fatalf("Validate on decoded lists 2000 deep: %.0f allocations a run, want fewer than 50", allocs)
+	}
+}
+
+func TestValidateLongListsCostNothing(t *testing.T) {
+	type Doc struct {
+		Tags  []string           `json:"tags" warp:"max=200000"`
+		Grid  [][]int            `json:"grid"`
+		Score map[string]float64 `json:"score"`
+		Any   []any              `json:"any"`
+		Bag   map[string]any     `json:"bag"`
+	}
+	doc := Doc{Tags: make([]string, 100000), Grid: make([][]int, 100000), Score: map[string]float64{}, Any: make([]any, 100000), Bag: map[string]any{}}
+	for i := range 100000 {
+		doc.Tags[i] = "t"
+		doc.Grid[i] = []int{i}
+		doc.Any[i] = []any{"x", float64(i)}
+		doc.Score[strconv.Itoa(i)] = float64(i)
+		doc.Bag[strconv.Itoa(i)] = map[string]any{"k": "v"}
+	}
+	if allocs := testing.AllocsPerRun(5, func() { Validate(&doc) }); allocs >= 50 {
+		t.Fatalf("Validate on lists of 100000: %.0f allocations a run, want fewer than 50", allocs)
+	}
+}
+
+func BenchmarkValidateDecodedAny(b *testing.B) {
+	var doc struct {
+		Data any `json:"data"`
+	}
+	if err := json.Unmarshal(append(append([]byte(`{"data":`), nestedLists(2000, 50)...), '}'), &doc); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		Validate(&doc)
+	}
+}
+
+func BenchmarkValidateLongStrings(b *testing.B) {
+	doc := struct {
+		Tags []string `json:"tags"`
+		Any  []any    `json:"any"`
+	}{Tags: make([]string, 100000), Any: make([]any, 100000)}
+	for i := range doc.Any {
+		doc.Any[i] = "x"
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		Validate(&doc)
 	}
 }
