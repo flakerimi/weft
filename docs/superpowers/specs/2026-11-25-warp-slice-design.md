@@ -51,11 +51,11 @@ The owner chose this order on 2026-11-25 ("slice first, build it"). No first rea
 
 ### 1. What the core gains (`warp/`)
 
-**Route names, modules and permissions.** `Route` gains `Module` (the name of the module whose `Register` was running when the route was added; empty for a route added outside one), `Name` and `Permission`. Two exported options set them: `warp.Name("list")` and `warp.Permission("products:edit")`. A route without `warp.Name` is named from its method and path: the static path segments joined with `_`, with the method in front unless it is `GET` (`GET /hello` is `hello`; `POST /hello/greet` is `post_hello_greet`). Two routes of one module with the same name are a registration mistake. `warp.Permission` only records; the module that enforces it (auth) supplies the option that also guards.
+**Route names, modules and permissions.** `Route` gains `Module` (the name of the module whose `Register` was running when the route was added; empty for a route added outside one), `Name` and `Permission`. Two exported options set them: `warp.Name("list")` and `warp.Permission("products:edit")`. A route without `warp.Name` is named from its method and path: the static path segments joined with `_`, with the method in front unless it is `GET` (`GET /hello` is `hello`; `POST /hello/greet` is `post_hello_greet`). Two routes of one module with the same name are a registration mistake. `warp.Permission` only records; the module that enforces it (auth) supplies the option that also guards, built with `warp.Options(opts...)`, which makes one route option out of several. Without it a package outside the core could not write an option that both records and guards.
 
 **What a module depends on.** Two lifetimes, two mechanisms, and nothing else:
 
-- For the app's lifetime (the database, later the mailer): `warp.Provide(app, value)` stores one value per Go type, and `warp.Need[T](app)` returns it or records one mistake naming the module that asked and the module to list first. A module wraps these in its own typed function, so app code reads `data.For(app)`. There is no lookup by string and no package-level state.
+- For the app's lifetime (the database, later the mailer): `warp.Provide(app, value)` stores one value per Go type, and `warp.Need[T](app, "data")` returns it, or returns the zero value and records one mistake: `module "products" needs the "data" module; list data.Module() before it in app/modules.go.` The caller names the module it needs, because a module that is not listed yet cannot name itself. A module wraps these in its own typed function, so app code reads `data.For(app)`. There is no lookup by string and no package-level state.
 - For one request (the signed-in user, the open transaction): values on the `context.Context` the handler receives, behind a function of the owning module (`auth.User(ctx)`).
 
 **Updates that touch only what was sent.** The core records which top-level keys a JSON body had: `warp.Sent(ctx, "name") bool` and `warp.SentKeys(ctx) []string`. On a route registered with `warp.Patch`, rules run only on the fields the body sent, so one struct serves create and update: omitting `name` leaves it alone, and sending `"name": ""` still fails `required`. `Validate(v)` called directly checks everything, as today. The difference lives in `Patch` and is stated in its doc comment.
@@ -66,17 +66,28 @@ The owner chose this order on 2026-11-25 ("slice first, build it"). No first rea
 
 **Cross-site requests.** Every request under `/api` with a method other than `GET`, `HEAD` or `OPTIONS` goes through `http.CrossOriginProtection` before routing. One from another site is answered 403, code `forbidden`, `This request came from another site.` `TRUSTED_ORIGINS` in `.env` (comma-separated origins) lets named sites through, for an app whose pages are served elsewhere. This closes the gap W1's review found: a route that takes no body was open.
 
-**The app describes itself.** `(*App).Describe() Description` returns every route (module, name, method, path, status, permission, input type, output type) and every struct type they reach, each field with its JSON, query or path name, its TypeScript type, whether it may be absent, and its parsed rules. It is a file of the core, not a package of its own: the core must print it on request and cannot import a package that imports it. When the environment has `WARP_DESCRIBE=1`, `Serve` writes the description as JSON to standard output and returns without listening.
+**The app describes itself.** `(*App).Describe() Description` returns every route (module, name, method, path, status, permission, input type, output type) and every struct type they reach, each field with its JSON, query or path name, its TypeScript type, whether it may be absent, and its parsed rules. It is a file of the core, not a package of its own: the core must print it on request and cannot import a package that imports it. When the environment has `WARP_DESCRIBE=1`, `(*App).Serve` writes the description as JSON to standard output and returns nil without migrating, starting or listening. It does so after its check of `Err()`, so a registration mistake still fails `weft gen` with its sentence.
+
+**One struct for create and update.** Three small general things, so the core never learns what a record is:
+
+- *A body field.* An input may have one field tagged `body:"json"`. It receives the whole JSON object, and its fields are keyed without a prefix in errors and in `Sent` (`name`, not `body.name`). An input with a body field has no `json` fields of its own. A struct may hold a field of a type parameter where it may not embed one, so a generic package can write `struct { ID int64 \`path:"id"\`; Body T \`body:"json"\` }`. The tag leaves room for `body:"raw"` later.
+- *A `readonly` rule.* A field with `warp:"readonly"` is answered but never read: it is left out of the body a route takes (sending it is the usual 400, "does not take"), and out of the generated input type and schema.
+- *`data.Record`* (section 2), which a model embeds by value.
+
+**Behind a proxy.** `TRUST_PROXY=on` in `.env` makes the app believe `X-Forwarded-Proto` and the last address of `X-Forwarded-For`; it is off by default, since a client can send both. `warp.ClientIP(r)` and `warp.IsHTTPS(r)` give the answer either way. `APP_URL` is the address people open the app at (default `http://localhost:` and the port); `weft dev` sets it to the page server's address.
+
+**Starting without listening.** `(*App).Start(ctx)` runs the modules' `Migrate` and `Start`, and `(*App).Stop(ctx)` their `Stop`, as `Run` does around serving. A test that uses `Handler()` calls them; `Run` is built on them.
 
 ### 2. Data (`warp/data`)
 
-- **Opening.** `data.Module()` reads `DB_DRIVER` and `DB_URL` from `.env`, opens the database with `database/sql`, and provides a `*data.DB`. The app's `main.go` imports the driver, as `database/sql` intends. A missing driver or value is one sentence at start.
-- **A store.** `data.NewStore[T](db, "products")` for a struct with an `ID int64`. Columns are the fields' `json` names. `CreatedAt` and `UpdatedAt` of type `time.Time`, when present, are set by the store. Methods: `List(ctx, Query)`, `Get(ctx, id)`, `Create(ctx, *T)`, `Update(ctx, id, *T, fields []string)` (only the named fields are written), `Delete(ctx, id)`. A missing record is `warp.NotFound`.
+- **Opening.** `data.Module()` reads `DB_DRIVER` and `DB_URL` from `.env` and provides a `*data.DB`. Registering does no file or network work: the database is opened, and tables are made, in the module's `Migrate`, which runs before any module starts. So `weft gen` never creates a database. The app's `main.go` imports the driver, as `database/sql` intends. A missing driver or value is one sentence at start.
+- **A record.** A model embeds `data.Record` by value: `ID int64`, `CreatedAt` and `UpdatedAt`, with the JSON names `id`, `created_at` and `updated_at`, all `readonly`. `data.ID` is the input `struct { ID int64 \`path:"id\"\` }`.
+- **A store.** `data.NewStore[T](db, "products")` for a struct that embeds `data.Record`. It records the table it needs on the `*data.DB`; nothing is opened. Columns are the fields' `json` names. The two timestamps are set by the store. Methods: `List(ctx, Query)`, `Get(ctx, id)`, `Create(ctx, *T)`, `Update(ctx, id, *T, fields []string)` (only the named fields are written), `Delete(ctx, id)`. A missing record is `warp.NotFound`.
 - **Tables.** At start a missing table is created and a missing column is added. A column whose type no longer matches stops the app with one sentence naming the table, the column and both types. Nothing is ever dropped or retyped.
 - **Lists.** `data.Query` is an ordinary typed input: `Page`, `PerPage` (default 20, at most 100), `Sort` (`name`, `-created_at`), `Q`, `Filter`. A field takes part only if its `data` tag says so: `data:"sort,filter,search"`. Sorting or filtering on any other field is a 400 that names it. The answer is `data.List[T]{Items, Total, Page, PerPage}`.
 - **Transactions.** `db.Tx(ctx, func(ctx context.Context) error)` commits when the function returns nil and rolls back otherwise. A store call made with that context uses the transaction.
 - **Already taken.** A field with the rule `unique` gets a unique index. A violation is answered 422 on that field, `This is already taken.`, not 500.
-- **The five routes.** `data.Resource(app, "/products", store, opts...)` registers `list`, `show`, `create`, `update` (a `PATCH` writing the sent fields) and `remove`, named so. It lives in `data`, not in the core, because the core cannot import `data`. An option gives per-action route options, which is how a permission per action is attached.
+- **The five routes.** `data.Resource(app, "/products", store, opts...)` registers `list`, `show`, `create`, `update` (a `PATCH` writing the sent fields) and `remove`, named so. `create` takes the model as its body; `update` takes the id from the path and the model as its body, writing only the sent fields; `show` and `remove` take `data.ID`. It lives in `data`, not in the core, because the core cannot import `data`. An option gives per-action route options, which is how a permission per action is attached.
 - **Engine.** SQLite only, behind a small dialect type so the next engines add a dialect and do not touch the store. Its tests need a driver, which `warp/` may not import, so they live in a nested Go module, `dbtest/`, with its own `go.mod` (the pure-Go SQLite driver, and a `replace` to the repository). The suite runs it beside `go test ./...`.
 
 ### 3. Login (`warp/auth`)
@@ -86,9 +97,9 @@ The smallest login that is honest about security:
 - **Users** in a table through `data`: email (unique), a password hash, a role.
 - **Passwords** are hashed with PBKDF2-HMAC-SHA256 from the standard library, 600,000 iterations, a random salt, stored with a prefix that names the scheme and its parameters so a later scheme can sit beside it.
 - **Sessions** are a signed cookie (HMAC-SHA256 with `AUTH_SECRET`): the user's id and an expiry. `HttpOnly`, `SameSite=Lax`, `Secure` when the request was HTTPS, lasting `AUTH_SESSION_DAYS` (default 30). `AUTH_SECRET` shorter than 32 bytes stops the app at start.
-- **Routes** under `/api/auth`: `login`, `logout`, `me`. A wrong email and a wrong password get the same answer. After 5 failed tries for one email and address within a minute, further tries get 429 for the rest of that minute.
-- **The first user.** `AUTH_OWNER_EMAIL` names the owner. If no user exists at start, the app logs a one-time setup link; opening it sets the owner's password. Until then login is impossible, which is the point.
-- **Guarding.** `auth.Can("products:edit")` is a route option: it records the permission on the route and refuses a request with no session (401) or without the permission (403). In the slice the owner has every permission and there is no other role. `auth.User(ctx)` gives the signed-in user. `auth.Per("products")` gives `data.Resource` a permission per action: `products:read`, `products:create`, `products:edit`, `products:delete`.
+- **Routes** under `/api/auth`: `login`, `logout`, `me`, and `setup`, which takes the one-time token and a password. A wrong email and a wrong password get the same answer. After 5 failed tries for one email and address within a minute, further tries get 429 for the rest of that minute. The address is `warp.ClientIP(r)`, without its port.
+- **The first user.** `AUTH_OWNER_EMAIL` names the owner. If no user exists at start, the app logs a one-time setup link, `APP_URL` and `/setup?token=…`; the page there sets the owner's password. The token is random, kept only in memory, made afresh at each start while no user exists, and useless once the owner exists. Until then login is impossible, which is the point.
+- **Guarding.** `auth.Can("products:edit")` is a route option: it records the permission on the route and refuses a request with no session (401) or without the permission (403). In the slice the owner has every permission and there is no other role. `auth.User(ctx)` gives the signed-in user, read from the users table on each guarded request, so a removed user is out at once. `auth.Per("products")` gives `data.Resource` a permission per action: `products:read`, `products:create`, `products:edit`, `products:delete`.
 - **Vue side**, in the example app for now: a `useSession()` that asks `/api/auth/me`, a login page and a setup page.
 
 ### 4. Types from Go (`weft gen`, `weft routes`)
@@ -102,13 +113,13 @@ The smallest login that is honest about security:
 
 A page whose path has a parameter (`pages/products/[id].vue`) must today list its paths at build. A record made after the build has no page.
 
-A dynamic page that exports `runtime = true` in place of `getPaths()` is built once, as a shell, and `routes.json` lists it with its pattern. `warp.Serve` answers a path with that shell when no exact page matches. In the browser, `useParams()` reads the parameters from the address, using the pattern the build wrote into the page. `weft dev` serves such a page the same way. A dynamic page with neither export still fails the build with today's sentence.
+A dynamic page that exports `runtime = true` in place of `getPaths()` is built once, as a shell, with empty parameters, into a folder that keeps the bracket name (`pages/products/[id]/index.html`, since a colon is not a safe file name), and `routes.json` lists it with its pattern and `runtime: true`. The build writes the pattern onto the page's root element, which is how `useParams()` knows it. `warp.Serve` answers a path with that shell when no exact page matches. In the browser, `useParams()` reads the parameters from the address, using the pattern the build wrote into the page. `weft dev` serves such a page the same way. A dynamic page with neither export still fails the build with today's sentence.
 
 The shell is answered with 200 whatever the id; a record that does not exist is the API's 404, which the page shows. The server answering 404 for the document would mean asking the app on every page request, which the serving design forbids. (Claude's call; recorded for the owner.)
 
 ### 6. The app (`examples/shop`)
 
-A Go module of its own (its `go.mod` holds the SQLite driver and a `replace` to the repository), with `web/` a member of the pnpm workspace as `site-src` is. Modules listed in `app/modules.go`: `data`, `auth`, `products`. A product has a name (required, unique, at most 120 characters), a price (0 or more), a status (`draft` or `live`) and its two timestamps.
+It is shaped exactly as `weft create` shapes an app, because `weft dev`, `weft gen` and `weft build` must run in it and `weft scaffold` is later written from it: a `package.json` with its `"weft"` settings beside `main.go`, a `go.mod` that holds the SQLite driver and replaces the Weft module with `./.weft/go`, and `.weft/` git-ignored. It is not a member of the repository's pnpm workspace. The suite drives it as it drives a created app: a test stages a bundle, copies `examples/shop` to a temporary folder, and runs `weft build`, the app's Go tests, the type check and the built binary there. `scripts/shop.sh` does the same staging for a person and runs `weft dev` in the folder itself. Modules listed in `app/modules.go`: `data`, `auth`, `products`. A product has a name (required, unique, at most 120 characters), a price (0 or more), a status (`draft` or `live`) and its two timestamps.
 
 Pages: `/login`; `/setup`; `/products`, a table with paging, sorting, search and a status filter, and a dialog to create and edit that checks the generated schema and shows the server's field errors; `/products/[id]`, a runtime page showing one product.
 
@@ -118,6 +129,14 @@ Tests, run by the suite: the whole story over HTTP in Go (set up the owner, sign
 
 `warptest.New(t, modules...)` gives an app and a client that keeps cookies, with helpers that send JSON and decode the answer or the error shape. The database is passed in, since the driver is the app's. `auth` adds `authtest.Owner(t, client)`, which makes an owner and signs in. The example app's tests are written with them.
 
+### 8. What `@weft/ui` changes
+
+The slice may change `@weft/ui` where it disagrees with Warp's wire format, since they are one system:
+
+- `Table`'s server-side fetch sends `per_page`, as the Warp design's list query has it, where it sent `perPage`; its docs stop naming `weft.Resource`.
+- `Form`'s field schema gains `enum` and `url`, so every rule the generator writes can be checked in the browser.
+- One difference stays and is written down: for `required`, `Form` counts a typed `0` as filled in, and Go counts a number that is not a pointer and is 0 as empty. The server's answer then appears on the field. A model that accepts 0 does not mark the field `required`.
+
 ## Decided by the owner
 
 - The order: one slice, then widen (2026-11-25).
@@ -126,7 +145,10 @@ Tests, run by the suite: the whole story over HTTP in Go (set up the owner, sign
 ## Calls made by Claude (open to correction)
 
 - The slice's app is a shop with products, since no first app was named.
-- The app lives in `examples/shop` with its own `go.mod`; store tests live in `dbtest/`. Both because `warp/` may not depend on a driver.
+- The app lives in `examples/shop` with its own `go.mod`, shaped as a created app; store tests live in `dbtest/`. Both because `warp/` may not depend on a driver. `AGENTS.md` gains the two nested modules, their one allowed dependency, and their place in the test list.
+- One struct for create and update through a body field, a `readonly` rule and `data.Record`, not through a special case in the core.
+- `TRUST_PROXY` is off by default; `APP_URL` names where the app is opened.
+- `@weft/ui` changes where it disagrees with the wire format.
 - `Describe` is part of the core, not `warp/describe`.
 - `data.Resource`, not `warp.Resource`.
 - A route's default name comes from its method and path.
