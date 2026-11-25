@@ -113,9 +113,11 @@ type App struct {
 	current    string            // the module whose Register is running
 	routeNames map[string]string // a module's name and a route's name to the route
 	routes     []Route
+	plans      []*plan // each route's binding plan, beside routes; nil for Handle
 	wraps      []func(http.Handler) http.Handler
 	provided   map[reflect.Type]any
-	mistakes   []error
+	badConfig  []error // the configuration's problems New found, beside cfg.Err
+	mistakes   []error // the registration mistakes
 	started    bool
 	running    []Module // the modules Start started, which Stop stops
 }
@@ -133,7 +135,7 @@ func New(cfg Config) *App {
 		provided:   map[reflect.Type]any{},
 	}
 	for _, o := range bad {
-		a.fail("TrustedOrigins has %q; write each origin like https://admin.example.com.", o)
+		a.badConfig = append(a.badConfig, fmt.Errorf("warp: TrustedOrigins has %q; write each origin like https://admin.example.com.", o))
 	}
 	return a
 }
@@ -233,17 +235,18 @@ func (a *App) Handle(pattern string, h http.Handler, opts ...RouteOption) {
 	if i := strings.IndexAny(pattern, " \t"); i >= 0 {
 		method, path = pattern[:i], strings.TrimLeft(pattern[i:], " \t")
 	}
-	a.route(method, path, nil, nil, 0, func(int) http.Handler { return h }, opts, nil)
+	a.route(method, path, nil, nil, nil, 0, func(int) http.Handler { return h }, opts, nil)
 }
 
 // route registers the handler mk makes at /api plus path, for method or, when
 // method is empty, for every method. Handle and the typed routes register
-// through it. mk is given the status the route answers with: status, unless a
-// Status option changes it, and 204 when out is None. mistakes are the ones
-// the caller found in the route's input; each is reported, after the route's
-// own, and any mistake leaves the route unregistered. A route registered
-// after the app started reports that alone.
-func (a *App) route(method, path string, in, out reflect.Type, status int, mk func(status int) http.Handler, opts []RouteOption, mistakes []string) {
+// through it; p is a typed route's binding plan, kept for Describe, and nil
+// for Handle. mk is given the status the route answers with: status, unless
+// a Status option changes it, and 204 when out is None. mistakes are the
+// ones the caller found in the route's input; each is reported, after the
+// route's own, and any mistake leaves the route unregistered. A route
+// registered after the app started reports that alone.
+func (a *App) route(method, path string, in, out reflect.Type, p *plan, status int, mk func(status int) http.Handler, opts []RouteOption, mistakes []string) {
 	name := strings.TrimSpace(method + " " + path)
 	a.mu.Lock()
 	started := a.started
@@ -314,6 +317,7 @@ func (a *App) route(method, path string, in, out reflect.Type, status int, mk fu
 		Module: module, Name: rc.name, Method: method, Path: "/api" + path,
 		In: in, Out: out, Status: rc.status, Permission: rc.permission,
 	})
+	a.plans = append(a.plans, p)
 	a.mu.Unlock()
 }
 
@@ -385,7 +389,16 @@ func (a *App) fail(format string, args ...any) {
 func (a *App) Err() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return errors.Join(append([]error{a.cfg.Err()}, a.mistakes...)...)
+	all := append([]error{a.cfg.Err()}, a.badConfig...)
+	return errors.Join(append(all, a.mistakes...)...)
+}
+
+// registrationErr returns the registration mistakes alone, joined, leaving
+// out the configuration's problems; nil when there is none.
+func (a *App) registrationErr() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return errors.Join(a.mistakes...)
 }
 
 // Routes returns every route, in the order registered.

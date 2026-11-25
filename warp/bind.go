@@ -42,6 +42,10 @@ type plan struct {
 	// body field is when the body's type has it.
 	checkSelf bool
 	checkBody []int
+	// bodyType is the type the body is read as, for Describe: the body
+	// field's, or the input's own when it has json fields; nil when the
+	// route reads no body.
+	bodyType reflect.Type
 }
 
 // param is a field filled from the query or the path.
@@ -167,6 +171,7 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 				// The body's fields are the input's json fields, at the same
 				// index paths as an embedded struct's.
 				bodyField = f.Name
+				p.bodyType = f.Type
 				mistakes = append(mistakes, bodyMistakes(f.Type, visited)...)
 				inner, _ := inputFields(f.Type, f.index)
 				for _, bf := range inner {
@@ -248,6 +253,9 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 	if p.readBody {
 		p.view, p.raw = reflect.StructOf(view), reflect.StructOf(raw)
 		p.keys = topObject(view)
+		if len(jsonFields) > 0 {
+			p.bodyType = t
+		}
 	}
 	p.checkSelf = reflect.PointerTo(t).Implements(validatorType)
 	return p, nil

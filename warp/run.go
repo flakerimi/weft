@@ -1,7 +1,9 @@
 package warp
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -25,7 +27,16 @@ const stopLimit = 10 * time.Second
 //
 // Under weft dev (WEFT_DEV_PARENT=1) it logs nothing, and it also stops when
 // standard input closes, which is when weft dev is gone.
+//
+// With WARP_DESCRIBE=1 in the environment, as weft gen runs it, it writes the
+// app's Describe to standard output as indented JSON and returns nil, without
+// migrating, starting or listening. It then returns the registration
+// mistakes, and Describe's, and leaves out the configuration's problems: a
+// description needs routes and types, not a working .env.
 func (a *App) Serve(dist fs.FS, opts ...ServeOption) error {
+	if os.Getenv("WARP_DESCRIBE") == "1" {
+		return a.describeTo(describeOut)
+	}
 	if err := a.Err(); err != nil {
 		return err
 	}
@@ -54,6 +65,35 @@ func (a *App) Serve(dist fs.FS, opts ...ServeOption) error {
 
 // notifyContext is signal.NotifyContext; a test puts another in its place.
 var notifyContext = signal.NotifyContext
+
+// describeOut is where Serve writes the description; a test puts another in
+// its place.
+var describeOut io.Writer = os.Stdout
+
+// describeTo writes the description to w as indented JSON, unless the app has
+// a registration mistake or Describe one.
+func (a *App) describeTo(w io.Writer) error {
+	if err := a.registrationErr(); err != nil {
+		return err
+	}
+	d, err := a.Describe()
+	if err != nil {
+		return err
+	}
+	// Encoded whole before it is written, so a failure prints nothing; < and
+	// > are left as they are, for Record<string, T> to be read as written.
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(d); err != nil {
+		return fmt.Errorf("warp: the description cannot be written as JSON (%w); report this as a bug in warp.", err)
+	}
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		return fmt.Errorf("warp: the description cannot be written (%w); check that standard output is open.", err)
+	}
+	return nil
+}
 
 // newServer is the server Run serves h with. A client gets 10 seconds to
 // send a request's headers.

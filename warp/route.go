@@ -132,7 +132,7 @@ func typed[In, Out any](app *App, method, path string, status int, fn func(conte
 	in, out := reflect.TypeFor[In](), reflect.TypeFor[Out]()
 	p, mistakes := planFor(in, method, path)
 	limit := app.cfg.MaxBodyBytes
-	app.route(method, path, in, out, status, func(status int) http.Handler {
+	app.route(method, path, in, out, p, status, func(status int) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var input In
 			rv := reflect.ValueOf(&input).Elem()
