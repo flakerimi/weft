@@ -1,4 +1,4 @@
-package weft
+package warp
 
 import (
 	"encoding/json"
@@ -98,24 +98,24 @@ func pageManifest(dist fs.FS) ([]byte, bool) {
 func loadSite(dist fs.FS, raw []byte) *site {
 	var m buildManifest
 	if err := json.Unmarshal(raw, &m); err != nil {
-		panic(fmt.Sprintf("weft.Serve: dist/manifest.json is not a Weft build manifest (%v).", err))
+		panic(fmt.Sprintf("warp.Serve: dist/manifest.json is not a Weft build manifest (%v).", err))
 	}
 	rawRoutes, err := fs.ReadFile(dist, "routes.json")
 	if err != nil {
-		panic(fmt.Sprintf("weft.Serve: dist/routes.json cannot be read (%v).", err))
+		panic(fmt.Sprintf("warp.Serve: dist/routes.json cannot be read (%v).", err))
 	}
 	var routes buildRoutes
 	if err := json.Unmarshal(rawRoutes, &routes); err != nil {
-		panic(fmt.Sprintf("weft.Serve: dist/routes.json is not a Weft route map (%v).", err))
+		panic(fmt.Sprintf("warp.Serve: dist/routes.json is not a Weft route map (%v).", err))
 	}
 
 	s := &site{pages: map[string]*resource{}, files: map[string]*resource{}}
 	for key, f := range m.Files {
 		if name := strings.TrimPrefix(key, "/"); !strings.HasPrefix(key, "/") || !fs.ValidPath(name) || name == "." {
-			panic(fmt.Sprintf(`weft.Serve: manifest.json lists %s, which is not a path like "/assets/app.js".`, key))
+			panic(fmt.Sprintf(`warp.Serve: manifest.json lists %s, which is not a path like "/assets/app.js".`, key))
 		}
 		if !entityTag(f.ETag) {
-			panic(fmt.Sprintf(`weft.Serve: manifest.json gives %s the ETag %s, which is not an entity tag like "abc" with no quote, comma, space or control character inside.`, key, f.ETag))
+			panic(fmt.Sprintf(`warp.Serve: manifest.json gives %s the ETag %s, which is not an entity tag like "abc" with no quote, comma, space or control character inside.`, key, f.ETag))
 		}
 		s.files[key] = &resource{
 			identity: readVariant(dist, key, f, ""),
@@ -127,13 +127,13 @@ func loadSite(dist fs.FS, raw []byte) *site {
 	route := func(what, file string, links []string) *resource {
 		res := s.files["/"+file]
 		if res == nil {
-			panic(fmt.Sprintf("weft.Serve: routes.json serves %s from %s, which manifest.json does not list.", what, file))
+			panic(fmt.Sprintf("warp.Serve: routes.json serves %s from %s, which manifest.json does not list.", what, file))
 		}
 		return &resource{identity: res.identity, br: res.br, gzip: res.gzip, links: links}
 	}
 	for _, p := range routes.Pages {
 		if s.pages[p.Path] != nil {
-			panic(fmt.Sprintf("weft.Serve: routes.json lists the page %s twice.", p.Path))
+			panic(fmt.Sprintf("warp.Serve: routes.json lists the page %s twice.", p.Path))
 		}
 		s.pages[p.Path] = route(p.Path, p.HTML, m.Hints[p.Path])
 	}
@@ -177,11 +177,11 @@ func readVariant(dist fs.FS, key string, f manifestFile, encoding string) *varia
 	}
 	body, err := fs.ReadFile(dist, name+ext)
 	if errors.Is(err, fs.ErrNotExist) && ext != "" {
-		panic(fmt.Sprintf("weft.Serve: manifest.json says %s has a %s variant, but dist has no %s.", key, ext, name+ext))
+		panic(fmt.Sprintf("warp.Serve: manifest.json says %s has a %s variant, but dist has no %s.", key, ext, name+ext))
 	} else if errors.Is(err, fs.ErrNotExist) {
-		panic(fmt.Sprintf("weft.Serve: manifest.json lists %s, but dist has no %s.", key, name))
+		panic(fmt.Sprintf("warp.Serve: manifest.json lists %s, but dist has no %s.", key, name))
 	} else if err != nil {
-		panic(fmt.Sprintf("weft.Serve: dist/%s cannot be read (%v).", name+ext, err))
+		panic(fmt.Sprintf("warp.Serve: dist/%s cannot be read (%v).", name+ext, err))
 	}
 	cache := cacheNone
 	if f.Immutable {

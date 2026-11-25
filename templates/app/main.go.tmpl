@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/flakerimi/weft"
+	"github.com/flakerimi/weft/warp"
 
 	"[[.Module]]/api"
 )
@@ -18,7 +18,7 @@ var dist fs.FS
 
 func handler() http.Handler {
 	if dist != nil {
-		return weft.Serve(dist, api.Handler())
+		return warp.Serve(dist, api.Handler())
 	}
 	return api.Handler()
 }

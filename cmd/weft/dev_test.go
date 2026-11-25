@@ -942,7 +942,7 @@ func TestGoFilesSkipsFolders(t *testing.T) {
 	}
 	for _, p := range []string{
 		"main.go", "dist_dev.go", "api/api.go", "api/web/web.go", "api/notes.txt",
-		".weft/go/serve.go", ".git/hooks/x.go", "node_modules/x/y.go", "web/pages/x.go",
+		".weft/go/warp/serve.go", ".git/hooks/x.go", "node_modules/x/y.go", "web/pages/x.go",
 		"db/x.go",
 	} {
 		write(p)

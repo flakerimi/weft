@@ -26,11 +26,11 @@ func exists(t *testing.T, path string) bool {
 
 func TestUnpackWritesTree(t *testing.T) {
 	dir := t.TempDir()
-	b := testBundle("weft/packages/ui/package.json", "weft/go/serve.go", "weft/go/go.mod.bundle", "template/x")
+	b := testBundle("weft/packages/ui/package.json", "weft/go/warp/serve.go", "weft/go/go.mod.bundle", "template/x")
 	if err := unpack(b, dir, "0.0.6"); err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{".weft/packages/ui/package.json", ".weft/go/serve.go"} {
+	for _, p := range []string{".weft/packages/ui/package.json", ".weft/go/warp/serve.go"} {
 		if !exists(t, filepath.Join(dir, p)) {
 			t.Errorf("%s is missing", p)
 		}
@@ -240,7 +240,7 @@ func TestBundleScript(t *testing.T) {
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("bundle.sh: %v\n%s", err, b)
 	}
-	for _, p := range []string{"weft/packages/ui/dist/weft.css", "weft/go/go.mod.bundle", "weft/go/serve.go", "weft/catalog/components.json", ".weft-bundle"} {
+	for _, p := range []string{"weft/packages/ui/dist/weft.css", "weft/go/go.mod.bundle", "weft/go/warp/serve.go", "weft/catalog/components.json", ".weft-bundle"} {
 		if !exists(t, filepath.Join(out, p)) {
 			t.Errorf("%s is missing", p)
 		}

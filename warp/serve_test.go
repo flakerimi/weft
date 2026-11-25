@@ -1,4 +1,4 @@
-package weft
+package warp
 
 import (
 	"context"
@@ -108,7 +108,7 @@ func TestServePathTraversal(t *testing.T) {
 
 func TestServeNeedsIndex(t *testing.T) {
 	defer func() {
-		if r := recover(); r != "weft.Serve: dist has no index.html" {
+		if r := recover(); r != "warp.Serve: dist has no index.html" {
 			t.Fatalf("panic %v", r)
 		}
 	}()

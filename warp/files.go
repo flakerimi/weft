@@ -1,4 +1,4 @@
-package weft
+package warp
 
 import (
 	"bytes"
@@ -67,7 +67,7 @@ func loadFolders(folders []folder, taken func(p string) string) diskFiles {
 	for _, f := range folders {
 		if !strings.HasPrefix(f.prefix, "/") || !strings.HasSuffix(f.prefix, "/") ||
 			(f.prefix != "/" && path.Clean(f.prefix)+"/" != f.prefix) {
-			panic(fmt.Sprintf(`weft.WithFiles: the prefix %q is not a path that starts and ends with "/", like "/releases/".`, f.prefix))
+			panic(fmt.Sprintf(`warp.WithFiles: the prefix %q is not a path that starts and ends with "/", like "/releases/".`, f.prefix))
 		}
 		err := fs.WalkDir(f.dir, ".", func(name string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -75,23 +75,23 @@ func loadFolders(folders []folder, taken func(p string) string) diskFiles {
 			}
 			switch {
 			case name != "." && strings.HasPrefix(d.Name(), "."):
-				panic(fmt.Sprintf("weft.WithFiles: %s in the folder served at %s is named with a leading dot; move it out.", name, f.prefix))
+				panic(fmt.Sprintf("warp.WithFiles: %s in the folder served at %s is named with a leading dot; move it out.", name, f.prefix))
 			case d.Type()&fs.ModeSymlink != 0:
-				panic(fmt.Sprintf("weft.WithFiles: %s in the folder served at %s is a symlink; put the file itself there.", name, f.prefix))
+				panic(fmt.Sprintf("warp.WithFiles: %s in the folder served at %s is a symlink; put the file itself there.", name, f.prefix))
 			case d.IsDir():
 				return nil
 			case !d.Type().IsRegular():
-				panic(fmt.Sprintf("weft.WithFiles: %s in the folder served at %s is not a file or a folder; move it out.", name, f.prefix))
+				panic(fmt.Sprintf("warp.WithFiles: %s in the folder served at %s is not a file or a folder; move it out.", name, f.prefix))
 			}
 			p := f.prefix + name
 			switch {
 			case p == "/api" || strings.HasPrefix(p, "/api/"):
-				panic(fmt.Sprintf("weft.WithFiles: %s is under /api/, which goes to the API; serve the folder at another prefix.", p))
+				panic(fmt.Sprintf("warp.WithFiles: %s is under /api/, which goes to the API; serve the folder at another prefix.", p))
 			case files[p] != nil:
-				panic(fmt.Sprintf("weft.WithFiles: %s is served from two folders; serve it from one place only.", p))
+				panic(fmt.Sprintf("warp.WithFiles: %s is served from two folders; serve it from one place only.", p))
 			}
 			if what := taken(p); what != "" {
-				panic(fmt.Sprintf("weft.WithFiles: %s is %s of the build too; serve it from one place only.", p, what))
+				panic(fmt.Sprintf("warp.WithFiles: %s is %s of the build too; serve it from one place only.", p, what))
 			}
 			file, err := readDiskFile(f.dir, name)
 			if err != nil {
@@ -101,7 +101,7 @@ func loadFolders(folders []folder, taken func(p string) string) diskFiles {
 			return nil
 		})
 		if err != nil {
-			panic(fmt.Sprintf("weft.WithFiles: the folder served at %s cannot be read (%v).", f.prefix, err))
+			panic(fmt.Sprintf("warp.WithFiles: the folder served at %s cannot be read (%v).", f.prefix, err))
 		}
 	}
 	return files

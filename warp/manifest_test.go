@@ -1,4 +1,4 @@
-package weft
+package warp
 
 import (
 	"encoding/json"
@@ -127,16 +127,16 @@ func TestManifestSiteLoads(t *testing.T) {
 }
 
 func TestManifestMissingFilePanics(t *testing.T) {
-	wantPanic(t, "weft.Serve: manifest.json lists /assets/client-abc.js, but dist has no assets/client-abc.js.", func() {
+	wantPanic(t, "warp.Serve: manifest.json lists /assets/client-abc.js, but dist has no assets/client-abc.js.", func() {
 		Serve(without(pageBuild(t), "assets/client-abc.js"), nil)
 	})
 }
 
 func TestManifestMissingVariantPanics(t *testing.T) {
-	wantPanic(t, "weft.Serve: manifest.json says /pages/about/index.html has a .br variant, but dist has no pages/about/index.html.br.", func() {
+	wantPanic(t, "warp.Serve: manifest.json says /pages/about/index.html has a .br variant, but dist has no pages/about/index.html.br.", func() {
 		Serve(without(pageBuild(t), "pages/about/index.html.br"), nil)
 	})
-	wantPanic(t, "weft.Serve: manifest.json says /robots.txt has a .gz variant, but dist has no robots.txt.gz.", func() {
+	wantPanic(t, "warp.Serve: manifest.json says /robots.txt has a .gz variant, but dist has no robots.txt.gz.", func() {
 		Serve(without(pageBuild(t), "robots.txt.gz"), nil)
 	})
 }
@@ -156,7 +156,7 @@ func TestManifestNotAPageBuild(t *testing.T) {
 		"routes.json folder": editRaw(without(pageBuild(t), "routes.json"), "routes.json/x", `{}`),
 	} {
 		t.Run(name, func(t *testing.T) {
-			wantPanic(t, "weft.Serve: dist has no index.html", func() { Serve(dist, nil) })
+			wantPanic(t, "warp.Serve: dist has no index.html", func() { Serve(dist, nil) })
 		})
 	}
 }
@@ -182,17 +182,17 @@ func TestManifestWebAppManifestIsSPA(t *testing.T) {
 }
 
 func TestManifestBadRoutesPanics(t *testing.T) {
-	wantPanic(t, "weft.Serve: dist/routes.json is not a Weft route map (unexpected end of JSON input).", func() {
+	wantPanic(t, "warp.Serve: dist/routes.json is not a Weft route map (unexpected end of JSON input).", func() {
 		Serve(editRaw(pageBuild(t), "routes.json", `{"pages":`), nil)
 	})
-	wantPanic(t, "weft.Serve: dist/manifest.json is not a Weft build manifest (json: cannot unmarshal number into Go struct field buildManifest.files of type weft.manifestFile).", func() {
+	wantPanic(t, "warp.Serve: dist/manifest.json is not a Weft build manifest (json: cannot unmarshal number into Go struct field buildManifest.files of type warp.manifestFile).", func() {
 		Serve(editRaw(pageBuild(t), "manifest.json", `{"files":{"/x":5}}`), nil)
 	})
 }
 
 func TestManifestDuplicatePagePanics(t *testing.T) {
 	routes := `{"pages":[{"path":"/about","html":"pages/about/index.html"},{"path":"/about","html":"pages/counter/index.html"}],"notFound":null,"app":null}`
-	wantPanic(t, "weft.Serve: routes.json lists the page /about twice.", func() {
+	wantPanic(t, "warp.Serve: routes.json lists the page /about twice.", func() {
 		Serve(editRaw(pageBuild(t), "routes.json", routes), nil)
 	})
 }
@@ -202,7 +202,7 @@ func TestManifestBadPathPanics(t *testing.T) {
 		dist := editManifest(t, pageBuild(t), func(m map[string]any) {
 			m["files"].(map[string]any)[key] = map[string]any{"etag": `"x"`, "type": "text/plain"}
 		})
-		wantPanic(t, `weft.Serve: manifest.json lists `+key+`, which is not a path like "/assets/app.js".`, func() {
+		wantPanic(t, `warp.Serve: manifest.json lists `+key+`, which is not a path like "/assets/app.js".`, func() {
 			Serve(dist, nil)
 		})
 	}
@@ -215,7 +215,7 @@ func TestManifestBadETagPanics(t *testing.T) {
 		})
 	}
 	for _, etag := range []string{"robots", `"`, `"a"b"`, `"a,b"`, `"a b"`, `W/robots`, `"robots`, `robots"`, "\"a\x01\"", "\"a\x7f\"", `x"a"`} {
-		wantPanic(t, `weft.Serve: manifest.json gives /robots.txt the ETag `+etag+`, which is not an entity tag like "abc" with no quote, comma, space or control character inside.`, func() {
+		wantPanic(t, `warp.Serve: manifest.json gives /robots.txt the ETag `+etag+`, which is not an entity tag like "abc" with no quote, comma, space or control character inside.`, func() {
 			Serve(setETag(etag), nil)
 		})
 	}
@@ -229,19 +229,19 @@ func TestManifestRouteToUnlistedFilePanics(t *testing.T) {
 	dist := editManifest(t, pageBuild(t), func(m map[string]any) {
 		delete(m["files"].(map[string]any), "/pages/about/index.html")
 	})
-	wantPanic(t, "weft.Serve: routes.json serves /about from pages/about/index.html, which manifest.json does not list.", func() {
+	wantPanic(t, "warp.Serve: routes.json serves /about from pages/about/index.html, which manifest.json does not list.", func() {
 		Serve(dist, nil)
 	})
 	dist = editManifest(t, pageBuild(t), func(m map[string]any) {
 		delete(m["files"].(map[string]any), "/pages/404/index.html")
 	})
-	wantPanic(t, "weft.Serve: routes.json serves the not-found page from pages/404/index.html, which manifest.json does not list.", func() {
+	wantPanic(t, "warp.Serve: routes.json serves the not-found page from pages/404/index.html, which manifest.json does not list.", func() {
 		Serve(dist, nil)
 	})
 	dist = editManifest(t, pageBuild(t), func(m map[string]any) {
 		delete(m["files"].(map[string]any), "/app/index.html")
 	})
-	wantPanic(t, "weft.Serve: routes.json serves /app from app/index.html, which manifest.json does not list.", func() {
+	wantPanic(t, "warp.Serve: routes.json serves /app from app/index.html, which manifest.json does not list.", func() {
 		Serve(dist, nil)
 	})
 }

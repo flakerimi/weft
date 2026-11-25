@@ -1,4 +1,5 @@
-package weft
+// Package warp is the Go side of a Weft app: its modules, typed routes and serving.
+package warp
 
 import (
 	"io/fs"
@@ -80,7 +81,7 @@ func Serve(dist fs.FS, api http.Handler, opts ...Option) http.Handler {
 func spa(dist fs.FS) http.Handler {
 	index, err := fs.ReadFile(dist, "index.html")
 	if err != nil {
-		panic("weft.Serve: dist has no index.html")
+		panic("warp.Serve: dist has no index.html")
 	}
 	files := http.FileServerFS(dist)
 
