@@ -16,11 +16,12 @@ import (
 // reads with Get or On. The zero Config works: every interface, port 8080,
 // 1 MiB, no proxy, opened at http://localhost:8080.
 type Config struct {
-	Host         string // HOST; empty is every interface
-	Port         string // PORT; default "8080"
-	MaxBodyBytes int64  // MAX_BODY_MB x 1 MiB; default 1 MiB
-	TrustProxy   bool   // TRUST_PROXY on: believe X-Forwarded-For and X-Forwarded-Proto
-	URL          string // APP_URL, the address people open the app at, without a trailing slash; default "http://localhost:" + Port
+	Host           string   // HOST; empty is every interface
+	Port           string   // PORT; default "8080"
+	MaxBodyBytes   int64    // MAX_BODY_MB x 1 MiB; default 1 MiB
+	TrustProxy     bool     // TRUST_PROXY on: believe X-Forwarded-For and X-Forwarded-Proto
+	URL            string   // APP_URL, the address people open the app at, without a trailing slash; default "http://localhost:" + Port
+	TrustedOrigins []string // TRUSTED_ORIGINS, comma-separated: other sites whose browsers may make state-changing API requests
 
 	vars map[string]string
 	err  error
@@ -114,6 +115,11 @@ func build(vars map[string]string, problems []error) Config {
 		} else {
 			problems = append(problems, fmt.Errorf("MAX_BODY_MB is %q; set it to a whole number of megabytes, 1 or more, in .env or the environment.", m))
 		}
+	}
+	origins, bad := trustedOrigins(vars["TRUSTED_ORIGINS"])
+	c.TrustedOrigins = origins
+	for _, o := range bad {
+		problems = append(problems, fmt.Errorf("TRUSTED_ORIGINS has %q; write each origin like https://admin.example.com.", o))
 	}
 	c.err = errors.Join(problems...)
 	return c

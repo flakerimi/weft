@@ -105,6 +105,7 @@ func Status(code int) RouteOption {
 type App struct {
 	cfg Config
 	mux *http.ServeMux
+	xo  *http.CrossOriginProtection // shared by every request
 
 	mu         sync.Mutex
 	modules    []Module
@@ -122,13 +123,19 @@ type App struct {
 // New returns an app configured by cfg, with no modules. A mistake in cfg is
 // reported by Err, and by Run.
 func New(cfg Config) *App {
-	return &App{
+	xo, bad := newOriginProtection(cfg.TrustedOrigins)
+	a := &App{
 		cfg:        cfg.withDefaults(),
 		mux:        http.NewServeMux(),
+		xo:         xo,
 		names:      map[string]bool{},
 		routeNames: map[string]string{},
 		provided:   map[reflect.Type]any{},
 	}
+	for _, o := range bad {
+		a.fail("TrustedOrigins has %q; write each origin like https://admin.example.com.", o)
+	}
+	return a
 }
 
 // Config returns the app's configuration, with its defaults filled in.
@@ -389,6 +396,7 @@ func (a *App) Routes() []Route {
 }
 
 // Handler returns the API alone, at /api/..., inside every Wrap given so far.
+// A state-changing request from another site is a 403 before any Wrap runs.
 // A path no route has is a 404 and a method a route does not take is a 405,
 // both in the error shape; a panic is logged and answered as a 500.
 func (a *App) Handler() http.Handler {
@@ -399,7 +407,7 @@ func (a *App) Handler() http.Handler {
 	for i := len(wraps) - 1; i >= 0; i-- {
 		h = wraps[i](h)
 	}
-	return recoverPanics(h)
+	return recoverPanics(refuseCrossSite(a.xo, h))
 }
 
 // dispatch serves a request through the mux, answering its own 404 and 405
