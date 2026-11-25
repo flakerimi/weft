@@ -420,6 +420,35 @@ func TestUpgradeNamesWeftServe(t *testing.T) {
 	}
 }
 
+// The check reads the Go, not the text: a comment naming weft.Serve is not a
+// call, and the root package under another name is still the root package.
+func TestSayWeftServeReadsTheGo(t *testing.T) {
+	const say = " still calls weft.Serve, which moved; see https://weft.base.al/docs/reference/cli#moving-an-app-to-warp for the two lines to change.\n"
+	for _, c := range []struct {
+		name, src, want string
+	}{
+		{"a comment", "package main\n\nimport \"github.com/flakerimi/weft/warp\"\n\n// was weft.Serve(dist, api.Handler())\n/* weft.Serve */\nfunc main() { warp.Serve(nil, nil) }\n", ""},
+		{"a call", "package main\n\nimport \"github.com/flakerimi/weft\"\n\nfunc main() { weft.Serve(nil, nil) }\n", "weft upgrade: main.go" + say},
+		{"another name", "package main\n\nimport w \"github.com/flakerimi/weft\"\n\nfunc main() { w.Serve(nil, nil) }\n", "weft upgrade: main.go" + say},
+		{"Version only", "package main\n\nimport \"github.com/flakerimi/weft\"\n\nfunc main() { println(weft.Version) }\n", ""},
+		{"a dot import", "package main\n\nimport . \"github.com/flakerimi/weft\"\n\nfunc main() { Serve(nil, nil) }\n", "weft upgrade: main.go" + say},
+		{"a dot import, and warp.Serve", "package main\n\nimport (\n\t. \"github.com/flakerimi/weft\"\n\t\"github.com/flakerimi/weft/warp\"\n)\n\nfunc main() { println(Version); warp.Serve(nil, nil) }\n", ""},
+		{"another package named weft", "package main\n\nimport weft \"example.com/weft\"\n\nfunc main() { weft.Serve() }\n", ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(c.src), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			var errb bytes.Buffer
+			sayWeftServe(dir, &errb)
+			if errb.String() != c.want {
+				t.Fatalf("stderr %q, want %q", errb.String(), c.want)
+			}
+		})
+	}
+}
+
 // An app made by a development build moves forward to a release.
 func TestUpgradeMovesADevApp(t *testing.T) {
 	otherVersionApp(t, "0.0.0-dev")

@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -160,4 +161,23 @@ func TestWriteErrorStatusOutOfRange(t *testing.T) {
 			t.Errorf("status %d: answered %d", status, w.Code)
 		}
 	}
+}
+
+// The 500 body for an unencodable value is shared: writing it must never
+// write into it. Run under -race.
+func TestWriteJSONCannotEncodeConcurrently(t *testing.T) {
+	captureLog(t)
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			for range 20 {
+				w := httptest.NewRecorder()
+				WriteJSON(w, 200, math.NaN())
+				if w.Code != 500 || !strings.HasSuffix(w.Body.String(), "}\n") {
+					t.Errorf("status %d, body %q", w.Code, w.Body.String())
+				}
+			}
+		})
+	}
+	wg.Wait()
 }

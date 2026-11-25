@@ -86,10 +86,12 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 	if err != nil {
 		slog.Error("warp: the answer cannot be written as JSON", "status", status, "error", err)
 		status, b = http.StatusInternalServerError, internalBody
+	} else {
+		b = append(b, '\n')
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	w.Write(append(b, '\n'))
+	w.Write(b)
 }
 
 // internal is the answer to an error the client is not told about.
@@ -97,7 +99,12 @@ func internal() *Error {
 	return &Error{Status: http.StatusInternalServerError, Code: "internal", Message: "Something went wrong on the server; its log has the details."}
 }
 
-var internalBody, _ = json.Marshal(errorBody{internal()})
+// internalBody is internal()'s answer, newline included. It is shared by
+// every request: it is written as it is, never appended to.
+var internalBody = func() []byte {
+	b, _ := json.Marshal(errorBody{internal()})
+	return append(b, '\n')
+}()
 
 type errorBody struct {
 	Error *Error `json:"error"`

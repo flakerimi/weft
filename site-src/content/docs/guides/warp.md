@@ -172,7 +172,7 @@ func remove(ctx context.Context, in ShowIn) (warp.None, error) {
 
 `GET /api/products/1` answers `{"id":1,"name":"Lamp","price":12}`. The paths are the standard library's `http.ServeMux` patterns, wildcards included.
 
-The output is written as JSON, with status 200. `warp.Post` answers 201 instead, and the option `warp.Status(200)` changes it: `warp.Post(app, "/search", search, warp.Status(200))`. An output of `warp.None` answers 204 with no body. An input of `warp.None` reads nothing from the request.
+The output is written as JSON, with status 200. `warp.Post` answers 201 instead, and the option `warp.Status(200)` changes it. An output of `warp.None` answers 204 with no body. An input of `warp.None` reads nothing from the request.
 
 ### The three tags
 
@@ -254,10 +254,10 @@ Rules go in a field's `warp` tag, separated by commas. They run on every typed i
 
 - Every rule but `required` passes an empty value, so an optional field may be left out: an empty `email` passes, and a 0 passes `min=1`.
 - A pointer that is not nil was sent: `required` passes, and the other rules check what it points at, so a `*int` holding 0 fails `min=1`. A pointer field is how an input tells "sent as 0" from "not sent".
-- Characters are counted in Unicode code points, not bytes: `çikë` is 4.
+- Characters are Unicode code points, not bytes: `çikë` is 4.
 - Only the first rule a field fails is reported, in the order of the tag.
 - A field's key is its `json`, `query` or `path` name. A field of a struct inside is `address.city`, of a list of structs `lines.0.sku`, and of a map's value `by_name.x.sku`.
-- At most 100 fields are listed, with 16 KiB of keys in all and none over 1 KiB, in field, index and sorted key order. When one is left out the message is `More fields need attention than are listed; the first N are listed.`, or with none listed `More fields need attention than can be listed.`
+- At most 100 fields are listed, with 16 KiB of keys in all, counted before JSON escaping, so the answer stays under about 100 KB, and none over 1 KiB, in field, index and sorted key order. When one is left out the message is `More fields need attention than are listed; the first N are listed.`, or with none listed `More fields need attention than can be listed.`
 
 For the body `{"name":"","price":-1,"plan":"gold"}`, `POST /api/products` answers 422 with:
 
@@ -370,4 +370,4 @@ func TestHello(t *testing.T) {
 }
 ```
 
-`warp.Config{}` works as it is: port 8080 and a 1 MB body limit. Check `app.Err()` first, so a registration mistake fails the test with its sentence. Run the tests with `go test -tags dev ./...`; the tag is needed until the first `weft build` makes `web/dist`.
+`warp.Config{}` works as it is, with the defaults above. Check `app.Err()` first, so a registration mistake fails the test with its sentence. Run the tests with `go test -tags dev ./...`; the tag is needed until the first `weft build` makes `web/dist`.

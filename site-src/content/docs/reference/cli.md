@@ -116,12 +116,12 @@ Moves an app to the Weft version of the `weft` you run: it rewrites `weft.versio
 
 #### Moving an app to Warp
 
-An app made by Weft 0.0.6 or before calls `weft.Serve` in `main.go`, which is now `warp.Serve`, so once upgraded it does not compile (`undefined: weft.Serve`). `weft upgrade` says so after its output, and still exits 0: `weft upgrade: main.go still calls weft.Serve, which moved; see https://weft.base.al/docs/reference/cli#moving-an-app-to-warp for the two lines to change.` The smallest change is two lines of `main.go`:
+An app made by Weft 0.0.6 or before calls `weft.Serve` in `main.go`, which is now `warp.Serve`, so once upgraded it does not compile (`undefined: weft.Serve`). `weft upgrade` says so after its output, and still exits 0: `weft upgrade: main.go still calls weft.Serve, which moved; see https://weft.base.al/docs/reference/cli#moving-an-app-to-warp for the two lines to change.` The smallest change is two lines of `main.go`: the import of `github.com/flakerimi/weft` becomes the first line below, and the `weft.Serve` call in `handler` the second.
 
 ```go
-	"github.com/flakerimi/weft/warp" // was "github.com/flakerimi/weft"
+	"github.com/flakerimi/weft/warp"
 
-		return warp.Serve(dist, api.Handler()) // was weft.Serve(dist, api.Handler())
+		return warp.Serve(dist, api.Handler())
 ```
 
 The `listen` function stays as it is. To use modules and typed routes, build a `warp.App` as the `main.go` of a new app does (see [Warp, the Go side](../guides/warp.md)).

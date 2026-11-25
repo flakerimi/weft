@@ -250,7 +250,7 @@ Made while planning and building W1 (2026-11-25):
 
 Made in W1's final fix wave (2026-11-25):
 
-- What a 422 lists is bounded: at most 100 fields, at most 16 KiB of key bytes in all, and no field whose key is longer than 1 KiB; when one is left out the message is `More fields need attention than are listed; the first N are listed.` (`More fields need attention than can be listed.` when none is). The walk stops once the 100 or the 16 KiB are spent, and lists in a fixed order: struct fields as declared, list entries by index, map entries by sorted key. A typed route also refuses a body nested more than 64 levels deep, before decoding: 400, `The body is nested more than 64 levels deep.` Before these, a 103 KB body could make a 100 MB answer.
+- What a 422 lists is bounded: at most 100 fields, at most 16 KiB of key bytes in all, counted before JSON escaping (a map key of escaped characters can make the answer up to about 100 KB), and no field whose key is longer than 1 KiB; when one is left out the message is `More fields need attention than are listed; the first N are listed.` (`More fields need attention than can be listed.` when none is). The walk stops once the 100 or the 16 KiB are spent, and lists in a fixed order: struct fields as declared, list entries by index, map entries by sorted key. A typed route also refuses a body nested more than 64 levels deep, before decoding: 400, `The body is nested more than 64 levels deep.` Before these, a 103 KB body could make a 100 MB answer.
 - A rule on a pointer that is not nil applies to what it points at, even a zero: the pointer says the value was sent, so `min=1` on a `*int` holding 0 fails. `required` on it still passes, and a zero not behind a pointer is still empty.
 - `warp.Option`, the page-serving option, is `warp.ServeOption`, leaving `Option` free for the app's own options later. No alias is kept.
 - `warp.Status` takes 200 to 599: a 1xx is not an answer a route can give.
@@ -262,6 +262,7 @@ Made in W1's final fix wave (2026-11-25):
 - **W4.** `RouteOption` is a func over an unexported struct, so `auth.Can` in another package can only compose `With`: it needs an exported way to attach a permission to a route. A route that takes no body is open cross-site, so the session cookie must be `SameSite=Lax` or stricter, or state-changing routes need an `Origin` check.
 - **W6.** `Shutdown` does not cancel request contexts, so an open SSE stream makes each stop take the full 10 s: it needs a `BaseContext` cancelled at the drain. `Start`'s context ends at the stop signal, before the drain. Shutdown's error is always reported as a timeout.
 - **W7.** There is no body-read or idle timeout.
+- **Validation's cost, if `MAX_BODY_MB` is raised far above 1.** Validating a map whose entries fail costs about one allocation per failing entry (about 24 MB for 100,000), and a nested map is probed again for each failing map above it. Both are bounded by the body limit.
 
 ## Open for the owner
 
