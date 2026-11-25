@@ -47,6 +47,11 @@ func Conflict(message string) *Error {
 	return &Error{Status: http.StatusConflict, Code: "conflict", Message: message}
 }
 
+// TooLarge is a 413 answer.
+func TooLarge(message string) *Error {
+	return &Error{Status: http.StatusRequestEntityTooLarge, Code: "too_large", Message: message}
+}
+
 // Invalid is a 422 answer that names each field that needs attention.
 func Invalid(fields map[string]string) *Error {
 	message := fmt.Sprintf("%d fields need attention.", len(fields))

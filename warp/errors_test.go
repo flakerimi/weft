@@ -109,6 +109,7 @@ func TestStatuses(t *testing.T) {
 		{Forbidden("x"), http.StatusForbidden, "forbidden"},
 		{NotFound("x"), http.StatusNotFound, "not_found"},
 		{Conflict("x"), http.StatusConflict, "conflict"},
+		{TooLarge("x"), http.StatusRequestEntityTooLarge, "too_large"},
 		{Invalid(map[string]string{"a": "b"}), http.StatusUnprocessableEntity, "validation"},
 		{TooMany("x"), http.StatusTooManyRequests, "rate_limited"},
 	} {

@@ -121,12 +121,14 @@ func (a *App) Handle(pattern string, h http.Handler, opts ...RouteOption) {
 	if i := strings.IndexAny(pattern, " \t"); i >= 0 {
 		method, path = pattern[:i], strings.TrimLeft(pattern[i:], " \t")
 	}
-	a.route(method, path, nil, nil, h, opts)
+	a.route(method, path, nil, nil, 0, func(int) http.Handler { return h }, opts)
 }
 
-// route registers h at /api plus path, for method or, when method is empty,
-// for every method. Handle and the typed routes register through it.
-func (a *App) route(method, path string, in, out reflect.Type, h http.Handler, opts []RouteOption) {
+// route registers the handler mk makes at /api plus path, for method or, when
+// method is empty, for every method. Handle and the typed routes register
+// through it. mk is given the status the route answers with: status, unless a
+// Status option changes it, and 204 when out is None.
+func (a *App) route(method, path string, in, out reflect.Type, status int, mk func(status int) http.Handler, opts []RouteOption) {
 	name := strings.TrimSpace(method + " " + path)
 	a.mu.Lock()
 	started := a.started
@@ -142,10 +144,14 @@ func (a *App) route(method, path string, in, out reflect.Type, h http.Handler, o
 		a.fail("route %q already gets /api in front; write it as %q.", path, strings.TrimPrefix(path, "/api"))
 		return
 	}
-	var rc routeConfig
+	rc := routeConfig{status: status}
 	for _, opt := range opts {
 		opt(&rc)
 	}
+	if out == noneType {
+		rc.status = http.StatusNoContent
+	}
+	h := mk(rc.status)
 	for i := len(rc.wraps) - 1; i >= 0; i-- {
 		h = rc.wraps[i](h)
 	}
