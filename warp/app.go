@@ -49,8 +49,9 @@ type Route struct {
 type RouteOption func(*routeConfig)
 
 type routeConfig struct {
-	status int
-	wraps  []func(http.Handler) http.Handler
+	status    int
+	statusSet bool // Status was given
+	wraps     []func(http.Handler) http.Handler
 }
 
 // With puts mw around this route alone, inside every Wrap. The first With
@@ -60,9 +61,10 @@ func With(mw func(http.Handler) http.Handler) RouteOption {
 }
 
 // Status sets the status a typed route answers with. A route registered with
-// Handle answers as its handler does; Routes reports the status given.
+// Handle answers as its handler does; Routes reports the status given. A code
+// outside 100 to 599 is a mistake, reported by Err.
 func Status(code int) RouteOption {
-	return func(c *routeConfig) { c.status = code }
+	return func(c *routeConfig) { c.status, c.statusSet = code, true }
 }
 
 // App is a Weft app: its configuration, its modules and its API, which it
@@ -121,32 +123,48 @@ func (a *App) Handle(pattern string, h http.Handler, opts ...RouteOption) {
 	if i := strings.IndexAny(pattern, " \t"); i >= 0 {
 		method, path = pattern[:i], strings.TrimLeft(pattern[i:], " \t")
 	}
-	a.route(method, path, nil, nil, 0, func(int) http.Handler { return h }, opts)
+	a.route(method, path, nil, nil, 0, func(int) http.Handler { return h }, opts, nil)
 }
 
 // route registers the handler mk makes at /api plus path, for method or, when
 // method is empty, for every method. Handle and the typed routes register
 // through it. mk is given the status the route answers with: status, unless a
-// Status option changes it, and 204 when out is None.
-func (a *App) route(method, path string, in, out reflect.Type, status int, mk func(status int) http.Handler, opts []RouteOption) {
+// Status option changes it, and 204 when out is None. mistakes are the ones
+// the caller found in the route's input; each is reported, after the route's
+// own, and any mistake leaves the route unregistered. A route registered
+// after the app started reports that alone.
+func (a *App) route(method, path string, in, out reflect.Type, status int, mk func(status int) http.Handler, opts []RouteOption, mistakes []string) {
 	name := strings.TrimSpace(method + " " + path)
 	a.mu.Lock()
 	started := a.started
 	a.mu.Unlock()
-	switch {
-	case started:
+	if started {
 		a.fail("route %q was registered after the app started serving; register every route before Serve.", name)
 		return
+	}
+	ok := true
+	switch {
 	case !strings.HasPrefix(path, "/"):
 		a.fail("route %q has a path that does not start with /; write it as %q.", name, strings.TrimSpace(method+" /"+path))
-		return
+		ok = false
 	case strings.HasPrefix(path, "/api/"):
 		a.fail("route %q already gets /api in front; write it as %q.", path, strings.TrimPrefix(path, "/api"))
-		return
+		ok = false
 	}
 	rc := routeConfig{status: status}
 	for _, opt := range opts {
 		opt(&rc)
+	}
+	if rc.statusSet && (rc.status < 100 || rc.status > 599) {
+		a.fail("%s: Status(%d) is not an HTTP status; use one from 100 to 599.", name, rc.status)
+		ok = false
+	}
+	for _, m := range mistakes {
+		a.fail("%s: %s", name, m)
+		ok = false
+	}
+	if !ok {
+		return
 	}
 	if out == noneType {
 		rc.status = http.StatusNoContent

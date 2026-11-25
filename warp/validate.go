@@ -282,12 +282,11 @@ func collectSpecs(t reflect.Type, prefix []int, seen map[reflect.Type]bool) []fi
 }
 
 // fieldKey is the name in the json tag, else the query tag, else the path tag.
+// json:"-" is no name, so a field a typed route fills from the query or the
+// path is validated under that key.
 func fieldKey(f reflect.StructField) string {
 	for _, tag := range []string{"json", "query", "path"} {
 		name, _, _ := strings.Cut(f.Tag.Get(tag), ",")
-		if tag == "json" && name == "-" {
-			return ""
-		}
 		if name != "" && name != "-" {
 			return name
 		}

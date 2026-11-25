@@ -96,7 +96,7 @@ func TestBodyOnlyForPostPutPatch(t *testing.T) {
 	Post(app, "/find", func(ctx context.Context, in Find) (Item, error) { return Item{Name: in.Q}, nil })
 	h := mustRegister(t, app)
 	for _, method := range []string{"GET", "DELETE"} {
-		if w := send(t, h, method, "/api/find?q=a", "garbage"); w.Code != 200 || !strings.Contains(w.Body.String(), `"name":"a"`) {
+		if w := send(t, h, method, "/api/find?q=a", "garbage", "Content-Type", "text/plain"); w.Code != 200 || !strings.Contains(w.Body.String(), `"name":"a"`) {
 			t.Errorf("%s: status %d, body %q", method, w.Code, w.Body.String())
 		}
 	}
@@ -340,7 +340,6 @@ func TestRegistrationMistakes(t *testing.T) {
 		}, []string{"ShowIn.Body is tagged json, and GET reads no body; tag it query or path."}},
 		{"a type no value fills", func(app *App) {
 			type ShowIn struct {
-				ID   int               `path:"id"`
 				When time.Time         `query:"when"`
 				Nums []int             `query:"num"`
 				Opts *int              `path:"id"`
@@ -363,6 +362,21 @@ func TestRegistrationMistakes(t *testing.T) {
 			"ShowIn.ID has both a path and a query tag; keep one.",
 			"ShowIn.Name has both a json and a query tag; keep one.",
 		}},
+		{"two query fields with one key", func(app *App) {
+			type ShowIn struct {
+				ID   int `path:"id"`
+				Page int `query:"page"`
+				P    int `query:"page"`
+			}
+			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
+		}, []string{`ShowIn.Page and ShowIn.P both have the query key "page"; rename one.`}},
+		{"two path fields with one key", func(app *App) {
+			type ShowIn struct {
+				ID  int    `path:"id"`
+				Raw string `path:"id"`
+			}
+			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
+		}, []string{`ShowIn.ID and ShowIn.Raw both have the path key "id"; rename one.`}},
 		{"a rule mistake", func(app *App) {
 			type ShowIn struct {
 				ID   int    `path:"id"`
@@ -447,5 +461,150 @@ func TestTypedRouteKeepsRouteChecks(t *testing.T) {
 	}
 	if routes := app.Routes(); len(routes) != 1 {
 		t.Fatalf("Routes() = %v", routes)
+	}
+}
+
+func TestJSONNameMistakes(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		register func(app *App)
+		want     string
+	}{
+		{"no name", func(app *App) {
+			type MakeIn struct {
+				Name string `json:",omitempty"`
+			}
+			Post(app, "/products", func(context.Context, MakeIn) (Item, error) { return Item{}, nil })
+		}, `MakeIn.Name has a json tag with no name; name it, as in json:"name".`},
+		{"an empty tag", func(app *App) {
+			type MakeIn struct {
+				UserID int `json:""`
+			}
+			Post(app, "/products", func(context.Context, MakeIn) (Item, error) { return Item{}, nil })
+		}, `MakeIn.UserID has a json tag with no name; name it, as in json:"user_id".`},
+		{"a quote", func(app *App) {
+			type MakeIn struct {
+				Name string `json:"it's"`
+			}
+			Post(app, "/products", func(context.Context, MakeIn) (Item, error) { return Item{}, nil })
+		}, `MakeIn.Name has the json name "it's", which JSON tags cannot carry; use letters, digits and underscores.`},
+		{"a space", func(app *App) {
+			type MakeIn struct {
+				Name string `json:"first name"`
+			}
+			Post(app, "/products", func(context.Context, MakeIn) (Item, error) { return Item{}, nil })
+		}, `MakeIn.Name has the json name "first name", which JSON tags cannot carry; use letters, digits and underscores.`},
+		{"a dash", func(app *App) {
+			type MakeIn struct {
+				Name string `json:"-,"`
+			}
+			Post(app, "/products", func(context.Context, MakeIn) (Item, error) { return Item{}, nil })
+		}, `MakeIn.Name has the json name "-", which JSON tags cannot carry; use letters, digits and underscores.`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			app := New(Config{})
+			c.register(app)
+			if got, want := errText(app.Err()), "warp: POST /products: "+c.want; got != want {
+				t.Fatalf("Err() = %q\nwant %q", got, want)
+			}
+			if routes := app.Routes(); len(routes) != 0 {
+				t.Fatalf("Routes() = %v, want none", routes)
+			}
+		})
+	}
+}
+
+func TestJSONNamesThatWork(t *testing.T) {
+	type MakeIn struct {
+		First string `json:"first-name"`
+		Dot   string `json:"a.b"`
+		Under string `json:"_x,omitempty"`
+		Word  string `json:"größe"`
+	}
+	var got MakeIn
+	app := New(Config{})
+	Post(app, "/products", func(ctx context.Context, in MakeIn) (Item, error) {
+		got = in
+		return Item{}, nil
+	})
+	h := mustRegister(t, app)
+	if w := send(t, h, "POST", "/api/products", `{"first-name":"a","a.b":"b","_x":"c","größe":"d"}`); w.Code != 201 {
+		t.Fatalf("status %d, body %q", w.Code, w.Body.String())
+	}
+	if want := (MakeIn{"a", "b", "c", "d"}); got != want {
+		t.Fatalf("input %+v, want %+v", got, want)
+	}
+}
+
+func TestJSONDashFieldIsValidated(t *testing.T) {
+	type In struct {
+		X int `json:"-" query:"x" warp:"min=5"`
+	}
+	app := New(Config{})
+	Get(app, "/items", func(ctx context.Context, in In) (Item, error) { return Item{}, nil })
+	w := send(t, mustRegister(t, app), "GET", "/api/items?x=2", "")
+	if code, _, fields := apiError(t, w); w.Code != 422 || code != "validation" ||
+		!reflect.DeepEqual(fields, map[string]string{"x": "Enter 5 or more."}) {
+		t.Fatalf("status %d, code %q, fields %v", w.Code, code, fields)
+	}
+}
+
+func TestBodyMediaType(t *testing.T) {
+	const object = `{"name":"a"}`
+	for _, c := range []struct {
+		contentType, body string
+		status            int
+		msg               string
+	}{
+		{"text/plain", object, 415, "Send the body as application/json."},
+		{"", object, 415, "Send the body as application/json."},
+		{"application/json; charset", object, 415, "Send the body as application/json."},
+		{"application/x-www-form-urlencoded", "name=a", 415, "Send the body as application/json."},
+		{"multipart/form-data; boundary=x", object, 415, "Send the body as application/json."},
+		{"+json", object, 415, "Send the body as application/json."},
+		{"text/plain", "garbage", 415, "Send the body as application/json."},
+		{"text/plain", "", 422, "1 field needs attention."},
+		{"", " \n\t", 422, "1 field needs attention."},
+		{"application/json", object, 201, ""},
+		{"application/json; charset=utf-8", object, 201, ""},
+		{"Application/JSON", object, 201, ""},
+		{"application/merge-patch+json", object, 201, ""},
+		{"application/json", "garbage", 400, "The body is not valid JSON."},
+	} {
+		app := New(Config{})
+		Post(app, "/items", func(ctx context.Context, in CreateIn) (Item, error) { return Item{}, nil })
+		w := send(t, mustRegister(t, app), "POST", "/api/items", c.body, "Content-Type", c.contentType)
+		if w.Code != c.status {
+			t.Errorf("%q %q: status %d, body %q", c.contentType, c.body, w.Code, w.Body.String())
+			continue
+		}
+		if c.msg == "" {
+			continue
+		}
+		if code, msg, _ := apiError(t, w); msg != c.msg || (c.status == 415 && code != "unsupported_media_type") {
+			t.Errorf("%q %q: code %q, message %q", c.contentType, c.body, code, msg)
+		}
+	}
+	// A body too large is a 413 whatever its type.
+	app := New(Config{MaxBodyBytes: 1 << 20})
+	Post(app, "/items", func(ctx context.Context, in CreateIn) (Item, error) { return Item{}, nil })
+	w := send(t, mustRegister(t, app), "POST", "/api/items", strings.Repeat("a", 1<<20+1), "Content-Type", "text/plain")
+	if w.Code != 413 {
+		t.Fatalf("too large as text/plain: status %d", w.Code)
+	}
+}
+
+func TestTypedRouteAfterStart(t *testing.T) {
+	type ShowIn struct {
+		Name string
+	}
+	app := New(Config{})
+	app.mu.Lock()
+	app.started = true
+	app.mu.Unlock()
+	Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil }, Status(0))
+	want := `warp: route "GET /products/{id}" was registered after the app started serving; register every route before Serve.`
+	if got := errText(app.Err()); got != want {
+		t.Fatalf("Err() = %q\nwant %q", got, want)
 	}
 }

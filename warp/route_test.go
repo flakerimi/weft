@@ -16,10 +16,19 @@ type Item struct {
 }
 
 // send serves one request with body, and header given as name, value pairs.
+// A body is sent as application/json unless header gives a Content-Type; a
+// header given as "" is left out.
 func send(t *testing.T, h http.Handler, method, path, body string, header ...string) *httptest.ResponseRecorder {
 	t.Helper()
 	r := httptest.NewRequest(method, path, strings.NewReader(body))
+	if body != "" {
+		r.Header.Set("Content-Type", "application/json")
+	}
 	for i := 0; i+1 < len(header); i += 2 {
+		if header[i+1] == "" {
+			r.Header.Del(header[i])
+			continue
+		}
 		r.Header.Set(header[i], header[i+1])
 	}
 	w := httptest.NewRecorder()
@@ -175,7 +184,7 @@ func TestNoneInReadsNothing(t *testing.T) {
 		ran = true
 		return Item{Name: "pong"}, nil
 	})
-	w := send(t, mustRegister(t, app), "POST", "/api/ping?x=1", "garbage")
+	w := send(t, mustRegister(t, app), "POST", "/api/ping?x=1", "garbage", "Content-Type", "text/plain")
 	if w.Code != 201 || !ran {
 		t.Fatalf("status %d, body %q, ran %v", w.Code, w.Body.String(), ran)
 	}
@@ -343,5 +352,36 @@ func TestTypedRouteGoesThroughWith(t *testing.T) {
 	send(t, mustRegister(t, app), "GET", "/api/items", "")
 	if want := []string{"with", "handler"}; !reflect.DeepEqual(notes(&log), want) {
 		t.Fatalf("log %v, want %v", notes(&log), want)
+	}
+}
+
+func TestStatusOutOfRange(t *testing.T) {
+	type ShowIn struct {
+		Name string
+	}
+	app := New(Config{})
+	app.Handle("GET /a", text("a"), Status(0))
+	Get(app, "/b", func(context.Context, None) (Item, error) { return Item{}, nil }, Status(600))
+	Post(app, "/c", func(context.Context, None) (None, error) { return None{}, nil }, Status(99))
+	Get(app, "/d", func(context.Context, ShowIn) (Item, error) { return Item{}, nil }, Status(-1))
+	Get(app, "/e", func(context.Context, None) (Item, error) { return Item{}, nil }, Status(100))
+	Get(app, "/f", func(context.Context, None) (Item, error) { return Item{}, nil }, Status(599))
+	app.Handle("GET /g", text("g"))
+	want := strings.Join([]string{
+		"warp: GET /a: Status(0) is not an HTTP status; use one from 100 to 599.",
+		"warp: GET /b: Status(600) is not an HTTP status; use one from 100 to 599.",
+		"warp: POST /c: Status(99) is not an HTTP status; use one from 100 to 599.",
+		"warp: GET /d: Status(-1) is not an HTTP status; use one from 100 to 599.",
+		"warp: GET /d: ShowIn.Name has no json, query or path tag; add one.",
+	}, "\n")
+	if got := errText(app.Err()); got != want {
+		t.Fatalf("Err() =\n%s\nwant\n%s", got, want)
+	}
+	var paths []string
+	for _, r := range app.Routes() {
+		paths = append(paths, r.Path)
+	}
+	if want := []string{"/api/e", "/api/f", "/api/g"}; !reflect.DeepEqual(paths, want) {
+		t.Fatalf("Routes() paths %v, want %v", paths, want)
 	}
 }

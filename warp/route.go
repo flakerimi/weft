@@ -21,6 +21,11 @@ func Get[In, Out any](app *App, path string, fn func(context.Context, In) (Out, 
 
 // Post registers fn for POST at path, as Get does, and fills the input from
 // the JSON body too. It answers with 201.
+//
+// A body that is not empty must be sent as application/json (or a type
+// ending in +json), else the answer is 415. A cross-site form or fetch can
+// send text/plain with the visitor's cookies and no preflight; taking JSON
+// bodies alone is what keeps another site from writing to a typed route.
 func Post[In, Out any](app *App, path string, fn func(context.Context, In) (Out, error), opts ...RouteOption) {
 	typed(app, http.MethodPost, path, http.StatusCreated, fn, opts)
 }
@@ -49,7 +54,8 @@ type call struct {
 }
 
 // Request returns the request a typed handler is answering, or nil when ctx
-// is not a typed handler's.
+// is not a typed handler's. On POST, PUT and PATCH its body has already been
+// read into the input, so there is nothing left in it to read.
 func Request(ctx context.Context) *http.Request {
 	if c, ok := ctx.Value(callKey{}).(*call); ok {
 		return c.r
@@ -68,17 +74,11 @@ func ResponseHeader(ctx context.Context) http.Header {
 }
 
 // typed registers fn at method and path, binding its input by a plan made
-// once, here. When the input type has mistakes, each is reported and the
-// route is not registered.
+// once, here. When the input type has mistakes, route reports each and does
+// not register the route.
 func typed[In, Out any](app *App, method, path string, status int, fn func(context.Context, In) (Out, error), opts []RouteOption) {
 	in, out := reflect.TypeFor[In](), reflect.TypeFor[Out]()
 	p, mistakes := planFor(in, method, path)
-	if len(mistakes) > 0 {
-		for _, m := range mistakes {
-			app.fail("%s %s: %s", method, path, m)
-		}
-		return
-	}
 	limit := app.cfg.MaxBodyBytes
 	app.route(method, path, in, out, status, func(status int) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -103,5 +103,5 @@ func typed[In, Out any](app *App, method, path string, status int, fn func(conte
 			}
 			WriteJSON(w, status, output)
 		})
-	}, opts)
+	}, opts, mistakes)
 }

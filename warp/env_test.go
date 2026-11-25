@@ -131,3 +131,9 @@ func TestZeroConfig(t *testing.T) {
 		t.Error("zero Config should have no vars and no error")
 	}
 }
+
+func TestNegativeBodyLimitIsTheDefault(t *testing.T) {
+	if got := New(Config{MaxBodyBytes: -1}).Config().MaxBodyBytes; got != 1<<20 {
+		t.Fatalf("MaxBodyBytes = %d, want %d", got, 1<<20)
+	}
+}

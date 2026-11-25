@@ -110,6 +110,7 @@ func TestStatuses(t *testing.T) {
 		{NotFound("x"), http.StatusNotFound, "not_found"},
 		{Conflict("x"), http.StatusConflict, "conflict"},
 		{TooLarge("x"), http.StatusRequestEntityTooLarge, "too_large"},
+		{UnsupportedMedia("x"), http.StatusUnsupportedMediaType, "unsupported_media_type"},
 		{Invalid(map[string]string{"a": "b"}), http.StatusUnprocessableEntity, "validation"},
 		{TooMany("x"), http.StatusTooManyRequests, "rate_limited"},
 	} {

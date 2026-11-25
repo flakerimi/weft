@@ -73,7 +73,7 @@ func (c Config) withDefaults() Config {
 	if c.Port == "" {
 		c.Port = defaultPort
 	}
-	if c.MaxBodyBytes == 0 {
+	if c.MaxBodyBytes <= 0 {
 		c.MaxBodyBytes = defaultMaxBodyBytes
 	}
 	return c

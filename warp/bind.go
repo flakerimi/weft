@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"mime"
 	"net/http"
 	"reflect"
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // plan is how a typed route fills its input type: made once, when the route
@@ -63,7 +65,17 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 	var mistakes []string
 	wild := wildcards(path)
 	hasField := map[string]bool{}
-	jsonOwner := map[string]string{}
+	owner := map[string]string{} // "json name", "query name", "path name" -> the field that has it
+	// claim reports whether at is the first field to have the key name of
+	// kind, and records the mistake when it is not.
+	claim := func(kind, key, at string) bool {
+		if other, taken := owner[kind+" "+key]; taken {
+			mistakes = append(mistakes, fmt.Sprintf("%s and %s both have the %s key %q; rename one.", other, at, kind, key))
+			return false
+		}
+		owner[kind+" "+key] = at
+		return true
+	}
 	var view, raw []reflect.StructField
 	for _, f := range inputFields(t, nil, map[reflect.Type]bool{}) {
 		at := name + "." + f.Name
@@ -88,15 +100,19 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 		case len(tags) == 3:
 			mistakes = append(mistakes, fmt.Sprintf("%s has a json, a path and a query tag; keep one.", at))
 		case isJSON:
-			if !p.readBody {
+			switch {
+			case !p.readBody:
 				mistakes = append(mistakes, fmt.Sprintf("%s is tagged json, and %s reads no body; tag it query or path.", at, method))
 				continue
-			}
-			if other, taken := jsonOwner[jsonKey]; taken {
-				mistakes = append(mistakes, fmt.Sprintf("%s and %s both have the json key %q; rename one.", other, at, jsonKey))
+			case jsonKey == "":
+				mistakes = append(mistakes, fmt.Sprintf("%s has a json tag with no name; name it, as in json:%q.", at, snakeCase(f.Name)))
+				continue
+			case !validJSONName(jsonKey):
+				mistakes = append(mistakes, fmt.Sprintf("%s has the json name %q, which JSON tags cannot carry; use letters, digits and underscores.", at, jsonKey))
+				continue
+			case !claim("json", jsonKey, at):
 				continue
 			}
-			jsonOwner[jsonKey] = at
 			view = append(view, reflect.StructField{
 				Name: "F" + strconv.Itoa(len(view)),
 				Type: f.Type,
@@ -117,12 +133,18 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 				mistakes = append(mistakes, cannotFill(at, f.Type))
 				continue
 			}
+			if !claim("path", pathKey, at) {
+				continue
+			}
 			prm.key, prm.index = pathKey, f.index
 			p.path = append(p.path, prm)
 		default:
 			prm, ok := paramFor(f.Type, true)
 			if !ok {
 				mistakes = append(mistakes, cannotFill(at, f.Type))
+				continue
+			}
+			if !claim("query", queryKey, at) {
 				continue
 			}
 			prm.key, prm.index = queryKey, f.index
@@ -195,7 +217,8 @@ func inputFields(t reflect.Type, prefix []int, seen map[reflect.Type]bool) []inp
 	return out
 }
 
-// jsonTagOf returns the key and options of f's json tag; json:"-" is no tag.
+// jsonTagOf returns the key and options of f's json tag, the key "" when the
+// tag has no name; json:"-" is no tag.
 func jsonTagOf(f reflect.StructField) (key, opts string, ok bool) {
 	tag, ok := f.Tag.Lookup("json")
 	if !ok || tag == "-" {
@@ -205,10 +228,39 @@ func jsonTagOf(f reflect.StructField) (key, opts string, ok bool) {
 	if opts != "" {
 		opts = "," + opts
 	}
-	if key == "" {
-		key = f.Name
-	}
 	return key, opts, true
+}
+
+// validJSONName reports whether name can be a json key: letters, digits, _,
+// - and ., but not the name - alone. encoding/json takes all of these as a
+// tag name; it takes a few more, which a typed route has no need of.
+func validJSONName(name string) bool {
+	if name == "" || name == "-" {
+		return false
+	}
+	for _, r := range name {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("_-.", r) {
+			return false
+		}
+	}
+	return true
+}
+
+// snakeCase writes a Go field name as a json key: UserID is user_id.
+func snakeCase(name string) string {
+	rs := []rune(name)
+	var b strings.Builder
+	for i, r := range rs {
+		if unicode.IsUpper(r) {
+			if i > 0 && (unicode.IsLower(rs[i-1]) || unicode.IsDigit(rs[i-1]) ||
+				(i+1 < len(rs) && unicode.IsUpper(rs[i-1]) && unicode.IsLower(rs[i+1]))) {
+				b.WriteByte('_')
+			}
+			r = unicode.ToLower(r)
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // tagName is the name in f's tag called tag; "" and "-" are no name.
@@ -376,6 +428,8 @@ func (p *plan) decode(w http.ResponseWriter, r *http.Request, dst reflect.Value,
 	data = bytes.Trim(data, " \t\r\n")
 	if len(data) == 0 {
 		data = []byte("{}")
+	} else if !isJSONMedia(r.Header.Get("Content-Type")) {
+		return UnsupportedMedia("Send the body as application/json.")
 	}
 	if !json.Valid(data) {
 		return BadRequest(notJSON)
@@ -393,6 +447,16 @@ func (p *plan) decode(w http.ResponseWriter, r *http.Request, dst reflect.Value,
 		}
 	}
 	return nil
+}
+
+// isJSONMedia reports whether a Content-Type is application/json or a type
+// ending in +json, such as application/merge-patch+json, with any parameters. Taking JSON alone keeps another site
+// from writing to a typed route: a cross-site form or fetch can send
+// text/plain with the visitor's cookies and no preflight.
+func isJSONMedia(contentType string) bool {
+	media, _, err := mime.ParseMediaType(contentType)
+	return err == nil && (media == "application/json" ||
+		strings.Contains(media, "/") && strings.HasSuffix(media, "+json"))
 }
 
 func decodeStrict(data []byte, v any) error {
@@ -421,7 +485,10 @@ func (p *plan) bodyError(data []byte, err error) error {
 	return BadRequest(notJSON)
 }
 
-// unknownField reads the field's name from the decoder's error.
+// unknownField reads the field's name from the decoder's error. encoding/json
+// has no error type for an unknown field, so this depends on its wording,
+// json: unknown field "name"; when the wording changes, the unknown-field
+// rows of TestBodyFailures and TestBodyCannotSetPathField fail.
 func unknownField(err error) (string, bool) {
 	if err == nil {
 		return "", false

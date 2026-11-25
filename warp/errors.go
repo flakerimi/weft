@@ -52,6 +52,11 @@ func TooLarge(message string) *Error {
 	return &Error{Status: http.StatusRequestEntityTooLarge, Code: "too_large", Message: message}
 }
 
+// UnsupportedMedia is a 415 answer.
+func UnsupportedMedia(message string) *Error {
+	return &Error{Status: http.StatusUnsupportedMediaType, Code: "unsupported_media_type", Message: message}
+}
+
 // Invalid is a 422 answer that names each field that needs attention.
 func Invalid(fields map[string]string) *Error {
 	message := fmt.Sprintf("%d fields need attention.", len(fields))
