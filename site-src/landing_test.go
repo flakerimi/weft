@@ -29,7 +29,9 @@ type benchResults struct {
 	Targets []struct {
 		ID    string `json:"id"`
 		Label string `json:"label"`
-		Load  struct {
+		// Kind is own, gzip or packed; results from before 2026-11-25 have none.
+		Kind string `json:"kind"`
+		Load struct {
 			RPS struct {
 				Median float64 `json:"median"`
 			} `json:"rps"`
@@ -303,11 +305,31 @@ func TestLandingBenchmark(t *testing.T) {
 	if bench == "" {
 		t.Fatal("no benchmark bars")
 	}
-	rows := strings.Count(bench, `role="row"`)
-	if rows != len(r.Targets) {
-		t.Errorf("%d bars for %d targets in %s", rows, len(r.Targets), file)
+	// A bar for each site behind the server it ships with; the benchmark's
+	// plain Go servers are not bars, and the note gives the range of the
+	// pre-compressed one.
+	shown, packedMin, packedMax := 0, 0.0, 0.0
+	for _, target := range r.Targets {
+		switch target.Kind {
+		case "", "own":
+			shown++
+		case "packed":
+			if n := target.Load.RPS.Median; packedMin == 0 || n < packedMin {
+				packedMin = n
+			}
+			packedMax = max(packedMax, target.Load.RPS.Median)
+		}
+	}
+	if rows := strings.Count(bench, `role="row"`); rows != shown {
+		t.Errorf("%d bars for %d sites behind their own servers in %s", rows, shown, file)
 	}
 	for _, target := range r.Targets {
+		if target.Kind != "" && target.Kind != "own" {
+			if strings.Contains(text(bench), thousands(target.Load.RPS.Median)) {
+				t.Errorf("%s: a plain Go server has a bar", target.ID)
+			}
+			continue
+		}
 		n := thousands(target.Load.RPS.Median)
 		if !strings.Contains(text(bench), n) {
 			t.Errorf("%s: no bar reads %s requests per second", target.ID, n)
@@ -323,7 +345,11 @@ func TestLandingBenchmark(t *testing.T) {
 		}
 	}
 	note := text(element(page, `class="landing-bench-note"`))
-	for _, must := range []string{r.Machine.Chip, "Part of the gap is the server", "less JavaScript"} {
+	musts := []string{r.Machine.Chip, "The gap is the server", "less JavaScript"}
+	if packedMax > 0 {
+		musts = append(musts, thousands(packedMin)+" to "+thousands(packedMax))
+	}
+	for _, must := range musts {
 		if !strings.Contains(note, must) {
 			t.Errorf("the note under the bars does not say %q", must)
 		}

@@ -3,7 +3,11 @@
 // accepts gzip. It is the server Astro's static output gets besides
 // `astro preview`, so Astro is not measured only behind its preview server.
 //
-// Usage: static -dir bench/astro/dist [-addr 127.0.0.1:4302]
+// With -precompressed it serves a folder that bench/tools/precompress.mjs
+// prepared from memory, sending the brotli or gzip stored beside each file
+// (precompressed.go): the same serving terms as weft.Serve, for any site.
+//
+// Usage: static -dir bench/astro/dist [-addr 127.0.0.1:4302] [-precompressed]
 package main
 
 import (
@@ -12,6 +16,7 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 )
@@ -92,10 +97,21 @@ func (g *gzipWriter) close() {
 func main() {
 	dir := flag.String("dir", "", "the folder to serve")
 	addr := flag.String("addr", "127.0.0.1:4302", "the address to listen on")
+	packed := flag.Bool("precompressed", false, "serve from memory, with the .br and .gz stored beside each file")
 	flag.Parse()
 	if *dir == "" {
 		log.Fatal("static: -dir is required")
 	}
+	if _, err := os.Stat(*dir); err != nil {
+		log.Fatalf("static: cannot read %s; build the site first, as bench/run.sh does.", *dir)
+	}
+	h := handler(*dir)
+	if *packed {
+		var err error
+		if h, err = precompressed(*dir); err != nil {
+			log.Fatalf("static: cannot read %s (%v); build the site first, as bench/run.sh does.", *dir, err)
+		}
+	}
 	log.Printf("static: %s on http://%s", *dir, *addr)
-	log.Fatal(http.ListenAndServe(*addr, handler(*dir)))
+	log.Fatal(http.ListenAndServe(*addr, h))
 }

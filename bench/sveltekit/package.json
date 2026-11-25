@@ -1,0 +1,20 @@
+{
+  "name": "weft-bench-sveltekit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The SvelteKit side of the Weft benchmark. Not part of the pnpm workspace: it has its own lockfile.",
+  "scripts": {
+    "build:static": "BENCH_STATIC=1 vite build",
+    "build:server": "vite build"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-node": "6.0.5",
+    "@sveltejs/adapter-static": "4.0.1",
+    "@sveltejs/kit": "3.4.0",
+    "@sveltejs/vite-plugin-svelte": "7.3.2",
+    "svelte": "5.59.2",
+    "typescript": "^6.0.0",
+    "vite": "8.3.8"
+  }
+}

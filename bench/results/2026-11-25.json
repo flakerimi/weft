@@ -1,0 +1,4727 @@
+{
+  "date": "2026-11-25",
+  "machine": {
+    "chip": "Apple M4",
+    "cores": 10,
+    "performance_cores": 4,
+    "memory_gb": 32,
+    "macos": "27.2.1",
+    "macos_build": "26B131"
+  },
+  "versions": {
+    "weft_commit": "857f786",
+    "vue_weft": "3.6.0-rc.16",
+    "astro": "7.4.13",
+    "astrojs_vue": "7.1.6",
+    "vue_astro": "3.5.46",
+    "nuxt": "4.7.0",
+    "vue_nuxt": "3.5.46",
+    "next": "16.4.6",
+    "react": "19.3.1",
+    "sveltekit": "3.4.0",
+    "svelte": "5.59.2",
+    "lighthouse": "13.6.0",
+    "sharp": "0.35.5",
+    "node": "v26.13.1",
+    "go": "go1.26.2",
+    "chrome": "Google Chrome 158.0.8127.88"
+  },
+  "method": {
+    "lighthouse_runs": 5,
+    "lighthouse_preset": "mobile (default), simulated throttling, headless Chrome, a fresh profile each run",
+    "ttfb_requests": 50,
+    "load": {
+      "runs": 3,
+      "connections": 64,
+      "duration": "10s",
+      "warmup": "2s",
+      "accept_encoding": "br, gzip"
+    }
+  },
+  "targets": [
+    {
+      "id": "weft",
+      "label": "Weft",
+      "server": "weft binary (weft.Serve), GOMAXPROCS=1",
+      "kind": "own",
+      "url": "http://127.0.0.1:4301/",
+      "lighthouse": {
+        "score": {
+          "median": 100,
+          "min": 100,
+          "max": 100,
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        },
+        "lcp_ms": {
+          "median": 1276,
+          "min": 1276,
+          "max": 1276,
+          "values": [
+            1276,
+            1276,
+            1276,
+            1276,
+            1276
+          ]
+        },
+        "fcp_ms": {
+          "median": 600,
+          "min": 600,
+          "max": 600,
+          "values": [
+            600,
+            600,
+            600,
+            600,
+            600
+          ]
+        },
+        "tbt_ms": {
+          "median": 0,
+          "min": 0,
+          "max": 31,
+          "values": [
+            10,
+            0,
+            0,
+            31,
+            0
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lcp_element": "div.bench > main.weft-page > div.weft-page__body > img.bench-image",
+        "requests": [
+          {
+            "url": "http://127.0.0.1:4301/",
+            "type": "Document",
+            "status": 200,
+            "transfer": 3535
+          },
+          {
+            "url": "http://127.0.0.1:4301/assets/boot-0ojnprcD.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 802
+          },
+          {
+            "url": "http://127.0.0.1:4301/hero.webp",
+            "type": "Image",
+            "status": 200,
+            "transfer": 60041
+          },
+          {
+            "url": "http://127.0.0.1:4301/favicon.ico",
+            "type": "Other",
+            "status": 404,
+            "transfer": 199
+          },
+          {
+            "url": "http://127.0.0.1:4301/assets/client-BoIcA1Gv.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 20716
+          },
+          {
+            "url": "http://127.0.0.1:4301/assets/Counter-P-dLI8no.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 532
+          }
+        ]
+      },
+      "bytes": {
+        "requests": 5,
+        "js_br": 21301,
+        "js_inline_raw": 0,
+        "css_br": 0,
+        "html_br": 3184,
+        "image": 59862,
+        "total_br": 84347,
+        "js_wire": 21301,
+        "total_wire": 84347,
+        "resources": [
+          {
+            "url": "http://127.0.0.1:4301/",
+            "type": "Document",
+            "content_type": "text/html; charset=utf-8",
+            "raw": 14789,
+            "br": 3184,
+            "wire": 3184,
+            "wire_encoding": "br",
+            "chrome_transfer": 3535,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4301/assets/boot-0ojnprcD.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 1112,
+            "br": 553,
+            "wire": 553,
+            "wire_encoding": "br",
+            "chrome_transfer": 802,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4301/hero.webp",
+            "type": "Image",
+            "content_type": "image/webp",
+            "raw": 59862,
+            "br": 59862,
+            "wire": 59862,
+            "wire_encoding": "identity",
+            "chrome_transfer": 60041,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4301/assets/client-BoIcA1Gv.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 59967,
+            "br": 20465,
+            "wire": 20465,
+            "wire_encoding": "br",
+            "chrome_transfer": 20716,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4301/assets/Counter-P-dLI8no.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 538,
+            "br": 283,
+            "wire": 283,
+            "wire_encoding": "br",
+            "chrome_transfer": 532,
+            "inline_js": 0
+          }
+        ]
+      },
+      "ttfb": {
+        "url": "http://127.0.0.1:4301/",
+        "n": 50,
+        "median_ms": 0.200041,
+        "p25_ms": 0.179791,
+        "p75_ms": 0.245208,
+        "min_ms": 0.157042,
+        "max_ms": 0.448417,
+        "first_byte_median_ms": 0.185167
+      },
+      "load": {
+        "rps": {
+          "median": 111249,
+          "min": 108824,
+          "max": 123643,
+          "values": [
+            123643,
+            111249,
+            108824
+          ]
+        },
+        "p50_ms": {
+          "median": 0.567542,
+          "min": 0.508917,
+          "max": 0.58075,
+          "values": [
+            0.508917,
+            0.567542,
+            0.58075
+          ]
+        },
+        "p99_ms": {
+          "median": 1.132042,
+          "min": 1.054,
+          "max": 1.145792,
+          "values": [
+            1.054,
+            1.132042,
+            1.145792
+          ]
+        },
+        "errors": 0,
+        "runs": [
+          {
+            "url": "http://127.0.0.1:4301/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1236430,
+            "errors": 0,
+            "bytes": 3936793120,
+            "rps": 123643,
+            "p50_ms": 0.508917,
+            "p99_ms": 1.054
+          },
+          {
+            "url": "http://127.0.0.1:4301/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1112489,
+            "errors": 0,
+            "bytes": 3542164976,
+            "rps": 111248.9,
+            "p50_ms": 0.567542,
+            "p99_ms": 1.132042
+          },
+          {
+            "url": "http://127.0.0.1:4301/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1088242,
+            "errors": 0,
+            "bytes": 3464962528,
+            "rps": 108824.2,
+            "p50_ms": 0.58075,
+            "p99_ms": 1.145792
+          }
+        ]
+      }
+    },
+    {
+      "id": "astro-vue-preview",
+      "label": "Astro, Vue island",
+      "server": "astro preview",
+      "kind": "own",
+      "url": "http://127.0.0.1:4321/",
+      "lighthouse": {
+        "score": {
+          "median": 100,
+          "min": 100,
+          "max": 100,
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        },
+        "lcp_ms": {
+          "median": 1356,
+          "min": 1354,
+          "max": 1357,
+          "values": [
+            1356,
+            1357,
+            1356,
+            1355,
+            1354
+          ]
+        },
+        "fcp_ms": {
+          "median": 602,
+          "min": 601,
+          "max": 602,
+          "values": [
+            602,
+            602,
+            602,
+            602,
+            601
+          ]
+        },
+        "tbt_ms": {
+          "median": 0,
+          "min": 0,
+          "max": 28,
+          "values": [
+            0,
+            0,
+            0,
+            28,
+            21
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lcp_element": "body > main.page > img.image",
+        "requests": [
+          {
+            "url": "http://127.0.0.1:4321/",
+            "type": "Document",
+            "status": 200,
+            "transfer": 4544
+          },
+          {
+            "url": "http://127.0.0.1:4321/_astro/hero.DkuBxBur_Z1fUCjU.webp",
+            "type": "Image",
+            "status": 200,
+            "transfer": 60130
+          },
+          {
+            "url": "http://127.0.0.1:4321/favicon.ico",
+            "type": "Other",
+            "status": 404,
+            "transfer": 1894
+          },
+          {
+            "url": "http://127.0.0.1:4321/_astro/Counter.Bq14vyBh.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 1067
+          },
+          {
+            "url": "http://127.0.0.1:4321/_astro/client.CqNZHXs6.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 3732
+          },
+          {
+            "url": "http://127.0.0.1:4321/_astro/runtime-core.esm-bundler.DSCEjuOH.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 26424
+          }
+        ]
+      },
+      "bytes": {
+        "requests": 5,
+        "js_br": 27158,
+        "js_inline_raw": 5238,
+        "css_br": 0,
+        "html_br": 3596,
+        "image": 59862,
+        "total_br": 90616,
+        "js_wire": 30145,
+        "total_wire": 94270,
+        "resources": [
+          {
+            "url": "http://127.0.0.1:4321/",
+            "type": "Document",
+            "content_type": "text/html",
+            "raw": 12020,
+            "br": 3596,
+            "wire": 4263,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 4544,
+            "inline_js": 5238
+          },
+          {
+            "url": "http://127.0.0.1:4321/_astro/hero.DkuBxBur_Z1fUCjU.webp",
+            "type": "Image",
+            "content_type": "image/webp",
+            "raw": 59862,
+            "br": 59862,
+            "wire": 59862,
+            "wire_encoding": "identity",
+            "chrome_transfer": 60130,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4321/_astro/Counter.Bq14vyBh.js",
+            "type": "Script",
+            "content_type": "text/javascript",
+            "raw": 746,
+            "br": 416,
+            "wire": 746,
+            "wire_encoding": "identity",
+            "chrome_transfer": 1067,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4321/_astro/client.CqNZHXs6.js",
+            "type": "Script",
+            "content_type": "text/javascript",
+            "raw": 7247,
+            "br": 3012,
+            "wire": 3362,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 3732,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4321/_astro/runtime-core.esm-bundler.DSCEjuOH.js",
+            "type": "Script",
+            "content_type": "text/javascript",
+            "raw": 67790,
+            "br": 23730,
+            "wire": 26037,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 26424,
+            "inline_js": 0
+          }
+        ]
+      },
+      "ttfb": {
+        "url": "http://127.0.0.1:4321/",
+        "n": 50,
+        "median_ms": 0.313958,
+        "p25_ms": 0.282041,
+        "p75_ms": 0.341375,
+        "min_ms": 0.234917,
+        "max_ms": 0.433292,
+        "first_byte_median_ms": 0.310458
+      },
+      "load": {
+        "rps": {
+          "median": 19354,
+          "min": 18635,
+          "max": 20943,
+          "values": [
+            20943,
+            19354,
+            18635
+          ]
+        },
+        "p50_ms": {
+          "median": 3.198625,
+          "min": 2.943625,
+          "max": 3.332833,
+          "values": [
+            2.943625,
+            3.198625,
+            3.332833
+          ]
+        },
+        "p99_ms": {
+          "median": 4.661667,
+          "min": 4.277916,
+          "max": 4.864625,
+          "values": [
+            4.277916,
+            4.864625,
+            4.661667
+          ]
+        },
+        "errors": 0,
+        "runs": [
+          {
+            "url": "http://127.0.0.1:4321/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 209432,
+            "errors": 0,
+            "bytes": 892808616,
+            "rps": 20943.2,
+            "p50_ms": 2.943625,
+            "p99_ms": 4.277916
+          },
+          {
+            "url": "http://127.0.0.1:4321/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 193537,
+            "errors": 0,
+            "bytes": 825048231,
+            "rps": 19353.7,
+            "p50_ms": 3.198625,
+            "p99_ms": 4.864625
+          },
+          {
+            "url": "http://127.0.0.1:4321/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 186352,
+            "errors": 0,
+            "bytes": 794418576,
+            "rps": 18635.2,
+            "p50_ms": 3.332833,
+            "p99_ms": 4.661667
+          }
+        ]
+      }
+    },
+    {
+      "id": "astro-vue-static",
+      "label": "Astro, Vue island",
+      "server": "Go static + gzip, GOMAXPROCS=1",
+      "kind": "gzip",
+      "url": "http://127.0.0.1:4302/",
+      "lighthouse": {
+        "score": {
+          "median": 100,
+          "min": 100,
+          "max": 100,
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        },
+        "lcp_ms": {
+          "median": 1353,
+          "min": 1351,
+          "max": 1354,
+          "values": [
+            1352,
+            1354,
+            1353,
+            1351,
+            1353
+          ]
+        },
+        "fcp_ms": {
+          "median": 601,
+          "min": 600,
+          "max": 621,
+          "values": [
+            601,
+            621,
+            601,
+            600,
+            601
+          ]
+        },
+        "tbt_ms": {
+          "median": 0,
+          "min": 0,
+          "max": 24,
+          "values": [
+            24,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lcp_element": "body > main.page > img.image",
+        "requests": [
+          {
+            "url": "http://127.0.0.1:4302/",
+            "type": "Document",
+            "status": 200,
+            "transfer": 4537
+          },
+          {
+            "url": "http://127.0.0.1:4302/_astro/hero.DkuBxBur_Z1fUCjU.webp",
+            "type": "Image",
+            "status": 200,
+            "transfer": 60035
+          },
+          {
+            "url": "http://127.0.0.1:4302/favicon.ico",
+            "type": "Other",
+            "status": 404,
+            "transfer": 176
+          },
+          {
+            "url": "http://127.0.0.1:4302/_astro/Counter.Bq14vyBh.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 699
+          },
+          {
+            "url": "http://127.0.0.1:4302/_astro/client.CqNZHXs6.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 3615
+          },
+          {
+            "url": "http://127.0.0.1:4302/_astro/runtime-core.esm-bundler.DSCEjuOH.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 26420
+          }
+        ]
+      },
+      "bytes": {
+        "requests": 5,
+        "js_br": 27158,
+        "js_inline_raw": 5238,
+        "css_br": 0,
+        "html_br": 3596,
+        "image": 59862,
+        "total_br": 90616,
+        "js_wire": 29891,
+        "total_wire": 94026,
+        "resources": [
+          {
+            "url": "http://127.0.0.1:4302/",
+            "type": "Document",
+            "content_type": "text/html; charset=utf-8",
+            "raw": 12020,
+            "br": 3596,
+            "wire": 4273,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 4537,
+            "inline_js": 5238
+          },
+          {
+            "url": "http://127.0.0.1:4302/_astro/hero.DkuBxBur_Z1fUCjU.webp",
+            "type": "Image",
+            "content_type": "image/webp",
+            "raw": 59862,
+            "br": 59862,
+            "wire": 59862,
+            "wire_encoding": "identity",
+            "chrome_transfer": 60035,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4302/_astro/Counter.Bq14vyBh.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 746,
+            "br": 416,
+            "wire": 461,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 699,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4302/_astro/client.CqNZHXs6.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 7247,
+            "br": 3012,
+            "wire": 3351,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 3615,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4302/_astro/runtime-core.esm-bundler.DSCEjuOH.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 67790,
+            "br": 23730,
+            "wire": 26079,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 26420,
+            "inline_js": 0
+          }
+        ]
+      },
+      "ttfb": {
+        "url": "http://127.0.0.1:4302/",
+        "n": 50,
+        "median_ms": 0.284,
+        "p25_ms": 0.2525,
+        "p75_ms": 0.298542,
+        "min_ms": 0.220125,
+        "max_ms": 0.368667,
+        "first_byte_median_ms": 0.280292
+      },
+      "load": {
+        "rps": {
+          "median": 7964,
+          "min": 7924,
+          "max": 7988,
+          "values": [
+            7988,
+            7964,
+            7924
+          ]
+        },
+        "p50_ms": {
+          "median": 8.187709,
+          "min": 8.120666,
+          "max": 8.217458,
+          "values": [
+            8.120666,
+            8.187709,
+            8.217458
+          ]
+        },
+        "p99_ms": {
+          "median": 13.485417,
+          "min": 13.161834,
+          "max": 14.0965,
+          "values": [
+            14.0965,
+            13.161834,
+            13.485417
+          ]
+        },
+        "errors": 0,
+        "runs": [
+          {
+            "url": "http://127.0.0.1:4302/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 79875,
+            "errors": 0,
+            "bytes": 341305875,
+            "rps": 7987.5,
+            "p50_ms": 8.120666,
+            "p99_ms": 14.0965
+          },
+          {
+            "url": "http://127.0.0.1:4302/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 79641,
+            "errors": 0,
+            "bytes": 340305993,
+            "rps": 7964.1,
+            "p50_ms": 8.187709,
+            "p99_ms": 13.161834
+          },
+          {
+            "url": "http://127.0.0.1:4302/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 79242,
+            "errors": 0,
+            "bytes": 338601066,
+            "rps": 7924.2,
+            "p50_ms": 8.217458,
+            "p99_ms": 13.485417
+          }
+        ]
+      }
+    },
+    {
+      "id": "astro-vue-packed",
+      "label": "Astro, Vue island",
+      "server": "Go, pre-compressed in memory, GOMAXPROCS=1",
+      "kind": "packed",
+      "url": "http://127.0.0.1:4303/",
+      "lighthouse": {
+        "score": {
+          "median": 100,
+          "min": 100,
+          "max": 100,
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        },
+        "lcp_ms": {
+          "median": 1351,
+          "min": 1350,
+          "max": 1500,
+          "values": [
+            1351,
+            1350,
+            1500,
+            1351,
+            1351
+          ]
+        },
+        "fcp_ms": {
+          "median": 600,
+          "min": 600,
+          "max": 600,
+          "values": [
+            600,
+            600,
+            600,
+            600,
+            600
+          ]
+        },
+        "tbt_ms": {
+          "median": 0,
+          "min": 0,
+          "max": 3,
+          "values": [
+            3,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lcp_element": "body > main.page > img.image",
+        "requests": [
+          {
+            "url": "http://127.0.0.1:4303/",
+            "type": "Document",
+            "status": 200,
+            "transfer": 3759
+          },
+          {
+            "url": "http://127.0.0.1:4303/_astro/hero.DkuBxBur_Z1fUCjU.webp",
+            "type": "Image",
+            "status": 200,
+            "transfer": 59967
+          },
+          {
+            "url": "http://127.0.0.1:4303/favicon.ico",
+            "type": "Other",
+            "status": 404,
+            "transfer": 176
+          },
+          {
+            "url": "http://127.0.0.1:4303/_astro/Counter.Bq14vyBh.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 584
+          },
+          {
+            "url": "http://127.0.0.1:4303/_astro/client.CqNZHXs6.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 3181
+          },
+          {
+            "url": "http://127.0.0.1:4303/_astro/runtime-core.esm-bundler.DSCEjuOH.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 23900
+          }
+        ]
+      },
+      "bytes": {
+        "requests": 5,
+        "js_br": 27158,
+        "js_inline_raw": 5238,
+        "css_br": 0,
+        "html_br": 3596,
+        "image": 59862,
+        "total_br": 90616,
+        "js_wire": 27158,
+        "total_wire": 90616,
+        "resources": [
+          {
+            "url": "http://127.0.0.1:4303/",
+            "type": "Document",
+            "content_type": "text/html; charset=utf-8",
+            "raw": 12020,
+            "br": 3596,
+            "wire": 3596,
+            "wire_encoding": "br",
+            "chrome_transfer": 3759,
+            "inline_js": 5238
+          },
+          {
+            "url": "http://127.0.0.1:4303/_astro/hero.DkuBxBur_Z1fUCjU.webp",
+            "type": "Image",
+            "content_type": "image/webp",
+            "raw": 59862,
+            "br": 59862,
+            "wire": 59862,
+            "wire_encoding": "identity",
+            "chrome_transfer": 59967,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4303/_astro/Counter.Bq14vyBh.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 746,
+            "br": 416,
+            "wire": 416,
+            "wire_encoding": "br",
+            "chrome_transfer": 584,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4303/_astro/client.CqNZHXs6.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 7247,
+            "br": 3012,
+            "wire": 3012,
+            "wire_encoding": "br",
+            "chrome_transfer": 3181,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4303/_astro/runtime-core.esm-bundler.DSCEjuOH.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 67790,
+            "br": 23730,
+            "wire": 23730,
+            "wire_encoding": "br",
+            "chrome_transfer": 23900,
+            "inline_js": 0
+          }
+        ]
+      },
+      "ttfb": {
+        "url": "http://127.0.0.1:4303/",
+        "n": 50,
+        "median_ms": 0.122709,
+        "p25_ms": 0.112417,
+        "p75_ms": 0.138083,
+        "min_ms": 0.093417,
+        "max_ms": 0.178291,
+        "first_byte_median_ms": 0.119708
+      },
+      "load": {
+        "rps": {
+          "median": 126285,
+          "min": 122218,
+          "max": 136192,
+          "values": [
+            136192,
+            126285,
+            122218
+          ]
+        },
+        "p50_ms": {
+          "median": 0.480292,
+          "min": 0.446416,
+          "max": 0.495375,
+          "values": [
+            0.446416,
+            0.480292,
+            0.495375
+          ]
+        },
+        "p99_ms": {
+          "median": 1.193375,
+          "min": 1.063125,
+          "max": 1.23875,
+          "values": [
+            1.063125,
+            1.193375,
+            1.23875
+          ]
+        },
+        "errors": 0,
+        "runs": [
+          {
+            "url": "http://127.0.0.1:4303/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1361919,
+            "errors": 0,
+            "bytes": 4897460724,
+            "rps": 136191.9,
+            "p50_ms": 0.446416,
+            "p99_ms": 1.063125
+          },
+          {
+            "url": "http://127.0.0.1:4303/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1262854,
+            "errors": 0,
+            "bytes": 4541222984,
+            "rps": 126285.4,
+            "p50_ms": 0.480292,
+            "p99_ms": 1.193375
+          },
+          {
+            "url": "http://127.0.0.1:4303/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1222184,
+            "errors": 0,
+            "bytes": 4394973664,
+            "rps": 122218.4,
+            "p50_ms": 0.495375,
+            "p99_ms": 1.23875
+          }
+        ]
+      }
+    },
+    {
+      "id": "astro-plain-preview",
+      "label": "Astro, no framework island",
+      "server": "astro preview",
+      "kind": "own",
+      "url": "http://127.0.0.1:4321/no-framework/",
+      "lighthouse": {
+        "score": {
+          "median": 100,
+          "min": 100,
+          "max": 100,
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        },
+        "lcp_ms": {
+          "median": 752,
+          "min": 752,
+          "max": 753,
+          "values": [
+            753,
+            752,
+            752,
+            752,
+            752
+          ]
+        },
+        "fcp_ms": {
+          "median": 601,
+          "min": 601,
+          "max": 622,
+          "values": [
+            622,
+            601,
+            601,
+            601,
+            601
+          ]
+        },
+        "tbt_ms": {
+          "median": 0,
+          "min": 0,
+          "max": 23,
+          "values": [
+            0,
+            0,
+            0,
+            4,
+            23
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lcp_element": "body > main.page > img.image",
+        "requests": [
+          {
+            "url": "http://127.0.0.1:4321/no-framework/",
+            "type": "Document",
+            "status": 200,
+            "transfer": 2559
+          },
+          {
+            "url": "http://127.0.0.1:4321/_astro/hero.DkuBxBur_Z1fUCjU.webp",
+            "type": "Image",
+            "status": 200,
+            "transfer": 60130
+          },
+          {
+            "url": "http://127.0.0.1:4321/favicon.ico",
+            "type": "Other",
+            "status": 404,
+            "transfer": 1894
+          }
+        ]
+      },
+      "bytes": {
+        "requests": 2,
+        "js_br": 0,
+        "js_inline_raw": 237,
+        "css_br": 0,
+        "html_br": 1785,
+        "image": 59862,
+        "total_br": 61647,
+        "js_wire": 0,
+        "total_wire": 62141,
+        "resources": [
+          {
+            "url": "http://127.0.0.1:4321/no-framework/",
+            "type": "Document",
+            "content_type": "text/html",
+            "raw": 6810,
+            "br": 1785,
+            "wire": 2279,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 2559,
+            "inline_js": 237
+          },
+          {
+            "url": "http://127.0.0.1:4321/_astro/hero.DkuBxBur_Z1fUCjU.webp",
+            "type": "Image",
+            "content_type": "image/webp",
+            "raw": 59862,
+            "br": 59862,
+            "wire": 59862,
+            "wire_encoding": "identity",
+            "chrome_transfer": 60130,
+            "inline_js": 0
+          }
+        ]
+      },
+      "ttfb": {
+        "url": "http://127.0.0.1:4321/no-framework/",
+        "n": 50,
+        "median_ms": 0.262542,
+        "p25_ms": 0.235958,
+        "p75_ms": 0.280167,
+        "min_ms": 0.206083,
+        "max_ms": 0.455542,
+        "first_byte_median_ms": 0.255959
+      },
+      "load": {
+        "rps": {
+          "median": 21304,
+          "min": 21258,
+          "max": 22036,
+          "values": [
+            22036,
+            21258,
+            21304
+          ]
+        },
+        "p50_ms": {
+          "median": 2.892958,
+          "min": 2.760833,
+          "max": 2.8995,
+          "values": [
+            2.760833,
+            2.892958,
+            2.8995
+          ]
+        },
+        "p99_ms": {
+          "median": 4.251625,
+          "min": 4.074084,
+          "max": 4.471458,
+          "values": [
+            4.471458,
+            4.251625,
+            4.074084
+          ]
+        },
+        "errors": 0,
+        "runs": [
+          {
+            "url": "http://127.0.0.1:4321/no-framework/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 220361,
+            "errors": 0,
+            "bytes": 502202719,
+            "rps": 22036.1,
+            "p50_ms": 2.760833,
+            "p99_ms": 4.471458
+          },
+          {
+            "url": "http://127.0.0.1:4321/no-framework/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 212576,
+            "errors": 0,
+            "bytes": 484460704,
+            "rps": 21257.6,
+            "p50_ms": 2.892958,
+            "p99_ms": 4.251625
+          },
+          {
+            "url": "http://127.0.0.1:4321/no-framework/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 213035,
+            "errors": 0,
+            "bytes": 485506765,
+            "rps": 21303.5,
+            "p50_ms": 2.8995,
+            "p99_ms": 4.074084
+          }
+        ]
+      }
+    },
+    {
+      "id": "astro-plain-static",
+      "label": "Astro, no framework island",
+      "server": "Go static + gzip, GOMAXPROCS=1",
+      "kind": "gzip",
+      "url": "http://127.0.0.1:4302/no-framework/",
+      "lighthouse": {
+        "score": {
+          "median": 100,
+          "min": 100,
+          "max": 100,
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        },
+        "lcp_ms": {
+          "median": 751,
+          "min": 750,
+          "max": 751,
+          "values": [
+            750,
+            751,
+            751,
+            750,
+            751
+          ]
+        },
+        "fcp_ms": {
+          "median": 600,
+          "min": 600,
+          "max": 601,
+          "values": [
+            600,
+            600,
+            601,
+            600,
+            600
+          ]
+        },
+        "tbt_ms": {
+          "median": 0,
+          "min": 0,
+          "max": 26,
+          "values": [
+            0,
+            26,
+            0,
+            0,
+            0
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lcp_element": "body > main.page > img.image",
+        "requests": [
+          {
+            "url": "http://127.0.0.1:4302/no-framework/",
+            "type": "Document",
+            "status": 200,
+            "transfer": 2533
+          },
+          {
+            "url": "http://127.0.0.1:4302/_astro/hero.DkuBxBur_Z1fUCjU.webp",
+            "type": "Image",
+            "status": 200,
+            "transfer": 60035
+          },
+          {
+            "url": "http://127.0.0.1:4302/favicon.ico",
+            "type": "Other",
+            "status": 404,
+            "transfer": 176
+          }
+        ]
+      },
+      "bytes": {
+        "requests": 2,
+        "js_br": 0,
+        "js_inline_raw": 237,
+        "css_br": 0,
+        "html_br": 1785,
+        "image": 59862,
+        "total_br": 61647,
+        "js_wire": 0,
+        "total_wire": 62138,
+        "resources": [
+          {
+            "url": "http://127.0.0.1:4302/no-framework/",
+            "type": "Document",
+            "content_type": "text/html; charset=utf-8",
+            "raw": 6810,
+            "br": 1785,
+            "wire": 2276,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 2533,
+            "inline_js": 237
+          },
+          {
+            "url": "http://127.0.0.1:4302/_astro/hero.DkuBxBur_Z1fUCjU.webp",
+            "type": "Image",
+            "content_type": "image/webp",
+            "raw": 59862,
+            "br": 59862,
+            "wire": 59862,
+            "wire_encoding": "identity",
+            "chrome_transfer": 60035,
+            "inline_js": 0
+          }
+        ]
+      },
+      "ttfb": {
+        "url": "http://127.0.0.1:4302/no-framework/",
+        "n": 50,
+        "median_ms": 0.206584,
+        "p25_ms": 0.201541,
+        "p75_ms": 0.224459,
+        "min_ms": 0.186,
+        "max_ms": 0.315625,
+        "first_byte_median_ms": 0.202667
+      },
+      "load": {
+        "rps": {
+          "median": 11131,
+          "min": 11090,
+          "max": 11271,
+          "values": [
+            11271,
+            11090,
+            11131
+          ]
+        },
+        "p50_ms": {
+          "median": 5.855958,
+          "min": 5.786666,
+          "max": 5.878542,
+          "values": [
+            5.786666,
+            5.878542,
+            5.855958
+          ]
+        },
+        "p99_ms": {
+          "median": 9.128,
+          "min": 9.04975,
+          "max": 9.198541,
+          "values": [
+            9.04975,
+            9.198541,
+            9.128
+          ]
+        },
+        "errors": 0,
+        "runs": [
+          {
+            "url": "http://127.0.0.1:4302/no-framework/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 112710,
+            "errors": 0,
+            "bytes": 256527960,
+            "rps": 11271,
+            "p50_ms": 5.786666,
+            "p99_ms": 9.04975
+          },
+          {
+            "url": "http://127.0.0.1:4302/no-framework/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 110900,
+            "errors": 0,
+            "bytes": 252408400,
+            "rps": 11090,
+            "p50_ms": 5.878542,
+            "p99_ms": 9.198541
+          },
+          {
+            "url": "http://127.0.0.1:4302/no-framework/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 111308,
+            "errors": 0,
+            "bytes": 253337008,
+            "rps": 11130.8,
+            "p50_ms": 5.855958,
+            "p99_ms": 9.128
+          }
+        ]
+      }
+    },
+    {
+      "id": "astro-plain-packed",
+      "label": "Astro, no framework island",
+      "server": "Go, pre-compressed in memory, GOMAXPROCS=1",
+      "kind": "packed",
+      "url": "http://127.0.0.1:4303/no-framework/",
+      "lighthouse": {
+        "score": {
+          "median": 100,
+          "min": 100,
+          "max": 100,
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        },
+        "lcp_ms": {
+          "median": 750,
+          "min": 750,
+          "max": 750,
+          "values": [
+            750,
+            750,
+            750,
+            750,
+            750
+          ]
+        },
+        "fcp_ms": {
+          "median": 600,
+          "min": 600,
+          "max": 620,
+          "values": [
+            600,
+            600,
+            600,
+            620,
+            600
+          ]
+        },
+        "tbt_ms": {
+          "median": 0,
+          "min": 0,
+          "max": 20,
+          "values": [
+            20,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lcp_element": "body > main.page > img.image",
+        "requests": [
+          {
+            "url": "http://127.0.0.1:4303/no-framework/",
+            "type": "Document",
+            "status": 200,
+            "transfer": 1948
+          },
+          {
+            "url": "http://127.0.0.1:4303/_astro/hero.DkuBxBur_Z1fUCjU.webp",
+            "type": "Image",
+            "status": 200,
+            "transfer": 59967
+          },
+          {
+            "url": "http://127.0.0.1:4303/favicon.ico",
+            "type": "Other",
+            "status": 404,
+            "transfer": 176
+          }
+        ]
+      },
+      "bytes": {
+        "requests": 2,
+        "js_br": 0,
+        "js_inline_raw": 237,
+        "css_br": 0,
+        "html_br": 1785,
+        "image": 59862,
+        "total_br": 61647,
+        "js_wire": 0,
+        "total_wire": 61647,
+        "resources": [
+          {
+            "url": "http://127.0.0.1:4303/no-framework/",
+            "type": "Document",
+            "content_type": "text/html; charset=utf-8",
+            "raw": 6810,
+            "br": 1785,
+            "wire": 1785,
+            "wire_encoding": "br",
+            "chrome_transfer": 1948,
+            "inline_js": 237
+          },
+          {
+            "url": "http://127.0.0.1:4303/_astro/hero.DkuBxBur_Z1fUCjU.webp",
+            "type": "Image",
+            "content_type": "image/webp",
+            "raw": 59862,
+            "br": 59862,
+            "wire": 59862,
+            "wire_encoding": "identity",
+            "chrome_transfer": 59967,
+            "inline_js": 0
+          }
+        ]
+      },
+      "ttfb": {
+        "url": "http://127.0.0.1:4303/no-framework/",
+        "n": 50,
+        "median_ms": 0.118583,
+        "p25_ms": 0.11075,
+        "p75_ms": 0.135666,
+        "min_ms": 0.103,
+        "max_ms": 0.1715,
+        "first_byte_median_ms": 0.114875
+      },
+      "load": {
+        "rps": {
+          "median": 129955,
+          "min": 129382,
+          "max": 132615,
+          "values": [
+            132615,
+            129382,
+            129955
+          ]
+        },
+        "p50_ms": {
+          "median": 0.472541,
+          "min": 0.459292,
+          "max": 0.473833,
+          "values": [
+            0.459292,
+            0.473833,
+            0.472541
+          ]
+        },
+        "p99_ms": {
+          "median": 1.100375,
+          "min": 1.09025,
+          "max": 1.102125,
+          "values": [
+            1.102125,
+            1.100375,
+            1.09025
+          ]
+        },
+        "errors": 0,
+        "runs": [
+          {
+            "url": "http://127.0.0.1:4303/no-framework/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1326150,
+            "errors": 0,
+            "bytes": 2367177750,
+            "rps": 132615,
+            "p50_ms": 0.459292,
+            "p99_ms": 1.102125
+          },
+          {
+            "url": "http://127.0.0.1:4303/no-framework/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1293822,
+            "errors": 0,
+            "bytes": 2309472270,
+            "rps": 129382.2,
+            "p50_ms": 0.473833,
+            "p99_ms": 1.100375
+          },
+          {
+            "url": "http://127.0.0.1:4303/no-framework/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1299548,
+            "errors": 0,
+            "bytes": 2319693180,
+            "rps": 129954.8,
+            "p50_ms": 0.472541,
+            "p99_ms": 1.09025
+          }
+        ]
+      }
+    },
+    {
+      "id": "nuxt-node",
+      "label": "Nuxt",
+      "server": "its Node server (Nitro)",
+      "kind": "own",
+      "url": "http://127.0.0.1:4313/",
+      "lighthouse": {
+        "score": {
+          "median": 99,
+          "min": 99,
+          "max": 99,
+          "values": [
+            99,
+            99,
+            99,
+            99,
+            99
+          ]
+        },
+        "lcp_ms": {
+          "median": 2252,
+          "min": 2251,
+          "max": 2274,
+          "values": [
+            2253,
+            2274,
+            2252,
+            2252,
+            2251
+          ]
+        },
+        "fcp_ms": {
+          "median": 752,
+          "min": 751,
+          "max": 753,
+          "values": [
+            753,
+            753,
+            752,
+            752,
+            751
+          ]
+        },
+        "tbt_ms": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lcp_element": "body > div#__nuxt > main.page > img.image",
+        "requests": [
+          {
+            "url": "http://127.0.0.1:4313/",
+            "type": "Document",
+            "status": 200,
+            "transfer": 4095
+          },
+          {
+            "url": "http://127.0.0.1:4313/_nuxt/entry.BV2C-9ET.css",
+            "type": "Stylesheet",
+            "status": 200,
+            "transfer": 2072
+          },
+          {
+            "url": "http://127.0.0.1:4313/_payload.json?_b=b93e23db-8e00-4cbc-8c2b-40934f57b3b2",
+            "type": "Other",
+            "status": 200,
+            "transfer": 376
+          },
+          {
+            "url": "http://127.0.0.1:4313/_nuxt/VYAMKppx.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 3868
+          },
+          {
+            "url": "http://127.0.0.1:4313/_nuxt/VAYpMYLP.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 18720
+          },
+          {
+            "url": "http://127.0.0.1:4313/_nuxt/C4w6M_p5.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 170957
+          },
+          {
+            "url": "http://127.0.0.1:4313/hero.webp",
+            "type": "Image",
+            "status": 200,
+            "transfer": 60102
+          },
+          {
+            "url": "http://127.0.0.1:4313/favicon.ico",
+            "type": "Other",
+            "status": 200,
+            "transfer": 229
+          }
+        ]
+      },
+      "bytes": {
+        "requests": 8,
+        "js_br": 63827,
+        "js_inline_raw": 153,
+        "css_br": 700,
+        "html_br": 1222,
+        "image": 59862,
+        "total_br": 125801,
+        "js_wire": 192609,
+        "total_wire": 258282,
+        "resources": [
+          {
+            "url": "http://127.0.0.1:4313/",
+            "type": "Document",
+            "content_type": "text/html;charset=utf-8",
+            "raw": 3844,
+            "br": 1222,
+            "wire": 3844,
+            "wire_encoding": "identity",
+            "chrome_transfer": 4095,
+            "inline_js": 153
+          },
+          {
+            "url": "http://127.0.0.1:4313/_nuxt/entry.BV2C-9ET.css",
+            "type": "Stylesheet",
+            "content_type": "text/css; charset=utf-8",
+            "raw": 1769,
+            "br": 700,
+            "wire": 1769,
+            "wire_encoding": "identity",
+            "chrome_transfer": 2072,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4313/_payload.json?_b=b93e23db-8e00-4cbc-8c2b-40934f57b3b2",
+            "type": "Other",
+            "content_type": "application/json;charset=utf-8",
+            "raw": 120,
+            "br": 112,
+            "wire": 120,
+            "wire_encoding": "identity",
+            "chrome_transfer": 376,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4313/_nuxt/VYAMKppx.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 3558,
+            "br": 1385,
+            "wire": 3558,
+            "wire_encoding": "identity",
+            "chrome_transfer": 3868,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4313/_nuxt/VAYpMYLP.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 18408,
+            "br": 6590,
+            "wire": 18408,
+            "wire_encoding": "identity",
+            "chrome_transfer": 18720,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4313/_nuxt/C4w6M_p5.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 170643,
+            "br": 55852,
+            "wire": 170643,
+            "wire_encoding": "identity",
+            "chrome_transfer": 170957,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4313/hero.webp",
+            "type": "Image",
+            "content_type": "image/webp",
+            "raw": 59862,
+            "br": 59862,
+            "wire": 59862,
+            "wire_encoding": "identity",
+            "chrome_transfer": 60102,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4313/favicon.ico",
+            "type": "Other",
+            "content_type": "image/x-icon",
+            "raw": 78,
+            "br": 78,
+            "wire": 78,
+            "wire_encoding": "identity",
+            "chrome_transfer": 229,
+            "inline_js": 0
+          }
+        ]
+      },
+      "ttfb": {
+        "url": "http://127.0.0.1:4313/",
+        "n": 50,
+        "median_ms": 0.214083,
+        "p25_ms": 0.187666,
+        "p75_ms": 0.22775,
+        "min_ms": 0.159334,
+        "max_ms": 0.393375,
+        "first_byte_median_ms": 0.210583
+      },
+      "load": {
+        "rps": {
+          "median": 50085,
+          "min": 49515,
+          "max": 51533,
+          "values": [
+            51533,
+            49515,
+            50085
+          ]
+        },
+        "p50_ms": {
+          "median": 1.227792,
+          "min": 1.1955,
+          "max": 1.2425,
+          "values": [
+            1.1955,
+            1.2425,
+            1.227792
+          ]
+        },
+        "p99_ms": {
+          "median": 2.17675,
+          "min": 2.111583,
+          "max": 2.242042,
+          "values": [
+            2.111583,
+            2.242042,
+            2.17675
+          ]
+        },
+        "errors": 0,
+        "runs": [
+          {
+            "url": "http://127.0.0.1:4313/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 515327,
+            "errors": 0,
+            "bytes": 1980916988,
+            "rps": 51532.7,
+            "p50_ms": 1.1955,
+            "p99_ms": 2.111583
+          },
+          {
+            "url": "http://127.0.0.1:4313/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 495154,
+            "errors": 0,
+            "bytes": 1903371976,
+            "rps": 49515.4,
+            "p50_ms": 1.2425,
+            "p99_ms": 2.242042
+          },
+          {
+            "url": "http://127.0.0.1:4313/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 500854,
+            "errors": 0,
+            "bytes": 1925282776,
+            "rps": 50085.4,
+            "p50_ms": 1.227792,
+            "p99_ms": 2.17675
+          }
+        ]
+      }
+    },
+    {
+      "id": "nuxt-static",
+      "label": "Nuxt",
+      "server": "Go static + gzip, GOMAXPROCS=1",
+      "kind": "gzip",
+      "url": "http://127.0.0.1:4311/",
+      "lighthouse": {
+        "score": {
+          "median": 100,
+          "min": 100,
+          "max": 100,
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        },
+        "lcp_ms": {
+          "median": 1651,
+          "min": 1651,
+          "max": 1653,
+          "values": [
+            1652,
+            1653,
+            1651,
+            1651,
+            1651
+          ]
+        },
+        "fcp_ms": {
+          "median": 751,
+          "min": 751,
+          "max": 753,
+          "values": [
+            752,
+            753,
+            751,
+            751,
+            751
+          ]
+        },
+        "tbt_ms": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lcp_element": "body > div#__nuxt > main.page > img.image",
+        "requests": [
+          {
+            "url": "http://127.0.0.1:4311/",
+            "type": "Document",
+            "status": 200,
+            "transfer": 1834
+          },
+          {
+            "url": "http://127.0.0.1:4311/_nuxt/entry.BV2C-9ET.css",
+            "type": "Stylesheet",
+            "status": 200,
+            "transfer": 1079
+          },
+          {
+            "url": "http://127.0.0.1:4311/_payload.json?_b=a8883676-bcd9-4be9-a1fb-b8d4c26815d3",
+            "type": "Other",
+            "status": 200,
+            "transfer": 357
+          },
+          {
+            "url": "http://127.0.0.1:4311/_nuxt/VYAMKppx.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 1893
+          },
+          {
+            "url": "http://127.0.0.1:4311/_nuxt/VAYpMYLP.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 7490
+          },
+          {
+            "url": "http://127.0.0.1:4311/_nuxt/C4w6M_p5.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 63491
+          },
+          {
+            "url": "http://127.0.0.1:4311/hero.webp",
+            "type": "Image",
+            "status": 200,
+            "transfer": 60035
+          },
+          {
+            "url": "http://127.0.0.1:4311/favicon.ico",
+            "type": "Other",
+            "status": 404,
+            "transfer": 176
+          }
+        ]
+      },
+      "bytes": {
+        "requests": 7,
+        "js_br": 63827,
+        "js_inline_raw": 153,
+        "css_br": 700,
+        "html_br": 1224,
+        "image": 59862,
+        "total_br": 125722,
+        "js_wire": 71890,
+        "total_wire": 134334,
+        "resources": [
+          {
+            "url": "http://127.0.0.1:4311/",
+            "type": "Document",
+            "content_type": "text/html; charset=utf-8",
+            "raw": 3844,
+            "br": 1224,
+            "wire": 1601,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 1834,
+            "inline_js": 153
+          },
+          {
+            "url": "http://127.0.0.1:4311/_nuxt/entry.BV2C-9ET.css",
+            "type": "Stylesheet",
+            "content_type": "text/css; charset=utf-8",
+            "raw": 1769,
+            "br": 700,
+            "wire": 848,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 1079,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4311/_payload.json?_b=a8883676-bcd9-4be9-a1fb-b8d4c26815d3",
+            "type": "Other",
+            "content_type": "application/json",
+            "raw": 120,
+            "br": 109,
+            "wire": 133,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 357,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4311/_nuxt/VYAMKppx.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 3558,
+            "br": 1385,
+            "wire": 1654,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 1893,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4311/_nuxt/VAYpMYLP.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 18408,
+            "br": 6590,
+            "wire": 7212,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 7490,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4311/_nuxt/C4w6M_p5.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 170643,
+            "br": 55852,
+            "wire": 63024,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 63491,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4311/hero.webp",
+            "type": "Image",
+            "content_type": "image/webp",
+            "raw": 59862,
+            "br": 59862,
+            "wire": 59862,
+            "wire_encoding": "identity",
+            "chrome_transfer": 60035,
+            "inline_js": 0
+          }
+        ]
+      },
+      "ttfb": {
+        "url": "http://127.0.0.1:4311/",
+        "n": 50,
+        "median_ms": 0.204792,
+        "p25_ms": 0.193625,
+        "p75_ms": 0.22825,
+        "min_ms": 0.171959,
+        "max_ms": 0.280334,
+        "first_byte_median_ms": 0.200542
+      },
+      "load": {
+        "rps": {
+          "median": 13061,
+          "min": 13040,
+          "max": 13156,
+          "values": [
+            13156,
+            13040,
+            13061
+          ]
+        },
+        "p50_ms": {
+          "median": 4.9175,
+          "min": 4.886458,
+          "max": 4.9225,
+          "values": [
+            4.886458,
+            4.9225,
+            4.9175
+          ]
+        },
+        "p99_ms": {
+          "median": 8.18525,
+          "min": 8.032083,
+          "max": 8.258292,
+          "values": [
+            8.032083,
+            8.258292,
+            8.18525
+          ]
+        },
+        "errors": 0,
+        "runs": [
+          {
+            "url": "http://127.0.0.1:4311/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 131562,
+            "errors": 0,
+            "bytes": 210630762,
+            "rps": 13156.2,
+            "p50_ms": 4.886458,
+            "p99_ms": 8.032083
+          },
+          {
+            "url": "http://127.0.0.1:4311/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 130403,
+            "errors": 0,
+            "bytes": 208775203,
+            "rps": 13040.3,
+            "p50_ms": 4.9225,
+            "p99_ms": 8.258292
+          },
+          {
+            "url": "http://127.0.0.1:4311/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 130613,
+            "errors": 0,
+            "bytes": 209111413,
+            "rps": 13061.3,
+            "p50_ms": 4.9175,
+            "p99_ms": 8.18525
+          }
+        ]
+      }
+    },
+    {
+      "id": "nuxt-packed",
+      "label": "Nuxt",
+      "server": "Go, pre-compressed in memory, GOMAXPROCS=1",
+      "kind": "packed",
+      "url": "http://127.0.0.1:4312/",
+      "lighthouse": {
+        "score": {
+          "median": 100,
+          "min": 100,
+          "max": 100,
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        },
+        "lcp_ms": {
+          "median": 1575,
+          "min": 1575,
+          "max": 1576,
+          "values": [
+            1575,
+            1575,
+            1576,
+            1575,
+            1575
+          ]
+        },
+        "fcp_ms": {
+          "median": 750,
+          "min": 750,
+          "max": 751,
+          "values": [
+            750,
+            750,
+            751,
+            750,
+            750
+          ]
+        },
+        "tbt_ms": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lcp_element": "body > div#__nuxt > main.page > img.image",
+        "requests": [
+          {
+            "url": "http://127.0.0.1:4312/",
+            "type": "Document",
+            "status": 200,
+            "transfer": 1387
+          },
+          {
+            "url": "http://127.0.0.1:4312/_nuxt/entry.BV2C-9ET.css",
+            "type": "Stylesheet",
+            "status": 200,
+            "transfer": 861
+          },
+          {
+            "url": "http://127.0.0.1:4312/_payload.json?_b=a8883676-bcd9-4be9-a1fb-b8d4c26815d3",
+            "type": "Other",
+            "status": 200,
+            "transfer": 263
+          },
+          {
+            "url": "http://127.0.0.1:4312/_nuxt/VYAMKppx.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 1554
+          },
+          {
+            "url": "http://127.0.0.1:4312/_nuxt/VAYpMYLP.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 6759
+          },
+          {
+            "url": "http://127.0.0.1:4312/_nuxt/C4w6M_p5.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 56022
+          },
+          {
+            "url": "http://127.0.0.1:4312/hero.webp",
+            "type": "Image",
+            "status": 200,
+            "transfer": 59967
+          },
+          {
+            "url": "http://127.0.0.1:4312/favicon.ico",
+            "type": "Other",
+            "status": 404,
+            "transfer": 176
+          }
+        ]
+      },
+      "bytes": {
+        "requests": 7,
+        "js_br": 63827,
+        "js_inline_raw": 153,
+        "css_br": 700,
+        "html_br": 1224,
+        "image": 59862,
+        "total_br": 125722,
+        "js_wire": 63827,
+        "total_wire": 125722,
+        "resources": [
+          {
+            "url": "http://127.0.0.1:4312/",
+            "type": "Document",
+            "content_type": "text/html; charset=utf-8",
+            "raw": 3844,
+            "br": 1224,
+            "wire": 1224,
+            "wire_encoding": "br",
+            "chrome_transfer": 1387,
+            "inline_js": 153
+          },
+          {
+            "url": "http://127.0.0.1:4312/_nuxt/entry.BV2C-9ET.css",
+            "type": "Stylesheet",
+            "content_type": "text/css; charset=utf-8",
+            "raw": 1769,
+            "br": 700,
+            "wire": 700,
+            "wire_encoding": "br",
+            "chrome_transfer": 861,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4312/_payload.json?_b=a8883676-bcd9-4be9-a1fb-b8d4c26815d3",
+            "type": "Other",
+            "content_type": "application/json",
+            "raw": 120,
+            "br": 109,
+            "wire": 109,
+            "wire_encoding": "br",
+            "chrome_transfer": 263,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4312/_nuxt/VYAMKppx.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 3558,
+            "br": 1385,
+            "wire": 1385,
+            "wire_encoding": "br",
+            "chrome_transfer": 1554,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4312/_nuxt/VAYpMYLP.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 18408,
+            "br": 6590,
+            "wire": 6590,
+            "wire_encoding": "br",
+            "chrome_transfer": 6759,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4312/_nuxt/C4w6M_p5.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 170643,
+            "br": 55852,
+            "wire": 55852,
+            "wire_encoding": "br",
+            "chrome_transfer": 56022,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4312/hero.webp",
+            "type": "Image",
+            "content_type": "image/webp",
+            "raw": 59862,
+            "br": 59862,
+            "wire": 59862,
+            "wire_encoding": "identity",
+            "chrome_transfer": 59967,
+            "inline_js": 0
+          }
+        ]
+      },
+      "ttfb": {
+        "url": "http://127.0.0.1:4312/",
+        "n": 50,
+        "median_ms": 0.120084,
+        "p25_ms": 0.114417,
+        "p75_ms": 0.125375,
+        "min_ms": 0.103292,
+        "max_ms": 0.19525,
+        "first_byte_median_ms": 0.114417
+      },
+      "load": {
+        "rps": {
+          "median": 129176,
+          "min": 128765,
+          "max": 132404,
+          "values": [
+            132404,
+            129176,
+            128765
+          ]
+        },
+        "p50_ms": {
+          "median": 0.473541,
+          "min": 0.461791,
+          "max": 0.47575,
+          "values": [
+            0.461791,
+            0.473541,
+            0.47575
+          ]
+        },
+        "p99_ms": {
+          "median": 1.098584,
+          "min": 1.078584,
+          "max": 1.100791,
+          "values": [
+            1.078584,
+            1.100791,
+            1.098584
+          ]
+        },
+        "errors": 0,
+        "runs": [
+          {
+            "url": "http://127.0.0.1:4312/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1324044,
+            "errors": 0,
+            "bytes": 1620629856,
+            "rps": 132404.4,
+            "p50_ms": 0.461791,
+            "p99_ms": 1.078584
+          },
+          {
+            "url": "http://127.0.0.1:4312/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1291755,
+            "errors": 0,
+            "bytes": 1581108120,
+            "rps": 129175.5,
+            "p50_ms": 0.473541,
+            "p99_ms": 1.100791
+          },
+          {
+            "url": "http://127.0.0.1:4312/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1287649,
+            "errors": 0,
+            "bytes": 1576082376,
+            "rps": 128764.9,
+            "p50_ms": 0.47575,
+            "p99_ms": 1.098584
+          }
+        ]
+      }
+    },
+    {
+      "id": "next-start",
+      "label": "Next.js",
+      "server": "next start",
+      "kind": "own",
+      "url": "http://127.0.0.1:4333/",
+      "lighthouse": {
+        "score": {
+          "median": 99,
+          "min": 99,
+          "max": 99,
+          "values": [
+            99,
+            99,
+            99,
+            99,
+            99
+          ]
+        },
+        "lcp_ms": {
+          "median": 2014,
+          "min": 2009,
+          "max": 2022,
+          "values": [
+            2017,
+            2022,
+            2014,
+            2012,
+            2009
+          ]
+        },
+        "fcp_ms": {
+          "median": 754,
+          "min": 754,
+          "max": 761,
+          "values": [
+            761,
+            760,
+            754,
+            754,
+            754
+          ]
+        },
+        "tbt_ms": {
+          "median": 4,
+          "min": 3,
+          "max": 6,
+          "values": [
+            3,
+            6,
+            5,
+            4,
+            3
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lcp_element": "body > main.page > img.image",
+        "requests": [
+          {
+            "url": "http://127.0.0.1:4333/",
+            "type": "Document",
+            "status": 200,
+            "transfer": 3865
+          },
+          {
+            "url": "http://127.0.0.1:4333/_next/static/chunks/2b9uskhz8mrlw.css",
+            "type": "Stylesheet",
+            "status": 200,
+            "transfer": 1213
+          },
+          {
+            "url": "http://127.0.0.1:4333/_next/static/chunks/0taqmdo6q41ma.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 6328
+          },
+          {
+            "url": "http://127.0.0.1:4333/_next/static/chunks/0yl8ywiphjhzi.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 50076
+          },
+          {
+            "url": "http://127.0.0.1:4333/_next/static/chunks/1rikqmm_9jd5q.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 72216
+          },
+          {
+            "url": "http://127.0.0.1:4333/_next/static/chunks/turbopack-2u1d16houkiyo.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 4305
+          },
+          {
+            "url": "http://127.0.0.1:4333/_next/static/chunks/0g96t7qjlj9ox.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 3923
+          },
+          {
+            "url": "http://127.0.0.1:4333/_next/static/chunks/1f30_ve1-5gqe.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 962
+          },
+          {
+            "url": "http://127.0.0.1:4333/hero.webp",
+            "type": "Image",
+            "status": 200,
+            "transfer": 60144
+          },
+          {
+            "url": "http://127.0.0.1:4333/favicon.ico",
+            "type": "Other",
+            "status": 404,
+            "transfer": 293
+          }
+        ]
+      },
+      "bytes": {
+        "requests": 9,
+        "js_br": 115223,
+        "js_inline_raw": 9255,
+        "css_br": 700,
+        "html_br": 2800,
+        "image": 59862,
+        "total_br": 178585,
+        "js_wire": 135400,
+        "total_wire": 199470,
+        "resources": [
+          {
+            "url": "http://127.0.0.1:4333/",
+            "type": "Document",
+            "content_type": "text/html; charset=utf-8",
+            "raw": 13241,
+            "br": 2800,
+            "wire": 3376,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 3865,
+            "inline_js": 9255
+          },
+          {
+            "url": "http://127.0.0.1:4333/_next/static/chunks/2b9uskhz8mrlw.css",
+            "type": "Stylesheet",
+            "content_type": "text/css; charset=UTF-8",
+            "raw": 1806,
+            "br": 700,
+            "wire": 832,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 1213,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4333/_next/static/chunks/0taqmdo6q41ma.js",
+            "type": "Script",
+            "content_type": "application/javascript; charset=UTF-8",
+            "raw": 17031,
+            "br": 5220,
+            "wire": 5931,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 6328,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4333/_next/static/chunks/0yl8ywiphjhzi.js",
+            "type": "Script",
+            "content_type": "application/javascript; charset=UTF-8",
+            "raw": 186791,
+            "br": 41825,
+            "wire": 49647,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 50076,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4333/_next/static/chunks/1rikqmm_9jd5q.js",
+            "type": "Script",
+            "content_type": "application/javascript; charset=UTF-8",
+            "raw": 229289,
+            "br": 61270,
+            "wire": 71771,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 72216,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4333/_next/static/chunks/turbopack-2u1d16houkiyo.js",
+            "type": "Script",
+            "content_type": "application/javascript; charset=UTF-8",
+            "raw": 9974,
+            "br": 3484,
+            "wire": 3909,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 4305,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4333/_next/static/chunks/0g96t7qjlj9ox.js",
+            "type": "Script",
+            "content_type": "application/javascript; charset=UTF-8",
+            "raw": 14000,
+            "br": 3137,
+            "wire": 3527,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 3923,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4333/_next/static/chunks/1f30_ve1-5gqe.js",
+            "type": "Script",
+            "content_type": "application/javascript; charset=UTF-8",
+            "raw": 615,
+            "br": 287,
+            "wire": 615,
+            "wire_encoding": "identity",
+            "chrome_transfer": 962,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4333/hero.webp",
+            "type": "Image",
+            "content_type": "image/webp",
+            "raw": 59862,
+            "br": 59862,
+            "wire": 59862,
+            "wire_encoding": "identity",
+            "chrome_transfer": 60144,
+            "inline_js": 0
+          }
+        ]
+      },
+      "ttfb": {
+        "url": "http://127.0.0.1:4333/",
+        "n": 50,
+        "median_ms": 0.481417,
+        "p25_ms": 0.460833,
+        "p75_ms": 0.524625,
+        "min_ms": 0.427791,
+        "max_ms": 0.612375,
+        "first_byte_median_ms": 0.474542
+      },
+      "load": {
+        "rps": {
+          "median": 10053,
+          "min": 9976,
+          "max": 10233,
+          "values": [
+            9976,
+            10053,
+            10233
+          ]
+        },
+        "p50_ms": {
+          "median": 6.203792,
+          "min": 6.14475,
+          "max": 6.275959,
+          "values": [
+            6.203792,
+            6.275959,
+            6.14475
+          ]
+        },
+        "p99_ms": {
+          "median": 9.173833,
+          "min": 8.861667,
+          "max": 9.991167,
+          "values": [
+            9.991167,
+            9.173833,
+            8.861667
+          ]
+        },
+        "errors": 0,
+        "runs": [
+          {
+            "url": "http://127.0.0.1:4333/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 99763,
+            "errors": 0,
+            "bytes": 336799888,
+            "rps": 9976.3,
+            "p50_ms": 6.203792,
+            "p99_ms": 9.991167
+          },
+          {
+            "url": "http://127.0.0.1:4333/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 100525,
+            "errors": 0,
+            "bytes": 339372400,
+            "rps": 10052.5,
+            "p50_ms": 6.275959,
+            "p99_ms": 9.173833
+          },
+          {
+            "url": "http://127.0.0.1:4333/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 102328,
+            "errors": 0,
+            "bytes": 345459328,
+            "rps": 10232.8,
+            "p50_ms": 6.14475,
+            "p99_ms": 8.861667
+          }
+        ]
+      }
+    },
+    {
+      "id": "next-static",
+      "label": "Next.js",
+      "server": "Go static + gzip, GOMAXPROCS=1",
+      "kind": "gzip",
+      "url": "http://127.0.0.1:4331/",
+      "lighthouse": {
+        "score": {
+          "median": 99,
+          "min": 99,
+          "max": 99,
+          "values": [
+            99,
+            99,
+            99,
+            99,
+            99
+          ]
+        },
+        "lcp_ms": {
+          "median": 2009,
+          "min": 1953,
+          "max": 2151,
+          "values": [
+            2011,
+            2009,
+            1998,
+            2151,
+            1953
+          ]
+        },
+        "fcp_ms": {
+          "median": 753,
+          "min": 751,
+          "max": 756,
+          "values": [
+            756,
+            755,
+            751,
+            752,
+            753
+          ]
+        },
+        "tbt_ms": {
+          "median": 0,
+          "min": 0,
+          "max": 3,
+          "values": [
+            3,
+            2,
+            0,
+            0,
+            0
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lcp_element": "body > main.page > img.image",
+        "requests": [
+          {
+            "url": "http://127.0.0.1:4331/",
+            "type": "Document",
+            "status": 200,
+            "transfer": 3649
+          },
+          {
+            "url": "http://127.0.0.1:4331/_next/static/chunks/2b9uskhz8mrlw.css",
+            "type": "Stylesheet",
+            "status": 200,
+            "transfer": 1079
+          },
+          {
+            "url": "http://127.0.0.1:4331/_next/static/chunks/0taqmdo6q41ma.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 6231
+          },
+          {
+            "url": "http://127.0.0.1:4331/_next/static/chunks/3gvxcb8r69bap.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 50548
+          },
+          {
+            "url": "http://127.0.0.1:4331/_next/static/chunks/1rikqmm_9jd5q.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 72412
+          },
+          {
+            "url": "http://127.0.0.1:4331/_next/static/chunks/turbopack-2u1d16houkiyo.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 4177
+          },
+          {
+            "url": "http://127.0.0.1:4331/_next/static/chunks/0g96t7qjlj9ox.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 3788
+          },
+          {
+            "url": "http://127.0.0.1:4331/_next/static/chunks/1f30_ve1-5gqe.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 599
+          },
+          {
+            "url": "http://127.0.0.1:4331/hero.webp",
+            "type": "Image",
+            "status": 200,
+            "transfer": 60035
+          },
+          {
+            "url": "http://127.0.0.1:4331/favicon.ico",
+            "type": "Other",
+            "status": 404,
+            "transfer": 176
+          }
+        ]
+      },
+      "bytes": {
+        "requests": 9,
+        "js_br": 115349,
+        "js_inline_raw": 9255,
+        "css_br": 700,
+        "html_br": 2791,
+        "image": 59862,
+        "total_br": 178702,
+        "js_wire": 135792,
+        "total_wire": 199893,
+        "resources": [
+          {
+            "url": "http://127.0.0.1:4331/",
+            "type": "Document",
+            "content_type": "text/html; charset=utf-8",
+            "raw": 13241,
+            "br": 2791,
+            "wire": 3391,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 3649,
+            "inline_js": 9255
+          },
+          {
+            "url": "http://127.0.0.1:4331/_next/static/chunks/2b9uskhz8mrlw.css",
+            "type": "Stylesheet",
+            "content_type": "text/css; charset=utf-8",
+            "raw": 1806,
+            "br": 700,
+            "wire": 848,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 1079,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4331/_next/static/chunks/0taqmdo6q41ma.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 17031,
+            "br": 5220,
+            "wire": 5960,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 6231,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4331/_next/static/chunks/3gvxcb8r69bap.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 187258,
+            "br": 41951,
+            "wire": 50123,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 50548,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4331/_next/static/chunks/1rikqmm_9jd5q.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 229289,
+            "br": 61270,
+            "wire": 71911,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 72412,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4331/_next/static/chunks/turbopack-2u1d16houkiyo.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 9974,
+            "br": 3484,
+            "wire": 3913,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 4177,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4331/_next/static/chunks/0g96t7qjlj9ox.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 14000,
+            "br": 3137,
+            "wire": 3524,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 3788,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4331/_next/static/chunks/1f30_ve1-5gqe.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 615,
+            "br": 287,
+            "wire": 361,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 599,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4331/hero.webp",
+            "type": "Image",
+            "content_type": "image/webp",
+            "raw": 59862,
+            "br": 59862,
+            "wire": 59862,
+            "wire_encoding": "identity",
+            "chrome_transfer": 60035,
+            "inline_js": 0
+          }
+        ]
+      },
+      "ttfb": {
+        "url": "http://127.0.0.1:4331/",
+        "n": 50,
+        "median_ms": 0.268458,
+        "p25_ms": 0.241708,
+        "p75_ms": 0.304042,
+        "min_ms": 0.223041,
+        "max_ms": 0.3565,
+        "first_byte_median_ms": 0.265125
+      },
+      "load": {
+        "rps": {
+          "median": 7797,
+          "min": 7770,
+          "max": 7830,
+          "values": [
+            7797,
+            7770,
+            7830
+          ]
+        },
+        "p50_ms": {
+          "median": 8.290625,
+          "min": 8.243625,
+          "max": 8.330542,
+          "values": [
+            8.290625,
+            8.330542,
+            8.243625
+          ]
+        },
+        "p99_ms": {
+          "median": 13.320875,
+          "min": 13.1135,
+          "max": 13.488166,
+          "values": [
+            13.320875,
+            13.1135,
+            13.488166
+          ]
+        },
+        "errors": 0,
+        "runs": [
+          {
+            "url": "http://127.0.0.1:4331/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 77974,
+            "errors": 0,
+            "bytes": 264409834,
+            "rps": 7797.4,
+            "p50_ms": 8.290625,
+            "p99_ms": 13.320875
+          },
+          {
+            "url": "http://127.0.0.1:4331/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 77698,
+            "errors": 0,
+            "bytes": 263473918,
+            "rps": 7769.8,
+            "p50_ms": 8.330542,
+            "p99_ms": 13.1135
+          },
+          {
+            "url": "http://127.0.0.1:4331/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 78301,
+            "errors": 0,
+            "bytes": 265518691,
+            "rps": 7830.1,
+            "p50_ms": 8.243625,
+            "p99_ms": 13.488166
+          }
+        ]
+      }
+    },
+    {
+      "id": "next-packed",
+      "label": "Next.js",
+      "server": "Go, pre-compressed in memory, GOMAXPROCS=1",
+      "kind": "packed",
+      "url": "http://127.0.0.1:4332/",
+      "lighthouse": {
+        "score": {
+          "median": 100,
+          "min": 99,
+          "max": 100,
+          "values": [
+            100,
+            99,
+            100,
+            99,
+            100
+          ]
+        },
+        "lcp_ms": {
+          "median": 1934,
+          "min": 1932,
+          "max": 1935,
+          "values": [
+            1933,
+            1935,
+            1934,
+            1935,
+            1932
+          ]
+        },
+        "fcp_ms": {
+          "median": 751,
+          "min": 751,
+          "max": 751,
+          "values": [
+            751,
+            751,
+            751,
+            751,
+            751
+          ]
+        },
+        "tbt_ms": {
+          "median": 4,
+          "min": 3,
+          "max": 5,
+          "values": [
+            4,
+            5,
+            4,
+            5,
+            3
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lcp_element": "body > main.page > img.image",
+        "requests": [
+          {
+            "url": "http://127.0.0.1:4332/",
+            "type": "Document",
+            "status": 200,
+            "transfer": 2954
+          },
+          {
+            "url": "http://127.0.0.1:4332/_next/static/chunks/2b9uskhz8mrlw.css",
+            "type": "Stylesheet",
+            "status": 200,
+            "transfer": 861
+          },
+          {
+            "url": "http://127.0.0.1:4332/_next/static/chunks/0taqmdo6q41ma.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 5389
+          },
+          {
+            "url": "http://127.0.0.1:4332/_next/static/chunks/3gvxcb8r69bap.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 42121
+          },
+          {
+            "url": "http://127.0.0.1:4332/_next/static/chunks/1rikqmm_9jd5q.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 61440
+          },
+          {
+            "url": "http://127.0.0.1:4332/_next/static/chunks/turbopack-2u1d16houkiyo.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 3653
+          },
+          {
+            "url": "http://127.0.0.1:4332/_next/static/chunks/0g96t7qjlj9ox.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 3306
+          },
+          {
+            "url": "http://127.0.0.1:4332/_next/static/chunks/1f30_ve1-5gqe.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 455
+          },
+          {
+            "url": "http://127.0.0.1:4332/hero.webp",
+            "type": "Image",
+            "status": 200,
+            "transfer": 59967
+          },
+          {
+            "url": "http://127.0.0.1:4332/favicon.ico",
+            "type": "Other",
+            "status": 404,
+            "transfer": 176
+          }
+        ]
+      },
+      "bytes": {
+        "requests": 9,
+        "js_br": 115349,
+        "js_inline_raw": 9255,
+        "css_br": 700,
+        "html_br": 2791,
+        "image": 59862,
+        "total_br": 178702,
+        "js_wire": 115349,
+        "total_wire": 178702,
+        "resources": [
+          {
+            "url": "http://127.0.0.1:4332/",
+            "type": "Document",
+            "content_type": "text/html; charset=utf-8",
+            "raw": 13241,
+            "br": 2791,
+            "wire": 2791,
+            "wire_encoding": "br",
+            "chrome_transfer": 2954,
+            "inline_js": 9255
+          },
+          {
+            "url": "http://127.0.0.1:4332/_next/static/chunks/2b9uskhz8mrlw.css",
+            "type": "Stylesheet",
+            "content_type": "text/css; charset=utf-8",
+            "raw": 1806,
+            "br": 700,
+            "wire": 700,
+            "wire_encoding": "br",
+            "chrome_transfer": 861,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4332/_next/static/chunks/0taqmdo6q41ma.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 17031,
+            "br": 5220,
+            "wire": 5220,
+            "wire_encoding": "br",
+            "chrome_transfer": 5389,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4332/_next/static/chunks/3gvxcb8r69bap.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 187258,
+            "br": 41951,
+            "wire": 41951,
+            "wire_encoding": "br",
+            "chrome_transfer": 42121,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4332/_next/static/chunks/1rikqmm_9jd5q.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 229289,
+            "br": 61270,
+            "wire": 61270,
+            "wire_encoding": "br",
+            "chrome_transfer": 61440,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4332/_next/static/chunks/turbopack-2u1d16houkiyo.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 9974,
+            "br": 3484,
+            "wire": 3484,
+            "wire_encoding": "br",
+            "chrome_transfer": 3653,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4332/_next/static/chunks/0g96t7qjlj9ox.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 14000,
+            "br": 3137,
+            "wire": 3137,
+            "wire_encoding": "br",
+            "chrome_transfer": 3306,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4332/_next/static/chunks/1f30_ve1-5gqe.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 615,
+            "br": 287,
+            "wire": 287,
+            "wire_encoding": "br",
+            "chrome_transfer": 455,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4332/hero.webp",
+            "type": "Image",
+            "content_type": "image/webp",
+            "raw": 59862,
+            "br": 59862,
+            "wire": 59862,
+            "wire_encoding": "identity",
+            "chrome_transfer": 59967,
+            "inline_js": 0
+          }
+        ]
+      },
+      "ttfb": {
+        "url": "http://127.0.0.1:4332/",
+        "n": 50,
+        "median_ms": 0.1175,
+        "p25_ms": 0.1065,
+        "p75_ms": 0.151458,
+        "min_ms": 0.091083,
+        "max_ms": 0.187833,
+        "first_byte_median_ms": 0.113583
+      },
+      "load": {
+        "rps": {
+          "median": 131974,
+          "min": 130131,
+          "max": 132155,
+          "values": [
+            130131,
+            131974,
+            132155
+          ]
+        },
+        "p50_ms": {
+          "median": 0.464875,
+          "min": 0.464667,
+          "max": 0.467583,
+          "values": [
+            0.467583,
+            0.464875,
+            0.464667
+          ]
+        },
+        "p99_ms": {
+          "median": 1.078708,
+          "min": 1.070583,
+          "max": 1.12175,
+          "values": [
+            1.12175,
+            1.078708,
+            1.070583
+          ]
+        },
+        "errors": 0,
+        "runs": [
+          {
+            "url": "http://127.0.0.1:4332/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1301309,
+            "errors": 0,
+            "bytes": 3631953419,
+            "rps": 130130.9,
+            "p50_ms": 0.467583,
+            "p99_ms": 1.12175
+          },
+          {
+            "url": "http://127.0.0.1:4332/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1319742,
+            "errors": 0,
+            "bytes": 3683399922,
+            "rps": 131974.2,
+            "p50_ms": 0.464875,
+            "p99_ms": 1.078708
+          },
+          {
+            "url": "http://127.0.0.1:4332/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1321552,
+            "errors": 0,
+            "bytes": 3688451632,
+            "rps": 132155.2,
+            "p50_ms": 0.464667,
+            "p99_ms": 1.070583
+          }
+        ]
+      }
+    },
+    {
+      "id": "sveltekit-node",
+      "label": "SvelteKit",
+      "server": "its Node server (adapter-node)",
+      "kind": "own",
+      "url": "http://127.0.0.1:4343/",
+      "lighthouse": {
+        "score": {
+          "median": 100,
+          "min": 100,
+          "max": 100,
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        },
+        "lcp_ms": {
+          "median": 1505,
+          "min": 1503,
+          "max": 1656,
+          "values": [
+            1508,
+            1505,
+            1656,
+            1503,
+            1504
+          ]
+        },
+        "fcp_ms": {
+          "median": 753,
+          "min": 752,
+          "max": 756,
+          "values": [
+            756,
+            753,
+            753,
+            752,
+            752
+          ]
+        },
+        "tbt_ms": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lcp_element": "body > div > main.page > img.image",
+        "requests": [
+          {
+            "url": "http://127.0.0.1:4343/",
+            "type": "Document",
+            "status": 200,
+            "transfer": 1606
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/entry/start.DemuQh4F.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 614
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/entry/payload.DSmR2FwN.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 387
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/chunks/DclECHGd.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 1042
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/chunks/C28ooCmM.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 13425
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/chunks/63X8glUm.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 17556
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/chunks/snX5D5Qy.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 2144
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/entry/app.Dn6P3WCP.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 833
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/nodes/0.C8KdwwU_.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 548
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/nodes/2.BYej_4iA.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 1912
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/assets/0.B5Rz18yj.css",
+            "type": "Stylesheet",
+            "status": 200,
+            "transfer": 1021
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/nodes/1.BPsCEMW3.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 532
+          },
+          {
+            "url": "http://127.0.0.1:4343/favicon.ico",
+            "type": "Other",
+            "status": 404,
+            "transfer": 160
+          },
+          {
+            "url": "http://127.0.0.1:4343/hero.webp",
+            "type": "Image",
+            "status": 200,
+            "transfer": 60089
+          }
+        ]
+      },
+      "bytes": {
+        "requests": 13,
+        "js_br": 35708,
+        "js_inline_raw": 530,
+        "css_br": 700,
+        "html_br": 1319,
+        "image": 59862,
+        "total_br": 97589,
+        "js_wire": 35708,
+        "total_wire": 97589,
+        "resources": [
+          {
+            "url": "http://127.0.0.1:4343/",
+            "type": "Document",
+            "content_type": "text/html;charset=utf-8",
+            "raw": 4473,
+            "br": 1319,
+            "wire": 1319,
+            "wire_encoding": "br",
+            "chrome_transfer": 1606,
+            "inline_js": 530
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/entry/start.DemuQh4F.js",
+            "type": "Script",
+            "content_type": "text/javascript",
+            "raw": 522,
+            "br": 286,
+            "wire": 286,
+            "wire_encoding": "br",
+            "chrome_transfer": 614,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/entry/payload.DSmR2FwN.js",
+            "type": "Script",
+            "content_type": "text/javascript",
+            "raw": 65,
+            "br": 60,
+            "wire": 60,
+            "wire_encoding": "br",
+            "chrome_transfer": 387,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/chunks/DclECHGd.js",
+            "type": "Script",
+            "content_type": "text/javascript",
+            "raw": 1630,
+            "br": 714,
+            "wire": 714,
+            "wire_encoding": "br",
+            "chrome_transfer": 1042,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/chunks/C28ooCmM.js",
+            "type": "Script",
+            "content_type": "text/javascript",
+            "raw": 39524,
+            "br": 13095,
+            "wire": 13095,
+            "wire_encoding": "br",
+            "chrome_transfer": 13425,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/chunks/63X8glUm.js",
+            "type": "Script",
+            "content_type": "text/javascript",
+            "raw": 49998,
+            "br": 17226,
+            "wire": 17226,
+            "wire_encoding": "br",
+            "chrome_transfer": 17556,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/chunks/snX5D5Qy.js",
+            "type": "Script",
+            "content_type": "text/javascript",
+            "raw": 4565,
+            "br": 1815,
+            "wire": 1815,
+            "wire_encoding": "br",
+            "chrome_transfer": 2144,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/entry/app.Dn6P3WCP.js",
+            "type": "Script",
+            "content_type": "text/javascript",
+            "raw": 1092,
+            "br": 505,
+            "wire": 505,
+            "wire_encoding": "br",
+            "chrome_transfer": 833,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/nodes/0.C8KdwwU_.js",
+            "type": "Script",
+            "content_type": "text/javascript",
+            "raw": 331,
+            "br": 220,
+            "wire": 220,
+            "wire_encoding": "br",
+            "chrome_transfer": 548,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/nodes/2.BYej_4iA.js",
+            "type": "Script",
+            "content_type": "text/javascript",
+            "raw": 4026,
+            "br": 1583,
+            "wire": 1583,
+            "wire_encoding": "br",
+            "chrome_transfer": 1912,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/assets/0.B5Rz18yj.css",
+            "type": "Stylesheet",
+            "content_type": "text/css",
+            "raw": 1806,
+            "br": 700,
+            "wire": 700,
+            "wire_encoding": "br",
+            "chrome_transfer": 1021,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4343/_app/immutable/nodes/1.BPsCEMW3.js",
+            "type": "Script",
+            "content_type": "text/javascript",
+            "raw": 322,
+            "br": 204,
+            "wire": 204,
+            "wire_encoding": "br",
+            "chrome_transfer": 532,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4343/hero.webp",
+            "type": "Image",
+            "content_type": "image/webp",
+            "raw": 59862,
+            "br": 59862,
+            "wire": 59862,
+            "wire_encoding": "identity",
+            "chrome_transfer": 60089,
+            "inline_js": 0
+          }
+        ]
+      },
+      "ttfb": {
+        "url": "http://127.0.0.1:4343/",
+        "n": 50,
+        "median_ms": 0.169792,
+        "p25_ms": 0.154375,
+        "p75_ms": 0.202333,
+        "min_ms": 0.13375,
+        "max_ms": 0.327542,
+        "first_byte_median_ms": 0.164291
+      },
+      "load": {
+        "rps": {
+          "median": 38099,
+          "min": 37977,
+          "max": 38630,
+          "values": [
+            38630,
+            37977,
+            38099
+          ]
+        },
+        "p50_ms": {
+          "median": 1.450208,
+          "min": 1.434375,
+          "max": 1.453167,
+          "values": [
+            1.434375,
+            1.453167,
+            1.450208
+          ]
+        },
+        "p99_ms": {
+          "median": 3.7665,
+          "min": 3.730833,
+          "max": 3.817042,
+          "values": [
+            3.730833,
+            3.817042,
+            3.7665
+          ]
+        },
+        "errors": 0,
+        "runs": [
+          {
+            "url": "http://127.0.0.1:4343/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 386304,
+            "errors": 0,
+            "bytes": 509534976,
+            "rps": 38630.4,
+            "p50_ms": 1.434375,
+            "p99_ms": 3.730833
+          },
+          {
+            "url": "http://127.0.0.1:4343/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 379767,
+            "errors": 0,
+            "bytes": 500912673,
+            "rps": 37976.7,
+            "p50_ms": 1.453167,
+            "p99_ms": 3.817042
+          },
+          {
+            "url": "http://127.0.0.1:4343/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 380991,
+            "errors": 0,
+            "bytes": 502527129,
+            "rps": 38099.1,
+            "p50_ms": 1.450208,
+            "p99_ms": 3.7665
+          }
+        ]
+      }
+    },
+    {
+      "id": "sveltekit-static",
+      "label": "SvelteKit",
+      "server": "Go static + gzip, GOMAXPROCS=1",
+      "kind": "gzip",
+      "url": "http://127.0.0.1:4341/",
+      "lighthouse": {
+        "score": {
+          "median": 100,
+          "min": 100,
+          "max": 100,
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        },
+        "lcp_ms": {
+          "median": 1504,
+          "min": 1502,
+          "max": 1655,
+          "values": [
+            1507,
+            1504,
+            1655,
+            1502,
+            1503
+          ]
+        },
+        "fcp_ms": {
+          "median": 752,
+          "min": 751,
+          "max": 755,
+          "values": [
+            755,
+            752,
+            752,
+            751,
+            752
+          ]
+        },
+        "tbt_ms": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lcp_element": "body > div > main.page > img.image",
+        "requests": [
+          {
+            "url": "http://127.0.0.1:4341/",
+            "type": "Document",
+            "status": 200,
+            "transfer": 1935
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/entry/start.DemuQh4F.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 553
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/entry/payload.DSmR2FwN.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 319
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/chunks/DclECHGd.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 1070
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/chunks/C28ooCmM.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 14782
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/chunks/63X8glUm.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 19388
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/chunks/snX5D5Qy.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 2286
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/entry/app.Dn6P3WCP.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 799
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/nodes/0.C8KdwwU_.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 511
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/nodes/2.BYej_4iA.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 2175
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/assets/0.B5Rz18yj.css",
+            "type": "Stylesheet",
+            "status": 200,
+            "transfer": 1079
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/nodes/1.BPsCEMW3.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 488
+          },
+          {
+            "url": "http://127.0.0.1:4341/hero.webp",
+            "type": "Image",
+            "status": 200,
+            "transfer": 60035
+          },
+          {
+            "url": "http://127.0.0.1:4341/favicon.ico",
+            "type": "Other",
+            "status": 404,
+            "transfer": 176
+          }
+        ]
+      },
+      "bytes": {
+        "requests": 13,
+        "js_br": 35708,
+        "js_inline_raw": 532,
+        "css_br": 700,
+        "html_br": 1319,
+        "image": 59862,
+        "total_br": 97589,
+        "js_wire": 39841,
+        "total_wire": 102253,
+        "resources": [
+          {
+            "url": "http://127.0.0.1:4341/",
+            "type": "Document",
+            "content_type": "text/html; charset=utf-8",
+            "raw": 4475,
+            "br": 1319,
+            "wire": 1702,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 1935,
+            "inline_js": 532
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/entry/start.DemuQh4F.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 522,
+            "br": 286,
+            "wire": 315,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 553,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/entry/payload.DSmR2FwN.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 65,
+            "br": 60,
+            "wire": 82,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 319,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/chunks/DclECHGd.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 1630,
+            "br": 714,
+            "wire": 832,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 1070,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/chunks/C28ooCmM.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 39524,
+            "br": 13095,
+            "wire": 14477,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 14782,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/chunks/63X8glUm.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 49998,
+            "br": 17226,
+            "wire": 19068,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 19388,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/chunks/snX5D5Qy.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 4565,
+            "br": 1815,
+            "wire": 2047,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 2286,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/entry/app.Dn6P3WCP.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 1092,
+            "br": 505,
+            "wire": 561,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 799,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/nodes/0.C8KdwwU_.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 331,
+            "br": 220,
+            "wire": 273,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 511,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/nodes/2.BYej_4iA.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 4026,
+            "br": 1583,
+            "wire": 1936,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 2175,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/assets/0.B5Rz18yj.css",
+            "type": "Stylesheet",
+            "content_type": "text/css; charset=utf-8",
+            "raw": 1806,
+            "br": 700,
+            "wire": 848,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 1079,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4341/_app/immutable/nodes/1.BPsCEMW3.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 322,
+            "br": 204,
+            "wire": 250,
+            "wire_encoding": "gzip",
+            "chrome_transfer": 488,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4341/hero.webp",
+            "type": "Image",
+            "content_type": "image/webp",
+            "raw": 59862,
+            "br": 59862,
+            "wire": 59862,
+            "wire_encoding": "identity",
+            "chrome_transfer": 60035,
+            "inline_js": 0
+          }
+        ]
+      },
+      "ttfb": {
+        "url": "http://127.0.0.1:4341/",
+        "n": 50,
+        "median_ms": 0.207583,
+        "p25_ms": 0.196458,
+        "p75_ms": 0.224208,
+        "min_ms": 0.177,
+        "max_ms": 0.277542,
+        "first_byte_median_ms": 0.205
+      },
+      "load": {
+        "rps": {
+          "median": 12681,
+          "min": 12593,
+          "max": 12758,
+          "values": [
+            12758,
+            12681,
+            12593
+          ]
+        },
+        "p50_ms": {
+          "median": 5.037375,
+          "min": 5.034459,
+          "max": 5.06275,
+          "values": [
+            5.034459,
+            5.06275,
+            5.037375
+          ]
+        },
+        "p99_ms": {
+          "median": 8.696875,
+          "min": 8.662375,
+          "max": 9.019375,
+          "values": [
+            8.696875,
+            8.662375,
+            9.019375
+          ]
+        },
+        "errors": 0,
+        "runs": [
+          {
+            "url": "http://127.0.0.1:4341/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 127579,
+            "errors": 0,
+            "bytes": 217139458,
+            "rps": 12757.9,
+            "p50_ms": 5.034459,
+            "p99_ms": 8.696875
+          },
+          {
+            "url": "http://127.0.0.1:4341/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 126811,
+            "errors": 0,
+            "bytes": 215832322,
+            "rps": 12681.1,
+            "p50_ms": 5.06275,
+            "p99_ms": 8.662375
+          },
+          {
+            "url": "http://127.0.0.1:4341/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 125934,
+            "errors": 0,
+            "bytes": 214339668,
+            "rps": 12593.4,
+            "p50_ms": 5.037375,
+            "p99_ms": 9.019375
+          }
+        ]
+      }
+    },
+    {
+      "id": "sveltekit-packed",
+      "label": "SvelteKit",
+      "server": "Go, pre-compressed in memory, GOMAXPROCS=1",
+      "kind": "packed",
+      "url": "http://127.0.0.1:4342/",
+      "lighthouse": {
+        "score": {
+          "median": 100,
+          "min": 100,
+          "max": 100,
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        },
+        "lcp_ms": {
+          "median": 1501,
+          "min": 1501,
+          "max": 1501,
+          "values": [
+            1501,
+            1501,
+            1501,
+            1501,
+            1501
+          ]
+        },
+        "fcp_ms": {
+          "median": 751,
+          "min": 750,
+          "max": 751,
+          "values": [
+            751,
+            751,
+            751,
+            750,
+            751
+          ]
+        },
+        "tbt_ms": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "min": 0,
+          "max": 0,
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lcp_element": "body > div > main.page > img.image",
+        "requests": [
+          {
+            "url": "http://127.0.0.1:4342/",
+            "type": "Document",
+            "status": 200,
+            "transfer": 1482
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/entry/start.DemuQh4F.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 454
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/entry/payload.DSmR2FwN.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 227
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/chunks/DclECHGd.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 882
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/chunks/C28ooCmM.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 13265
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/chunks/63X8glUm.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 17396
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/chunks/snX5D5Qy.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 1984
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/entry/app.Dn6P3WCP.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 673
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/nodes/0.C8KdwwU_.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 388
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/nodes/2.BYej_4iA.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 1752
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/assets/0.B5Rz18yj.css",
+            "type": "Stylesheet",
+            "status": 200,
+            "transfer": 861
+          },
+          {
+            "url": "http://127.0.0.1:4342/hero.webp",
+            "type": "Image",
+            "status": 200,
+            "transfer": 59967
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/nodes/1.BPsCEMW3.js",
+            "type": "Script",
+            "status": 200,
+            "transfer": 372
+          },
+          {
+            "url": "http://127.0.0.1:4342/favicon.ico",
+            "type": "Other",
+            "status": 404,
+            "transfer": 176
+          }
+        ]
+      },
+      "bytes": {
+        "requests": 13,
+        "js_br": 35708,
+        "js_inline_raw": 532,
+        "css_br": 700,
+        "html_br": 1319,
+        "image": 59862,
+        "total_br": 97589,
+        "js_wire": 35708,
+        "total_wire": 97589,
+        "resources": [
+          {
+            "url": "http://127.0.0.1:4342/",
+            "type": "Document",
+            "content_type": "text/html; charset=utf-8",
+            "raw": 4475,
+            "br": 1319,
+            "wire": 1319,
+            "wire_encoding": "br",
+            "chrome_transfer": 1482,
+            "inline_js": 532
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/entry/start.DemuQh4F.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 522,
+            "br": 286,
+            "wire": 286,
+            "wire_encoding": "br",
+            "chrome_transfer": 454,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/entry/payload.DSmR2FwN.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 65,
+            "br": 60,
+            "wire": 60,
+            "wire_encoding": "br",
+            "chrome_transfer": 227,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/chunks/DclECHGd.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 1630,
+            "br": 714,
+            "wire": 714,
+            "wire_encoding": "br",
+            "chrome_transfer": 882,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/chunks/C28ooCmM.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 39524,
+            "br": 13095,
+            "wire": 13095,
+            "wire_encoding": "br",
+            "chrome_transfer": 13265,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/chunks/63X8glUm.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 49998,
+            "br": 17226,
+            "wire": 17226,
+            "wire_encoding": "br",
+            "chrome_transfer": 17396,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/chunks/snX5D5Qy.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 4565,
+            "br": 1815,
+            "wire": 1815,
+            "wire_encoding": "br",
+            "chrome_transfer": 1984,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/entry/app.Dn6P3WCP.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 1092,
+            "br": 505,
+            "wire": 505,
+            "wire_encoding": "br",
+            "chrome_transfer": 673,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/nodes/0.C8KdwwU_.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 331,
+            "br": 220,
+            "wire": 220,
+            "wire_encoding": "br",
+            "chrome_transfer": 388,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/nodes/2.BYej_4iA.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 4026,
+            "br": 1583,
+            "wire": 1583,
+            "wire_encoding": "br",
+            "chrome_transfer": 1752,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/assets/0.B5Rz18yj.css",
+            "type": "Stylesheet",
+            "content_type": "text/css; charset=utf-8",
+            "raw": 1806,
+            "br": 700,
+            "wire": 700,
+            "wire_encoding": "br",
+            "chrome_transfer": 861,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4342/hero.webp",
+            "type": "Image",
+            "content_type": "image/webp",
+            "raw": 59862,
+            "br": 59862,
+            "wire": 59862,
+            "wire_encoding": "identity",
+            "chrome_transfer": 59967,
+            "inline_js": 0
+          },
+          {
+            "url": "http://127.0.0.1:4342/_app/immutable/nodes/1.BPsCEMW3.js",
+            "type": "Script",
+            "content_type": "text/javascript; charset=utf-8",
+            "raw": 322,
+            "br": 204,
+            "wire": 204,
+            "wire_encoding": "br",
+            "chrome_transfer": 372,
+            "inline_js": 0
+          }
+        ]
+      },
+      "ttfb": {
+        "url": "http://127.0.0.1:4342/",
+        "n": 50,
+        "median_ms": 0.123042,
+        "p25_ms": 0.111208,
+        "p75_ms": 0.143292,
+        "min_ms": 0.10075,
+        "max_ms": 0.191458,
+        "first_byte_median_ms": 0.119292
+      },
+      "load": {
+        "rps": {
+          "median": 129418,
+          "min": 126812,
+          "max": 130162,
+          "values": [
+            130162,
+            129418,
+            126812
+          ]
+        },
+        "p50_ms": {
+          "median": 0.472791,
+          "min": 0.469542,
+          "max": 0.478792,
+          "values": [
+            0.469542,
+            0.472791,
+            0.478792
+          ]
+        },
+        "p99_ms": {
+          "median": 1.103667,
+          "min": 1.099792,
+          "max": 1.1805,
+          "values": [
+            1.099792,
+            1.103667,
+            1.1805
+          ]
+        },
+        "errors": 0,
+        "runs": [
+          {
+            "url": "http://127.0.0.1:4342/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1301621,
+            "errors": 0,
+            "bytes": 1716838099,
+            "rps": 130162.1,
+            "p50_ms": 0.469542,
+            "p99_ms": 1.099792
+          },
+          {
+            "url": "http://127.0.0.1:4342/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1294176,
+            "errors": 0,
+            "bytes": 1707018144,
+            "rps": 129417.6,
+            "p50_ms": 0.472791,
+            "p99_ms": 1.103667
+          },
+          {
+            "url": "http://127.0.0.1:4342/",
+            "connections": 64,
+            "warmup_s": 2,
+            "duration_s": 10,
+            "requests": 1268123,
+            "errors": 0,
+            "bytes": 1672654237,
+            "rps": 126812.3,
+            "p50_ms": 0.478792,
+            "p99_ms": 1.1805
+          }
+        ]
+      }
+    }
+  ]
+}

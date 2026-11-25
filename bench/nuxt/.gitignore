@@ -1,0 +1,6 @@
+.nuxt/
+.output/
+.output-static/
+node_modules/
+public/hero.webp
+dist

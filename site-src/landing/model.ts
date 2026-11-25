@@ -13,6 +13,13 @@ export interface BenchResults {
     id: string
     label: string
     server: string
+    /**
+     * What serves the site: the server it ships with (`own`), or one of the
+     * benchmark's plain Go servers, gzipping on the fly (`gzip`) or sending
+     * brotli stored at build from memory (`packed`). Results from before
+     * 2026-11-25 have no kind, and every target in them counts as `own`.
+     */
+    kind?: 'own' | 'gzip' | 'packed'
     load: { rps: { median: number; min: number; max: number } }
     ttfb: { median_ms: number }
     bytes: { js_br: number; js_inline_raw: number }
@@ -47,11 +54,16 @@ export interface BenchRow {
   ours: boolean
 }
 
-/** A bar for each target, fastest first: the median requests per second of its load runs. */
+/**
+ * A bar for each site behind the server it ships with, fastest first: the
+ * median requests per second of its load runs. The benchmark's plain Go
+ * servers are not bars; benchFacts gives the pre-compressed one's range.
+ */
 export function benchRows(results: BenchResults): BenchRow[] {
   if (!results.targets.some((t) => t.id === 'weft')) throw new Error(`landing: bench/results/${results.date}.json has no weft target.`)
-  const top = Math.max(...results.targets.map((t) => t.load.rps.median))
-  return results.targets
+  const shown = results.targets.filter((t) => (t.kind ?? 'own') === 'own')
+  const top = Math.max(...shown.map((t) => t.load.rps.median))
+  return shown
     .map((t) => ({ id: t.id, label: t.label, server: t.server, rps: t.load.rps.median, share: t.load.rps.median / top, ours: t.id === 'weft' }))
     .sort((a, b) => b.rps - a.rps)
 }
@@ -68,6 +80,7 @@ export function benchFacts(results: BenchResults) {
   }
   const weft = target('weft')
   const plain = target('astro-plain-preview')
+  const packed = results.targets.filter((t) => t.kind === 'packed').map((t) => t.load.rps.median)
   return {
     date: results.date,
     machine: results.machine.chip,
@@ -78,6 +91,12 @@ export function benchFacts(results: BenchResults) {
     weftJS: weft.bytes.js_br,
     /** The JavaScript Astro's page with no framework island loads: files (brotli) and inline (raw). */
     plainJS: plain.bytes.js_br + plain.bytes.js_inline_raw,
+    /**
+     * The slowest and fastest of the other sites' static builds behind a Go
+     * server that sends brotli stored at build from memory, as Weft's does,
+     * in requests per second; null when the run measured none.
+     */
+    packed: packed.length ? { min: Math.min(...packed), max: Math.max(...packed) } : null,
   }
 }
 
