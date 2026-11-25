@@ -1,15 +1,22 @@
-package api
+package hello
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/flakerimi/weft/warp"
 )
 
 func TestHello(t *testing.T) {
+	app := warp.New(warp.Config{})
+	app.Use(Module())
+	if err := app.Err(); err != nil {
+		t.Fatal(err)
+	}
 	rec := httptest.NewRecorder()
-	Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/api/hello", nil))
+	app.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/api/hello", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
 	}

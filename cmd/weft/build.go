@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -57,12 +58,32 @@ func buildCmd(args []string, stdout, stderr io.Writer) int {
 	} else if target, err = filepath.Abs(target); err != nil {
 		return fail(stderr, "build", err)
 	}
-	if err := runIn(appDir, stdout, stderr, "go", "build", "-o", target, "."); err != nil {
+	goCmd := exec.Command("go", goBuildArgs(target)...)
+	goCmd.Dir, goCmd.Env = appDir, goBuildEnv(os.Environ())
+	goCmd.Stdout, goCmd.Stderr = stdout, stderr
+	if err := goCmd.Run(); err != nil {
 		fmt.Fprintln(stderr, "weft build: go build failed; fix what its output above says and run weft build again.")
 		return 1
 	}
 	fmt.Fprintf(stdout, "Built %s\n", shown)
 	return 0
+}
+
+// goBuildArgs is the go command's arguments for the binary to ship: paths
+// and symbols stripped, so it is small and the same wherever it is built.
+func goBuildArgs(target string) []string {
+	return []string{"build", "-trimpath", "-ldflags", "-s -w", "-o", target, "."}
+}
+
+// goBuildEnv is environ with CGO_ENABLED=0 added unless it sets CGO_ENABLED,
+// so the binary has no C library to carry and runs wherever it is copied.
+func goBuildEnv(environ []string) []string {
+	for _, kv := range environ {
+		if strings.HasPrefix(kv, "CGO_ENABLED=") {
+			return environ
+		}
+	}
+	return append(slices.Clone(environ), "CGO_ENABLED=0")
 }
 
 // binaryName is the app's package.json name when it makes a plain file name,

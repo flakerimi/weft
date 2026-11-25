@@ -1,6 +1,6 @@
 # AGENTS.md
 
-[[.Name]] is a Weft app: Go serves the API and the pages the build writes, in one binary. Weft [[.Version]] is unpacked in `.weft/`, which `weft` writes and you do not edit.
+[[.Name]] is a Weft app: Go serves the API (a `warp.App` with a list of modules) and the pages the build writes, in one binary. Weft [[.Version]] is unpacked in `.weft/`, which `weft` writes and you do not edit.
 
 ## Commands
 
@@ -13,14 +13,18 @@ go test -tags dev ./...   # the Go tests
 pnpm typecheck  # check the Vue files
 ```
 
+To add a route, add it in a module's `Register` with `warp.Get(app, "/path", fn)`; to add a module, make `app/<name>/` with a `Module()` and list it in `app/modules.go`. `weft dev` restarts the Go server when a `.go` file or `.env` changes.
+
 Go commands need `-tags dev` until the first `weft build`: without it `dist.go` embeds `web/dist`, which does not exist yet.
 
 ## Layout
 
 | Path | What it is |
 | --- | --- |
-| `main.go`, `dist.go`, `dist_dev.go` | The server. `dist.go` embeds `web/dist` and listens on every interface; with `-tags dev`, as `weft dev` builds it, `dist_dev.go` embeds nothing and listens on 127.0.0.1 only |
-| `api/` | The Go API, under `/api` |
+| `main.go`, `dist.go`, `dist_dev.go` | The server. `main.go` makes the `warp.App` and serves it; `dist.go` embeds `web/dist`; with `-tags dev`, as `weft dev` builds it, `dist_dev.go` embeds nothing |
+| `app/modules.go` | The one list of the app's modules |
+| `app/<name>/routes.go` | One module: its routes, under `/api` |
+| `.env`, `.env.sample` | `PORT` and `HOST` for the server; `.env` is not committed, `.env.sample` is |
 | `web/pages/` | One page per `.vue` file; its path is the route |
 | `web/components/` | Your components; an island is one used with `Island` |
 

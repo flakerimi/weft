@@ -92,7 +92,7 @@ func assertCreated(t *testing.T, dir string) {
 		t.Errorf("package.json has the wrong name: %q", read("package.json"))
 	}
 	ignore := strings.Split(read(".gitignore"), "\n")
-	for _, want := range []string{".weft/", "node_modules/", "web/dist/", "web/.weft-types/", "/" + filepath.Base(dir)} {
+	for _, want := range []string{".weft/", "node_modules/", "web/dist/", "web/.weft-types/", ".env", "/" + filepath.Base(dir)} {
 		found := false
 		for _, l := range ignore {
 			found = found || l == want
@@ -110,10 +110,20 @@ func assertCreated(t *testing.T, dir string) {
 		}
 		return nil
 	})
-	for _, p := range []string{"web/pages/index.vue", "web/components/Hello.vue", "api/api.go", "dist_dev.go", "CLAUDE.md", "README.md", "AGENTS.md"} {
+	for _, p := range []string{"web/pages/index.vue", "web/components/Hello.vue", "app/modules.go", "app/hello/routes.go", "app/hello/hello_test.go", ".env", ".env.sample", "dist_dev.go", "CLAUDE.md", "README.md", "AGENTS.md"} {
 		if !exists(t, filepath.Join(dir, p)) {
 			t.Errorf("%s is missing", p)
 		}
+	}
+	if exists(t, filepath.Join(dir, "api", "api.go")) {
+		t.Error("api/api.go is written: the template's API is in app/")
+	}
+	if got := read(".env"); got != "PORT=8080\n" {
+		t.Errorf(".env = %q", got)
+	}
+	wantSample := "# The port the app listens on.\nPORT=8080\n\n# The address to listen on. Empty means every interface.\n# HOST=127.0.0.1\n"
+	if got := read(".env.sample"); got != wantSample {
+		t.Errorf(".env.sample = %q, want %q", got, wantSample)
 	}
 	// An agent starts from /index.md, as the app's AGENTS.md says too.
 	for _, f := range []string{"README.md", "AGENTS.md"} {

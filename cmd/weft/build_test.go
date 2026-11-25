@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -138,6 +140,41 @@ func assertServes(t *testing.T, bin string) {
 	if code, body := get(t, url+"/nope"); code != 404 || !strings.Contains(body, "Not found") {
 		t.Errorf("GET /nope = %d %q", code, body)
 	}
+	if code, body := get(t, url+"/api/nope"); code != 404 || !strings.Contains(body, `"code":"not_found"`) {
+		t.Errorf("GET /api/nope = %d %q", code, body)
+	}
+	// A PORT that is no number stops the binary, with a sentence.
+	cmd := exec.Command(bin)
+	cmd.Env = append(os.Environ(), "PORT=abc")
+	out, err := cmd.CombinedOutput()
+	if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 1 {
+		t.Errorf("PORT=abc: %v, want exit 1", err)
+	}
+	if want := `PORT is "abc"; set it to a number from 1 to 65535 in .env or the environment.`; !strings.Contains(string(out), want) {
+		t.Errorf("PORT=abc printed %q, want %q", out, want)
+	}
+}
+
+func TestGoBuildArgs(t *testing.T) {
+	want := []string{"build", "-trimpath", "-ldflags", "-s -w", "-o", "x", "."}
+	if got := goBuildArgs("x"); !slices.Equal(got, want) {
+		t.Errorf("goBuildArgs = %q, want %q", got, want)
+	}
+}
+
+func TestGoBuildEnv(t *testing.T) {
+	in := []string{"PATH=/bin", "GOOS=linux"}
+	want := []string{"PATH=/bin", "GOOS=linux", "CGO_ENABLED=0"}
+	if got := goBuildEnv(in); !slices.Equal(got, want) {
+		t.Errorf("goBuildEnv(%q) = %q, want %q", in, got, want)
+	}
+	if len(in) != 2 {
+		t.Error("goBuildEnv changed its argument")
+	}
+	set := []string{"PATH=/bin", "CGO_ENABLED=1"}
+	if got := goBuildEnv(set); !slices.Equal(got, set) {
+		t.Errorf("goBuildEnv(%q) = %q, want it unchanged", set, got)
+	}
 }
 
 func TestBuildMakesBinary(t *testing.T) {
@@ -155,6 +192,19 @@ func TestBuildMakesBinary(t *testing.T) {
 		t.Errorf("the page build's output was not passed through: %q", out)
 	}
 	assertServes(t, filepath.Join(app, "myapp"))
+
+	// A build for another system is one command: GOOS and GOARCH pass through.
+	t.Setenv("GOOS", "linux")
+	t.Setenv("GOARCH", "arm64")
+	if code, out, errs := build(t, "-o", "cross"); code != 0 {
+		t.Fatalf("cross build: exit %d: %s%s", code, out, errs)
+	}
+	head, err := os.ReadFile(filepath.Join(app, "cross"))
+	if err != nil || len(head) < 4 || string(head[:4]) != "\x7fELF" {
+		t.Errorf("GOOS=linux GOARCH=arm64 weft build -o cross wrote no ELF file: %v", err)
+	}
+	t.Setenv("GOOS", runtime.GOOS)
+	t.Setenv("GOARCH", runtime.GOARCH)
 
 	// The pages typecheck once the build has written web/.weft-types.
 	if out, err := exec.Command("pnpm", "typecheck").CombinedOutput(); err != nil {
