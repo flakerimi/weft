@@ -72,7 +72,8 @@ func TooMany(message string) *Error {
 }
 
 // WriteJSON answers with v as JSON. A nil slice is written as [], and a 204
-// has no body.
+// has no body. A value that cannot be written as JSON, such as a NaN or a
+// channel, is logged and answered as a 500.
 func WriteJSON(w http.ResponseWriter, status int, v any) {
 	if status == http.StatusNoContent {
 		w.WriteHeader(status)
@@ -81,21 +82,39 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 	if rv := reflect.ValueOf(v); rv.Kind() == reflect.Slice && rv.IsNil() {
 		v = []any{}
 	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		slog.Error("warp: the answer cannot be written as JSON", "status", status, "error", err)
+		status, b = http.StatusInternalServerError, internalBody
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	w.Write(append(b, '\n'))
+}
+
+// internal is the answer to an error the client is not told about.
+func internal() *Error {
+	return &Error{Status: http.StatusInternalServerError, Code: "internal", Message: "Something went wrong on the server; its log has the details."}
+}
+
+var internalBody, _ = json.Marshal(errorBody{internal()})
+
+type errorBody struct {
+	Error *Error `json:"error"`
 }
 
 // WriteError answers with err in the error shape. An *Error, even wrapped, is
-// written as it is; anything else is logged and answered as a 500 that does
-// not carry its text.
+// written as it is; anything else, and an *Error whose Status is not from 400
+// to 599, is logged and answered as a 500 that does not carry its text.
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	var e *Error
-	if !errors.As(err, &e) {
+	switch {
+	case !errors.As(err, &e):
 		slog.Error("api error", "method", r.Method, "path", r.URL.Path, "error", err)
-		e = &Error{Status: http.StatusInternalServerError, Code: "internal", Message: "Something went wrong on the server; its log has the details."}
+		e = internal()
+	case e.Status < 400 || e.Status > 599:
+		slog.Error("api error with a status that is not an error status", "method", r.Method, "path", r.URL.Path, "status", e.Status, "error", err)
+		e = internal()
 	}
-	WriteJSON(w, e.Status, struct {
-		Error *Error `json:"error"`
-	}{e})
+	WriteJSON(w, e.Status, errorBody{e})
 }

@@ -3,6 +3,7 @@ package warp
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"regexp"
 	"strconv"
@@ -28,12 +29,16 @@ const (
 
 var envKey = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
-// FromEnv reads ./.env if it exists, then the environment, which wins.
+// FromEnv reads ./.env if it exists, then the environment, which wins. An
+// .env that exists but cannot be read is a problem, reported by Err.
 func FromEnv() Config {
 	vars := map[string]string{}
 	var problems []error
-	if data, err := os.ReadFile(".env"); err == nil {
+	switch data, err := os.ReadFile(".env"); {
+	case err == nil:
 		problems = parseDotEnv(string(data), vars)
+	case !errors.Is(err, fs.ErrNotExist):
+		problems = append(problems, fmt.Errorf(".env cannot be read (%v); fix its permissions or remove it.", err))
 	}
 	for _, kv := range os.Environ() {
 		if k, v, ok := strings.Cut(kv, "="); ok {
@@ -104,15 +109,18 @@ func build(vars map[string]string, problems []error) Config {
 func parseDotEnv(text string, vars map[string]string) []error {
 	var problems []error
 	for i, raw := range strings.Split(text, "\n") {
-		line := strings.TrimSpace(raw)
-		if line == "" || strings.HasPrefix(line, "#") {
+		written := strings.TrimSpace(raw)
+		if written == "" || strings.HasPrefix(written, "#") {
 			continue
 		}
-		line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		line := written
+		if rest, ok := strings.CutPrefix(line, "export"); ok && rest != "" && (rest[0] == ' ' || rest[0] == '\t') {
+			line = strings.TrimSpace(rest)
+		}
 		key, value, ok := strings.Cut(line, "=")
 		key = strings.TrimSpace(key)
 		if !ok || !envKey.MatchString(key) {
-			problems = append(problems, fmt.Errorf(".env line %d is %q; write it as KEY=value, or start it with # to make it a comment.", i+1, line))
+			problems = append(problems, fmt.Errorf(".env line %d is %q; write it as KEY=value, or start it with # to make it a comment.", i+1, written))
 			continue
 		}
 		vars[key] = parseValue(value)

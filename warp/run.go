@@ -25,7 +25,7 @@ const stopLimit = 10 * time.Second
 //
 // Under weft dev (WEFT_DEV_PARENT=1) it logs nothing, and it also stops when
 // standard input closes, which is when weft dev is gone.
-func (a *App) Serve(dist fs.FS, opts ...Option) error {
+func (a *App) Serve(dist fs.FS, opts ...ServeOption) error {
 	if err := a.Err(); err != nil {
 		return err
 	}
@@ -37,8 +37,11 @@ func (a *App) Serve(dist fs.FS, opts ...Option) error {
 	if err != nil {
 		return fmt.Errorf("warp: cannot listen on %s (%w); set HOST and PORT in .env.", addr, err)
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := notifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	// Once the first signal ends ctx, the signals are no longer taken, so a
+	// second Ctrl-C during the drain ends the process the default way.
+	context.AfterFunc(ctx, stop)
 	if os.Getenv("WEFT_DEV_PARENT") == "1" {
 		var cancel context.CancelFunc
 		ctx, cancel = untilEOF(ctx, os.Stdin)
@@ -47,6 +50,15 @@ func (a *App) Serve(dist fs.FS, opts ...Option) error {
 		log.Printf("listening on http://localhost:%d", ln.Addr().(*net.TCPAddr).Port)
 	}
 	return a.Run(ctx, ln, dist, opts...)
+}
+
+// notifyContext is signal.NotifyContext; a test puts another in its place.
+var notifyContext = signal.NotifyContext
+
+// newServer is the server Run serves h with. A client gets 10 seconds to
+// send a request's headers.
+func newServer(h http.Handler) *http.Server {
+	return &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second}
 }
 
 // untilEOF returns a context that also ends when r reaches its end.
@@ -65,11 +77,12 @@ func untilEOF(parent context.Context, r io.Reader) (context.Context, context.Can
 // the requests in flight finish, for up to 10 seconds, and stops every
 // Stopper in reverse order. When a step fails, the modules already started
 // are stopped. Run closes ln, and returns nil after a clean stop.
-func (a *App) Run(ctx context.Context, ln net.Listener, dist fs.FS, opts ...Option) error {
+func (a *App) Run(ctx context.Context, ln net.Listener, dist fs.FS, opts ...ServeOption) error {
+	if ln == nil {
+		return errors.New("warp: Run needs a listener; call Serve, or pass one from net.Listen.")
+	}
 	if err := a.Err(); err != nil {
-		if ln != nil {
-			ln.Close()
-		}
+		ln.Close()
 		return err
 	}
 	a.mu.Lock()
@@ -100,7 +113,7 @@ func (a *App) Run(ctx context.Context, ln net.Listener, dist fs.FS, opts ...Opti
 		}
 	}
 
-	srv := &http.Server{Handler: h}
+	srv := newServer(h)
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(ln) }()
 	var errs []error

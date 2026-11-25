@@ -113,8 +113,12 @@ func TestNewCarriesConfigMistakes(t *testing.T) {
 	if len(got) != 2 || got[0] != want || !strings.HasPrefix(got[1], "warp: ") {
 		t.Fatalf("Err() = %q", got)
 	}
-	if err := app.Run(context.Background(), nil, nil); errText(err) != errText(app.Err()) {
+	ln := listenLocal(t)
+	if err := app.Run(context.Background(), ln, nil); errText(err) != errText(app.Err()) {
 		t.Fatalf("Run = %v", err)
+	}
+	if !closed(ln.Addr().String()) {
+		t.Fatal("the listener is still open")
 	}
 }
 

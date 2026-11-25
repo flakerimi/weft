@@ -196,7 +196,7 @@ type inputField struct {
 // when the body leaves its fields out it stays nil, and reading a promoted
 // field panics. So is an embedded struct with a json name, which
 // encoding/json reads as a named object while warp makes its fields the
-// input's own.
+// input's own, and one tagged json:"-", which encoding/json skips.
 func inputFields(t reflect.Type, prefix []int) ([]inputField, []string) {
 	var out []inputField
 	var mistakes []string
@@ -210,6 +210,11 @@ func inputFields(t reflect.Type, prefix []int) ([]inputField, []string) {
 				continue
 			}
 			if f.Type.Kind() == reflect.Struct && f.Type != timeType {
+				if f.Tag.Get("json") == "-" {
+					mistakes = append(mistakes, fmt.Sprintf("%s embeds %s with json:\"-\"; give the field a name to leave it out, or drop the tag to make %s's fields the input's own.",
+						typeName(t), typeName(f.Type), typeName(f.Type)))
+					continue
+				}
 				if key, _, ok := jsonTagOf(f); ok && key != "" {
 					mistakes = append(mistakes, fmt.Sprintf("%s embeds %s with the json name %q; give the field a name, or drop the tag to make %s's fields the input's own.",
 						typeName(t), typeName(f.Type), key, typeName(f.Type)))
@@ -297,7 +302,7 @@ func jsonNameMistake(at, field, key string) string {
 	case key == "":
 		return fmt.Sprintf("%s has a json tag with no name; name it, as in json:%q.", at, snakeCase(field))
 	case !validJSONName(key):
-		return fmt.Sprintf("%s has the json name %q, which JSON tags cannot carry; use letters, digits and underscores.", at, key)
+		return fmt.Sprintf("%s has the json name %q, which JSON tags cannot carry; use letters, digits, _, - and .", at, key)
 	}
 	return ""
 }
@@ -516,6 +521,9 @@ func (p *plan) decode(w http.ResponseWriter, r *http.Request, dst reflect.Value,
 	} else if !isJSONMedia(r.Header.Get("Content-Type")) {
 		return UnsupportedMedia("Send the body as application/json.")
 	}
+	if tooDeep(data, maxNesting) {
+		return BadRequest(fmt.Sprintf("The body is nested more than %d levels deep.", maxNesting))
+	}
 	if !json.Valid(data) {
 		return BadRequest(notJSON)
 	}
@@ -533,13 +541,48 @@ func (p *plan) decode(w http.ResponseWriter, r *http.Request, dst reflect.Value,
 }
 
 // isJSONMedia reports whether a Content-Type is application/json or a type
-// ending in +json, such as application/merge-patch+json, with any parameters. Taking JSON alone keeps another site
-// from writing to a typed route: a cross-site form or fetch can send
-// text/plain with the visitor's cookies and no preflight.
+// ending in +json, such as application/merge-patch+json, with any
+// parameters. A cross-site form or fetch can send text/plain with the
+// visitor's cookies and no preflight; taking JSON alone keeps another site
+// from sending a typed route a body. It does not protect a route that takes
+// no body, which is answered whatever the Content-Type.
 func isJSONMedia(contentType string) bool {
 	media, _, err := mime.ParseMediaType(contentType)
 	return err == nil && (media == "application/json" ||
 		strings.Contains(media, "/") && strings.HasSuffix(media, "+json"))
+}
+
+// maxNesting is how deep a typed route's body may nest objects and lists,
+// the body's own object counted: deeper bodies are refused before decoding.
+const maxNesting = 64
+
+// tooDeep reports whether data nests objects and lists more than max deep,
+// counting { and [ outside strings in one pass, with no allocation.
+func tooDeep(data []byte, max int) bool {
+	depth := 0
+	inString, escaped := false, false
+	for _, c := range data {
+		switch {
+		case inString:
+			switch {
+			case escaped:
+				escaped = false
+			case c == '\\':
+				escaped = true
+			case c == '"':
+				inString = false
+			}
+		case c == '"':
+			inString = true
+		case c == '{' || c == '[':
+			if depth++; depth > max {
+				return true
+			}
+		case c == '}' || c == ']':
+			depth--
+		}
+	}
+	return false
 }
 
 func decodeStrict(data []byte, v any) error {
@@ -550,7 +593,9 @@ func decodeStrict(data []byte, v any) error {
 
 // bodyError turns the decoder's error into the answer. The decoder reports
 // the first problem it meets, so on a wrong type the body is read again with
-// every field taking any value, to put an unknown field first.
+// every field taking any value, to put an unknown field first. An error that
+// is none of a syntax error, an unknown field and a wrong type comes from a
+// field's own decoder, as time.Time's on "tomorrow".
 func (p *plan) bodyError(data []byte, err error) error {
 	var te *json.UnmarshalTypeError
 	if errors.As(err, &te) {
@@ -565,7 +610,10 @@ func (p *plan) bodyError(data []byte, err error) error {
 	if name, ok := unknownField(err); ok {
 		return unknown(name)
 	}
-	return BadRequest(notJSON)
+	if se := (*json.SyntaxError)(nil); errors.As(err, &se) {
+		return BadRequest(notJSON)
+	}
+	return BadRequest("The body has a value its field cannot take.")
 }
 
 // unknownField reads the field's name from the decoder's error. encoding/json

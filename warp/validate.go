@@ -38,48 +38,64 @@ var (
 
 const ruleList = "required, email, url, min=, max=, enum= or unique"
 
+// The limits on what a 422 lists, so that a small body cannot make a huge
+// answer: at most maxListed fields, at most maxKeyBytes of key bytes in all,
+// and never a key longer than maxKeyLen.
+const (
+	maxListed   = 100
+	maxKeyBytes = 16 << 10
+	maxKeyLen   = 1 << 10
+)
+
 // Validate checks v, a struct or a pointer to one, against the warp tags of
 // its fields. It returns nil, or an *Error from Invalid that names each field
-// that needs attention.
+// that needs attention: at most 100 of them, with at most 16 KiB of keys in
+// all, and none whose key is longer than 1 KiB. When a field is left out the
+// message says so, and the walk stops once the 100 or the 16 KiB are spent.
+// Fields are listed in a fixed order: struct fields as declared, list entries
+// by index, map entries by key. A value with a pointer cycle is not supported.
 func Validate(v any) error {
 	rv := derefValue(reflect.ValueOf(v))
 	if !rv.IsValid() || rv.Kind() != reflect.Struct {
 		return nil
 	}
-	fields := map[string]string{}
-	var at []segment
-	validateStruct(rv, &at, fields)
-	if len(fields) == 0 {
+	var w walker
+	w.validateStruct(rv)
+	if len(w.fields) == 0 && !w.left {
 		return nil
 	}
-	return Invalid(fields)
+	e := Invalid(w.fields)
+	switch {
+	case w.left && len(w.fields) == 0:
+		e.Message, e.Fields = "More fields need attention than can be listed.", nil
+	case w.left:
+		e.Message = fmt.Sprintf("More fields need attention than are listed; the first %d are listed.", len(w.fields))
+	}
+	return e
 }
 
 // segment is one step of a field's key: a field's or a map entry's name, or a
-// list index when index is not negative. The walk keeps the steps to where it
-// is as a stack, pushing one before it goes in and popping it after, and
-// writes them out as a key only for a field that fails: a value that passes
-// costs no string. (A chain of segments linked to their parents would not
-// stay on the stack: Go moves a value whose address flows back into itself
-// through recursion to the heap.)
+// list index when index is not negative; end is the length of the key up to
+// and with this step. The walk keeps the steps to where it is as a stack,
+// pushing one before it goes in and popping it after, and writes them out as
+// a key only for a field that is listed: a value that passes costs no string,
+// and a key's length is known without building it. (A chain of segments
+// linked to their parents would not stay on the stack: Go moves a value whose
+// address flows back into itself through recursion to the heap.)
 type segment struct {
 	name  string
 	index int
+	end   int
 }
 
-// key writes the steps as a dotted key, such as lines.0.sku.
+// key writes the steps as a dotted key, such as lines.0.sku; no steps is "".
 func key(at []segment) string {
-	var digits [20]byte
-	size := len(at) - 1
-	for _, s := range at {
-		if s.index >= 0 {
-			size += len(strconv.AppendInt(digits[:0], int64(s.index), 10))
-		} else {
-			size += len(s.name)
-		}
+	if len(at) == 0 {
+		return ""
 	}
+	var digits [20]byte
 	var b strings.Builder
-	b.Grow(size)
+	b.Grow(at[len(at)-1].end)
 	for i, s := range at {
 		if i > 0 {
 			b.WriteByte('.')
@@ -93,46 +109,105 @@ func key(at []segment) string {
 	return b.String()
 }
 
-func validateStruct(rv reflect.Value, at *[]segment, fields map[string]string) {
-	depth := len(*at)
+// walker is one run of Validate.
+type walker struct {
+	at     []segment
+	fields map[string]string
+	bytes  int  // the key bytes listed so far
+	left   bool // a failing field was not listed
+	done   bool // stop walking: the limits are spent or, probing, a field failed
+	probe  bool // only find whether anything fails, listing nothing
+}
+
+// push makes the step name, or the list index when index is not negative,
+// the one after the first depth steps.
+func (w *walker) push(depth int, name string, index int) {
+	n := len(name)
+	if index >= 0 {
+		n = 1
+		for i := index; i >= 10; i /= 10 {
+			n++
+		}
+	}
+	if depth > 0 {
+		n += w.at[depth-1].end + 1
+	}
+	w.at = append(w.at[:depth], segment{name: name, index: index, end: n})
+}
+
+// fail records that the field at the top of the stack fails with msg, if
+// the limits let it be listed.
+func (w *walker) fail(msg string) {
+	if w.probe {
+		w.done = true
+		return
+	}
+	n := 0
+	if len(w.at) > 0 {
+		n = w.at[len(w.at)-1].end
+	}
+	switch {
+	case n > maxKeyLen:
+		w.left = true
+	case len(w.fields) == maxListed || w.bytes+n > maxKeyBytes:
+		w.left, w.done = true, true
+	default:
+		if w.fields == nil {
+			w.fields = map[string]string{}
+		}
+		w.fields[key(w.at)] = msg
+		w.bytes += n
+	}
+}
+
+func (w *walker) validateStruct(rv reflect.Value) {
+	depth := len(w.at)
+	defer func() { w.at = w.at[:depth] }()
 	for _, spec := range specsOf(rv.Type()) {
+		if w.done {
+			return
+		}
 		fv, ok := fieldByIndex(rv, spec.index)
 		if !ok {
 			continue
 		}
-		*at = append((*at)[:depth], segment{name: spec.key, index: -1})
+		w.push(depth, spec.key, -1)
 		if msg := checkField(fv, spec.rules); msg != "" {
-			fields[key(*at)] = msg
+			w.fail(msg)
 		}
 		if !holdsStructs(fv.Type()) {
 			continue
 		}
 		if inner, ok := reachable(fv); ok {
-			validateInside(inner, at, fields)
+			w.validateInside(inner)
 		}
 	}
-	*at = (*at)[:depth]
 }
 
 // validateInside validates the structs in v, a struct, or a slice, array or
 // map whose element type can hold them, as reachable gives it. A list's
-// entries are keyed by their index after at, a map's by its keys, formatted
-// with fmt.Sprint and visited in sorted order. at is the stack of steps to v;
-// it is as long again when validateInside returns.
-func validateInside(v reflect.Value, at *[]segment, fields map[string]string) {
-	depth := len(*at)
-	defer func() { *at = (*at)[:depth] }()
+// entries are keyed by their index, a map's by its keys, formatted with
+// fmt.Sprint. The stack of steps is as long again when it returns.
+//
+// A map's entries are listed in sorted key order, so that the same fields
+// are listed on every run, and cheaply: each value is copied in turn into one
+// reused value and probed for a failure, which builds nothing; only the
+// entries that fail have their keys kept, sorted, and walked again to list
+// what fails in them.
+func (w *walker) validateInside(v reflect.Value) {
+	depth := len(w.at)
+	defer func() { w.at = w.at[:depth] }()
 	switch v.Kind() {
 	case reflect.Struct:
-		validateStruct(v, at, fields)
+		w.validateStruct(v)
 	case reflect.Slice, reflect.Array:
 		if !holdsStructs(v.Type().Elem()) {
 			return
 		}
-		for i := 0; i < v.Len(); i++ {
+		for i := 0; i < v.Len() && !w.done; i++ {
 			if inner, ok := reachable(v.Index(i)); ok {
-				*at = append((*at)[:depth], segment{index: i})
-				validateInside(inner, at, fields)
+				w.push(depth, "", i)
+				w.validateInside(inner)
 			}
 		}
 	case reflect.Map:
@@ -140,22 +215,46 @@ func validateInside(v reflect.Value, at *[]segment, fields map[string]string) {
 			return
 		}
 		type entry struct {
-			name  string
-			value reflect.Value
+			name string
+			key  reflect.Value
 		}
-		var entries []entry
+		var failing []entry
+		stringKeys := v.Type().Key().Kind() == reflect.String
 		probe := reflect.New(v.Type().Elem()).Elem()
-		for iter := v.MapRange(); iter.Next(); {
-			probe.SetIterValue(iter) // reused, so an entry with nothing in it costs nothing
-			if _, ok := reachable(probe); ok {
-				inner, _ := reachable(iter.Value())
-				entries = append(entries, entry{fmt.Sprint(iter.Key().Interface()), inner})
+		for iter := v.MapRange(); iter.Next() && !w.done; {
+			probe.SetIterValue(iter)
+			inner, ok := reachable(probe)
+			if !ok {
+				continue
 			}
+			if w.probe {
+				w.validateInside(inner)
+				continue
+			}
+			w.probe = true
+			w.validateInside(inner)
+			fails := w.done
+			w.probe, w.done = false, false
+			if !fails {
+				continue
+			}
+			k := iter.Key()
+			name := ""
+			if stringKeys {
+				name = k.String()
+			} else {
+				name = fmt.Sprint(k.Interface())
+			}
+			failing = append(failing, entry{name, k})
 		}
-		slices.SortFunc(entries, func(a, b entry) int { return strings.Compare(a.name, b.name) })
-		for _, e := range entries {
-			*at = append((*at)[:depth], segment{name: e.name, index: -1})
-			validateInside(e.value, at, fields)
+		slices.SortFunc(failing, func(a, b entry) int { return strings.Compare(a.name, b.name) })
+		for _, e := range failing {
+			if w.done {
+				return
+			}
+			inner, _ := reachable(v.MapIndex(e.key))
+			w.push(depth, e.name, -1)
+			w.validateInside(inner)
 		}
 	}
 }
@@ -280,12 +379,15 @@ func isEmpty(v reflect.Value) bool {
 }
 
 // checkField returns the message of the first rule the value fails, or "".
+// A pointer that is not nil says the value was sent, even when it is zero:
+// required passes, and every other rule applies to what it points at. A
+// value not behind a pointer that is empty passes every rule but required.
 func checkField(fv reflect.Value, rules []rule) string {
 	v := derefValue(fv)
+	sent := fv.Kind() == reflect.Pointer && !fv.IsNil()
 	for _, r := range rules {
 		if r.name == "required" {
-			// A pointer says "present, and it may be zero".
-			if fv.Kind() == reflect.Pointer && !fv.IsNil() {
+			if sent {
 				continue
 			}
 			if !v.IsValid() || isBlank(v) {
@@ -293,8 +395,7 @@ func checkField(fv reflect.Value, rules []rule) string {
 			}
 			continue
 		}
-		// Every other rule lets an empty value pass.
-		if !v.IsValid() || isEmpty(v) {
+		if !v.IsValid() || !sent && isEmpty(v) {
 			continue
 		}
 		if msg := checkRule(v, r); msg != "" {

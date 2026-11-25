@@ -7,8 +7,11 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"os"
 	"reflect"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -303,8 +306,11 @@ func TestRunWithoutDist(t *testing.T) {
 	}
 }
 
+// Run has passed its Err() check by then, so each mistake made after the
+// app started is logged too.
 func TestRegisteringAfterStartIsAMistake(t *testing.T) {
 	var log []string
+	logs := captureLog(t)
 	app := New(Config{})
 	r := startApp(t, app, nil)
 	if status, _ := fetch(t, r.url+"/api/x"); status != 404 {
@@ -312,13 +318,25 @@ func TestRegisteringAfterStartIsAMistake(t *testing.T) {
 	}
 	app.Use(mod("late", &log))
 	app.Handle("GET /x", text("x"))
+	app.Wrap(func(next http.Handler) http.Handler { return next })
 	if err := r.stop(t); err != nil {
 		t.Fatal(err)
 	}
-	want := "warp: Use was called after the app started serving; list every module before Serve.\n" +
-		`warp: route "GET /x" was registered after the app started serving; register every route before Serve.`
-	if errText(app.Err()) != want {
+	mistakes := []string{
+		"warp: Use was called after the app started serving; list every module before Serve.",
+		`warp: route "GET /x" was registered after the app started serving; register every route before Serve.`,
+		"warp: Wrap was called after the app started serving; wrap before Serve.",
+	}
+	if want := strings.Join(mistakes, "\n"); errText(app.Err()) != want {
 		t.Fatalf("Err() = %q\nwant %q", errText(app.Err()), want)
+	}
+	for _, m := range mistakes {
+		if !strings.Contains(logs.String(), strconv.Quote(m)) {
+			t.Errorf("the log lacks %s:\n%s", m, logs)
+		}
+	}
+	if len(app.wraps) != 0 {
+		t.Fatal("a Wrap after the start was kept")
 	}
 	if len(log) != 0 || len(app.Routes()) != 0 {
 		t.Fatalf("log %v, routes %v", log, app.Routes())
@@ -351,5 +369,72 @@ func TestUntilEOF(t *testing.T) {
 	case <-ctx.Done():
 	case <-time.After(5 * time.Second):
 		t.Fatal("the context did not end when standard input closed")
+	}
+}
+
+// stopCheck is a module whose Stop, which runs after the drain, records
+// whether stopped was closed by then.
+type stopCheck struct {
+	stopped <-chan struct{}
+	early   chan bool
+}
+
+func (stopCheck) Name() string            { return "check" }
+func (stopCheck) Register(app *App) error { return nil }
+func (m stopCheck) Stop(ctx context.Context) error {
+	select {
+	case <-m.stopped:
+		m.early <- true
+	case <-time.After(2 * time.Second):
+		m.early <- false
+	}
+	return nil
+}
+
+// Once the first signal ends Serve's context, Serve stops taking the signals,
+// so a second Ctrl-C during the drain ends the process the default way. A
+// test cannot send itself SIGINT, so notifyContext stands in for
+// signal.NotifyContext, and the test checks that its stop runs as soon as the
+// context ends, before the modules stop.
+func TestServeStopsTakingSignalsOnceTold(t *testing.T) {
+	signal, stopped := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	was := notifyContext
+	notifyContext = func(parent context.Context, _ ...os.Signal) (context.Context, context.CancelFunc) {
+		ctx, cancel := context.WithCancel(parent)
+		go func() { <-signal; cancel() }()
+		return ctx, func() { once.Do(func() { close(stopped) }); cancel() }
+	}
+	t.Cleanup(func() { notifyContext = was })
+	captureLog(t)
+	check := stopCheck{stopped: stopped, early: make(chan bool, 1)}
+	app := New(Config{Host: "127.0.0.1", Port: "0"})
+	app.Use(check)
+	done := make(chan error, 1)
+	go func() { done <- app.Serve(nil) }()
+	close(signal)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve did not return after its context ended")
+	}
+	if !<-check.early {
+		t.Fatal("the signals were still taken while the app stopped")
+	}
+}
+
+func TestServerTimesOutSlowHeaders(t *testing.T) {
+	if got := newServer(http.NotFoundHandler()).ReadHeaderTimeout; got != 10*time.Second {
+		t.Fatalf("ReadHeaderTimeout %v, want 10s", got)
+	}
+}
+
+func TestRunNeedsAListener(t *testing.T) {
+	app := New(ConfigFrom(map[string]string{"PORT": "abc"}))
+	if err := app.Run(context.Background(), nil, nil); errText(err) != "warp: Run needs a listener; call Serve, or pass one from net.Listen." {
+		t.Fatalf("Run = %q", errText(err))
 	}
 }

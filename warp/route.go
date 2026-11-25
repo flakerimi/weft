@@ -25,7 +25,9 @@ func Get[In, Out any](app *App, path string, fn func(context.Context, In) (Out, 
 // A body that is not empty must be sent as application/json (or a type
 // ending in +json), else the answer is 415. A cross-site form or fetch can
 // send text/plain with the visitor's cookies and no preflight; taking JSON
-// bodies alone is what keeps another site from writing to a typed route.
+// alone keeps another site from sending a typed route a body. It does not
+// protect a route that takes no body: a POST /api/like/7 with no body is
+// answered whatever its Content-Type.
 func Post[In, Out any](app *App, path string, fn func(context.Context, In) (Out, error), opts ...RouteOption) {
 	typed(app, http.MethodPost, path, http.StatusCreated, fn, opts)
 }

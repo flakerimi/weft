@@ -15,8 +15,8 @@ import (
 	"time"
 )
 
-// An Option changes what Serve serves.
-type Option func(*options)
+// A ServeOption changes what Serve serves.
+type ServeOption func(*options)
 
 type options struct {
 	folders []folder
@@ -43,7 +43,7 @@ type folder struct {
 // dir holds a symlink, or if a file's path is also a page or a file of dist,
 // another folder's file, or under /api/. A dot-named entry (.DS_Store, .git)
 // is refused the same way: it is never meant to be published.
-func WithFiles(prefix string, dir fs.FS) Option {
+func WithFiles(prefix string, dir fs.FS) ServeOption {
 	return func(o *options) { o.folders = append(o.folders, folder{prefix, dir}) }
 }
 

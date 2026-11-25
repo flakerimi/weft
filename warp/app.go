@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -62,7 +63,7 @@ func With(mw func(http.Handler) http.Handler) RouteOption {
 
 // Status sets the status a typed route answers with. A route registered with
 // Handle answers as its handler does; Routes reports the status given. A code
-// outside 100 to 599 is a mistake, reported by Err.
+// outside 200 to 599 is a mistake, reported by Err: a 1xx is not an answer.
 func Status(code int) RouteOption {
 	return func(c *routeConfig) { c.status, c.statusSet = code, true }
 }
@@ -155,8 +156,8 @@ func (a *App) route(method, path string, in, out reflect.Type, status int, mk fu
 	for _, opt := range opts {
 		opt(&rc)
 	}
-	if rc.statusSet && (rc.status < 100 || rc.status > 599) {
-		a.fail("%s: Status(%d) is not an HTTP status; use one from 100 to 599.", name, rc.status)
+	if rc.statusSet && (rc.status < 200 || rc.status > 599) {
+		a.fail("%s: Status(%d) is not a status a route can answer with; use one from 200 to 599.", name, rc.status)
 		ok = false
 	}
 	for _, m := range mistakes {
@@ -201,19 +202,28 @@ func register(mux *http.ServeMux, pattern string, h http.Handler) (err error) {
 }
 
 // Wrap puts mw around every API request. The first Wrap given is the
-// outermost.
+// outermost. A Wrap after the app started is a mistake, reported by Err.
 func (a *App) Wrap(mw func(http.Handler) http.Handler) {
 	a.mu.Lock()
+	if a.started {
+		a.mu.Unlock()
+		a.fail("Wrap was called after the app started serving; wrap before Serve.")
+		return
+	}
 	defer a.mu.Unlock()
 	a.wraps = append(a.wraps, mw)
 }
 
-// fail records a registration mistake, with warp: in front.
+// fail records a registration mistake, with warp: in front. One recorded
+// after the app started is logged too, since Run has checked Err by then.
 func (a *App) fail(format string, args ...any) {
 	err := fmt.Errorf("warp: "+format, args...)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.mistakes = append(a.mistakes, err)
+	if a.started {
+		slog.Error(err.Error())
+	}
 }
 
 // Err returns every mistake so far, the configuration's first, joined; nil
@@ -324,6 +334,7 @@ func recoverPanics(h http.Handler) http.Handler {
 			if v == http.ErrAbortHandler {
 				panic(v)
 			}
+			// After the handler wrote, the 500 goes after what it sent, and the body is broken.
 			WriteError(w, r, fmt.Errorf("panic: %v\n%s", v, debug.Stack()))
 		}()
 		h.ServeHTTP(w, r)

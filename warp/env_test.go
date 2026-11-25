@@ -2,6 +2,7 @@ package warp
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -135,5 +136,54 @@ func TestZeroConfig(t *testing.T) {
 func TestNegativeBodyLimitIsTheDefault(t *testing.T) {
 	if got := New(Config{MaxBodyBytes: -1}).Config().MaxBodyBytes; got != 1<<20 {
 		t.Fatalf("MaxBodyBytes = %d, want %d", got, 1<<20)
+	}
+}
+
+func TestDotEnvCannotBeRead(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.Mkdir(".env", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	err := FromEnv().Err()
+	if err == nil || !strings.HasPrefix(err.Error(), ".env cannot be read (") || !strings.HasSuffix(err.Error(), "); fix its permissions or remove it.") {
+		t.Fatalf("Err() = %v", err)
+	}
+}
+
+func TestDotEnvExport(t *testing.T) {
+	writeDotEnv(t, "export\tA=1\nexport FOO\nexporter=2\n")
+	cfg := FromEnv()
+	if cfg.Get("A") != "1" || cfg.Get("exporter") != "2" {
+		t.Errorf("A=%q exporter=%q", cfg.Get("A"), cfg.Get("exporter"))
+	}
+	want := `.env line 2 is "export FOO"; write it as KEY=value, or start it with # to make it a comment.`
+	if err := cfg.Err(); err == nil || err.Error() != want {
+		t.Errorf("Err() = %v, want %q", err, want)
+	}
+}
+
+func TestDotEnvCRLF(t *testing.T) {
+	writeDotEnv(t, "A=1\r\nB=\"two\"\r\n# c\r\n\r\nC=3 # note\r\n")
+	cfg := FromEnv()
+	if cfg.Get("A") != "1" || cfg.Get("B") != "two" || cfg.Get("C") != "3" || cfg.Err() != nil {
+		t.Errorf("A=%q B=%q C=%q Err=%v", cfg.Get("A"), cfg.Get("B"), cfg.Get("C"), cfg.Err())
+	}
+}
+
+func TestEmptyPortIsUnset(t *testing.T) {
+	cfg := ConfigFrom(map[string]string{"PORT": ""})
+	if cfg.Err() != nil || New(cfg).Config().Port != "8080" {
+		t.Fatalf("Err() = %v, Port %q", cfg.Err(), New(cfg).Config().Port)
+	}
+}
+
+func TestMaxBodyUpperBound(t *testing.T) {
+	top := strconv.FormatInt((1<<62)>>20, 10)
+	if cfg := ConfigFrom(map[string]string{"MAX_BODY_MB": top}); cfg.Err() != nil || cfg.MaxBodyBytes != 1<<62 {
+		t.Fatalf("MAX_BODY_MB=%s: Err() = %v, MaxBodyBytes %d", top, cfg.Err(), cfg.MaxBodyBytes)
+	}
+	over := strconv.FormatInt((1<<62)>>20+1, 10)
+	if err := ConfigFrom(map[string]string{"MAX_BODY_MB": over}).Err(); err == nil {
+		t.Fatalf("MAX_BODY_MB=%s was taken", over)
 	}
 }

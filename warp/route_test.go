@@ -364,15 +364,20 @@ func TestStatusOutOfRange(t *testing.T) {
 	Get(app, "/b", func(context.Context, None) (Item, error) { return Item{}, nil }, Status(600))
 	Post(app, "/c", func(context.Context, None) (None, error) { return None{}, nil }, Status(99))
 	Get(app, "/d", func(context.Context, ShowIn) (Item, error) { return Item{}, nil }, Status(-1))
-	Get(app, "/e", func(context.Context, None) (Item, error) { return Item{}, nil }, Status(100))
+	Get(app, "/e", func(context.Context, None) (Item, error) { return Item{}, nil }, Status(200))
 	Get(app, "/f", func(context.Context, None) (Item, error) { return Item{}, nil }, Status(599))
 	app.Handle("GET /g", text("g"))
+	Get(app, "/h", func(context.Context, None) (Item, error) { return Item{}, nil }, Status(100))
+	app.Handle("GET /i", text("i"), Status(199))
+	const tail = " is not a status a route can answer with; use one from 200 to 599."
 	want := strings.Join([]string{
-		"warp: GET /a: Status(0) is not an HTTP status; use one from 100 to 599.",
-		"warp: GET /b: Status(600) is not an HTTP status; use one from 100 to 599.",
-		"warp: POST /c: Status(99) is not an HTTP status; use one from 100 to 599.",
-		"warp: GET /d: Status(-1) is not an HTTP status; use one from 100 to 599.",
+		"warp: GET /a: Status(0)" + tail,
+		"warp: GET /b: Status(600)" + tail,
+		"warp: POST /c: Status(99)" + tail,
+		"warp: GET /d: Status(-1)" + tail,
 		"warp: GET /d: ShowIn.Name has no json, query or path tag; add one.",
+		"warp: GET /h: Status(100)" + tail,
+		"warp: GET /i: Status(199)" + tail,
 	}, "\n")
 	if got := errText(app.Err()); got != want {
 		t.Fatalf("Err() =\n%s\nwant\n%s", got, want)

@@ -40,7 +40,7 @@ const (
 // Serve panics if dist has no index.html.
 //
 // Options add to what is served: WithFiles serves a folder on disk beside dist.
-func Serve(dist fs.FS, api http.Handler, opts ...Option) http.Handler {
+func Serve(dist fs.FS, api http.Handler, opts ...ServeOption) http.Handler {
 	if api == nil {
 		api = http.HandlerFunc(noAPI)
 	}

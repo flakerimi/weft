@@ -1,9 +1,11 @@
 package warp
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -116,6 +118,46 @@ func TestStatuses(t *testing.T) {
 	} {
 		if c.err.Status != c.status || c.err.Code != c.code {
 			t.Errorf("%s: got %d %s", c.code, c.err.Status, c.err.Code)
+		}
+	}
+}
+
+// An output that cannot be written as JSON is logged and answered as the
+// plain 500, never as a 200 with an empty body.
+func TestWriteJSONCannotEncode(t *testing.T) {
+	logs := captureLog(t)
+	type Reading struct {
+		Value float64 `json:"value"`
+	}
+	app := New(Config{})
+	Get(app, "/reading", func(ctx context.Context, in None) (Reading, error) { return Reading{math.NaN()}, nil })
+	w := send(t, mustRegister(t, app), "GET", "/api/reading", "")
+	if code, msg, _ := apiError(t, w); w.Code != 500 || code != "internal" || msg != "Something went wrong on the server; its log has the details." {
+		t.Fatalf("status %d, code %q, message %q", w.Code, code, msg)
+	}
+	if !strings.Contains(logs.String(), "NaN") || !strings.Contains(logs.String(), "level=ERROR") {
+		t.Fatalf("log %q", logs.String())
+	}
+	w = httptest.NewRecorder()
+	WriteJSON(w, 200, map[string]any{"c": make(chan int)})
+	if w.Code != 500 || !strings.Contains(w.Body.String(), `"internal"`) {
+		t.Fatalf("a channel: status %d, body %q", w.Code, w.Body.String())
+	}
+}
+
+// An *Error whose status is not an error status is answered as the plain
+// 500, and logged.
+func TestWriteErrorStatusOutOfRange(t *testing.T) {
+	for _, status := range []int{0, 200, 302, 399, 600} {
+		logs := captureLog(t)
+		w := writeErr(t, &Error{Status: status, Code: "odd", Message: "Odd."})
+		if code, _, _ := apiError(t, w); w.Code != 500 || code != "internal" || !strings.Contains(logs.String(), "level=ERROR") {
+			t.Errorf("status %d: answered %d %q, log %q", status, w.Code, code, logs.String())
+		}
+	}
+	for _, status := range []int{400, 599} {
+		if w := writeErr(t, &Error{Status: status, Code: "edge", Message: "Edge."}); w.Code != status {
+			t.Errorf("status %d: answered %d", status, w.Code)
 		}
 	}
 }

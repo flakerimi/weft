@@ -500,19 +500,19 @@ func TestJSONNameMistakes(t *testing.T) {
 				Name string `json:"it's"`
 			}
 			Post(app, "/products", func(context.Context, MakeIn) (Item, error) { return Item{}, nil })
-		}, `MakeIn.Name has the json name "it's", which JSON tags cannot carry; use letters, digits and underscores.`},
+		}, `MakeIn.Name has the json name "it's", which JSON tags cannot carry; use letters, digits, _, - and .`},
 		{"a space", func(app *App) {
 			type MakeIn struct {
 				Name string `json:"first name"`
 			}
 			Post(app, "/products", func(context.Context, MakeIn) (Item, error) { return Item{}, nil })
-		}, `MakeIn.Name has the json name "first name", which JSON tags cannot carry; use letters, digits and underscores.`},
+		}, `MakeIn.Name has the json name "first name", which JSON tags cannot carry; use letters, digits, _, - and .`},
 		{"a dash", func(app *App) {
 			type MakeIn struct {
 				Name string `json:"-,"`
 			}
 			Post(app, "/products", func(context.Context, MakeIn) (Item, error) { return Item{}, nil })
-		}, `MakeIn.Name has the json name "-", which JSON tags cannot carry; use letters, digits and underscores.`},
+		}, `MakeIn.Name has the json name "-", which JSON tags cannot carry; use letters, digits, _, - and .`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			app := New(Config{})
@@ -611,6 +611,7 @@ func TestTypedRouteAfterStart(t *testing.T) {
 	type ShowIn struct {
 		Name string
 	}
+	logs := captureLog(t)
 	app := New(Config{})
 	app.mu.Lock()
 	app.started = true
@@ -619,6 +620,9 @@ func TestTypedRouteAfterStart(t *testing.T) {
 	want := `warp: route "GET /products/{id}" was registered after the app started serving; register every route before Serve.`
 	if got := errText(app.Err()); got != want {
 		t.Fatalf("Err() = %q\nwant %q", got, want)
+	}
+	if !strings.Contains(logs.String(), "registered after the app started") {
+		t.Fatalf("the mistake was not logged: %q", logs)
 	}
 }
 
@@ -692,7 +696,7 @@ func TestNestedBodyMistakes(t *testing.T) {
 				Pair [2]*Part `json:"pair"`
 			}
 			Post(app, "/orders", func(context.Context, OrderIn) (Item, error) { return Item{}, nil })
-		}, []string{`Part.Name has the json name "it's", which JSON tags cannot carry; use letters, digits and underscores.`}},
+		}, []string{`Part.Name has the json name "it's", which JSON tags cannot carry; use letters, digits, _, - and .`}},
 		{"one key twice, through an embedded struct", func(app *App) {
 			type Inner struct {
 				A string `json:"a"`
@@ -890,6 +894,24 @@ func TestTaggedEmbedIsRefused(t *testing.T) {
 			t.Fatalf("Err() = %q\nwant %q", got, want)
 		}
 	})
+	t.Run(`json:"-"`, func(t *testing.T) {
+		type Base struct {
+			Note string `json:"note"`
+		}
+		type ShowIn struct {
+			Base `json:"-"`
+			Name string `json:"name"`
+		}
+		app := New(Config{})
+		Post(app, "/products", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
+		want := `warp: POST /products: ShowIn embeds Base with json:"-"; give the field a name to leave it out, or drop the tag to make Base's fields the input's own.`
+		if got := errText(app.Err()); got != want {
+			t.Fatalf("Err() = %q\nwant %q", got, want)
+		}
+		if len(app.Routes()) != 0 {
+			t.Fatalf("Routes() = %v", app.Routes())
+		}
+	})
 	t.Run("an embed tagged with no name is flattened", func(t *testing.T) {
 		type Base struct {
 			Note string `json:"note"`
@@ -907,4 +929,84 @@ func TestTaggedEmbedIsRefused(t *testing.T) {
 			t.Fatalf("status %d, body %q, input %+v", w.Code, w.Body.String(), got)
 		}
 	})
+}
+
+// A pointer query field sent empty stays nil, so its rules are skipped; sent
+// as 0 it points at 0, and its rules apply.
+func TestEmptyQueryPointerIsNotSent(t *testing.T) {
+	type ListIn struct {
+		PerPage *int `query:"per_page" warp:"min=1,max=100"`
+	}
+	var got ListIn
+	app := New(Config{})
+	Get(app, "/items", func(ctx context.Context, in ListIn) ([]Item, error) {
+		got = in
+		return nil, nil
+	})
+	h := mustRegister(t, app)
+	if w := send(t, h, "GET", "/api/items?per_page=", ""); w.Code != 200 || got.PerPage != nil {
+		t.Fatalf("per_page=: status %d, body %q, input %+v", w.Code, w.Body.String(), got)
+	}
+	w := send(t, h, "GET", "/api/items?per_page=0", "")
+	if code, _, fields := apiError(t, w); w.Code != 422 || code != "validation" || !reflect.DeepEqual(fields, map[string]string{"per_page": "Enter 1 or more."}) {
+		t.Fatalf("per_page=0: status %d, fields %v", w.Code, fields)
+	}
+}
+
+func TestBodyNestingLimit(t *testing.T) {
+	type DocIn struct {
+		Data any    `json:"data"`
+		Note string `json:"note"`
+	}
+	app := New(Config{})
+	Post(app, "/docs", func(ctx context.Context, in DocIn) (Item, error) { return Item{}, nil })
+	h := mustRegister(t, app)
+	// The body's own object is the first level.
+	nested := func(levels int) string {
+		return `{"data":` + strings.Repeat("[", levels-1) + strings.Repeat("]", levels-1) + `}`
+	}
+	if w := send(t, h, "POST", "/api/docs", nested(64)); w.Code != 201 {
+		t.Fatalf("64 levels: status %d, body %q", w.Code, w.Body.String())
+	}
+	mixed := `{"data":` + strings.Repeat(`[{"a":`, 32) + "1" + strings.Repeat("}]", 32) + `}`
+	for _, body := range []string{nested(65), nested(1000), mixed} {
+		w := send(t, h, "POST", "/api/docs", body)
+		if code, msg, _ := apiError(t, w); w.Code != 400 || code != "bad_request" || msg != "The body is nested more than 64 levels deep." {
+			t.Fatalf("%.40s…: status %d, code %q, message %q", body, w.Code, code, msg)
+		}
+	}
+	// Brackets inside a string do not count, escaped quotes included.
+	inString := `{"note":"` + strings.Repeat(`[{\"`, 100) + `\\","data":` + strings.Repeat("[", 62) + strings.Repeat("]", 62) + `}`
+	if w := send(t, h, "POST", "/api/docs", inString); w.Code != 201 {
+		t.Fatalf("brackets in a string: status %d, body %q", w.Code, w.Body.String())
+	}
+	if allocs := testing.AllocsPerRun(5, func() { tooDeep([]byte(inString), maxNesting) }); allocs != 0 {
+		t.Fatalf("tooDeep made %.0f allocations", allocs)
+	}
+	// It comes after the media type is checked.
+	w := send(t, h, "POST", "/api/docs", nested(65), "Content-Type", "text/plain")
+	if w.Code != 415 {
+		t.Fatalf("too deep as text/plain: status %d", w.Code)
+	}
+}
+
+// A value that is valid JSON but that its field's own decoder refuses is not
+// "not valid JSON".
+func TestBodyValueItsFieldCannotTake(t *testing.T) {
+	type EventIn struct {
+		When time.Time `json:"when"`
+		Data []byte    `json:"data"`
+	}
+	app := New(Config{})
+	Post(app, "/events", func(ctx context.Context, in EventIn) (Item, error) { return Item{}, nil })
+	h := mustRegister(t, app)
+	for _, body := range []string{`{"when":"tomorrow"}`, `{"data":"!!!"}`} {
+		w := send(t, h, "POST", "/api/events", body)
+		if code, msg, fields := apiError(t, w); w.Code != 400 || code != "bad_request" || msg != "The body has a value its field cannot take." || fields != nil {
+			t.Errorf("%s: status %d, code %q, message %q, fields %v", body, w.Code, code, msg, fields)
+		}
+	}
+	if w := send(t, h, "POST", "/api/events", `{"when":"2026-11-25T10:00:00Z","data":"YWI="}`); w.Code != 201 {
+		t.Fatalf("status %d, body %q", w.Code, w.Body.String())
+	}
 }

@@ -2,6 +2,7 @@ package warp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -582,10 +583,15 @@ func TestValidateDeepPassingCostsNothing(t *testing.T) {
 }
 
 func TestValidateDeepFailureNamesTheWholePath(t *testing.T) {
-	bad := deepNodes(4000, "far too long")
-	want := map[string]string{strings.Repeat("k.0.", 4000) + "name": "Use at most 10 characters."}
+	bad := deepNodes(250, "far too long")
+	want := map[string]string{strings.Repeat("k.0.", 250) + "name": "Use at most 10 characters."}
 	if got := fieldsOf(t, &bad); !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %d fields, want the one at the bottom", len(got))
+	}
+	// 4000 deep, the key is over 1 KiB, so it is not listed.
+	bad = deepNodes(4000, "far too long")
+	if e := validationOf(t, &bad); e.Message != "More fields need attention than can be listed." || e.Fields != nil {
+		t.Fatalf("message %q, %d fields", e.Message, len(e.Fields))
 	}
 	if allocs := testing.AllocsPerRun(5, func() { Validate(&bad) }); allocs >= 100 {
 		t.Fatalf("Validate with one failure 4000 deep: %.0f allocations a run, want fewer than 100", allocs)
@@ -622,4 +628,217 @@ func BenchmarkValidateDeepNodes(b *testing.B) {
 			Validate(&long)
 		}
 	})
+}
+
+type limitLine struct {
+	SKU string `json:"sku" warp:"required"`
+}
+
+type limitOrder struct {
+	Lines []limitLine `json:"lines"`
+}
+
+type limitIn struct {
+	ByName map[string]limitOrder `json:"by_name"`
+	Lines  []limitLine           `json:"lines"`
+}
+
+// validation answers that list fields, by what Validate returned.
+func validationOf(t *testing.T, v any) *Error {
+	t.Helper()
+	var e *Error
+	if !errors.As(Validate(v), &e) {
+		t.Fatalf("Validate(%T) did not return an *Error", v)
+	}
+	return e
+}
+
+func failingLines(n int) []limitLine { return make([]limitLine, n) }
+
+func TestValidateListsAtMost100Fields(t *testing.T) {
+	e := validationOf(t, limitIn{Lines: failingLines(150)})
+	if want := "More fields need attention than are listed; the first 100 are listed."; e.Message != want {
+		t.Fatalf("message %q, want %q", e.Message, want)
+	}
+	want := map[string]string{}
+	for i := range 100 {
+		want["lines."+strconv.Itoa(i)+".sku"] = "This is required."
+	}
+	if !reflect.DeepEqual(e.Fields, want) {
+		t.Fatalf("%d fields listed, want lines.0.sku to lines.99.sku", len(e.Fields))
+	}
+	// Exactly 100 is not more than are listed.
+	if e := validationOf(t, limitIn{Lines: failingLines(100)}); e.Message != "100 fields need attention." || len(e.Fields) != 100 {
+		t.Fatalf("100 failing: message %q, %d fields", e.Message, len(e.Fields))
+	}
+}
+
+func TestValidateListsTheSameMapEntries(t *testing.T) {
+	in := limitIn{ByName: map[string]limitOrder{}}
+	for i := range 300 {
+		in.ByName[fmt.Sprintf("k%03d", i)] = limitOrder{Lines: failingLines(1)}
+	}
+	first := validationOf(t, in).Fields
+	if len(first) != 100 {
+		t.Fatalf("%d fields listed, want 100", len(first))
+	}
+	for i := range 100 {
+		if k := fmt.Sprintf("by_name.k%03d.lines.0.sku", i); first[k] == "" {
+			t.Fatalf("%s is not listed; the first 100 keys in sorted order are", k)
+		}
+	}
+	for range 20 {
+		if got := validationOf(t, in).Fields; !reflect.DeepEqual(got, first) {
+			t.Fatal("another run listed other fields")
+		}
+	}
+}
+
+func TestValidateKeyBudget(t *testing.T) {
+	// A key over 1 KiB is never listed.
+	long := limitIn{ByName: map[string]limitOrder{strings.Repeat("k", 1<<10): {Lines: failingLines(3)}}}
+	e := validationOf(t, long)
+	if e.Message != "More fields need attention than can be listed." || e.Fields != nil {
+		t.Fatalf("message %q, %d fields", e.Message, len(e.Fields))
+	}
+	w := writeErr(t, e)
+	if strings.Contains(w.Body.String(), `"fields"`) || w.Code != 422 {
+		t.Fatalf("status %d, body %s", w.Code, w.Body)
+	}
+	// Up to 16 KiB of keys in all: by_name.<1000 bytes>.lines.0.sku is 1018
+	// bytes, so 16 fit and the 17th does not.
+	in := limitIn{ByName: map[string]limitOrder{}}
+	for i := range 20 {
+		in.ByName[fmt.Sprintf("%02d", i)+strings.Repeat("k", 998)] = limitOrder{Lines: failingLines(1)}
+	}
+	e = validationOf(t, in)
+	if e.Message != "More fields need attention than are listed; the first 16 are listed." || len(e.Fields) != 16 {
+		t.Fatalf("message %q, %d fields", e.Message, len(e.Fields))
+	}
+	// A key of exactly 1 KiB is listed, and a short one after a long one is too.
+	edge := limitIn{ByName: map[string]limitOrder{
+		strings.Repeat("a", 1024-len("by_name..lines.0.sku")): {Lines: failingLines(1)},
+		"b" + strings.Repeat("z", 1024):                       {Lines: failingLines(1)},
+		"c":                                                   {Lines: failingLines(1)},
+	}}
+	e = validationOf(t, edge)
+	if e.Message != "More fields need attention than are listed; the first 2 are listed." || len(e.Fields) != 2 || e.Fields["by_name.c.lines.0.sku"] == "" {
+		t.Fatalf("message %q, fields %d", e.Message, len(e.Fields))
+	}
+}
+
+func TestValidateTwoFieldsUnchanged(t *testing.T) {
+	type S struct {
+		A string `json:"a" warp:"required"`
+		B string `json:"b" warp:"email"`
+	}
+	e := validationOf(t, S{B: "nope"})
+	if want := map[string]string{"a": "This is required.", "b": "Enter an email address."}; e.Message != "2 fields need attention." || !reflect.DeepEqual(e.Fields, want) {
+		t.Fatalf("message %q, fields %v", e.Message, e.Fields)
+	}
+}
+
+// The two bodies the whole-branch review measured: a small body could make a
+// huge 422 (100 MB from the first, 11.6 MB from the second).
+func TestValidationAnswersAreBounded(t *testing.T) {
+	app := New(Config{})
+	Post(app, "/orders", func(ctx context.Context, in limitIn) (Item, error) { return Item{}, nil })
+	h := mustRegister(t, app)
+	lines := func(n int) string { return strings.TrimSuffix(strings.Repeat("{},", n), ",") }
+	for _, c := range []struct {
+		name, body string
+		allocs     float64
+	}{
+		{"one 100 KB map key over 1,000 failing lines", `{"by_name":{"` + strings.Repeat("k", 100<<10) + `":{"lines":[` + lines(1000) + `]}}}`, 50},
+		{"300,000 failing lines", `{"lines":[` + lines(300000) + `]}`, 200},
+	} {
+		w := send(t, h, "POST", "/api/orders", c.body)
+		if w.Code != 422 || w.Body.Len() >= 32<<10 {
+			t.Errorf("%s: status %d, answer %d B, want a 422 under 32 KiB", c.name, w.Code, w.Body.Len())
+		}
+		var in limitIn
+		if err := json.Unmarshal([]byte(c.body), &in); err != nil {
+			t.Fatal(err)
+		}
+		allocs := testing.AllocsPerRun(3, func() { Validate(&in) })
+		t.Logf("%s: answer %d B, %.0f allocations", c.name, w.Body.Len(), allocs)
+		if allocs > c.allocs {
+			t.Errorf("%s: Validate made %.0f allocations, want at most %.0f", c.name, allocs, c.allocs)
+		}
+	}
+}
+
+func TestValidateValidMapCostsLittle(t *testing.T) {
+	doc := struct {
+		ByName map[string]limitLine `json:"by_name"`
+	}{ByName: map[string]limitLine{}}
+	for i := range 100000 {
+		doc.ByName[strconv.Itoa(i)] = limitLine{SKU: "a"}
+	}
+	allocs := testing.AllocsPerRun(5, func() { Validate(&doc) })
+	t.Logf("a map of 100000 valid entries: %.0f allocations", allocs)
+	if allocs >= 50 {
+		t.Fatalf("Validate on a map of 100000 valid entries: %.0f allocations a run, want fewer than 50", allocs)
+	}
+}
+
+// A pointer that is not nil was sent, so every rule applies to what it points
+// at, even a zero; a zero that is not behind a pointer is empty, and only
+// required checks it.
+func TestValidateSentPointerZero(t *testing.T) {
+	type S struct {
+		N    *int    `json:"n" warp:"min=1"`
+		Text *string `json:"text" warp:"min=1"`
+		Mail *string `json:"mail" warp:"email"`
+		Kind *string `json:"kind" warp:"enum=a|b"`
+		Need *int    `json:"need" warp:"required"`
+		Zero int     `json:"zero" warp:"min=1"`
+		None *int    `json:"none" warp:"min=1"`
+	}
+	zero, empty := 0, ""
+	got := fieldsOf(t, S{N: &zero, Text: &empty, Mail: &empty, Kind: &empty, Need: &zero})
+	want := map[string]string{
+		"n":    "Enter 1 or more.",
+		"text": "Use at least 1 characters.",
+		"mail": "Enter an email address.",
+		"kind": "Choose one of: a, b.",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("fields %v, want %v", got, want)
+	}
+}
+
+func TestValidateRequiredOnEmptyCollections(t *testing.T) {
+	type S struct {
+		List  []int          `json:"list" warp:"required"`
+		Map   map[string]int `json:"map" warp:"required"`
+		Array [2]string      `json:"array" warp:"required"`
+	}
+	want := map[string]string{"list": "This is required.", "map": "This is required.", "array": "This is required."}
+	if got := fieldsOf(t, S{List: []int{}, Map: map[string]int{}}); !reflect.DeepEqual(got, want) {
+		t.Fatalf("fields %v, want %v", got, want)
+	}
+	if got := fieldsOf(t, S{List: []int{0}, Map: map[string]int{"a": 0}, Array: [2]string{"", "x"}}); got != nil {
+		t.Fatalf("fields %v, want none", got)
+	}
+}
+
+func TestValidateMinMaxOnArrays(t *testing.T) {
+	type S struct {
+		Few  [2]int `json:"few" warp:"min=3"`
+		Many [4]int `json:"many" warp:"max=3"`
+	}
+	want := map[string]string{"few": "Choose at least 3.", "many": "Choose at most 3."}
+	if got := fieldsOf(t, S{Few: [2]int{1}, Many: [4]int{1}}); !reflect.DeepEqual(got, want) {
+		t.Fatalf("fields %v, want %v", got, want)
+	}
+	if got := fieldsOf(t, S{}); got != nil {
+		t.Fatalf("a zero array is empty: fields %v", got)
+	}
+}
+
+func TestKeyOfNoSteps(t *testing.T) {
+	if got := key(nil); got != "" {
+		t.Fatalf("key(nil) = %q", got)
+	}
 }
