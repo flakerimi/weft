@@ -101,9 +101,11 @@ shop/
 ### The core
 
 ```go
-app := warp.New(warp.FromEnv())
-app.Use(auth.Module(), storage.Module(), products.Module())
-log.Fatal(app.Serve(dist))
+server := warp.New(warp.FromEnv())
+server.Use(app.Modules()...) // auth.Module(), storage.Module(), products.Module(), listed in app/modules.go
+if err := server.Serve(dist); err != nil {
+	log.Fatal(err)
+}
 ```
 
 - **A module** is `Name() string` and `Register(app *warp.App) error`. Optional interfaces add a step: `Migrator` (tables), `Starter` and `Stopper` (background work). The app starts modules in the order listed and stops them in reverse.
@@ -199,7 +201,7 @@ These replace phases 4b and 5 of the Weft design. Each gets its own plan.
 
 | Phase | Contents |
 | --- | --- |
-| W1 | The core: `warp.App`, modules, env configuration, typed routes on `ServeMux`, the error shape, validation; `weft.Serve` becomes `warp.Serve`; the template's `main.go` and `app/` move to this shape |
+| W1 | Delivered (plan `docs/superpowers/plans/2026-11-25-warp-core.md`). The core: `warp.App`, modules, env configuration, typed routes on `ServeMux`, the error shape, validation; `weft.Serve` becomes `warp.Serve`; the template's `main.go` and `app/` move to this shape |
 | W2 | `warp/describe`, `weft gen` (types, the typed client, form schemas), `weft routes`; `weft dev` regenerates on a Go change |
 | W3 | `warp/data`: `Store`, additive migrations, list queries, `warp.Resource`; SQLite, then PostgreSQL, then MySQL |
 | W4 | `auth`: sessions, users, roles, permissions; `useSession`, the login page, `perm`, the route guard; `mail` with the `log` and `smtp` drivers |
@@ -227,6 +229,24 @@ W1 starts after phase 4 (app tooling) lands, because it changes the template tha
 - SQLite by default through a pure-Go driver.
 - Modules are listed explicitly in `app/modules.go`; nothing registers itself from an `init` function.
 - Scaffolding never deletes: there is no `destroy` command.
+
+Made while planning and building W1 (2026-11-25):
+
+- No `weft.Serve` is left behind: the root package keeps only `Version`. Nothing is published, so a forwarding function would only be a second name.
+- `warp.Serve(dist, api, opts...)` is the handler, as `weft.Serve` was; `app.Serve(dist)` builds it over the app's own API, listens, and stops cleanly on SIGINT or SIGTERM. The template calls `log.Fatal` only when `Serve` returns an error, since a clean stop returns nil.
+- Mistakes in registration are collected, not panicked: `app.Use`, `app.Handle` and `warp.Get` return nothing, and `app.Err()` and `app.Serve` report every mistake, one sentence each. `warp.Get(app, ...)` has no error to check, and a panic at import time has no place to name the file.
+- Route paths are written without `/api`, which the app adds: `warp.Get(app, "/products/{id}", show)` answers at `/api/products/{id}`.
+- Every exported field of an input struct has exactly one `json`, `query` or `path` tag. A field without one is a registration mistake, so no field gets Go's default name in a snake_case API.
+- Struct types inside a body field are checked at registration too: every exported field needs a usable `json` name, and a `query` or `path` tag inside is a mistake. An input that embeds a pointer to a struct is a mistake, since a body that leaves its fields out would leave it nil and a promoted field would panic.
+- An unknown field in a JSON body is a 400. A misspelt field that is silently dropped is how an update loses data.
+- Typed routes take JSON bodies only: a body that is not empty must be `application/json` or a `+json` type, else 415 `unsupported_media_type`. A page on another site can send a form or `text/plain` with the visitor's cookies and no preflight, and sessions in cookies come in W4. A body that is JSON but not an object is a 400.
+- `POST` answers 201 unless the route says `warp.Status(200)`; an output of `warp.None` answers 204.
+- A path value that does not convert is a 404, not a 400: `/api/products/abc` names nothing.
+- `required` on a pointer passes whenever the pointer is not nil: a pointer is how an input says "present, and it may be zero". Every other rule passes an empty value.
+- `unique` is parsed in W1 and enforced in W3, by `warp/data`, which is the first thing that can look.
+- `weft dev` sets `HOST=127.0.0.1`, and `warp` watches for the dev parent, so `dist_dev.go` keeps no logic.
+- `weft build` makes the binary to ship (the owner, 2026-11-25: the docs say `weft build`, not `go build`). It builds with `-trimpath -ldflags "-s -w"`, and with `CGO_ENABLED=0` unless the environment sets it; `GOOS` and `GOARCH` come from the environment. No doc page builds a site by hand inside the Weft repository.
+- Out of W1: `filter[...]` and list queries (W3), present-or-absent `PATCH` fields (W3), `auth.Can` and a route's permission (W4), `warp/describe` (W2). `Route` is shaped so each can add a field.
 
 ## Open for the owner
 

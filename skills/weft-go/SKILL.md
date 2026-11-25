@@ -1,152 +1,117 @@
 ---
 name: weft-go
-description: Use when serving a Weft build from Go or shipping it - writing the main.go that embeds dist with weft.Serve, adding an /api handler, serving a folder from disk with weft.WithFiles, building one static binary or a scratch container image, checking compression, ETags and 304s with curl, and installing or updating the weft command.
+description: Use when writing the Go side of a Weft app or shipping it - the warp.App in main.go and its modules in app/modules.go, typed routes with warp.Get and warp.Post, json, query and path tags and warp validation rules, the one error shape, .env configuration, testing a module with app.Handler, serving the page build with warp.Serve and a folder from disk with warp.WithFiles, building the binary with weft build for another system or a scratch container image, checking compression and ETags with curl, and installing or updating the weft command.
 ---
 
-# Serving and publishing a Weft site from Go
+# The Go side of a Weft app, and shipping it
 
-`weft.Serve` turns a Weft build into an `http.Handler`. It reads every page and file into memory when it starts, already compressed by the build, and answers each request from a map. Your API sits beside it, so the whole site is one binary. The package is `github.com/flakerimi/weft` and uses only Go's standard library. Build the pages first; the `weft-site` skill covers that.
+An app's Go half is Warp, `github.com/flakerimi/weft/warp`, on Go's standard library alone: a `warp.App` with a list of modules, whose routes are typed Go functions with a validated input, answering errors in one JSON shape; `warp.Serve` serves the page build from memory beside the API, so the app is one binary. Pages are the `weft-site` skill.
 
-## The program
+## The app
+
+`weft create` writes `main.go`:
 
 ```go
-// Command hello serves the pages in dist and a small API, from one binary.
-package main
-
-import (
-	"embed"
-	"encoding/json"
-	"io/fs"
-	"log"
-	"net/http"
-
-	"github.com/flakerimi/weft"
-)
-
-//go:embed all:dist
-var site embed.FS
-
 func main() {
-	dist, err := fs.Sub(site, "dist")
-	if err != nil {
+	server := warp.New(warp.FromEnv())
+	server.Use(app.Modules()...)
+	// Serve returns nil once it was asked to stop: that is a clean exit.
+	if err := server.Serve(dist); err != nil {
 		log.Fatal(err)
 	}
-	api := http.NewServeMux()
-	api.HandleFunc("GET /api/hello", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"message": "Hello from Go"})
-	})
-	log.Fatal(http.ListenAndServe(":8080", weft.Serve(dist, api)))
 }
 ```
 
-- Write `//go:embed all:dist`, never a plain `dist`. Without `all:`, files whose names start with `.` or `_` are left out.
-- `/api` and everything under `/api/` go to `api`. With `nil`, they get a JSON 404: `{"error":{"code":"not_found","message":"no API"}}`.
-- A site inside the repository is part of the `github.com/flakerimi/weft` module. Run it with `go run ./hello`.
-- An app made with `weft create` has this program already, in `main.go` and `dist.go`, with its API in `api/`. Its `go.mod` points `github.com/flakerimi/weft` at the copy in `.weft/go`. `weft dev` builds it with `-tags dev`, where `dist_dev.go` embeds nothing and listens on `127.0.0.1` at `PORT`; `weft build` builds the binary that embeds `web/dist`. Run Go commands with `-tags dev` until the first `weft build`.
+- `dist` is set by `dist.go`, which embeds `web/dist`; under `-tags dev`, as `weft dev` builds it, it stays nil. Run Go commands with `-tags dev` until the first `weft build`: `go test -tags dev ./...`.
+- `app/modules.go` is the one list of modules, in the order they start; nothing registers itself from `init`. A new module is `app/<name>/` with a `Module()`, added to the list.
+- A module is `Name() string` and `Register(app *warp.App) error`, and may add `Migrate`, `Start` and `Stop` (`func(ctx context.Context) error`): migrate and start in order before serving, stop in reverse after. On SIGINT or SIGTERM requests in flight get up to 10 s.
+- Never edit `.weft/`, where `go.mod` finds Warp.
+
+## Typed routes
+
+```go
+type CreateIn struct {
+	Name  string  `json:"name" warp:"required,max=120"`
+	Price float64 `json:"price" warp:"min=0"`
+	Plan  string  `json:"plan" warp:"enum=basic|pro"`
+}
+
+func (module) Register(app *warp.App) error {
+	warp.Get(app, "/products/{id}", show) // func(ctx context.Context, in ShowIn) (Product, error)
+	warp.Post(app, "/products", create)   // answers 201
+	return nil
+}
+```
+
+- Paths have no `/api`; the app adds it. `Get`, `Post`, `Put`, `Patch`, `Delete`. 200, `Post` 201, `warp.Status(200)` to change it; `warp.None` as input reads nothing, as output answers 204.
+- Each exported input field has exactly one tag: `json` (the body: POST, PUT, PATCH only), `query` (text, bool, numbers, a pointer to one, `[]string`) or `path` (a `{name}` wildcard).
+- A body must be `application/json` (else 415), one JSON object, with no field the input lacks (400). A path value that does not convert is 404.
+- Rules: `required`, `email`, `url`, `min=N`, `max=N`, `enum=a|b`, `unique` (not checked yet). Every rule but `required` passes an empty value; `required` on a pointer passes when it is not nil. A failure is 422 with a message per field.
+- A mistake in a route (a field with no tag, a `path` tag with no wildcard, an unknown rule) is one sentence from `app.Err()`, and `Serve` refuses to start.
+- `warp.Request(ctx)` is the request, `warp.ResponseHeader(ctx)` the answer's headers. `app.Handle("GET /export.csv", h)` mounts a plain handler; `app.Wrap(mw)` wraps every API request, `warp.With(mw)` one route.
+
+## Errors and configuration
+
+Errors are `{"error":{"code":"…","message":"…","fields":{…}}}`. Return `warp.BadRequest` (400), `Unauthorized` (401), `Forbidden` (403), `NotFound` (404), `Conflict` (409), `TooLarge` (413), `UnsupportedMedia` (415), `Invalid(fields)` (422) or `TooMany` (429), with a one-sentence message; any other error or a panic is logged and answered 500 `internal`, without its text. `warp.WriteError` writes one from a plain handler.
+
+`warp.FromEnv()` reads `.env`, then the environment, which wins: `PORT` (8080), `HOST` (every interface), `MAX_BODY_MB` (1). Read your own keys with `app.Config().Get` and `On`. `.env` is git-ignored, `.env.sample` committed; `weft dev` restarts Go when `.env` changes.
+
+## Testing a module
+
+Build `warp.New(warp.Config{})`, `Use(Module())`, check `app.Err()`, then call `app.Handler()`, the API alone, with `httptest`: `app.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/api/hello", nil))`. Set `Content-Type: application/json` on a request with a body.
 
 ## What Serve answers
 
-The answer depends on what `dist` holds:
+`/api` and everything under it go to the API. Every other path of a page build gets the page at that path, else a file the manifest lists, else the app's `index.html` under `--app-prefix`, else `pages/404.vue` with 404; a single-page app gets its file, or `index.html`. Serve sends the stored brotli or gzip the request accepts best, compressing nothing per request; gives each file the build's `ETag` (`If-None-Match` gets 304); caches hashed files for a year; sends `103 Early Hints`; and answers only `GET` and `HEAD`. It panics at start, naming the file, if the build is incomplete: fix the build.
 
-- **A page build** (`routes.json` and `manifest.json`). A request gets, in order:
-  1. the page at that path, with or without a trailing slash;
-  2. a file the manifest lists;
-  3. the app's `index.html` under `--app-prefix`;
-  4. the `pages/404.vue` page, with status 404.
-- **A single-page app** (a plain Vite build with `index.html`). A request gets the file at its path, or else `index.html`.
-
-The build's own files are never served: `manifest.json`, `routes.json`, `.weft-build` and `/pages/…`.
-
-For a page build, Serve also:
-
-- sends the stored brotli or gzip variant the request accepts best, with `Vary: Accept-Encoding`. It compresses nothing per request;
-- gives every page and file the build's strong `ETag`, and a matching `If-None-Match` gets `304`;
-- caches files named by a hash for a year (`immutable`) and revalidates everything else (`no-cache`);
-- sends `103 Early Hints` first for a page with fonts, a linked stylesheet or island scripts;
-- answers only `GET` and `HEAD`. Anything else gets `405` with `Allow: GET, HEAD`.
-
-Serve panics at start, in one sentence naming the file, if the build is incomplete. Fix the build, not the server.
-
-Check it:
-
-```sh
-curl http://localhost:8080/api/hello
-curl -sI -H 'Accept-Encoding: br' http://localhost:8080/
-```
-
-The page should come back with `Content-Encoding: br` and an `ETag`.
+Check it after `weft build` and `./myapp`: `curl -sI -H 'Accept-Encoding: br' http://localhost:8080/` shows `Content-Encoding: br` and an `ETag`.
 
 ## Files from disk
 
-Some files should not go into the binary: downloads, media, anything that changes between releases. Serve a folder for them:
+For downloads and media that do not belong in the binary, open the folder in `main.go` and give it to `Serve`:
 
 ```go
 files, err := os.OpenRoot("/data/files")
 if err != nil {
 	log.Fatal(err)
 }
-handler := weft.Serve(dist, nil, weft.WithFiles("/files/", files.FS()))
+if err := server.Serve(dist, warp.WithFiles("/files/", files.FS())); err != nil {
+	log.Fatal(err)
+}
 ```
 
-- The prefix starts and ends with `/`. With `/`, files are served at their own paths.
-- Open the folder with `os.OpenRoot`, so a symlink added later cannot lead out of it.
-- Each file is read once at start for its ETag and type, and its bytes are read from disk on each request.
-- A file changed since the start gets `500`, and a new file is not served. Restart after you change the folder.
-- Serve panics if the folder holds a symlink or a dotfile, or if a path is also a page or file of the build, or is under `/api/`.
+The prefix starts and ends with `/`. Each file is read once at start for its ETag; one changed since gets 500, a new one is not served. Serve panics if the folder holds a symlink, a dotfile, or a path the build or `/api/` has.
 
 ## One binary
 
 ```sh
-pnpm --filter hello build
-CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o hello-site ./hello
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o hello-site ./hello
+weft build                                     # the pages into web/dist, then ./<name>
+GOOS=linux GOARCH=arm64 weft build -o myapp    # for a Linux server on arm64
 ```
 
-Always build the pages before `go build`, because the binary embeds `dist/` as it is at that moment. The binary needs no Node and no files beside it. It runs on `FROM scratch`:
+`weft build` builds the pages first, since the binary embeds `web/dist`, then the binary with `-trimpath -ldflags "-s -w"`, and `CGO_ENABLED=0` unless the environment sets it. It needs no Node and no files beside it, and runs on `FROM scratch`:
 
 ```dockerfile
-FROM golang:1.26 AS build
-WORKDIR /src
-COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/hello-site ./hello
-
 FROM scratch
-COPY --from=build /out/hello-site /hello-site
+COPY myapp /myapp
 USER 65534:65534
 EXPOSE 8080
-ENTRYPOINT ["/hello-site"]
+ENTRYPOINT ["/myapp"]
 ```
 
-Build the image from the repository root with `hello/dist` already built. Put `**/node_modules` in `.dockerignore`.
+Build the image in the app's folder, from a binary built for its system, with a `.dockerignore` of `*` and `!myapp`.
 
 ## The weft command
 
-```sh
-curl -fsSL https://weft.base.al/install | sh
-weft version
-weft update --check
-weft update --version 0.0.2
-```
-
-- The installer reads `WEFT_VERSION`, `WEFT_BIN_DIR` (default `$HOME/.local/bin`) and `WEFT_BASE`.
-- `weft update` checks the archive against `SHA256SUMS` and swaps the binary in place.
-- A development build (`0.0.0-dev`) refuses to update.
+`curl -fsSL https://weft.base.al/install | sh` installs it (`WEFT_VERSION`, `WEFT_BIN_DIR`, `WEFT_BASE`). `weft update` moves to the latest release; `--check` only looks, `--version 0.0.2` picks one.
 
 ## Do not
 
-- Add a Go dependency the app does not need. Go: use the standard library and `github.com/flakerimi/weft`; add a dependency only for what the standard library cannot do, such as a database driver. The `weft` package itself uses only the standard library.
-- Compress, render or hash anything per request. Everything comes from the build's manifest.
-- Embed releases or large media. Serve them with `WithFiles`.
+- Add a Go dependency the app does not need. Go: use the standard library and `github.com/flakerimi/weft/warp`; add a dependency only for what the standard library cannot do, such as a database driver.
+- Register a module from `init`, write `/api` in a route's path, or answer an error with JSON of your own.
+- Compress, render or hash anything per request, or embed large media.
 - Run `scripts/publish-site.sh`, `scripts/rollback-site.sh` or `lisa` for weft.base.al without `--dry-run`. Publishing that site is the owner's step.
 
 ## Not yet
 
-These are planned but not built (see https://weft.base.al/docs/coming-next):
-
-- `weft deploy`;
-- `weft gen` and the Go-to-Vue contract: `weft.Validate`, `weft.Resource[T]` and the wire format;
-- `weft.Auth` and `weft.Require`;
-- `weft.SSE` with `useLive`.
-
-Today an API is plain `net/http`.
+Planned, not built (see https://weft.base.al/docs/coming-next): `weft gen` and types from Go; `warp/data`, list queries and `unique` checked; `auth` and `mail`; `weft scaffold`; `storage`, `events` and `live`; `jobs`, `i18n`, `middleware`, `docs`; `weft deploy`. Today write TypeScript types by hand, and store data with `database/sql`.

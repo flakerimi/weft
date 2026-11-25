@@ -96,7 +96,7 @@ done
 # the bundle keeps it as go.mod.bundle and weft unpacks it as go.mod.
 cp go.mod "$out/weft/go/go.mod.bundle"
 cat > "$out/weft/go/version.go" <<GO
-// Package weft serves Weft applications: a Go binary that embeds its Vue frontend.
+// Package weft carries the Weft release a build belongs to; an app's Go code imports github.com/flakerimi/weft/warp.
 package weft
 
 // Version is the Weft release this build belongs to.

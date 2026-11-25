@@ -1,19 +1,19 @@
 ---
 title: Serving from Go
-description: What weft.Serve sends for each request, and how to serve files from disk beside the build.
-order: 22
+description: What warp.Serve sends for each request, and how to serve files from disk beside the build.
+order: 23
 ---
 
-On this page you learn what `weft.Serve` answers for each request, how it caches and compresses, and how to serve a folder from disk next to your pages. For the signatures, see the [Go package reference](../reference/go.md).
+On this page you learn what `warp.Serve` answers for each request, how it caches and compresses, and how to serve a folder from disk next to your pages. An app's `server.Serve(dist)` serves through it, with the app's API beside the pages; [Warp, the Go side](warp.md) covers the API. For the signatures, see the [Go package reference](../reference/go.md).
 
 ## Two kinds of build
 
-`weft.Serve(dist, api)` looks at `dist` once, when you call it:
+`warp.Serve(dist, api)` looks at `dist` once, when it is called, which for an app is when `server.Serve(dist)` starts:
 
 - **A page build**, which `weft-build-pages` writes: `dist` has `routes.json` and `manifest.json`. Serve reads every file into memory and answers each request from there.
 - **A single-page app**, which a plain Vite build writes: `dist` has an `index.html` and no route map. Serve sends its files as they are, and `index.html` for every other path, so your Vue router can handle it.
 
-Either way, paths under `/api/` go to `api`. Pass `nil` when you have no API; `/api/` paths then get a JSON 404.
+Either way, `/api` and the paths under it go to `api`, which for an app is its `app.Handler()`. With `api` nil they get a 404 in the error shape, `This app has no API.`
 
 ## A page build
 
@@ -56,35 +56,19 @@ Paths under `/app` get the app's `index.html`, except files under `/app/assets/`
 
 ## Files from disk
 
-Some files do not belong in the binary: downloads, large media, anything that changes between releases. `weft.WithFiles` serves a folder from disk under a prefix:
+Some files do not belong in the binary: downloads, large media, anything that changes between releases. `warp.WithFiles` serves a folder from disk under a prefix. Give it to `Serve` in the app's `main.go`:
 
 ```go
-// Command files serves the pages in dist, and the files of /data/files at /files/.
-package main
-
-import (
-	"embed"
-	"io/fs"
-	"log"
-	"net/http"
-	"os"
-
-	"github.com/flakerimi/weft"
-)
-
-//go:embed all:dist
-var site embed.FS
-
 func main() {
-	dist, err := fs.Sub(site, "dist")
-	if err != nil {
-		log.Fatal(err)
-	}
 	files, err := os.OpenRoot("/data/files")
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Fatal(http.ListenAndServe(":8080", weft.Serve(dist, nil, weft.WithFiles("/files/", files.FS()))))
+	server := warp.New(warp.FromEnv())
+	server.Use(app.Modules()...)
+	if err := server.Serve(dist, warp.WithFiles("/files/", files.FS())); err != nil {
+		log.Fatal(err)
+	}
 }
 ```
 

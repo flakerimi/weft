@@ -9,7 +9,7 @@ import.
 
 | Folder | What it is |
 |---|---|
-| [`weft/`](weft) | The Weft site: `pages/index.vue` with `@weft/ui`, the counter as a Vapor island, built by `weft-build-pages` and embedded in a Go binary that serves it with `weft.Serve` (like `site-src`). Part of the pnpm workspace. |
+| [`weft/`](weft) | The Weft site: `pages/index.vue` with `@weft/ui`, the counter as a Vapor island, built by `weft-build-pages` and embedded in a Go binary that serves it with `warp.Serve` (like `site-src`). Part of the pnpm workspace. The results below label its server `weft binary (weft.Serve)`, as the results file recorded it before `weft.Serve` became `warp.Serve`. |
 | [`astro/`](astro) | The Astro site: `/` with the counter as a Vue island (`@astrojs/vue`, `client:idle`), and `/no-framework/` with the counter as a plain `<script>` in an `.astro` component. Not part of the workspace: its own `package.json` and `package-lock.json`. |
 | [`static/`](static) | A plain Go static file server: `net/http.FileServer`, text gzipped on the fly. |
 | [`load/`](load) | The load generator and TTFB timer, a Go `main` (standard library only), run as its own process. |
@@ -100,7 +100,7 @@ The numbers in the prose below are from the run in the table (2026-11-20).
   real (the quartile ranges do not overlap) but too small to matter on a real network.
 - **Requests per second** is mostly a server result, not a framework one: Weft answers from memory with the brotli
   the build stored, while `astro preview` and the Go static server gzip every response as they send it. That is
-  the point of `weft.Serve`, but an Astro site behind a server that serves pre-compressed files from memory
+  the point of `warp.Serve`, but an Astro site behind a server that serves pre-compressed files from memory
   might narrow this gap (not measured).
 - **What went over the wire**: Weft sent brotli; both Astro servers sent gzip, which is why Astro's wire bytes are
   a little above its brotli column.
@@ -125,7 +125,7 @@ does, in the side experiment.
 A labelled side experiment, run after the main run on the same machine, with no change to Weft's code
 ([`tools/lcp-experiment.mjs`](tools/lcp-experiment.mjs); every run is in the results JSON under
 `side_experiments.lcp_script_placement`). Hand-edited copies of the built Weft page and the two Astro pages are all
-served by `static/` (gzip on the fly, so here Weft's files go out as gzip, not the brotli `weft.Serve` sends). Each
+served by `static/` (gzip on the fly, so here Weft's files go out as gzip, not the brotli `warp.Serve` sends). Each
 page gets five Lighthouse mobile runs, interleaved, with the default simulated throttling (Lantern) and with
 DevTools throttling, where the page really loads on a throttled network and CPU. LCP, median [min–max]:
 

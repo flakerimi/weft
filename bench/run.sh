@@ -1,7 +1,7 @@
 #!/bin/sh
 # Weft against Astro: build both landings, serve them, measure them.
 #
-#   Weft   bench/weft, built by Weft and served by its own binary (weft.Serve)
+#   Weft   bench/weft, built by Weft and served by its own binary (warp.Serve)
 #   Astro  bench/astro, a production build, served by `astro preview` and by a
 #          plain Go static file server with gzip on the fly (bench/static)
 #
