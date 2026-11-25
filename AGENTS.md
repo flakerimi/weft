@@ -10,6 +10,9 @@ Weft is one UI system for Go and Vue apps. It has Vapor components, a page build
 | --- | --- |
 | `version.go` | The root Go package (`github.com/flakerimi/weft`): only `Version`, which a release sets with `-X`. |
 | `warp/` | Warp, the Go side of an app (`github.com/flakerimi/weft/warp`): `App` and its modules, typed routes, validation, the error shape, `.env` configuration, and `Serve` and `WithFiles` for the page build. Standard library only. |
+| `warp/data/` | The data layer (`github.com/flakerimi/weft/warp/data`): `data.Module()` opens the database named by `DB_DRIVER` and `DB_URL` through `database/sql` at start and makes the tables; `Store[T]` keeps a model that embeds `data.Record`; `Tx` runs a transaction. SQLite only, behind a small dialect type. It imports no driver: the app does. |
+| `warp/warptest/` | The test kit for apps and modules built on Warp: an app started from a map of settings, and a client that keeps cookies and decodes answers and the error shape. |
+| `dbtest/` | A Go module of its own (`github.com/flakerimi/weft/dbtest`) holding every test that needs a real database, so the SQLite driver `modernc.org/sqlite` is its dependency and never `warp`'s. |
 | `cmd/weft/` | The `weft` command: `create`, `dev`, `build`, `upgrade`, `catalog`, `version`, `update`. A release stages the bundle (the packages, the Go package, the catalogue and the template) into `cmd/weft/bundle/` for `go:embed`; in git that folder holds only `README.md`, and a development build reads a bundle from the folder `$WEFT_BUNDLE` names. |
 | `packages/themes/` | Tokens and the `neutral`, `lisa` and `weft` themes. `dist/` is generated. |
 | `packages/ui/` | `@weft/ui`. Components are in `src/<group>/<Name>.vue` with `<Name>.docs.md`, the accessibility composables in `src/headless/`, examples in `examples/<Name>/`, tests in `test/`. |
@@ -39,6 +42,7 @@ scripts/site.sh build
 pnpm --filter weft-bench build
 go vet ./...
 go test ./...
+(cd dbtest && go test ./...)
 ```
 
 - `scripts/site.sh` and `scripts/playground.sh` without `build` also run the server, on `:8080`.
@@ -60,7 +64,7 @@ Briefs and reports for a plan's tasks live in `.superpowers/sdd/<plan>/`, which 
 
 - **Vapor only.** Every component is `<script setup vapor lang="ts">`. Never use the Options API, `getCurrentInstance`, `app.config.globalProperties`, `v-memo` or VNode render functions, and never install `vaporInteropPlugin`.
 - **Pinned versions.** `vue` is pinned to exactly `3.6.0-rc.16`. Before adding any dependency, run `npm view <pkg> version` and use the latest.
-- **Go uses the standard library only.** Nothing is compressed, rendered or hashed per request: it all comes from the build's manifest.
+- **Go uses the standard library only.** Nothing is compressed, rendered or hashed per request: it all comes from the build's manifest. The one exception is the nested modules `dbtest/` and, later, `examples/shop/`, which may require a database driver; `warp/` never imports one, not even in a test.
 - **Styles use only `--weft-*` tokens**, each with a fallback. New tokens go in `@weft/themes`.
 - **Components adapt from inside**, through `useWeft()` and `useWidth()`. Never write a `Mobile*` variant, and never check device names.
 - **Error messages** are one sentence that names the file and says what to do.

@@ -372,6 +372,13 @@ func (a *App) Wrap(mw func(http.Handler) http.Handler) {
 	a.wraps = append(a.wraps, mw)
 }
 
+// Mistake records a registration mistake found by a package outside the core,
+// such as a module that checks its own types: one sentence that names the
+// thing and says what to do. It is reported with the others by Err, Start and
+// Serve, with "warp: " in front. A mistake recorded after the app started is
+// also logged, since nothing reads Err then.
+func (a *App) Mistake(format string, args ...any) { a.fail(format, args...) }
+
 // fail records a registration mistake, with warp: in front. One recorded
 // after the app started is logged too, since Run has checked Err by then.
 func (a *App) fail(format string, args ...any) {

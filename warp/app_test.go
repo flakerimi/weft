@@ -562,3 +562,46 @@ func TestProvideAndNeed(t *testing.T) {
 		}
 	})
 }
+
+func TestMistake(t *testing.T) {
+	app := New(Config{})
+	app.Use(inModule("products", func(app *App) {
+		app.Mistake("products: %s does not embed data.Record; embed it, since a store needs an id and two times.", "Product")
+	}))
+	app.Handle("x", text("x"))
+	want := strings.Join([]string{
+		`warp: products: Product does not embed data.Record; embed it, since a store needs an id and two times.`,
+		`warp: route "x" has a path that does not start with /; write it as "/x".`,
+	}, "\n")
+	if got := errText(app.Err()); got != want {
+		t.Fatalf("Err() =\n%s\nwant\n%s", got, want)
+	}
+	if err := app.Start(context.Background()); errText(err) != want {
+		t.Fatalf("Start = %v, want the mistakes", err)
+	}
+
+	// A mistake refuses a description too, whatever the configuration.
+	out := describeTo(t)
+	app = New(ConfigFrom(map[string]string{"PORT": "nope"}))
+	app.Mistake("a store's table is named %q; use lower-case letters, digits and _, such as order_items.", "Order Items")
+	if err, want := app.Serve(nil), `warp: a store's table is named "Order Items"; use lower-case letters, digits and _, such as order_items.`; errText(err) != want {
+		t.Fatalf("Serve = %q, want %q", errText(err), want)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("Serve printed %q", out)
+	}
+
+	// After start it is logged as well, since nothing reads Err then.
+	logs := captureLog(t)
+	app = New(Config{})
+	if err := app.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	app.Mistake("late: say what to do.")
+	if want := "warp: late: say what to do."; errText(app.Err()) != want || !strings.Contains(logs.String(), want) {
+		t.Fatalf("Err() = %q, log %q", errText(app.Err()), logs)
+	}
+	if err := app.Stop(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
