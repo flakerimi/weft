@@ -38,11 +38,31 @@ func filesUnder(t *testing.T, dirs ...string) map[string]string {
 	return out
 }
 
+// movingToWarp is the heading of the one section of cli.md that names
+// weft.Serve: how to move an app made before warp.Serve.
+const movingToWarp = "#### Moving an app to Warp\n"
+
 // The root package holds only Version now: Go code serves with warp.Serve,
 // so no doc, agent file or skill names weft.Serve or weft.WithFiles, and the
-// Warp guide exists.
+// Warp guide exists. cli.md's section on moving an app to Warp is the one
+// exception.
 func TestDocsNameWarpServe(t *testing.T) {
+	cli := "content/docs/reference/cli.md"
 	for p, text := range filesUnder(t, "content/docs", "agents", "../skills") {
+		if p == cli {
+			before, after, ok := strings.Cut(text, movingToWarp)
+			if !ok {
+				t.Errorf("%s has no %q section; keep how to move an app to Warp under that heading", p, strings.TrimSpace(movingToWarp))
+			}
+			// The section ends at the next heading of its level or higher.
+			end := len(after)
+			for _, next := range []string{"\n## ", "\n### ", "\n#### "} {
+				if i := strings.Index(after, next); i >= 0 && i < end {
+					end = i
+				}
+			}
+			text = before + after[end:]
+		}
 		for _, old := range []string{"weft.Serve", "weft.WithFiles"} {
 			if strings.Contains(text, old) {
 				t.Errorf("%s names %s; write warp.%s, as the warp package has it", p, old, strings.TrimPrefix(old, "weft."))

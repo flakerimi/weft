@@ -17,7 +17,7 @@ Commands:
   build      build the pages, then the app's binary (-o <file>)
   catalog    list the components, print one (weft catalog <Name>) or search (--find)
   create     make an app (weft create <name>)
-  dev        run the app, restarting Go when a .go file changes (--port n)
+  dev        run the app, restarting Go when a .go file or .env changes (--port n)
   update     update weft to the latest release (--check, --version X)
   upgrade    move the app to this weft's Weft version (--no-install)
   version    print the Weft version
@@ -80,7 +80,7 @@ Runs an app while you work. It builds the Go code with the `dev` tag into `.weft
 
 Every 300 ms it looks for a changed `.go` file outside `.weft/`, `.git/`, `node_modules/` and `web/`, and for a changed `.env` in the app's folder. When one changed it builds again and, if the build succeeds, replaces the running Go server. A failed build prints the compiler's output, and the last build keeps serving `/api` until you save the fix. A rebuilt server that stops by itself, such as one that panics as it starts, prints `weft dev: the Go server stopped after the restart; fix it and save again.`, and the next save builds and starts it again. A folder it may not read is skipped, and named once. A change under `web/` reloads the browser and needs no build; a change to `web/vite.config` needs `weft dev` to start again. The Go server's own output is passed through. `weft dev` runs it with `PORT` set to a free port, `HOST=127.0.0.1` and `WEFT_DEV_PARENT=1`, which win over your environment and the app's `.env`: so the Go server listens on `127.0.0.1` only and prints no address, and the one address shown is the page server's, which sends `/api` on.
 
-The Go server must listen on the port in the `PORT` variable. If it does not answer there within 30 s of starting, `weft dev` stops both servers and says `weft dev: the Go server did not answer within 30 s; make main.go listen on the port in the PORT variable.`, with exit status 1. The page server has the same 30 s, after which it says `weft dev: the page server did not answer within 30 s; see its output above.`
+The Go server must listen on the port in the `PORT` variable, which warp's `Serve` reads. If it does not answer there within 30 s of starting, `weft dev` stops both servers and says `weft dev: the Go server did not answer within 30 s; check that main.go serves the app (warp's Serve reads PORT), and run weft dev again.`, with exit status 1. The page server has the same 30 s, after which it says `weft dev: the page server did not answer within 30 s; see its output above.`
 
 Ctrl-C, SIGTERM, closing the terminal (SIGHUP) or `Ctrl-\` (SIGQUIT) stops both servers, with exit status 0. Killed so that it cannot stop them, as by SIGKILL, it leaves neither running: each server's standard input is a pipe `weft dev` holds open, and each exits when it ends. If the page server, or the Go server it started with, stops by itself, `weft dev` stops the other and says `weft dev: the page server stopped; see its output above.` (or `the Go server`), with exit status 1. A port in use is the sentence `weft dev: port <n> is in use; stop what is using it or pass --port.`, checked before anything else, so nothing is installed or started. Wrong usage exits with status 2.
 
@@ -113,6 +113,18 @@ Moves an app to the Weft version of the `weft` you run: it rewrites `weft.versio
 | Flag | What it does |
 | --- | --- |
 | `--no-install` | Skip `pnpm install` |
+
+#### Moving an app to Warp
+
+An app made by Weft 0.0.6 or before calls `weft.Serve` in `main.go`, which is now `warp.Serve`, so once upgraded it does not compile (`undefined: weft.Serve`). `weft upgrade` says so after its output, and still exits 0: `weft upgrade: main.go still calls weft.Serve, which moved; see https://weft.base.al/docs/reference/cli#moving-an-app-to-warp for the two lines to change.` The smallest change is two lines of `main.go`:
+
+```go
+	"github.com/flakerimi/weft/warp" // was "github.com/flakerimi/weft"
+
+		return warp.Serve(dist, api.Handler()) // was weft.Serve(dist, api.Handler())
+```
+
+The `listen` function stays as it is. To use modules and typed routes, build a `warp.App` as the `main.go` of a new app does (see [Warp, the Go side](../guides/warp.md)).
 
 ### weft catalog
 

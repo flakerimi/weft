@@ -4,7 +4,7 @@ description: An app's modules, its typed routes and their validation, the one er
 order: 22
 ---
 
-On this page you learn how the Go half of an app works: the app and its modules, routes that are typed Go functions, the rules that check their input, the one shape every error has, and the configuration in `.env`. Warp is the package `github.com/flakerimi/weft/warp`, and uses only Go's standard library. What it does with the built pages is in [Serving from Go](go-serving.md).
+On this page you learn how the Go half of an app works: the app and its modules, typed routes and the rules that check their input, the one error shape, and the configuration in `.env`. Warp is the package `github.com/flakerimi/weft/warp`, and uses only Go's standard library. What it does with the built pages is in [Serving from Go](go-serving.md).
 
 ## An app and its modules
 
@@ -96,7 +96,6 @@ type module struct{ stop context.CancelFunc }
 func (*module) Name() string                 { return "jobs" }
 func (*module) Register(app *warp.App) error { return nil }
 
-// Start runs before the app serves.
 func (m *module) Start(ctx context.Context) error {
 	work, stop := context.WithCancel(context.Background())
 	m.stop = stop
@@ -104,14 +103,13 @@ func (m *module) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop runs after the app has stopped serving.
 func (m *module) Stop(ctx context.Context) error {
 	m.stop()
 	return nil
 }
 ```
 
-`run` is the module's own work, which returns when `work` is cancelled.
+`run` is the module's work, which returns when `work` is cancelled.
 
 ## Typed routes
 
@@ -174,7 +172,7 @@ func remove(ctx context.Context, in ShowIn) (warp.None, error) {
 
 `GET /api/products/1` answers `{"id":1,"name":"Lamp","price":12}`. The paths are the standard library's `http.ServeMux` patterns, wildcards included.
 
-The output is written as JSON, with status 200. `warp.Post` answers 201 instead, and the option `warp.Status(200)` changes it, as in `warp.Post(app, "/search", search, warp.Status(200))`. An output of `warp.None` answers 204 with no body. An input of `warp.None` reads nothing from the request.
+The output is written as JSON, with status 200. `warp.Post` answers 201 instead, and the option `warp.Status(200)` changes it: `warp.Post(app, "/search", search, warp.Status(200))`. An output of `warp.None` answers 204 with no body. An input of `warp.None` reads nothing from the request.
 
 ### The three tags
 
@@ -186,13 +184,13 @@ Every exported field of an input has exactly one of three tags, which says where
 | `query:"name"` | The query string | `string`, `bool`, any int, uint or float, a pointer to one of them, or `[]string` |
 | `path:"name"` | The wildcard `{name}` of the path | `string`, `bool`, any int, uint or float |
 
-The body is read first, then the query, then the path, so a body can never set a query or path field. A struct inside a body field is read from the body too: its fields need `json` tags, and take no `query` or `path` tag.
+The body is read first, then the query, then the path. The body is decoded into the `json` fields alone, so it cannot set a query or path field. A struct inside a body field is read from the body too: its fields need `json` tags, and take no `query` or `path` tag.
 
 In the query, a pointer stays nil when the key is absent, and a `[]string` gets every value of a repeated key (`?tag=a&tag=b`). A key that is present but empty, such as `?page=`, counts as absent for a number or a bool.
 
 ### JSON bodies only
 
-A body that is not empty must be sent with `Content-Type: application/json`, or a type that ends in `+json`; anything else is answered 415. A page on another site can send a form or `text/plain` with the visitor's cookies and no preflight, and taking JSON alone keeps it from writing to a typed route. An empty body reads as `{}`.
+A body that is not empty must be sent with `Content-Type: application/json`, or a type that ends in `+json`; anything else is answered 415. A page on another site can send a form or `text/plain` with the visitor's cookies and no preflight; taking JSON alone keeps it from sending a typed route a body. It does not protect a route that takes no body: `POST /api/like/7` with no body is answered whatever its `Content-Type`. An empty body reads as `{}`.
 
 ### When the input is wrong
 
@@ -202,22 +200,23 @@ The handler is not called, and the answer is in the [error shape](#errors):
 | --- | --- | --- |
 | A body larger than `MAX_BODY_MB` | 413 `too_large` | `The body is larger than 1 MB.` |
 | A body that is not sent as JSON | 415 `unsupported_media_type` | `Send the body as application/json.` |
+| A body nested more than 64 levels deep | 400 `bad_request` | `The body is nested more than 64 levels deep.` |
 | A body that is not JSON, or has more after the value | 400 `bad_request` | `The body is not valid JSON.` |
 | A body that is JSON but not an object | 400 `bad_request` | `The body must be a JSON object.` |
 | A body field the input does not have | 400 `bad_request` | `The body has the field "nme", which this route does not take.` |
 | A body field of the wrong type | 400 `bad_request` | `1 field has the wrong type.`, with `price: Send a number.` (or `Send text.`, `Send true or false.`, `Send a list.`, `Send an object.`) |
+| A value its field's own decoder refuses (`"tomorrow"` for a `time.Time`) | 400 `bad_request` | `The body has a value its field cannot take.` |
 | A query value that does not convert | 400 `bad_request` | `1 field has the wrong type.`, with `page: Send a whole number.` (or `Send a number.`, `Send true or false.`) |
 | A path value that does not convert | 404 `not_found` | `Nothing is at /api/products/abc.` |
 | A rule that fails | 422 `validation` | `1 field needs attention.`, with a message per field (see [Validation](#validation)) |
 
-A field the body does not have is refused because a misspelt field that is dropped without a word is how an update loses data.
+A field the body does not have is refused: a misspelt field dropped without a word is how an update loses data.
 
 ### The request and the answer's headers
 
 A handler gets the request it is answering, and headers to send with its answer, from its context:
 
 ```go
-// whoami reads the request and sets a header on the answer.
 func whoami(ctx context.Context, _ warp.None) (Product, error) {
 	r := warp.Request(ctx)
 	warp.ResponseHeader(ctx).Set("Cache-Control", "no-store")
@@ -237,7 +236,7 @@ warp: GET /products/{id}: BadIn.Email is tagged json, and GET reads no body; tag
 warp: GET /products/{id}: BadIn.Email has the rule "emial", which warp does not know; use required, email, url, min=, max=, enum= or unique.
 ```
 
-Besides those, a registration is refused when a field has two of the three tags, a `json` tag has no name or a name that is not letters, digits, `_`, `-` and `.`, two fields have the same key, a `path` tag names no wildcard of the path or a wildcard has no field, a query or path field has a type it cannot be filled into, a struct inside a body field has a field without a `json` tag or with a `query` or `path` tag, the input embeds a pointer to a struct, a rule does not fit its field, `warp.Status` is given a code outside 100 to 599, a path starts with `/api/`, or the same route is registered twice.
+Besides those, a registration is refused when a field has two of the three tags, a `json` tag has no name or a name that is not letters, digits, `_`, `-` and `.`, two fields have the same key, a `path` tag names no wildcard of the path or a wildcard has no field, a query or path field has a type it cannot be filled into, a struct inside a body field has a field without a `json` tag or with a `query` or `path` tag, the input embeds a pointer to a struct, or a struct with a `json` name or `json:"-"`, a rule does not fit its field, `warp.Status` is given a code outside 200 to 599, a path starts with `/api/`, or the same route is registered twice.
 
 ## Validation
 
@@ -253,11 +252,12 @@ Rules go in a field's `warp` tag, separated by commas. They run on every typed i
 | `enum=a\|b` | text | it is not one of them | `Choose one of: a, b.` |
 | `unique` | text, a number | never: the rule is accepted, and nothing checks it yet (see [Coming next](../coming-next.md)) | |
 
-- Every rule but `required` passes an empty value, so an optional field may be left out: an empty `email` passes, and a 0 passes `min=1`. Write `required,min=1` to refuse 0.
-- `required` on a pointer passes whenever the pointer is not nil, even when it points at a zero: a pointer is how an input says a value was sent. The other rules apply to what it points at.
-- Characters are counted as letters, not bytes: `çikë` is 4.
+- Every rule but `required` passes an empty value, so an optional field may be left out: an empty `email` passes, and a 0 passes `min=1`.
+- A pointer that is not nil was sent: `required` passes, and the other rules check what it points at, so a `*int` holding 0 fails `min=1`. A pointer field is how an input tells "sent as 0" from "not sent".
+- Characters are counted in Unicode code points, not bytes: `çikë` is 4.
 - Only the first rule a field fails is reported, in the order of the tag.
-- A field's key is its `json`, `query` or `path` name. A field of a struct inside is `address.city`, and of a list of structs `lines.0.sku`.
+- A field's key is its `json`, `query` or `path` name. A field of a struct inside is `address.city`, of a list of structs `lines.0.sku`, and of a map's value `by_name.x.sku`.
+- At most 100 fields are listed, with 16 KiB of keys in all and none over 1 KiB, in field, index and sorted key order. When one is left out the message is `More fields need attention than are listed; the first N are listed.`, or with none listed `More fields need attention than can be listed.`
 
 For the body `{"name":"","price":-1,"plan":"gold"}`, `POST /api/products` answers 422 with:
 
@@ -296,7 +296,7 @@ The app answers some errors itself:
 - a path under `/api` that no route has: 404 `not_found`, `Nothing is at /api/nope.`;
 - a method a route does not take: 405 `method_not_allowed`, `/api/products/1 does not take PUT; use DELETE or GET.`, with an `Allow` header.
 
-`warp.WriteError(w, r, err)` writes an error in this shape from a plain handler, and `warp.WriteJSON(w, status, v)` writes a value as JSON, a nil slice as `[]`.
+`warp.WriteError(w, r, err)` writes an error in this shape from a plain handler, and `warp.WriteJSON(w, status, v)` a value as JSON, a nil slice as `[]`. An `*Error` with a status outside 400 to 599, or a value JSON cannot hold, such as a NaN, is answered as the 500.
 
 ## Configuration
 
@@ -310,7 +310,7 @@ The app answers some errors itself:
 
 A module reads its own keys with `app.Config().Get("KEY")`, which is `""` when it is unset, and `app.Config().On("KEY")`, which is true for `on`, `true`, `1` and `yes`, in any case.
 
-`.env` has one `KEY=value` per line. Blank lines and lines that start with `#` are skipped, and a leading `export ` is dropped. A value in single or double quotes is what is between them; an unquoted value is trimmed and ends at ` #`. There is no `${}` expansion. A line it cannot read, or a `PORT` or `MAX_BODY_MB` that is not a number it takes, stops the app with one sentence, such as `PORT is "abc"; set it to a number from 1 to 65535 in .env or the environment.`
+`.env` has one `KEY=value` per line. Blank lines and lines that start with `#` are skipped, and a leading `export` and space or tab is dropped. A value in single or double quotes is what is between them; an unquoted value is trimmed and ends at ` #`. There is no `${}` expansion. A line it cannot read, an `.env` it cannot open, or a `PORT` or `MAX_BODY_MB` that is not a number it takes, stops the app with one sentence, such as `PORT is "abc"; set it to a number from 1 to 65535 in .env or the environment.`
 
 `weft create` writes `.env`, which git ignores, and `.env.sample`, which is committed. `weft dev` sets `PORT` and `HOST=127.0.0.1` itself, and restarts the Go server when `.env` changes. `warp.ConfigFrom(map[string]string{...})` makes a configuration from a map, for tests.
 

@@ -73,9 +73,13 @@ Phase W6:
 
 Phase W7: `jobs`, for work on a schedule; `i18n`, for translated fields; `middleware`, for request logging, security headers, CORS, a rate limit and API keys; and `docs`, an OpenAPI document at `/api/openapi.json`.
 
-## Body errors
+## Errors
 
-When a JSON body has both a field of the wrong type and, inside a nested object, a field the route does not take, the unknown field is reported only when it comes before the wrong-typed value; otherwise the answer names the wrong type. The Warp design gives this no phase.
+- When a JSON body has both a field of the wrong type and, inside a nested object, a field the route does not take, the unknown field is reported only when it comes before the wrong-typed value; otherwise the answer names the wrong type.
+- A wrong-typed value inside a list or map is reported without its index or key, as `lines.qty`, where validation says `lines.1.sku`. The form schemas of phase W2 need the index.
+- A taken port is named as taken (`warp: port 8080 is taken; …`) on macOS and Linux only; elsewhere it is the general `cannot listen` sentence.
+
+The Warp design gives the first and the last no phase.
 
 ## The agent kit
 

@@ -46,7 +46,7 @@ func (module) Register(app *warp.App) error {
 - Paths have no `/api`; the app adds it. `Get`, `Post`, `Put`, `Patch`, `Delete`. 200, `Post` 201, `warp.Status(200)` to change it; `warp.None` as input reads nothing, as output answers 204.
 - Each exported input field has exactly one tag: `json` (the body: POST, PUT, PATCH only), `query` (text, bool, numbers, a pointer to one, `[]string`) or `path` (a `{name}` wildcard).
 - A body must be `application/json` (else 415), one JSON object, with no field the input lacks (400). A path value that does not convert is 404.
-- Rules: `required`, `email`, `url`, `min=N`, `max=N`, `enum=a|b`, `unique` (not checked yet). Every rule but `required` passes an empty value; `required` on a pointer passes when it is not nil. A failure is 422 with a message per field.
+- Rules: `required`, `email`, `url`, `min=N`, `max=N`, `enum=a|b`, `unique` (not checked yet). Every rule but `required` passes an empty value; a pointer that is not nil was sent, so `required` passes and the rest check what it points at. A failure is 422, listing up to 100 fields.
 - A mistake in a route (a field with no tag, a `path` tag with no wildcard, an unknown rule) is one sentence from `app.Err()`, and `Serve` refuses to start.
 - `warp.Request(ctx)` is the request, `warp.ResponseHeader(ctx)` the answer's headers. `app.Handle("GET /export.csv", h)` mounts a plain handler; `app.Wrap(mw)` wraps every API request, `warp.With(mw)` one route.
 
@@ -80,13 +80,13 @@ if err := server.Serve(dist, warp.WithFiles("/files/", files.FS())); err != nil 
 }
 ```
 
-The prefix starts and ends with `/`. Each file is read once at start for its ETag; one changed since gets 500, a new one is not served. Serve panics if the folder holds a symlink, a dotfile, or a path the build or `/api/` has.
+The prefix starts and ends with `/`. Each file is read once at start for its ETag; one changed since gets 500, a new one is not served. Serve panics if the folder holds a symlink, a dotfile, or a path the build or `/api/` has. Under `weft dev`, `dist` is nil, so the folder is not served.
 
 ## One binary
 
 ```sh
 weft build                                     # the pages into web/dist, then ./<name>
-GOOS=linux GOARCH=arm64 weft build -o myapp    # for a Linux server on arm64
+GOOS=linux GOARCH=arm64 weft build -o myapp-linux-arm64
 ```
 
 `weft build` builds the pages first, since the binary embeds `web/dist`, then the binary with `-trimpath -ldflags "-s -w"`, and `CGO_ENABLED=0` unless the environment sets it. It needs no Node and no files beside it, and runs on `FROM scratch`:
@@ -99,7 +99,7 @@ EXPOSE 8080
 ENTRYPOINT ["/myapp"]
 ```
 
-Build the image in the app's folder, from a binary built for its system, with a `.dockerignore` of `*` and `!myapp`.
+Build the image from a binary built for its system, named `myapp`, with a `.dockerignore` of `*` and `!myapp`.
 
 ## The weft command
 

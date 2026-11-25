@@ -17,20 +17,20 @@ func (a *App) Wrap(mw func(http.Handler) http.Handler)
 func (a *App) Err() error
 func (a *App) Routes() []Route
 func (a *App) Handler() http.Handler
-func (a *App) Serve(dist fs.FS, opts ...Option) error
-func (a *App) Run(ctx context.Context, ln net.Listener, dist fs.FS, opts ...Option) error
+func (a *App) Serve(dist fs.FS, opts ...ServeOption) error
+func (a *App) Run(ctx context.Context, ln net.Listener, dist fs.FS, opts ...ServeOption) error
 ```
 
 - `New` makes an app configured by `cfg`, with no modules. The zero `Config` works: port 8080, a 1 MB body limit.
 - `Config` returns the configuration, with its defaults filled in.
-- `Use` calls each module's `Register` at once, in order. Two modules with one name, a `Register` that fails, and a `Use` after the app started are mistakes.
+- `Use` calls each module's `Register` at once, in order. Two modules with one name, a `Register` that fails, and a `Use`, `Handle` or `Wrap` after the app started are mistakes; one made after the start is also logged, since `Run` has checked `Err` by then.
 - `Handle` mounts `h` at `pattern`: a method, a space and a path without `/api` (`"GET /export.csv"`), or a path alone for every method.
 - `Wrap` puts `mw` around every API request; the first given is the outermost.
-- `Err` returns every mistake so far, the configuration's first, joined; nil when there is none. Each is one sentence, starting `warp: `.
+- `Err` returns every mistake so far, the configuration's first, joined; nil when there is none. Each is one sentence; a registration mistake starts `warp: `, a configuration one does not.
 - `Routes` returns every route, in the order registered.
 - `Handler` is the API alone, at `/api/...`: a path no route has is a 404, a method a route does not take a 405 with `Allow`, and a panic a 500, all in the error shape.
-- `Serve` returns `Err()` if there is a mistake. Otherwise it listens on `Host` and `Port`, logs `listening on http://localhost:<port>`, and calls `Run` until SIGINT or SIGTERM. It returns nil after a clean stop. A taken port is `warp: port 8080 is taken; stop what uses it or set PORT in .env.` Under `weft dev` (`WEFT_DEV_PARENT=1`) it logs nothing and also stops when standard input closes.
-- `Run` does the same on `ln` until `ctx` ends: `Migrate` on every `Migrator`, then `Start` on every `Starter`, in order; it serves `dist` and the API through `Serve` (the API alone when `dist` is nil); when `ctx` ends it lets the requests in flight finish, for up to 10 seconds, then calls `Stop` on every `Stopper`, last first, with 10 seconds more. When a step fails, the modules already started are stopped.
+- `Serve` returns `Err()` if there is a mistake. Otherwise it listens on `Host` and `Port`, logs `listening on http://localhost:<port>`, and calls `Run` until SIGINT or SIGTERM. It returns nil after a clean stop. A taken port is `warp: port 8080 is taken; stop what uses it or set PORT in .env.` Once the first signal comes it stops taking them, so a second Ctrl-C ends the process at once. Under `weft dev` (`WEFT_DEV_PARENT=1`) it logs nothing and also stops when standard input closes.
+- `Run` does the same on `ln` until `ctx` ends: `Migrate` on every `Migrator`, then `Start` on every `Starter`, in order; it serves `dist` and the API through `Serve` (the API alone when `dist` is nil); when `ctx` ends it lets the requests in flight finish, for up to 10 seconds, then calls `Stop` on every `Stopper`, last first, with 10 seconds more. When a step fails, the modules already started are stopped. A client has 10 seconds to send a request's headers. A nil `ln` is `warp: Run needs a listener; call Serve, or pass one from net.Listen.`
 
 ## Module
 
@@ -62,7 +62,8 @@ func ResponseHeader(ctx context.Context) http.Header
 ```
 
 - Each registers `fn` at `/api` plus `path`. `In` is a struct whose fields are tagged `json`, `query` or `path`, or `None`; it is filled, checked by `Validate`, and given to `fn`. `Out` is answered as JSON: 200, 201 for `Post`, 204 with no body for `None`.
-- `Post`, `Put` and `Patch` read a JSON body, at most `MaxBodyBytes`, sent as `application/json` or a `+json` type. `Get` and `Delete` read none.
+- `Post`, `Put` and `Patch` read a JSON body, at most `MaxBodyBytes`, sent as `application/json` or a `+json` type, and nested at most 64 levels (`The body is nested more than 64 levels deep.`). A value its field's own decoder refuses, such as `"tomorrow"` for a `time.Time`, is `The body has a value its field cannot take.` `Get` and `Delete` read none. Taking JSON alone keeps another site from sending a route a body; it does not protect a route that takes none.
+- An input that embeds a pointer to a struct, or a struct with a `json` name or `json:"-"`, is a registration mistake.
 - `Request` returns the request a typed handler is answering, or nil outside one. On `POST`, `PUT` and `PATCH` its body has already been read.
 - `ResponseHeader` returns the headers its answer is sent with, whether it succeeds or fails.
 
@@ -76,7 +77,7 @@ func Status(code int) RouteOption
 ```
 
 - `With` puts `mw` around one route, inside every `Wrap`; the first given is the outermost.
-- `Status` sets the status a typed route answers with, from 100 to 599.
+- `Status` sets the status a typed route answers with, from 200 to 599; any other is a mistake.
 
 ## Route
 
@@ -96,7 +97,7 @@ One registered route, as `Routes` lists it. `Path` has `/api` in front; `In` and
 func Validate(v any) error
 ```
 
-Checks `v`, a struct or a pointer to one, against the `warp` tags of its fields, and of the structs inside it: `required`, `email`, `url`, `min=N`, `max=N`, `enum=a|b` and `unique`. It returns nil, or an `*Error` from `Invalid` naming each field that fails. Typed routes call it on every input.
+Checks `v`, a struct or a pointer to one, against the `warp` tags of its fields, and of the structs inside it: `required`, `email`, `url`, `min=N`, `max=N`, `enum=a|b` and `unique`. It returns nil, or an `*Error` from `Invalid` naming each field that fails, keyed as `address.city`, `lines.0.sku` or `by_name.x.sku`. A pointer that is not nil was sent: every rule applies to what it points at, even a zero, but `required` passes. At most 100 fields are listed, with 16 KiB of keys in all and none longer than 1 KiB, in field, index and sorted key order; the walk stops when the 100 or the 16 KiB are spent. When one is left out the message is `More fields need attention than are listed; the first N are listed.`, or `More fields need attention than can be listed.` with no `fields`. A value with a pointer cycle is not supported. Typed routes call it on every input.
 
 ## Error
 
@@ -125,8 +126,8 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error)
 ```
 
 - `Error` returns the message. `Invalid`'s message is `1 field needs attention.` or `N fields need attention.`
-- `WriteJSON` writes `v` as JSON with `status`: a nil slice as `[]`, and nothing for a 204.
-- `WriteError` writes `err` as `{"error":{...}}`. An `*Error`, even wrapped, is written as it is; any other error is logged and answered 500, code `internal`, without its text.
+- `WriteJSON` writes `v` as JSON with `status`: a nil slice as `[]`, and nothing for a 204. A value JSON cannot hold, such as a NaN or a channel, is logged and answered as the 500 below.
+- `WriteError` writes `err` as `{"error":{...}}`. An `*Error`, even wrapped, is written as it is; any other error, and an `*Error` whose `Status` is not 400 to 599, is logged and answered 500, code `internal`, without its text.
 
 ## Config
 
@@ -147,12 +148,12 @@ func (c Config) Err() error
 - `FromEnv` reads `./.env` if it exists, then the environment, which wins.
 - `ConfigFrom` does the same from a map, for tests and for apps that configure themselves.
 - `Get` returns a key's value, `""` when it is unset; `On` reports whether it is `on`, `true`, `1` or `yes`, in any case.
-- `Err` reports every line of `.env` it could not read and every bad `PORT` or `MAX_BODY_MB`, one sentence each. `New` carries it into the app's `Err`.
+- `Err` reports an `.env` that exists but cannot be read, every line of it that cannot be read, and every bad `PORT` or `MAX_BODY_MB`, one sentence each. `New` carries it into the app's `Err`.
 
 ## Serve
 
 ```go
-func Serve(dist fs.FS, api http.Handler, opts ...Option) http.Handler
+func Serve(dist fs.FS, api http.Handler, opts ...ServeOption) http.Handler
 ```
 
 Returns the handler for a Weft app's pages and API. `App.Serve` and `App.Run` build it over the app's `Handler`.
@@ -163,10 +164,10 @@ Returns the handler for a Weft app's pages and API. `App.Serve` and `App.Run` bu
 
 Serve panics, in one sentence that starts `warp.Serve:` and names the file, when the build is incomplete or `dist` has no `index.html`. It does that at start, not on a request.
 
-## Option
+## ServeOption
 
 ```go
-type Option func(*options)
+type ServeOption func(*options)
 ```
 
 Changes what Serve serves. `WithFiles` is the one option today.
@@ -174,7 +175,7 @@ Changes what Serve serves. `WithFiles` is the one option today.
 ## WithFiles
 
 ```go
-func WithFiles(prefix string, dir fs.FS) Option
+func WithFiles(prefix string, dir fs.FS) ServeOption
 ```
 
 Serves the files of `dir`, a folder that does not change while the server runs, under `prefix`. `WithFiles("/releases/", d)` serves `d`'s `0.0.1/SHA256SUMS` at `/releases/0.0.1/SHA256SUMS`. `prefix` starts and ends with `/`; `/` serves the files at their own paths.

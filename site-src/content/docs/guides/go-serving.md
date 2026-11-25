@@ -76,5 +76,6 @@ func main() {
 - A file changed on disk since the start gets a `500`, never a stale ETag. Restart the server after you change the folder.
 - It serves files at their exact paths only, never a folder listing.
 - It refuses to start, naming the file, if the folder holds a symlink or a name that starts with `.`, or if a path is also a page or file of the build, or under `/api/`.
+- Under `weft dev`, `dist` is nil and the dev server serves the pages, so the app serves its API alone and the folder is not served.
 
 Opening the folder with `os.OpenRoot` keeps a symlink added later from leading out of it. This site serves its installer and releases this way.
