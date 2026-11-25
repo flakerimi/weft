@@ -120,7 +120,7 @@ func TestOn(t *testing.T) {
 }
 
 func TestZeroConfig(t *testing.T) {
-	cfg := Config{}.withDefaults()
+	cfg := New(Config{}).Config()
 	if cfg.Port != "8080" {
 		t.Errorf("Port = %q, want 8080", cfg.Port)
 	}

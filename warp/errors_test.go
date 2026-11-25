@@ -59,9 +59,13 @@ func TestWriteErrorOmitsFields(t *testing.T) {
 }
 
 func TestWriteErrorHidesPlainErrors(t *testing.T) {
+	logs := captureLog(t)
 	w := writeErr(t, errors.New("pq: password authentication failed"))
 	if w.Code != 500 {
 		t.Fatalf("status %d", w.Code)
+	}
+	if !strings.Contains(logs.String(), "pq: password authentication failed") {
+		t.Fatalf("log has no error: %q", logs.String())
 	}
 	if strings.Contains(w.Body.String(), "pq") {
 		t.Fatalf("body leaks: %s", w.Body)
