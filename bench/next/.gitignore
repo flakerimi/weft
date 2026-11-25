@@ -1,0 +1,5 @@
+.next/
+out-static/
+node_modules/
+next-env.d.ts
+public/hero.webp

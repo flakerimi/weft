@@ -18,7 +18,7 @@ Weft is one UI system for Go and Vue apps. It has Vapor components, a page build
 | `site-src/` | weft.base.al. It has its pages, the docs in `content/docs/`, the gallery in `gallery/`, the files for agents in `agents/` (`/index.md`, `/llms.txt`, `/llms-full.txt`), the server in `main.go`, and Go tests over the build. |
 | `skills/` | Claude Code skills for people building with Weft, served at `/skills/<name>`. |
 | `playground/` | A Go binary embedding a Vite app that uses the components. |
-| `bench/` | The benchmark against Astro. |
+| `bench/` | The benchmark against Astro, Nuxt, Next.js and SvelteKit. |
 | `scripts/` | Builds and releases: `site.sh`, `playground.sh`, `bundle.sh` (stages the bundle `weft` carries), `release.sh` (stages it into `cmd/weft/bundle/` and builds the binaries), `publish-site.sh`, `rollback-site.sh`, `catalog.ts`, `sizes.ts`. |
 | `docs/superpowers/specs/` | The design, `2026-11-20-weft-design.md`, with its phases. |
 | `docs/superpowers/plans/` | The plans, one per stage, each with Global Constraints and a Review Focus. |

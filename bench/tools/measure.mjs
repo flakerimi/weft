@@ -44,16 +44,28 @@ if (!args.load || !args.out) {
   process.exit(2)
 }
 
-const weft = process.env.WEFT_URL ?? 'http://127.0.0.1:4301'
-const preview = process.env.ASTRO_PREVIEW_URL ?? 'http://127.0.0.1:4321'
-const plain = process.env.ASTRO_STATIC_URL ?? 'http://127.0.0.1:4302'
+// The servers bench/run.sh starts, by port. Every framework has three: its
+// own production server, a plain Go file server that gzips on the fly, and the
+// same Go server answering from memory with the brotli and gzip stored at
+// build (the terms weft.Serve gives Weft).
+const at = (port) => `http://127.0.0.1:${port}`
+const GZIP = 'Go static + gzip, GOMAXPROCS=1'
+const PACKED = 'Go, pre-compressed in memory, GOMAXPROCS=1'
+const site = (id, label, own, ports, path = '/') => [
+  { id: `${id}-${own.id}`, label, server: own.server, kind: 'own', url: `${at(ports.own)}${path}` },
+  { id: `${id}-static`, label, server: GZIP, kind: 'gzip', url: `${at(ports.gzip)}${path}` },
+  { id: `${id}-packed`, label, server: PACKED, kind: 'packed', url: `${at(ports.packed)}${path}` },
+]
+const astro = { own: 4321, gzip: 4302, packed: 4303 }
+const preview = { id: 'preview', server: 'astro preview' }
 
 const targets = [
-  { id: 'weft', label: 'Weft', server: 'weft binary (weft.Serve), GOMAXPROCS=1', url: `${weft}/` },
-  { id: 'astro-vue-preview', label: 'Astro, Vue island', server: 'astro preview', url: `${preview}/` },
-  { id: 'astro-vue-static', label: 'Astro, Vue island', server: 'Go static + gzip, GOMAXPROCS=1', url: `${plain}/` },
-  { id: 'astro-plain-preview', label: 'Astro, no framework island', server: 'astro preview', url: `${preview}/no-framework/` },
-  { id: 'astro-plain-static', label: 'Astro, no framework island', server: 'Go static + gzip, GOMAXPROCS=1', url: `${plain}/no-framework/` },
+  { id: 'weft', label: 'Weft', server: 'weft binary (weft.Serve), GOMAXPROCS=1', kind: 'own', url: `${at(4301)}/` },
+  ...site('astro-vue', 'Astro, Vue island', preview, astro),
+  ...site('astro-plain', 'Astro, no framework island', preview, astro, '/no-framework/'),
+  ...site('nuxt', 'Nuxt', { id: 'node', server: 'its Node server (Nitro)' }, { own: 4313, gzip: 4311, packed: 4312 }),
+  ...site('next', 'Next.js', { id: 'start', server: 'next start' }, { own: 4333, gzip: 4331, packed: 4332 }),
+  ...site('sveltekit', 'SvelteKit', { id: 'node', server: 'its Node server (adapter-node)' }, { own: 4343, gzip: 4341, packed: 4342 }),
 ]
 
 const log = (m) => process.stderr.write(`measure: ${m}\n`)
@@ -199,6 +211,12 @@ const results = {
     astro: pkg(join(bench, 'astro', 'node_modules', 'astro', 'package.json')),
     astrojs_vue: pkg(join(bench, 'astro', 'node_modules', '@astrojs', 'vue', 'package.json')),
     vue_astro: pkg(join(bench, 'astro', 'node_modules', 'vue', 'package.json')),
+    nuxt: pkg(join(bench, 'nuxt', 'node_modules', 'nuxt', 'package.json')),
+    vue_nuxt: pkg(join(bench, 'nuxt', 'node_modules', 'vue', 'package.json')),
+    next: pkg(join(bench, 'next', 'node_modules', 'next', 'package.json')),
+    react: pkg(join(bench, 'next', 'node_modules', 'react', 'package.json')),
+    sveltekit: pkg(join(bench, 'sveltekit', 'node_modules', '@sveltejs', 'kit', 'package.json')),
+    svelte: pkg(join(bench, 'sveltekit', 'node_modules', 'svelte', 'package.json')),
     lighthouse: pkg(join(tools, 'node_modules', 'lighthouse', 'package.json')),
     sharp: pkg(join(tools, 'node_modules', 'sharp', 'package.json')),
     node: process.version,

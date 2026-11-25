@@ -1,0 +1,15 @@
+{
+  "name": "weft-bench-next",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Next.js side of the Weft benchmark. Not part of the pnpm workspace: it has its own lockfile.",
+  "scripts": {
+    "build:static": "BENCH_STATIC=1 next build",
+    "build:server": "next build"
+  },
+  "dependencies": {
+    "next": "16.4.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  }
+}

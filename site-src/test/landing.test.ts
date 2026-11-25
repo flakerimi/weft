@@ -44,8 +44,10 @@ describe('the benchmark bars', () => {
   const { results } = newestResults(resultFiles)
   const rows = benchRows(results)
 
-  it('has a bar for every target, fastest first, Weft marked as ours', () => {
-    expect(rows.map((r) => r.id).sort()).toEqual(results.targets.map((t) => t.id).sort())
+  it('has a bar for each site behind the server it ships with, fastest first, Weft marked as ours', () => {
+    const shown = results.targets.filter((t) => (t.kind ?? 'own') === 'own')
+    expect(shown.length).toBeGreaterThan(1)
+    expect(rows.map((r) => r.id).sort()).toEqual(shown.map((t) => t.id).sort())
     const rps = rows.map((r) => r.rps)
     expect(rps).toEqual([...rps].sort((a, b) => b - a))
     expect(rows.filter((r) => r.ours).map((r) => r.id)).toEqual(['weft'])
@@ -80,6 +82,22 @@ describe('the benchmark bars', () => {
     expect(facts.date).toBe(results.date)
     expect(facts.weftJS).toBe(weft.bytes.js_br)
     expect(facts.plainJS).toBe(plain.bytes.js_br + plain.bytes.js_inline_raw)
+  })
+
+  it('leaves the plain Go servers out of the bars and states their range beside them', () => {
+    const target = (id: string, kind: 'own' | 'gzip' | 'packed', rps: number) =>
+      ({ ...results.targets[0]!, id, kind, load: { rps: { median: rps, min: rps, max: rps } } })
+    const made = {
+      ...results,
+      targets: [target('weft', 'own', 100), target('a-own', 'own', 40), target('a-static', 'gzip', 10), target('a-packed', 'packed', 130), target('b-packed', 'packed', 110)],
+    }
+    expect(benchRows(made).map((r) => [r.id, r.share])).toEqual([['weft', 1], ['a-own', 0.4]])
+    expect(benchFacts({ ...made, targets: [...made.targets, target('astro-plain-preview', 'own', 20)] }).packed).toEqual({ min: 110, max: 130 })
+  })
+
+  it('has no pre-compressed range for results that measured none', () => {
+    const old = { ...results, targets: results.targets.filter((t) => t.kind !== 'packed') }
+    expect(benchFacts(old).packed).toBeNull()
   })
 
   it('refuses results without a Weft target', () => {

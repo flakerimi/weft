@@ -1,0 +1,15 @@
+{
+  "name": "weft-bench-nuxt",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The Nuxt side of the Weft benchmark. Not part of the pnpm workspace: it has its own lockfile.",
+  "scripts": {
+    "build:static": "BENCH_OUT=.output-static nuxt generate",
+    "build:server": "BENCH_OUT=.output nuxt build"
+  },
+  "dependencies": {
+    "nuxt": "4.7.0",
+    "vue": "3.5.46"
+  }
+}
