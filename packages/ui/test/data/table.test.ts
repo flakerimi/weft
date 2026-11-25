@@ -34,7 +34,7 @@ async function cases(props: Record<string, unknown> = {}) {
   const m = mount(TableCases, { rows: PEOPLE, ...props })
   unmount = m.unmount
   await settle()
-  return m as typeof m & { exposed: { sort: string | null; selected: (string | number)[]; page: number; errors: unknown[]; table: { refresh(): Promise<void> } } }
+  return m as typeof m & { exposed: { searchText: string; filterValues: Record<string, string>; sort: string | null; selected: (string | number)[]; page: number; errors: unknown[]; table: { refresh(): Promise<void> } } }
 }
 
 const bodyRows = () => $$('.weft-table tbody tr:not([aria-hidden])')
@@ -93,8 +93,14 @@ describe('table helpers', () => {
   })
 
   it('writes a query as the wire format search parameters', () => {
-    expect(tableSearch({ page: 2, perPage: 20, sort: '-since' }).toString()).toBe('page=2&perPage=20&sort=-since')
-    expect(tableSearch({ page: 1, perPage: 10 }).toString()).toBe('page=1&perPage=10')
+    expect(tableSearch({ page: 2, perPage: 20, sort: '-since' }).toString()).toBe('page=2&per_page=20&sort=-since')
+    expect(tableSearch({ page: 1, perPage: 10 }).toString()).toBe('page=1&per_page=10')
+    const all = tableSearch({ page: 1, perPage: 10, sort: 'name', q: 'ada lovelace', filters: { plan: 'pro', city: 'A&B' } })
+    expect(all.get('q')).toBe('ada lovelace')
+    expect(all.get('filter[plan]')).toBe('pro')
+    expect(all.get('filter[city]')).toBe('A&B')
+    expect(all.toString()).toBe('page=1&per_page=10&sort=name&q=ada+lovelace&filter%5Bplan%5D=pro&filter%5Bcity%5D=A%26B')
+    expect(tableSearch({ page: 1, perPage: 10, q: '', filters: {} }).toString()).toBe('page=1&per_page=10')
   })
 
   it('selects a range between the anchor and the target, in the order shown', () => {
@@ -569,7 +575,7 @@ describe('Table', () => {
       const fetch = vi.fn(async (q: TableQuery): Promise<TableResult<Person>> => {
         calls.push(q)
         const sorted = sortRows(all, [{ key: 'name' }, { key: 'age' }], q.sort)
-        return { items: sorted.slice((q.page - 1) * q.perPage, q.page * q.perPage), total: all.length, page: q.page, perPage: q.perPage }
+        return { items: sorted.slice((q.page - 1) * q.perPage, q.page * q.perPage), total: all.length, page: q.page, per_page: q.perPage }
       })
       return { fetch, calls }
     }
@@ -591,6 +597,16 @@ describe('Table', () => {
       await settle()
       expect(calls.at(-1)).toEqual({ page: 3, perPage: 20 })
       expect(names()).toEqual(['P41', 'P42', 'P43', 'P44', 'P45'])
+    })
+
+    it('sends the search and the filters, and asks again when either changes', async () => {
+      const { fetch, calls } = server()
+      const m = await cases({ rows: undefined, fetch: fn(fetch), perPage: 10, search: 'P0', filters: { city: 'X' } })
+      expect(calls.at(-1)).toEqual({ page: 1, perPage: 10, q: 'P0', filters: { city: 'X' } })
+      m.exposed.searchText = 'P1'
+      await settle()
+      expect(calls.at(-1)).toEqual({ page: 1, perPage: 10, q: 'P1', filters: { city: 'X' } })
+      expect(calls).toHaveLength(2)
     })
 
     it('sends the sort to the server, in the wire format, from page 1, and does not sort on the client', async () => {

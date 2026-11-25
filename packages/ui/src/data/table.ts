@@ -1,5 +1,5 @@
 // What a Table is told and what it works out: its columns, the query it
-// asks a `fetch` function (the wire format's `page`, `perPage` and `sort`),
+// asks a `fetch` function (the wire format's `page`, `per_page`, `sort`, `q` and `filter[...]`),
 // the stable client-side sort, row keys and the words it says.
 import { DEFAULT_LOCALE } from '../adaptive/locale.ts'
 
@@ -30,14 +30,18 @@ export interface TableQuery {
   perPage: number
   /** The column key, ascending (`name`), or descending with a minus (`-since`); absent when unsorted. */
   sort?: string
+  /** The search text (`q`); absent when empty. */
+  q?: string
+  /** Filters by field name (`filter[<field>]`); absent when none. */
+  filters?: Record<string, string>
 }
 
-/** What `fetch` answers: the wire format's list (`page` and `perPage` may come back too, and are not needed). */
+/** What `fetch` answers: the wire format's list (`page` and `per_page` may come back too, and are not needed). */
 export interface TableResult<T> {
   items: T[]
   total: number
   page?: number
-  perPage?: number
+  per_page?: number
 }
 
 export type TableFetch<T> = (query: TableQuery) => Promise<TableResult<T>> | TableResult<T>
@@ -161,10 +165,12 @@ export function keyOf<T>(row: T, rowKey: string | ((row: T) => RowKey) | undefin
   return typeof value === 'string' || typeof value === 'number' ? value : fallback
 }
 
-/** A query as URL search parameters, as the wire format reads them: `page=2&perPage=20&sort=-since`. */
+/** A query as URL search parameters, as the wire format reads them: `page=2&per_page=20&sort=-since&q=ada&filter[plan]=pro`. */
 export function tableSearch(query: TableQuery): URLSearchParams {
-  const params = new URLSearchParams({ page: String(query.page), perPage: String(query.perPage) })
+  const params = new URLSearchParams({ page: String(query.page), per_page: String(query.perPage) })
   if (query.sort) params.set('sort', query.sort)
+  if (query.q) params.set('q', query.q)
+  for (const [field, value] of Object.entries(query.filters ?? {})) params.set(`filter[${field}]`, value)
   return params
 }
 

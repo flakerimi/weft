@@ -13,22 +13,25 @@
  *   `pattern` attribute reads it (`[0-9]+` means digits only).
  * - `email`: the text must be an email address, by the rule browsers use for
  *   `type="email"`.
+ * - `url`: the text must be an absolute web address: `http:` or `https:`
+ *   with a host.
+ * - `enum`: the text must be one of these values (`enum: ['draft', 'live']`).
  * - `message`: one sentence to show in place of any of the sentences below.
  *
  * By the value's type at run time:
  *
- * | value          | required | min, max          | pattern, email      |
- * |----------------|----------|-------------------|---------------------|
- * | text           | yes      | length, in chars  | the text            |
- * | number         | yes      | the number itself | the number written  |
- * |                |          |                   | out (`String(n)`)   |
- * | list (array)   | yes      | how many          | not checked         |
- * | anything else  | yes      | not checked       | not checked         |
+ * | value          | required | min, max          | pattern, email      | url, enum   |
+ * |----------------|----------|-------------------|---------------------|-------------|
+ * | text           | yes      | length, in chars  | the text            | the text    |
+ * | number         | yes      | the number itself | the number written  | not checked |
+ * |                |          |                   | out (`String(n)`)   |             |
+ * | list (array)   | yes      | how many          | not checked         | not checked |
+ * | anything else  | yes      | not checked       | not checked         | not checked |
  *
  * (A boolean, a date, a file: only `required` applies.)
  *
  * An empty value that is not required passes every other rule. A field's
- * first failing rule, in the order above, gives its error.
+ * first failing rule, in the order above (`url` and `enum` last, `email` before them), gives its error.
  */
 
 /** The rules for one field. */
@@ -38,6 +41,10 @@ export interface FieldRule {
   max?: number
   pattern?: string
   email?: boolean
+  /** The text must be an absolute `http:` or `https:` address with a host. */
+  url?: boolean
+  /** The text must be one of these values. */
+  enum?: string[]
   message?: string
 }
 
@@ -89,9 +96,25 @@ export function validateField(value: unknown, rule: FieldRule): string | undefin
     const length = Array.from(value).length
     if (rule.min !== undefined && length < rule.min) return fail(`Use at least ${plural(rule.min, 'character', 'characters')}.`)
     if (rule.max !== undefined && length > rule.max) return fail(`Use at most ${plural(rule.max, 'character', 'characters')}.`)
-    return textRules(value, rule, fail)
+    return textRules(value, rule, fail) ?? webRules(value, rule, fail)
   }
   return undefined
+}
+
+/** `url` and `enum`, for text only (as the Go side checks them). */
+function webRules(text: string, rule: FieldRule, fail: (sentence: string) => string): string | undefined {
+  if (rule.url && !isWebAddress(text)) return fail('Enter a web address that starts with http:// or https://.')
+  if (rule.enum && !rule.enum.includes(text)) return fail(`Choose one of: ${rule.enum.join(', ')}.`)
+  return undefined
+}
+
+function isWebAddress(text: string): boolean {
+  if (!/^https?:\/\//i.test(text)) return false
+  try {
+    return new URL(text).hostname !== ''
+  } catch {
+    return false
+  }
 }
 
 /** `pattern` and `email`, for text and numbers written out. */

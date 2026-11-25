@@ -19,6 +19,8 @@ const props = withDefaults(
     columns?: TableColumn<Person>[]
     selectable?: boolean
     perPage?: number
+    search?: string
+    filters?: Record<string, string>
     loading?: boolean
     keyboard?: boolean
     caption?: string
@@ -41,9 +43,11 @@ const COLUMNS: TableColumn<Person>[] = [
 const sort = ref<string | null>(null)
 const selected = ref<RowKey[]>([])
 const page = ref(1)
+const searchText = ref(props.search)
+const filterValues = ref(props.filters)
 const errors = ref<unknown[]>([])
 const table = ref<{ refresh(): Promise<void> } | null>(null)
-defineExpose({ sort, selected, page, errors, table })
+defineExpose({ searchText, filterValues, sort, selected, page, errors, table })
 </script>
 
 <template>
@@ -59,6 +63,8 @@ defineExpose({ sort, selected, page, errors, table })
         :columns="columns ?? COLUMNS"
         :selectable="selectable"
         :per-page="perPage"
+        :search="searchText"
+        :filters="filterValues"
         :loading="loading"
         :keyboard="keyboard"
         :caption="caption"

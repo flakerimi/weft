@@ -1,6 +1,6 @@
 <script setup vapor lang="ts">
 // A Table driven by a server speaking the wire format: each page and sort
-// is a request (here answered in memory, as a weft.Resource would).
+// is a request (here answered in memory, in the wire format's shape).
 import { EmptyState, Table, tableSearch, type TableColumn, type TableQuery, type TableResult } from '@weft/ui'
 
 interface Customer {
@@ -24,7 +24,7 @@ async function load(query: TableQuery): Promise<TableResult<Customer>> {
   const key = (sort?.replace(/^-/, '') ?? 'id') as keyof Customer
   const sorted = [...all].sort((a, b) => String(a[key]).localeCompare(String(b[key]), undefined, { numeric: true }) * (sort?.startsWith('-') ? -1 : 1))
   const start = (query.page - 1) * query.perPage
-  return { items: sorted.slice(start, start + query.perPage), total: all.length, page: query.page, perPage: query.perPage }
+  return { items: sorted.slice(start, start + query.perPage), total: all.length, page: query.page, per_page: query.perPage }
 }
 
 const columns: TableColumn<Customer>[] = [

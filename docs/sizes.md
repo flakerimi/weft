@@ -64,7 +64,7 @@ component uses. Neither is counted in the rows below.
 | FieldGroup | 2.47 | — | 1.63 | 4.09 |
 | FileUpload | 6.32 | — | 2.23 | 8.55 |
 | Footer | 1.29 | — | 0.55 | 1.84 |
-| Form | 6.41 | — | 2.13 | 8.54 |
+| Form | 6.50 | — | 2.13 | 8.63 |
 | FormField | 2.64 | — | 1.13 | 3.77 |
 | Grid | 0.86 | — | 0.41 | 1.26 |
 | Header | 16.98 | — | 3.38 | 20.35 |
@@ -97,7 +97,7 @@ component uses. Neither is counted in the rows below.
 | StatCard | 2.39 | — | 1.01 | 3.40 |
 | Stepper | 2.97 | — | 1.00 | 3.97 |
 | Switch | 1.96 | — | 1.42 | 3.38 |
-| Table | 10.79 | — | 2.75 | 13.54 |
+| Table | 10.88 | — | 2.75 | 13.63 |
 | Tabs | 3.74 | — | 1.28 | 5.02 |
 | Textarea | 2.12 | — | 0.54 | 2.66 |
 | Timeline | 1.83 | — | 0.90 | 2.73 |

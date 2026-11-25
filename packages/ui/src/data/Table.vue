@@ -42,8 +42,12 @@ const props = withDefaults(
     columns: TableColumn<T>[]
     /** The rows, sorted and paged on the client. */
     rows?: T[]
-    /** Asks for a page of rows instead (`{ page, perPage, sort }` → `{ items, total }`): sorting and paging happen on the server. */
+    /** Asks for a page of rows instead (`{ page, perPage, sort, q, filters }` → `{ items, total }`): sorting and paging happen on the server. */
     fetch?: TableFetch<T>
+    /** The search text, sent to `fetch` as `q` (`?q=`); empty sends none. */
+    search?: string
+    /** Filters by field name, sent to `fetch` as `filters` (`?filter[plan]=pro`). */
+    filters?: Record<string, string>
     /** A row's key, for selection and rendering: a property name or a function; default the row's `id`, else its place. */
     rowKey?: string | ((row: T) => RowKey)
     /** The sort, in the wire format (`name`, `-since`; null for none), bound with `v-model:sort`. */
@@ -86,6 +90,8 @@ const props = withDefaults(
   {
     rows: undefined,
     fetch: undefined,
+    search: undefined,
+    filters: undefined,
     sort: undefined,
     defaultSort: null,
     selected: undefined,
@@ -140,6 +146,8 @@ const data = useTableData<T>({
   sort,
   page,
   perPage: () => props.perPage,
+  search: () => props.search,
+  filters: () => props.filters,
   loading: () => !!props.loading,
   active: () => mounted.value,
   needKeys: () => !!props.selectable,

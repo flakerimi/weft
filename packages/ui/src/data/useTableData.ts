@@ -3,7 +3,7 @@
  *
  * A Table's rows: from `rows()`, sorted (stably) and sliced to the page on
  * the client; or from `fetch()`, asked for the page in the wire format
- * (`{ page, perPage, sort }`, sort absent when none) whenever one of those
+ * (`{ page, perPage, sort, q, filters }`, each absent when none) whenever one of those
  * values changes while `active()` (the Table passes "mounted", so the
  * server and the first render draw a busy table and agree). Only the
  * answer to the latest question is kept; a rejection is kept in `failed`
@@ -21,7 +21,7 @@
  * or a fetch under way, or no answer yet.
  */
 import { computed, ref, shallowRef, watch, type ComputedRef, type Ref, type ShallowRef } from 'vue'
-import { keyOf, sortRows, valueOf, type RowKey, type TableColumn, type TableFetch } from './table.ts'
+import { keyOf, sortRows, valueOf, type RowKey, type TableColumn, type TableFetch, type TableQuery } from './table.ts'
 
 export interface TableDataOptions<T> {
   rows: () => T[] | undefined
@@ -31,6 +31,10 @@ export interface TableDataOptions<T> {
   sort: Readonly<Ref<string | null>>
   page: Readonly<Ref<number>>
   perPage: () => number | undefined
+  /** The search text sent as `q`. */
+  search?: () => string | undefined
+  /** The filters sent as `filter[key]=value`. */
+  filters?: () => Record<string, string> | undefined
   loading: () => boolean
   active: () => boolean
   /** Rows can be chosen, so they need keys of their own. */
@@ -72,7 +76,15 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
     const mine = ++asked
     fetching.value = true
     failed.value = null
-    const query = { page: opts.page.value, perPage: perPage.value!, ...(opts.sort.value ? { sort: opts.sort.value } : {}) }
+    const q = opts.search?.()
+    const filters = opts.filters?.()
+    const query: TableQuery = {
+      page: opts.page.value,
+      perPage: perPage.value!,
+      ...(opts.sort.value ? { sort: opts.sort.value } : {}),
+      ...(q ? { q } : {}),
+      ...(filters && Object.keys(filters).length ? { filters: { ...filters } } : {}),
+    }
     try {
       const answer = await fetch(query)
       if (mine !== asked) return
@@ -87,7 +99,7 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
   }
   // Primitive sources: asking again only when a value of the query changes.
   watch(
-    [opts.active, () => opts.page.value, () => perPage.value, () => opts.sort.value, opts.fetch],
+    [opts.active, () => opts.page.value, () => perPage.value, () => opts.sort.value, () => opts.search?.(), () => JSON.stringify(opts.filters?.() ?? {}), opts.fetch],
     ([on]) => {
       if (on) void load()
     },

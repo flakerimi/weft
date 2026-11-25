@@ -63,6 +63,38 @@ describe('validateField', () => {
     }
   })
 
+  it('checks enum: the value must be one of them, in the order given', () => {
+    const rule = { enum: ['draft', 'live', 'gone'] }
+    expect(validateField('live', rule)).toBeUndefined()
+    expect(validateField('Live', rule)).toBe('Choose one of: draft, live, gone.')
+    expect(validateField('other', { enum: ['a'] })).toBe('Choose one of: a.')
+    expect(validateField('other', { enum: ['a'], message: 'Pick one.' })).toBe('Pick one.')
+  })
+
+  it('checks url: an absolute http or https address with a host', () => {
+    const sentence = 'Enter a web address that starts with http:// or https://.'
+    for (const good of ['http://example.com', 'https://example.com/a?b=1#c', 'https://localhost:8080']) {
+      expect(validateField(good, { url: true }), good).toBeUndefined()
+    }
+    for (const bad of ['example.com', 'ftp://example.com', 'https://', '//example.com', 'javascript:alert(1)', 'mailto:a@b.c', 'http:/x']) {
+      expect(validateField(bad, { url: true }), bad).toBe(sentence)
+    }
+    expect(validateField('nope', { url: true, message: 'Bad.' })).toBe('Bad.')
+  })
+
+  it('lets an empty optional value pass url and enum, and still requires when asked', () => {
+    for (const empty of ['', '  ', undefined, null]) {
+      expect(validateField(empty, { url: true, enum: ['a'] })).toBeUndefined()
+    }
+    expect(validateField('', { url: true, enum: ['a'], required: true })).toBe('This field is required.')
+  })
+
+  it('gives the first failing rule: email, then url, then enum', () => {
+    expect(validateField('x', { email: true, url: true, enum: ['a'] })).toBe('Enter an email address.')
+    expect(validateField('x', { url: true, enum: ['a'] })).toBe('Enter a web address that starts with http:// or https://.')
+    expect(validateField('x', { min: 3, url: true })).toBe('Use at least 3 characters.')
+  })
+
   it('says message in place of any of its own sentences', () => {
     const rule = { required: true, min: 8, message: 'Use 8 or more characters.' }
     expect(validateField('', rule)).toBe('Use 8 or more characters.')

@@ -1,7 +1,7 @@
 ---
 group: data
 purpose: Rows of data under column headers, sorted, chosen, paged and loaded from an array or from a server.
-use: For records a person compares, sorts or acts on in bulk (customers, invoices, devices), from a plain array or a Go resource speaking the wire format.
+use: For records a person compares, sorts or acts on in bulk (customers, invoices, devices), from a plain array or a server speaking the wire format.
 avoid: For a few label–value pairs about one thing, use a description list or StatCard; for items a person reads one by one, use a list of Cards; for a hierarchy, use Tree.
 adapts:
   input: On touch every row is at least --weft-hit-min (44 px) tall, and its checkbox takes a 44 px press (Checkbox's rule).
@@ -18,12 +18,16 @@ row's checkbox ("Select Ada").
 **Rows.** Give `rows` (an array), sorted and paged on the client (text in
 the WeftProvider's `locale`, en-US without one, numbers and dates by
 amount), or
-`fetch(query)`, which receives the wire format's `{ page, perPage, sort }`
-(sort is `name` or `-since`, absent when unsorted) and answers `{ items,
-total }`, so paging and sorting happen on the server. `tableSearch(query)`
-writes those as search parameters (`page=2&perPage=20&sort=-since`) for a
-Go `weft.Resource`. It asks once mounted (the server draws skeleton rows),
-again whenever the page or the sort changes, ignores an answer a newer query
+`fetch(query)`, which receives `{ page, perPage, sort, q, filters }`
+(`sort` is `name` or `-since`; `q`, `filters` and `sort` are absent when
+there is none) and answers `{ items, total, page, per_page }` (`page` and
+`per_page` are optional), so paging, sorting, searching and filtering happen
+on the server. Give the search text as `search` and the filters as
+`filters` (`{ plan: 'pro' }`); a change asks again. `tableSearch(query)`
+writes the query as the wire format's search parameters:
+`page=2&per_page=20&sort=-since&q=ada&filter[plan]=pro`.
+It asks once mounted (the server draws skeleton rows),
+again whenever the page, the sort, the search or the filters change, ignores an answer a newer query
 overtook, and shows a message with a Try again button (and emits `error`)
 when the promise rejects; `refresh()` asks again. `rowKey` (a property name
 or a function; default the row's `id`, else its place) keys the rows. The
