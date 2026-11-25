@@ -23,11 +23,15 @@ type rule struct {
 }
 
 // fieldSpec is a validated field of a struct type: its key, where it sits, its
-// rules and the mistakes found in them.
+// rules and the mistakes found in them. A readonly field has no rules and is
+// never validated; json says the key is the field's json name, so a body
+// can send it.
 type fieldSpec struct {
 	key      string
 	index    []int
 	rules    []rule
+	readonly bool
+	json     bool
 	problems []string
 }
 
@@ -55,11 +59,19 @@ const (
 // Fields are listed in a fixed order: struct fields as declared, list entries
 // by index, map entries by key. A value with a pointer cycle is not supported.
 func Validate(v any) error {
-	rv := derefValue(reflect.ValueOf(v))
+	return validate(reflect.ValueOf(v), false, nil)
+}
+
+// validate is Validate on rv. When partial, a json field of the struct
+// itself is checked only when its key is in sent, the keys the body had; its
+// query and path fields, and everything inside a field that is checked, are
+// checked as Validate checks them.
+func validate(rv reflect.Value, partial bool, sent []string) error {
+	rv = derefValue(rv)
 	if !rv.IsValid() || rv.Kind() != reflect.Struct {
 		return nil
 	}
-	var w walker
+	w := walker{partial: partial, sent: sent}
 	w.validateStruct(rv)
 	if len(w.fields) == 0 && !w.left {
 		return nil
@@ -117,6 +129,9 @@ type walker struct {
 	left   bool // a failing field was not listed
 	done   bool // stop walking: the limits are spent or, probing, a field failed
 	probe  bool // only find whether anything fails, listing nothing
+	// partial checks only the json fields in sent at the top, for PATCH.
+	partial bool
+	sent    []string
 }
 
 // push makes the step name, or the list index when index is not negative,
@@ -166,6 +181,9 @@ func (w *walker) validateStruct(rv reflect.Value) {
 	for _, spec := range specsOf(rv.Type()) {
 		if w.done {
 			return
+		}
+		if spec.readonly || depth == 0 && w.partial && spec.json && !slices.Contains(w.sent, spec.key) {
+			continue
 		}
 		fv, ok := fieldByIndex(rv, spec.index)
 		if !ok {
@@ -493,13 +511,20 @@ func collectSpecs(t reflect.Type, prefix []int, seen map[reflect.Type]bool) []fi
 		if !f.IsExported() {
 			continue
 		}
+		// A body field's fields are keyed as the input's own, as an embedded
+		// struct's are.
+		if _, ok := f.Tag.Lookup("body"); ok && f.Type.Kind() == reflect.Struct && f.Type != timeType {
+			specs = append(specs, collectSpecs(f.Type, index, seen)...)
+			continue
+		}
 		key := fieldKey(f)
 		if key == "" {
 			continue
 		}
-		spec := fieldSpec{key: key, index: index}
+		jsonKey, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		spec := fieldSpec{key: key, index: index, json: jsonKey == key}
 		if tag := f.Tag.Get("warp"); tag != "" {
-			spec.rules, spec.problems = parseRules(t, f, tag)
+			spec.rules, spec.readonly, spec.problems = parseRules(t, f, tag)
 		}
 		specs = append(specs, spec)
 	}
@@ -519,7 +544,20 @@ func fieldKey(f reflect.StructField) string {
 	return ""
 }
 
-func parseRules(owner reflect.Type, f reflect.StructField, tag string) ([]rule, []string) {
+// isReadonly reports whether f's warp tag has the rule readonly.
+func isReadonly(f reflect.StructField) bool {
+	for part := range strings.SplitSeq(f.Tag.Get("warp"), ",") {
+		if strings.TrimSpace(part) == "readonly" {
+			return true
+		}
+	}
+	return false
+}
+
+// parseRules reads the rules of f's warp tag, and whether it has readonly,
+// which no other rule may go beside: a readonly field is answered and never
+// read, so it has no rules.
+func parseRules(owner reflect.Type, f reflect.StructField, tag string) ([]rule, bool, []string) {
 	at := owner.Name()
 	if at == "" {
 		at = owner.String()
@@ -534,6 +572,14 @@ func parseRules(owner reflect.Type, f reflect.StructField, tag string) ([]rule, 
 	isNumber := isNumberKind(k)
 	isList := k == reflect.Slice || k == reflect.Array
 
+	if isReadonly(f) {
+		for part := range strings.SplitSeq(tag, ",") {
+			if part = strings.TrimSpace(part); part != "" && part != "readonly" {
+				return nil, true, []string{fmt.Sprintf("%s has the rule \"readonly\" beside other rules; a readonly field is never read, so remove them.", at)}
+			}
+		}
+		return nil, true, nil
+	}
 	var rules []rule
 	var problems []string
 	for _, part := range strings.Split(tag, ",") {
@@ -592,7 +638,7 @@ func parseRules(owner reflect.Type, f reflect.StructField, tag string) ([]rule, 
 		}
 		rules = append(rules, r)
 	}
-	return rules, problems
+	return rules, false, problems
 }
 
 // checkRules returns every mistake in the warp tags of t, a struct type, and of

@@ -390,3 +390,158 @@ func TestStatusOutOfRange(t *testing.T) {
 		t.Fatalf("Routes() paths %v, want %v", paths, want)
 	}
 }
+
+func TestPatchChecksOnlySentFields(t *testing.T) {
+	type Address struct {
+		City string `json:"city" warp:"required"`
+		Zip  string `json:"zip"`
+	}
+	type In struct {
+		ID      int     `path:"id" warp:"min=1"`
+		Name    string  `json:"name" warp:"required"`
+		Price   float64 `json:"price" warp:"min=0"`
+		Address Address `json:"address"`
+	}
+	app := New(Config{})
+	answer := func(ctx context.Context, in In) (Item, error) { return Item{ID: in.ID}, nil }
+	Patch(app, "/items/{id}", answer)
+	Post(app, "/items/{id}", answer)
+	Put(app, "/items/{id}", answer)
+	Patch(app, "/generic/{id}", func(ctx context.Context, in withID[bodyFields]) (Item, error) { return Item{}, nil })
+	h := mustRegister(t, app)
+	for _, c := range []struct {
+		method, path, body string
+		status             int
+		fields             map[string]string
+	}{
+		{"PATCH", "/api/items/1", `{"price":5}`, 200, nil},
+		{"PATCH", "/api/items/1", `{}`, 200, nil},
+		{"PATCH", "/api/items/1", ``, 200, nil},
+		{"POST", "/api/items/1", `{"price":5}`, 422, map[string]string{"name": "This is required.", "address.city": "This is required."}},
+		{"PUT", "/api/items/1", `{"price":5}`, 422, map[string]string{"name": "This is required.", "address.city": "This is required."}},
+		{"PATCH", "/api/items/1", `{"name":""}`, 422, map[string]string{"name": "This is required."}},
+		{"PATCH", "/api/items/1", `{"NAME":" ","price":-1}`, 422, map[string]string{"name": "This is required.", "price": "Enter 0 or more."}},
+		// A nested field that was sent is checked whole.
+		{"PATCH", "/api/items/1", `{"address":{"zip":"1"}}`, 422, map[string]string{"address.city": "This is required."}},
+		// The path is checked on every route.
+		{"PATCH", "/api/items/-1", `{"price":5}`, 422, map[string]string{"id": "Enter 1 or more."}},
+		{"PATCH", "/api/generic/1", `{"price":5}`, 200, nil},
+		{"PATCH", "/api/generic/1", `{"name":"","price":5}`, 422, map[string]string{"name": "This is required."}},
+	} {
+		w := send(t, h, c.method, c.path, c.body)
+		if c.status == 200 {
+			if w.Code != 200 {
+				t.Errorf("%s %s %s: status %d, body %q", c.method, c.path, c.body, w.Code, w.Body.String())
+			}
+			continue
+		}
+		if _, _, fields := apiError(t, w); w.Code != c.status || !reflect.DeepEqual(fields, c.fields) {
+			t.Errorf("%s %s %s: status %d, fields %v", c.method, c.path, c.body, w.Code, fields)
+		}
+	}
+	// Validate called directly checks every field.
+	if got := fieldsOf(t, In{ID: 1, Price: 5, Address: Address{City: "Oslo"}}); !reflect.DeepEqual(got, map[string]string{"name": "This is required."}) {
+		t.Fatalf("Validate: fields %v", got)
+	}
+}
+
+// rangeIn checks itself across fields, with a value receiver.
+type rangeIn struct {
+	From int `json:"from" warp:"min=0"`
+	To   int `json:"to"`
+}
+
+func (in rangeIn) Validate(ctx context.Context) error {
+	ResponseHeader(ctx).Add("X-Checked", "input")
+	switch {
+	case in.To == 99:
+		return errors.New("the calendar is down")
+	case in.To == 42:
+		return Conflict("That range is booked.")
+	case Sent(ctx, "to") && in.To < in.From:
+		return Invalid(map[string]string{"to": "End after the start."})
+	}
+	return nil
+}
+
+// spanBody checks itself with a pointer receiver.
+type spanBody struct {
+	From int `json:"from"`
+	To   int `json:"to"`
+}
+
+func (b *spanBody) Validate(ctx context.Context) error {
+	ResponseHeader(ctx).Add("X-Checked", "body")
+	if b.To < b.From {
+		return Invalid(map[string]string{"to": "End after the start.", "from": "Start before the end."})
+	}
+	return nil
+}
+
+type spanIn struct {
+	ID   int      `path:"id"`
+	Body spanBody `body:"json"`
+}
+
+func (in *spanIn) Validate(ctx context.Context) error {
+	ResponseHeader(ctx).Add("X-Checked", "input")
+	if in.ID == 7 {
+		return Invalid(map[string]string{"id": "This one is closed.", "to": "Not this end."})
+	}
+	return nil
+}
+
+// spanOnly has no method of its own; its body type has one.
+type spanOnly struct {
+	Body spanBody `body:"json"`
+}
+
+func TestInputValidateMethod(t *testing.T) {
+	logs := captureLog(t)
+	ran := false
+	app := New(Config{})
+	Post(app, "/ranges", func(ctx context.Context, in rangeIn) (Item, error) { ran = true; return Item{}, nil })
+	Patch(app, "/ranges", func(ctx context.Context, in rangeIn) (Item, error) { ran = true; return Item{}, nil })
+	Post(app, "/spans/{id}", func(ctx context.Context, in spanIn) (Item, error) { ran = true; return Item{}, nil })
+	Post(app, "/only", func(ctx context.Context, in spanOnly) (Item, error) { ran = true; return Item{}, nil })
+	h := mustRegister(t, app)
+	for _, c := range []struct {
+		method, path, body string
+		status             int
+		code, msg          string
+		fields             map[string]string
+		checked            []string
+	}{
+		{"POST", "/api/ranges", `{"from":1,"to":2}`, 201, "", "", nil, []string{"input"}},
+		{"POST", "/api/ranges", `{"from":3,"to":2}`, 422, "validation", "1 field needs attention.", map[string]string{"to": "End after the start."}, []string{"input"}},
+		{"POST", "/api/ranges", `{"from":-1,"to":-5}`, 422, "validation", "1 field needs attention.", map[string]string{"from": "Enter 0 or more."}, nil},
+		{"POST", "/api/ranges", `{"to":99}`, 500, "internal", "Something went wrong on the server; its log has the details.", nil, []string{"input"}},
+		{"POST", "/api/ranges", `{"to":42}`, 409, "conflict", "That range is booked.", nil, []string{"input"}},
+		// On PATCH it runs too, and can ask what was sent.
+		{"PATCH", "/api/ranges", `{"from":3}`, 200, "", "", nil, []string{"input"}},
+		{"PATCH", "/api/ranges", `{"from":3,"to":2}`, 422, "validation", "1 field needs attention.", map[string]string{"to": "End after the start."}, []string{"input"}},
+		{"POST", "/api/only", `{"from":3,"to":2}`, 422, "validation", "2 fields need attention.", map[string]string{"to": "End after the start.", "from": "Start before the end."}, []string{"body"}},
+		{"POST", "/api/spans/1", `{"from":1,"to":2}`, 201, "", "", nil, []string{"input", "body"}},
+		// The input's comes first, and the two are merged.
+		{"POST", "/api/spans/7", `{"from":3,"to":2}`, 422, "validation", "3 fields need attention.",
+			map[string]string{"id": "This one is closed.", "to": "Not this end.", "from": "Start before the end."}, []string{"input", "body"}},
+	} {
+		ran = false
+		w := send(t, h, c.method, c.path, c.body)
+		if got := w.Header().Values("X-Checked"); !reflect.DeepEqual(got, c.checked) {
+			t.Errorf("%s %s %s: checked %q, want %q", c.method, c.path, c.body, got, c.checked)
+		}
+		if c.status < 300 {
+			if w.Code != c.status || !ran {
+				t.Errorf("%s %s %s: status %d, ran %v, body %q", c.method, c.path, c.body, w.Code, ran, w.Body.String())
+			}
+			continue
+		}
+		if code, msg, fields := apiError(t, w); w.Code != c.status || code != c.code || msg != c.msg || !reflect.DeepEqual(fields, c.fields) || ran {
+			t.Errorf("%s %s %s: status %d, code %q, message %q, fields %v, ran %v", c.method, c.path, c.body, w.Code, code, msg, fields, ran)
+		}
+	}
+	if !strings.Contains(logs.String(), "the calendar is down") {
+		t.Fatalf("the error was not logged: %q", logs.String())
+	}
+}

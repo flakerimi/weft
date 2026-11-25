@@ -842,3 +842,44 @@ func TestKeyOfNoSteps(t *testing.T) {
 		t.Fatalf("key(nil) = %q", got)
 	}
 }
+
+func TestReadonlyIsNeverValidated(t *testing.T) {
+	type Person struct {
+		Name string `json:"name" warp:"required"`
+	}
+	type S struct {
+		ID    int64    `json:"id" warp:"readonly"`
+		Owner Person   `json:"owner" warp:" readonly "`
+		Peers []Person `json:"peers" warp:"readonly"`
+		Name  string   `json:"name" warp:"required"`
+	}
+	if got := fieldsOf(t, S{Peers: []Person{{}}}); !reflect.DeepEqual(got, map[string]string{"name": "This is required."}) {
+		t.Fatalf("fields %v", got)
+	}
+	var readonly []string
+	for _, spec := range specsOf(reflect.TypeFor[S]()) {
+		if spec.readonly {
+			readonly = append(readonly, spec.key)
+		}
+	}
+	if want := []string{"id", "owner", "peers"}; !reflect.DeepEqual(readonly, want) {
+		t.Fatalf("readonly specs %q, want %q", readonly, want)
+	}
+}
+
+func TestCheckRulesReadonly(t *testing.T) {
+	type Product struct {
+		ID    int64  `json:"id" warp:"readonly,required"`
+		Code  string `json:"code" warp:"min=1,readonly"`
+		Fine  int64  `json:"fine" warp:"readonly"`
+		Twice int64  `json:"twice" warp:"readonly,readonly"`
+	}
+	got := checkRules(reflect.TypeFor[Product]())
+	want := []string{
+		`Product.ID has the rule "readonly" beside other rules; a readonly field is never read, so remove them.`,
+		`Product.Code has the rule "readonly" beside other rules; a readonly field is never read, so remove them.`,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got:\n%q\nwant:\n%q", got, want)
+	}
+}

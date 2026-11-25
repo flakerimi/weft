@@ -2,6 +2,8 @@ package warp
 
 import (
 	"context"
+	"fmt"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -353,17 +355,17 @@ func TestRegistrationMistakes(t *testing.T) {
 		}, []string{"ShowIn.Body is tagged json, and GET reads no body; tag it query or path."}},
 		{"a type no value fills", func(app *App) {
 			type ShowIn struct {
-				When time.Time         `query:"when"`
-				Nums []int             `query:"num"`
-				Opts *int              `path:"id"`
-				By   map[string]string `query:"by"`
+				When time.Time      `query:"when"`
+				Nums []int          `query:"num"`
+				Opts *int           `path:"id"`
+				By   map[string]int `query:"by"`
 			}
 			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
 		}, []string{
 			"ShowIn.When is a time.Time, which a query or path value cannot fill; use a string, a number or a bool.",
 			"ShowIn.Nums is a []int, which a query or path value cannot fill; use a string, a number or a bool.",
 			"ShowIn.Opts is a *int, which a query or path value cannot fill; use a string, a number or a bool.",
-			"ShowIn.By is a map[string]string, which a query or path value cannot fill; use a string, a number or a bool.",
+			"ShowIn.By is a map[string]int; a filter map is a map[string]string.",
 		}},
 		{"two tags", func(app *App) {
 			type ShowIn struct {
@@ -1008,5 +1010,475 @@ func TestBodyValueItsFieldCannotTake(t *testing.T) {
 	}
 	if w := send(t, h, "POST", "/api/events", `{"when":"2026-11-25T10:00:00Z","data":"YWI="}`); w.Code != 201 {
 		t.Fatalf("status %d, body %q", w.Code, w.Body.String())
+	}
+}
+
+// bodyFields is the type of a body field in the tests below.
+type bodyFields struct {
+	Name  string  `json:"name" warp:"required"`
+	Price float64 `json:"price" warp:"min=0"`
+}
+
+func TestBodyField(t *testing.T) {
+	type UpdateIn struct {
+		ID   int        `path:"id"`
+		Page int        `query:"page"`
+		Body bodyFields `body:"json"`
+	}
+	var got UpdateIn
+	var sent []string
+	var hasName, hasBody bool
+	app := New(Config{})
+	Put(app, "/items/{id}", func(ctx context.Context, in UpdateIn) (Item, error) {
+		got, sent = in, SentKeys(ctx)
+		hasName, hasBody = Sent(ctx, "name"), Sent(ctx, "body")
+		return Item{ID: in.ID, Name: in.Body.Name}, nil
+	})
+	h := mustRegister(t, app)
+	w := send(t, h, "PUT", "/api/items/3?page=2", `{"price":5,"name":"lamp"}`)
+	if w.Code != 200 || w.Body.String() != `{"id":3,"name":"lamp"}`+"\n" {
+		t.Fatalf("status %d, body %q", w.Code, w.Body.String())
+	}
+	if want := (UpdateIn{ID: 3, Page: 2, Body: bodyFields{Name: "lamp", Price: 5}}); got != want {
+		t.Fatalf("input %+v, want %+v", got, want)
+	}
+	if !reflect.DeepEqual(sent, []string{"price", "name"}) || !hasName || hasBody {
+		t.Fatalf("SentKeys %q, Sent(name) %v, Sent(body) %v", sent, hasName, hasBody)
+	}
+	for _, c := range []struct {
+		body   string
+		status int
+		msg    string
+		fields map[string]string
+	}{
+		{`{"price":-1}`, 422, "2 fields need attention.", map[string]string{"name": "This is required.", "price": "Enter 0 or more."}},
+		{`{"name":"a","price":"x"}`, 400, "1 field has the wrong type.", map[string]string{"price": "Send a number."}},
+		{`{"body":{"name":"a"}}`, 400, `The body has the field "body", which this route does not take.`, nil},
+		{`{"name":"a","id":9}`, 400, `The body has the field "id", which this route does not take.`, nil},
+		{`{"name":"a","page":9}`, 400, `The body has the field "page", which this route does not take.`, nil},
+	} {
+		w := send(t, h, "PUT", "/api/items/3", c.body)
+		if _, msg, fields := apiError(t, w); w.Code != c.status || msg != c.msg || !reflect.DeepEqual(fields, c.fields) {
+			t.Errorf("%s: status %d, message %q, fields %v", c.body, w.Code, msg, fields)
+		}
+	}
+	// Validate called directly keys the body's fields without a prefix too.
+	if got := fieldsOf(t, UpdateIn{}); !reflect.DeepEqual(got, map[string]string{"name": "This is required."}) {
+		t.Fatalf("Validate: fields %v", got)
+	}
+}
+
+// withID is the input a generic package writes: a struct may hold a field of
+// a type parameter where it may not embed one.
+type withID[T any] struct {
+	ID   int64 `path:"id"`
+	Body T     `body:"json"`
+}
+
+func TestBodyFieldGeneric(t *testing.T) {
+	var got withID[bodyFields]
+	app := New(Config{})
+	Post(app, "/items/{id}", func(ctx context.Context, in withID[bodyFields]) (Item, error) {
+		got = in
+		return Item{}, nil
+	})
+	h := mustRegister(t, app)
+	if w := send(t, h, "POST", "/api/items/8", `{"name":"lamp","price":2}`); w.Code != 201 {
+		t.Fatalf("status %d, body %q", w.Code, w.Body.String())
+	}
+	if want := (withID[bodyFields]{ID: 8, Body: bodyFields{Name: "lamp", Price: 2}}); got != want {
+		t.Fatalf("input %+v, want %+v", got, want)
+	}
+	w := send(t, h, "POST", "/api/items/8", `{}`)
+	if _, _, fields := apiError(t, w); w.Code != 422 || !reflect.DeepEqual(fields, map[string]string{"name": "This is required."}) {
+		t.Fatalf("status %d, fields %v", w.Code, fields)
+	}
+}
+
+func TestBodyFieldMistakes(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		register func(app *App)
+		want     []string
+	}{
+		{"not a struct", func(app *App) {
+			type UpdateIn struct {
+				ID   int    `path:"id"`
+				Body string `body:"json"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: UpdateIn.Body is tagged body:"json" and is a string; make it a struct.`}},
+		{"a pointer, time and a type that decodes itself", func(app *App) {
+			type UpdateIn struct {
+				ID   int         `path:"id"`
+				Body *bodyFields `body:"json"`
+				When time.Time   `body:"json"`
+				Cash Money       `body:"json"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{
+			`warp: PATCH /products/{id}: UpdateIn.Body is tagged body:"json" and is a *warp.bodyFields; make it a struct.`,
+			`warp: PATCH /products/{id}: UpdateIn.When is tagged body:"json" and is a time.Time; make it a struct.`,
+			`warp: PATCH /products/{id}: UpdateIn.Cash is tagged body:"json" and is a warp.Money; make it a struct.`,
+		}},
+		{"a json field beside it", func(app *App) {
+			type UpdateIn struct {
+				ID   int        `path:"id"`
+				Name string     `json:"name"`
+				Body bodyFields `body:"json"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: UpdateIn has a body field and the json field Name; move Name into the body's type.`}},
+		{"two body fields", func(app *App) {
+			type UpdateIn struct {
+				ID    int        `path:"id"`
+				Body  bodyFields `body:"json"`
+				Other bodyFields `body:"json"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: UpdateIn has two body fields, Body and Other; keep one.`}},
+		{"on GET", func(app *App) {
+			type ShowIn struct {
+				ID   int        `path:"id"`
+				Body bodyFields `body:"json"`
+			}
+			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: GET /products/{id}: ShowIn.Body is tagged body, and GET reads no body; remove it.`}},
+		{"another kind", func(app *App) {
+			type UpdateIn struct {
+				ID   int        `path:"id"`
+				Body bodyFields `body:"xml"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: UpdateIn.Body is tagged body:"xml"; the only body kind is json.`}},
+		{"a body and a json tag", func(app *App) {
+			type UpdateIn struct {
+				ID   int        `path:"id"`
+				Body bodyFields `body:"json" json:"body"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: UpdateIn.Body has both a body and a json tag; keep one.`}},
+		{"inside the body", func(app *App) {
+			type Address struct {
+				City string     `json:"city"`
+				Body bodyFields `body:"json"`
+			}
+			type Fields struct {
+				Name    string  `json:"name"`
+				Address Address `json:"address"`
+			}
+			type UpdateIn struct {
+				ID   int    `path:"id"`
+				Body Fields `body:"json"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: Address.Body is tagged body inside a body field; only the route's input itself has a body field.`}},
+		{"the body's own fields are checked", func(app *App) {
+			type Base struct {
+				Name string `json:"name"`
+			}
+			type Fields struct {
+				Base
+				Title string `json:"name"`
+				Bare  string
+				Page  int `query:"page"`
+			}
+			type UpdateIn struct {
+				ID   int    `path:"id"`
+				Body Fields `body:"json"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{
+			`warp: PATCH /products/{id}: Fields.Name and Fields.Title both have the json key "name"; rename one.`,
+			`warp: PATCH /products/{id}: Fields.Bare has no json tag; add one.`,
+			`warp: PATCH /products/{id}: Fields.Page is tagged query inside a body field; only the route's input itself takes query and path tags.`,
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			app := New(Config{})
+			c.register(app)
+			if got := strings.Split(errText(app.Err()), "\n"); !reflect.DeepEqual(got, c.want) {
+				t.Fatalf("Err() =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(c.want, "\n"))
+			}
+			if routes := app.Routes(); len(routes) != 0 {
+				t.Fatalf("Routes() = %v, want none", routes)
+			}
+		})
+	}
+}
+
+// The types of TestReadonly: a record's fields are answered and never read.
+type roRecord struct {
+	ID        int64     `json:"id" warp:"readonly"`
+	CreatedAt time.Time `json:"created_at" warp:"readonly"`
+}
+
+type roPerson struct {
+	Name string `json:"name" warp:"required"`
+	Bare string
+}
+
+type roLine struct {
+	ID  int    `json:"id" warp:"readonly"`
+	SKU string `json:"sku" warp:"required"`
+}
+
+type roAddress struct {
+	ID   int64  `json:"id" warp:"readonly"`
+	City string `json:"city"`
+}
+
+type roProduct struct {
+	roRecord
+	Name    string             `json:"name" warp:"required"`
+	Owner   roPerson           `json:"owner" warp:"readonly"`
+	Address roAddress          `json:"address"`
+	Lines   []roLine           `json:"lines"`
+	ByName  map[string]*roLine `json:"by_name"`
+	Any     any                `json:"any"`
+}
+
+func TestReadonly(t *testing.T) {
+	var got roProduct
+	app := New(Config{})
+	Post(app, "/products", func(ctx context.Context, in struct {
+		Body roProduct `body:"json"`
+	}) (roProduct, error) {
+		got = in.Body
+		out := in.Body
+		out.ID, out.Owner.Name = 7, "Ada"
+		return out, nil
+	})
+	type PlainIn struct {
+		ID   int    `json:"id" warp:"readonly"`
+		Name string `json:"name"`
+	}
+	Post(app, "/plain", func(ctx context.Context, in PlainIn) (Item, error) { return Item{}, nil })
+	h := mustRegister(t, app)
+
+	// Answered: the output carries it. Not validated: Owner's required Name
+	// is empty, and Owner's untagged field is no registration mistake.
+	body := `{"name":"lamp","address":{"city":"Oslo"},"lines":[{"sku":"a"}],"by_name":{"x":{"sku":"b"},"y":null},"any":{"id":1}}`
+	w := send(t, h, "POST", "/api/products", body)
+	if w.Code != 201 || !strings.Contains(w.Body.String(), `"id":7,"created_at":"0001-01-01T00:00:00Z","name":"lamp","owner":{"name":"Ada","Bare":""}`) {
+		t.Fatalf("status %d, body %q", w.Code, w.Body.String())
+	}
+	if got.Name != "lamp" || got.Address.City != "Oslo" || got.Lines[0].SKU != "a" || got.ByName["x"].SKU != "b" || got.ID != 0 {
+		t.Fatalf("input %+v", got)
+	}
+	if err := Validate(roProduct{Name: "lamp"}); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+
+	// Refused in the body, at every depth, and whatever its case.
+	for _, c := range []struct{ path, body, field string }{
+		{"/api/products", `{"name":"a","id":9}`, "id"},
+		{"/api/products", `{"ID":9}`, "ID"},
+		{"/api/products", `{"created_at":"2026-11-25T10:00:00Z"}`, "created_at"},
+		{"/api/products", `{"owner":{"name":"x"}}`, "owner"},
+		{"/api/products", `{"name":"a","address":{"city":"Oslo","id":3}}`, "id"},
+		{"/api/products", `{"address":{"Id":3}}`, "Id"},
+		{"/api/products", `{"address":{"id":3}}`, "id"},
+		{"/api/products", `{"address":{"ID":3}}`, "ID"},
+		{"/api/products", `{"lines":[{"sku":"a"},{"sku":"b","id":1}]}`, "id"},
+		{"/api/products", `{"by_name":{"x":{"id":1,"sku":"b"}}}`, "id"},
+		{"/api/plain", `{"id":1}`, "id"},
+	} {
+		w := send(t, h, "POST", c.path, c.body)
+		want := `The body has the field "` + c.field + `", which this route does not take.`
+		if code, msg, _ := apiError(t, w); w.Code != 400 || code != "bad_request" || msg != want {
+			t.Errorf("%s: status %d, code %q, message %q", c.body, w.Code, code, msg)
+		}
+	}
+}
+
+func TestReadonlyMistakes(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		register func(app *App)
+		want     string
+	}{
+		{"on a query field", func(app *App) {
+			type ShowIn struct {
+				ID   int `path:"id"`
+				Page int `query:"page" warp:"readonly"`
+			}
+			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
+		}, `warp: GET /products/{id}: ShowIn.Page is tagged query and readonly; readonly is for json fields.`},
+		{"on a path field", func(app *App) {
+			type ShowIn struct {
+				ID int `path:"id" warp:"readonly"`
+			}
+			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
+		}, `warp: GET /products/{id}: ShowIn.ID is tagged path and readonly; readonly is for json fields.`},
+		{"beside other rules", func(app *App) {
+			type Product struct {
+				ID   int64  `json:"id" warp:"readonly,min=1"`
+				Name string `json:"name"`
+			}
+			Post(app, "/products", func(context.Context, struct {
+				Body Product `body:"json"`
+			}) (Item, error) {
+				return Item{}, nil
+			})
+		}, `warp: POST /products: Product.ID has the rule "readonly" beside other rules; a readonly field is never read, so remove them.`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			app := New(Config{})
+			c.register(app)
+			if got := errText(app.Err()); got != c.want {
+				t.Fatalf("Err() = %q\nwant %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestSentKeys(t *testing.T) {
+	type Address struct {
+		Zip string `json:"zip"`
+	}
+	type In struct {
+		A       int     `json:"a"`
+		B       int     `json:"b"`
+		C       *int    `json:"c"`
+		Address Address `json:"address"`
+	}
+	var sent []string
+	var sentB, sentZip bool
+	ran := false
+	app := New(Config{})
+	Post(app, "/things", func(ctx context.Context, in In) (Item, error) {
+		ran = true
+		sent, sentB, sentZip = SentKeys(ctx), Sent(ctx, "b"), Sent(ctx, "zip")
+		return Item{}, nil
+	})
+	Get(app, "/things", func(ctx context.Context, in None) (Item, error) {
+		ran = true
+		sent, sentB = SentKeys(ctx), Sent(ctx, "b")
+		return Item{}, nil
+	})
+	h := mustRegister(t, app)
+	for _, c := range []struct {
+		method, body string
+		want         []string
+		b            bool
+	}{
+		{"POST", `{"b":1,"address":{"zip":"x"},"a":2,"B":3,"c":null}`, []string{"b", "address", "a", "c"}, true},
+		{"POST", `{"a":1,"a":2,"A":3}`, []string{"a"}, false},
+		{"POST", `{"a":1, "b" : 2 }`, []string{"a", "b"}, true},
+		{"POST", ``, nil, false},
+		{"POST", `{}`, nil, false},
+		{"GET", ``, nil, false},
+	} {
+		sent, sentB, sentZip, ran = nil, false, false, false
+		if w := send(t, h, c.method, "/api/things", c.body); w.Code >= 300 || !ran {
+			t.Fatalf("%s %s: status %d, body %q", c.method, c.body, w.Code, w.Body.String())
+		}
+		if !reflect.DeepEqual(sent, c.want) || sentB != c.b || sentZip {
+			t.Errorf("%s %s: SentKeys %q, Sent(b) %v, Sent(zip) %v", c.method, c.body, sent, sentB, sentZip)
+		}
+	}
+	// A key the route does not take is refused before the handler runs.
+	ran = false
+	if w := send(t, h, "POST", "/api/things", `{"a":1,"zz":2}`); w.Code != 400 || ran {
+		t.Fatalf("an unknown key: status %d, ran %v", w.Code, ran)
+	}
+	if Sent(context.Background(), "a") || SentKeys(context.Background()) != nil {
+		t.Fatal("outside a typed route, nothing was sent")
+	}
+}
+
+// Finding the sent keys costs a few allocations, not some for each key.
+func TestSentKeysCostLittle(t *testing.T) {
+	type In struct {
+		A int   `json:"a"`
+		B []any `json:"b"`
+		C any   `json:"c"`
+	}
+	p, mistakes := planFor(reflect.TypeFor[In](), "POST", "/x")
+	if mistakes != nil {
+		t.Fatal(mistakes)
+	}
+	body := "{" + strings.TrimSuffix(strings.Repeat(`"a":1,"b":[1,{"x":"y\"z"}],"c":{"k":[true,null]},`, 3000), ",") + "}"
+	keys, err := p.walk([]byte(body))
+	if err != nil || !reflect.DeepEqual(keys, []string{"a", "b", "c"}) {
+		t.Fatalf("keys %q, err %v", keys, err)
+	}
+	if allocs := testing.AllocsPerRun(5, func() { p.walk([]byte(body)) }); allocs > 3 {
+		t.Fatalf("finding the keys of 9000: %.0f allocations, want at most 3", allocs)
+	}
+}
+
+func TestFilterMap(t *testing.T) {
+	type Filters map[string]string
+	type ListIn struct {
+		Filter map[string]string `query:"filter"`
+		Where  Filters           `query:"where"`
+		Page   int               `query:"page"`
+	}
+	var got ListIn
+	app := New(Config{})
+	Get(app, "/items", func(ctx context.Context, in ListIn) (Item, error) {
+		got = in
+		return Item{}, nil
+	})
+	h := mustRegister(t, app)
+	get := func(query string) *httptest.ResponseRecorder {
+		t.Helper()
+		got = ListIn{}
+		return send(t, h, "GET", "/api/items?"+query, "")
+	}
+	if w := get("filter[status]=live&filter%5Bcat%5D=3&filter[status]=draft&where[size]=&page=2"); w.Code != 200 {
+		t.Fatalf("status %d, body %q", w.Code, w.Body.String())
+	}
+	if want := (ListIn{Filter: map[string]string{"status": "live", "cat": "3"}, Where: Filters{"size": ""}, Page: 2}); !reflect.DeepEqual(got, want) {
+		t.Fatalf("input %+v, want %+v", got, want)
+	}
+	// Keys that are not filter[name] are ignored, as other keys are.
+	if w := get("filter[]=a&filter[a=b&filter=c&filter[a]b=d&filter[a][b]=e&filters[x]=f&page=1"); w.Code != 200 || got.Filter != nil {
+		t.Fatalf("status %d, input %+v", w.Code, got)
+	}
+	keys := func(prefix string, n int) string {
+		var parts []string
+		for i := range n {
+			parts = append(parts, fmt.Sprintf("%s[k%d]=v", prefix, i))
+		}
+		return strings.Join(parts, "&")
+	}
+	if w := get(keys("filter", 32) + "&" + keys("other", 40)); w.Code != 200 || len(got.Filter) != 32 {
+		t.Fatalf("32 keys: status %d, %d keys", w.Code, len(got.Filter))
+	}
+	for _, c := range []struct{ query, msg string }{
+		{keys("filter", 33), "The query has more filter[...] keys than a route takes (32)."},
+		{keys("where", 33), "The query has more where[...] keys than a route takes (32)."},
+		{"filter[" + strings.Repeat("k", 65) + "]=v", "A filter[...] key is longer than 64 bytes."},
+		{"where[" + strings.Repeat("k", 65) + "]=v", "A where[...] key is longer than 64 bytes."},
+	} {
+		w := get(c.query)
+		if code, msg, _ := apiError(t, w); w.Code != 400 || code != "bad_request" || msg != c.msg {
+			t.Errorf("%.30s…: status %d, code %q, message %q", c.query, w.Code, code, msg)
+		}
+	}
+	long := strings.Repeat("k", 64)
+	if w := get("filter[" + long + "]=v"); w.Code != 200 || got.Filter[long] != "v" {
+		t.Fatalf("a 64-byte key: status %d, input %+v", w.Code, got)
+	}
+}
+
+func TestFilterMapMistake(t *testing.T) {
+	type ListIn struct {
+		Filter map[string]int    `query:"filter"`
+		By     map[int]string    `query:"by"`
+		ID     map[string]string `path:"id"`
+	}
+	app := New(Config{})
+	Get(app, "/items/{id}", func(context.Context, ListIn) (Item, error) { return Item{}, nil })
+	want := strings.Join([]string{
+		"warp: GET /items/{id}: ListIn.Filter is a map[string]int; a filter map is a map[string]string.",
+		"warp: GET /items/{id}: ListIn.By is a map[int]string; a filter map is a map[string]string.",
+		"warp: GET /items/{id}: ListIn.ID is a map[string]string, which a query or path value cannot fill; use a string, a number or a bool.",
+	}, "\n")
+	if got := errText(app.Err()); got != want {
+		t.Fatalf("Err() =\n%s\nwant\n%s", got, want)
 	}
 }

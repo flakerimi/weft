@@ -2,14 +2,18 @@ package warp
 
 import (
 	"bytes"
+	"cmp"
+	"context"
 	"encoding"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"mime"
 	"net/http"
+	"net/url"
 	"reflect"
 	"slices"
 	"strconv"
@@ -22,14 +26,22 @@ import (
 type plan struct {
 	none     bool // the input is None: nothing is read
 	readBody bool // POST, PUT and PATCH read a JSON body
+	partial  bool // PATCH checks only the json fields the body sent
 	// view is a struct of the json fields alone, which the body is decoded
-	// into, so a body can never set a query or path field; raw is the same
-	// struct with every field a json.RawMessage, to find an unknown field
-	// the decoder met after a wrong type.
+	// into, so a body can never set a query or path field, nor a readonly
+	// one; raw is the same struct with every field a json.RawMessage, to
+	// find an unknown field the decoder met after a wrong type.
 	view, raw reflect.Type
 	body      [][]int // where view's field i sits in the input
-	query     []param
-	path      []param
+	// keys are view's keys, to find which ones the body sent and, inside
+	// their values, a readonly key the view's types would take.
+	keys  *object
+	query []param
+	path  []param
+	// checkSelf says the input has Validate(ctx); checkBody is where its
+	// body field is when the body's type has it.
+	checkSelf bool
+	checkBody []int
 }
 
 // param is a field filled from the query or the path.
@@ -37,11 +49,14 @@ type param struct {
 	key   string
 	index []int
 	typ   reflect.Type
-	list  bool   // a []string of every value of the key
-	ptr   bool   // a pointer, left nil when the key is absent
-	text  bool   // a string, which keeps an empty value
-	set   setter // converts one value into the field, or into what it points to
-	wrong string // the message when a value does not convert
+	list  bool // a []string of every value of the key
+	ptr   bool // a pointer, left nil when the key is absent
+	text  bool // a string, which keeps an empty value
+	// filter is a map[string]string of every key[name], key being the tag's
+	// name, such as filter[status]=live.
+	filter bool
+	set    setter // converts one value into the field, or into what it points to
+	wrong  string // the message when a value does not convert
 }
 
 // setter converts s and stores it in v, reporting false when s does not
@@ -50,7 +65,16 @@ type setter func(v reflect.Value, s string) bool
 
 const notJSON = "The body is not valid JSON."
 
-var stringType = reflect.TypeFor[string]()
+var (
+	stringType    = reflect.TypeFor[string]()
+	validatorType = reflect.TypeFor[validator]()
+)
+
+// validator is an input, or an input's body type, that checks itself once
+// its tag rules pass.
+type validator interface {
+	Validate(ctx context.Context) error
+}
 
 // planFor makes the plan for the input type t of a route at method and path,
 // or returns every mistake in t as sentences.
@@ -62,7 +86,10 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 		return nil, []string{fmt.Sprintf("the input %s must be a struct or warp.None.", typeName(t))}
 	}
 	name := typeName(t)
-	p := &plan{readBody: method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch}
+	p := &plan{
+		readBody: method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch,
+		partial:  method == http.MethodPatch,
+	}
 	var mistakes []string
 	wild := wildcards(path)
 	hasField := map[string]bool{}
@@ -78,16 +105,36 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 		return true
 	}
 	var view, raw []reflect.StructField
+	addView := func(key, opts string, ft reflect.Type, index []int) {
+		view = append(view, reflect.StructField{
+			Name: "F" + strconv.Itoa(len(view)),
+			Type: ft,
+			Tag:  reflect.StructTag("json:" + strconv.Quote(key+opts)),
+		})
+		raw = append(raw, reflect.StructField{
+			Name: "F" + strconv.Itoa(len(raw)),
+			Type: reflect.TypeFor[json.RawMessage](),
+			Tag:  reflect.StructTag("json:" + strconv.Quote(key)),
+		})
+		p.body = append(p.body, index)
+	}
+	var bodyField string    // the body field's name, once one is seen
+	var jsonFields []string // the names of the input's own json fields
 	fields, embedded := inputFields(t, nil)
 	mistakes = append(mistakes, embedded...)
 	visited := map[reflect.Type]bool{} // the struct types inside json fields, checked once
 	for _, f := range fields {
 		at := name + "." + f.Name
 		jsonKey, jsonOpts, isJSON := jsonTagOf(f.StructField)
+		bodyKind, isBody := f.Tag.Lookup("body")
 		pathKey, queryKey := tagName(f.StructField, "path"), tagName(f.StructField, "query")
 		var tags []string
+		if isBody {
+			tags = append(tags, "a body")
+		}
 		if isJSON {
 			tags = append(tags, "a json")
+			jsonFields = append(jsonFields, f.Name)
 		}
 		if pathKey != "" {
 			tags = append(tags, "a path")
@@ -96,13 +143,42 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 		if queryKey != "" {
 			tags = append(tags, "a query")
 		}
+		readonly := isReadonly(f.StructField)
 		switch {
 		case len(tags) == 0:
 			mistakes = append(mistakes, fmt.Sprintf("%s has no json, query or path tag; add one.", at))
 		case len(tags) == 2:
 			mistakes = append(mistakes, fmt.Sprintf("%s has both %s and %s tag; keep one.", at, tags[0], tags[1]))
-		case len(tags) == 3:
-			mistakes = append(mistakes, fmt.Sprintf("%s has a json, a path and a query tag; keep one.", at))
+		case len(tags) > 2:
+			mistakes = append(mistakes, fmt.Sprintf("%s has %s and %s tag; keep one.", at, strings.Join(tags[:len(tags)-1], ", "), tags[len(tags)-1]))
+		case readonly && !isJSON:
+			mistakes = append(mistakes, fmt.Sprintf("%s is tagged %s and readonly; readonly is for json fields.", at, strings.TrimPrefix(tags[0], "a ")))
+		case isBody:
+			switch {
+			case !p.readBody:
+				mistakes = append(mistakes, fmt.Sprintf("%s is tagged body, and %s reads no body; remove it.", at, method))
+			case bodyKind != "json":
+				mistakes = append(mistakes, fmt.Sprintf("%s is tagged body:%q; the only body kind is json.", at, bodyKind))
+			case f.Type.Kind() != reflect.Struct || f.Type == timeType || decodesItself(f.Type):
+				mistakes = append(mistakes, fmt.Sprintf("%s is tagged body:\"json\" and is a %s; make it a struct.", at, f.Type))
+			case bodyField != "":
+				mistakes = append(mistakes, fmt.Sprintf("%s has two body fields, %s and %s; keep one.", name, bodyField, f.Name))
+			default:
+				// The body's fields are the input's json fields, at the same
+				// index paths as an embedded struct's.
+				bodyField = f.Name
+				mistakes = append(mistakes, bodyMistakes(f.Type, visited)...)
+				inner, _ := inputFields(f.Type, f.index)
+				for _, bf := range inner {
+					key, opts, ok := jsonTagOf(bf.StructField)
+					if ok && validJSONName(key) && !isReadonly(bf.StructField) {
+						addView(key, opts, bf.Type, bf.index)
+					}
+				}
+				if reflect.PointerTo(f.Type).Implements(validatorType) {
+					p.checkBody = f.index
+				}
+			}
 		case isJSON:
 			if !p.readBody {
 				mistakes = append(mistakes, fmt.Sprintf("%s is tagged json, and %s reads no body; tag it query or path.", at, method))
@@ -114,21 +190,13 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 			} else {
 				ok = claim("json", jsonKey, at)
 			}
-			mistakes = append(mistakes, bodyMistakes(f.Type, visited)...)
-			if !ok {
-				continue
+			if readonly {
+				continue // never read, so what is inside it is not the body's
 			}
-			view = append(view, reflect.StructField{
-				Name: "F" + strconv.Itoa(len(view)),
-				Type: f.Type,
-				Tag:  reflect.StructTag("json:" + strconv.Quote(jsonKey+jsonOpts)),
-			})
-			raw = append(raw, reflect.StructField{
-				Name: "F" + strconv.Itoa(len(raw)),
-				Type: reflect.TypeFor[json.RawMessage](),
-				Tag:  reflect.StructTag("json:" + strconv.Quote(jsonKey)),
-			})
-			p.body = append(p.body, f.index)
+			mistakes = append(mistakes, bodyMistakes(f.Type, visited)...)
+			if ok {
+				addView(jsonKey, jsonOpts, f.Type, f.index)
+			}
 		case pathKey != "":
 			if !slices.Contains(wild, pathKey) {
 				mistakes = append(mistakes, fmt.Sprintf("%s is tagged path:%q, and the path has no {%s}.", at, pathKey, pathKey))
@@ -145,6 +213,13 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 			p.path = append(p.path, prm)
 		default:
 			prm, ok := paramFor(f.Type, true)
+			if f.Type.Kind() == reflect.Map {
+				if f.Type.Key() != stringType || f.Type.Elem() != stringType {
+					mistakes = append(mistakes, fmt.Sprintf("%s is a %s; a filter map is a map[string]string.", at, f.Type))
+					continue
+				}
+				prm, ok = param{typ: f.Type, filter: true}, true
+			}
 			if !ok {
 				mistakes = append(mistakes, cannotFill(at, f.Type))
 				continue
@@ -154,6 +229,11 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 			}
 			prm.key, prm.index = queryKey, f.index
 			p.query = append(p.query, prm)
+		}
+	}
+	if bodyField != "" {
+		for _, j := range jsonFields {
+			mistakes = append(mistakes, fmt.Sprintf("%s has a body field and the json field %s; move %s into the body's type.", name, j, j))
 		}
 	}
 	for _, w := range wild {
@@ -167,7 +247,9 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 	}
 	if p.readBody {
 		p.view, p.raw = reflect.StructOf(view), reflect.StructOf(raw)
+		p.keys = topObject(view)
 	}
+	p.checkSelf = reflect.PointerTo(t).Implements(validatorType)
 	return p, nil
 }
 
@@ -248,8 +330,9 @@ func decodesItself(t reflect.Type) bool {
 // bodyMistakes returns the mistakes in the struct types a json field of type
 // t holds, through pointers, slices, arrays and map values, each type checked
 // once. Inside the body only json tags make sense: every exported field needs
-// a usable json name, json:"-" leaves a field out, and a query or path tag is
-// a mistake. time.Time and a type that decodes itself are not looked inside.
+// a usable json name, json:"-" leaves a field out, and a query, path or body
+// tag is a mistake. time.Time, a type that decodes itself and what a readonly
+// field holds are not looked inside.
 func bodyMistakes(t reflect.Type, visited map[reflect.Type]bool) []string {
 	for !decodesItself(t) && isContainer(t.Kind()) {
 		t = t.Elem()
@@ -268,6 +351,10 @@ func bodyMistakes(t reflect.Type, visited map[reflect.Type]bool) []string {
 			continue
 		}
 		bad := false
+		if _, ok := f.Tag.Lookup("body"); ok {
+			mistakes = append(mistakes, fmt.Sprintf("%s is tagged body inside a body field; only the route's input itself has a body field.", at))
+			bad = true
+		}
 		for _, tag := range []string{"query", "path"} {
 			if tagName(f.StructField, tag) != "" {
 				mistakes = append(mistakes, fmt.Sprintf("%s is tagged %s inside a body field; only the route's input itself takes query and path tags.", at, tag))
@@ -286,7 +373,9 @@ func bodyMistakes(t reflect.Type, visited map[reflect.Type]bool) []string {
 		default:
 			owner[key] = at
 		}
-		mistakes = append(mistakes, bodyMistakes(f.Type, visited)...)
+		if !isReadonly(f.StructField) { // never read, so what is inside it is not the body's
+			mistakes = append(mistakes, bodyMistakes(f.Type, visited)...)
+		}
 	}
 	return mistakes
 }
@@ -452,20 +541,33 @@ func scalar(t reflect.Type) (setter, string, bool) {
 }
 
 // fill sets dst, the input, from r by the plan: the body, then the query,
-// then the path. It returns the *Error to answer when one of them is wrong.
-func (p *plan) fill(w http.ResponseWriter, r *http.Request, dst reflect.Value, limit int64) error {
+// then the path. It returns the top-level keys the body sent, as walk gives
+// them, or the *Error to answer when one of them is wrong.
+func (p *plan) fill(w http.ResponseWriter, r *http.Request, dst reflect.Value, limit int64) ([]string, error) {
 	if p.none {
-		return nil
+		return nil, nil
 	}
+	var sent []string
 	if p.readBody {
-		if err := p.decode(w, r, dst, limit); err != nil {
-			return err
+		var err error
+		if sent, err = p.decode(w, r, dst, limit); err != nil {
+			return nil, err
 		}
 	}
 	if len(p.query) > 0 {
 		values := r.URL.Query()
 		wrong := map[string]string{}
 		for _, q := range p.query {
+			if q.filter {
+				m, err := filterOf(values, q.key)
+				if err != nil {
+					return nil, err
+				}
+				if m != nil {
+					dst.FieldByIndex(q.index).Set(reflect.ValueOf(m).Convert(q.typ))
+				}
+				continue
+			}
 			vals := values[q.key]
 			if len(vals) == 0 {
 				continue
@@ -490,54 +592,105 @@ func (p *plan) fill(w http.ResponseWriter, r *http.Request, dst reflect.Value, l
 			}
 		}
 		if len(wrong) > 0 {
-			return wrongType(wrong)
+			return nil, wrongType(wrong)
 		}
 	}
 	for _, pp := range p.path {
 		if !pp.set(dst.FieldByIndex(pp.index), r.PathValue(pp.key)) {
-			return NotFound(fmt.Sprintf("Nothing is at %s.", r.URL.Path))
+			return nil, NotFound(fmt.Sprintf("Nothing is at %s.", r.URL.Path))
 		}
 	}
-	return nil
+	return sent, nil
+}
+
+// The bounds on a filter map: at most maxFilterKeys keys, none longer than
+// maxFilterKey bytes.
+const (
+	maxFilterKeys = 32
+	maxFilterKey  = 64
+)
+
+// filterOf returns the map of every prefix[name] in values, name to its first
+// value, or nil when there is none. The keys are counted and measured before
+// the map is made. A key that is not prefix[name], such as prefix[] or
+// prefix[a, is no filter key, and is ignored as any other key is.
+func filterOf(values url.Values, prefix string) (map[string]string, error) {
+	n, long := 0, false
+	for k := range values {
+		if name, ok := filterKey(k, prefix); ok {
+			n++
+			long = long || len(name) > maxFilterKey
+		}
+	}
+	switch {
+	case n > maxFilterKeys:
+		return nil, BadRequest(fmt.Sprintf("The query has more %s[...] keys than a route takes (%d).", prefix, maxFilterKeys))
+	case long:
+		return nil, BadRequest(fmt.Sprintf("A %s[...] key is longer than %d bytes.", prefix, maxFilterKey))
+	case n == 0:
+		return nil, nil
+	}
+	m := make(map[string]string, n)
+	for k, vals := range values {
+		if name, ok := filterKey(k, prefix); ok {
+			m[name] = vals[0]
+		}
+	}
+	return m, nil
+}
+
+// filterKey returns name when k is prefix[name], name not empty and with no
+// bracket in it.
+func filterKey(k, prefix string) (string, bool) {
+	rest, ok := strings.CutPrefix(k, prefix)
+	if !ok || len(rest) < 3 || rest[0] != '[' || rest[len(rest)-1] != ']' {
+		return "", false
+	}
+	name := rest[1 : len(rest)-1]
+	return name, !strings.ContainsAny(name, "[]")
 }
 
 // decode reads the JSON body, at most limit bytes, into the input's json
-// fields.
-func (p *plan) decode(w http.ResponseWriter, r *http.Request, dst reflect.Value, limit int64) error {
+// fields, and returns the top-level keys it sent.
+func (p *plan) decode(w http.ResponseWriter, r *http.Request, dst reflect.Value, limit int64) ([]string, error) {
 	var data []byte
 	if r.Body != nil {
 		var err error
 		data, err = io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
 		if err != nil {
 			if tooBig := (*http.MaxBytesError)(nil); errors.As(err, &tooBig) {
-				return TooLarge(fmt.Sprintf("The body is larger than %s.", sizeOf(limit)))
+				return nil, TooLarge(fmt.Sprintf("The body is larger than %s.", sizeOf(limit)))
 			}
-			return BadRequest(notJSON)
+			return nil, BadRequest(notJSON)
 		}
 	}
 	data = bytes.Trim(data, " \t\r\n")
 	if len(data) == 0 {
 		data = []byte("{}")
 	} else if !isJSONMedia(r.Header.Get("Content-Type")) {
-		return UnsupportedMedia("Send the body as application/json.")
+		return nil, UnsupportedMedia("Send the body as application/json.")
 	}
 	if tooDeep(data, maxNesting) {
-		return BadRequest(fmt.Sprintf("The body is nested more than %d levels deep.", maxNesting))
+		return nil, BadRequest(fmt.Sprintf("The body is nested more than %d levels deep.", maxNesting))
 	}
 	if !json.Valid(data) {
-		return BadRequest(notJSON)
+		return nil, BadRequest(notJSON)
 	}
 	if data[0] != '{' {
-		return BadRequest("The body must be a JSON object.")
+		return nil, BadRequest("The body must be a JSON object.")
 	}
 	view := reflect.New(p.view)
 	if err := decodeStrict(data, view.Interface()); err != nil {
-		return p.bodyError(data, err)
+		return nil, p.bodyError(data, err)
+	}
+	sent, err := p.walk(data)
+	if err != nil {
+		return nil, err
 	}
 	for i, index := range p.body {
 		dst.FieldByIndex(index).Set(view.Elem().Field(i))
 	}
-	return nil
+	return sent, nil
 }
 
 // isJSONMedia reports whether a Content-Type is application/json or a type
@@ -675,4 +828,301 @@ func sizeOf(limit int64) string {
 		return fmt.Sprintf("%d MB", limit>>20)
 	}
 	return fmt.Sprintf("%d bytes", limit)
+}
+
+// object is what may be sent where a struct is: the json keys of its
+// fields in field order, which of them are readonly, and how to look inside
+// each one's value, nil where nothing inside it can be readonly.
+type object struct {
+	names    []string
+	keys     [][]byte // names, as bytes
+	readonly []bool
+	inner    []*look
+}
+
+// look is how to look inside a JSON value: as a struct's object, as a list
+// of values or as an object of values (a map), each value looked at so.
+type look struct {
+	obj        *object
+	list, dict *look
+}
+
+// objects makes the objects of the struct types a body reaches, each once,
+// so that a type that holds itself ends.
+type objects map[reflect.Type]*object
+
+func (m objects) lookFor(t reflect.Type) *look {
+	for t.Kind() == reflect.Pointer && !decodesItself(t) {
+		t = t.Elem()
+	}
+	if decodesItself(t) {
+		return nil
+	}
+	switch t.Kind() {
+	case reflect.Slice, reflect.Array:
+		if e := m.lookFor(t.Elem()); e != nil {
+			return &look{list: e}
+		}
+	case reflect.Map:
+		if e := m.lookFor(t.Elem()); e != nil {
+			return &look{dict: e}
+		}
+	case reflect.Struct:
+		if t != timeType {
+			return &look{obj: m.objectOf(t)}
+		}
+	}
+	return nil
+}
+
+func (m objects) objectOf(t reflect.Type) *object {
+	if o, ok := m[t]; ok {
+		return o
+	}
+	o := &object{}
+	m[t] = o
+	fields, _ := inputFields(t, nil)
+	for _, f := range fields {
+		key, _, ok := jsonTagOf(f.StructField)
+		if !ok || key == "" {
+			continue
+		}
+		readonly := isReadonly(f.StructField)
+		var inner *look
+		if !readonly {
+			inner = m.lookFor(f.Type)
+		}
+		o.names, o.keys = append(o.names, key), append(o.keys, []byte(key))
+		o.readonly = append(o.readonly, readonly)
+		o.inner = append(o.inner, inner)
+	}
+	return o
+}
+
+// topObject makes the object of a plan's view, whose fields' types may hold
+// readonly fields however deep, and keeps a look only where one does.
+func topObject(view []reflect.StructField) *object {
+	m := objects{}
+	top := &object{}
+	for _, f := range view {
+		key, _, _ := jsonTagOf(f)
+		top.names, top.keys = append(top.names, key), append(top.keys, []byte(key))
+		top.readonly = append(top.readonly, false)
+		top.inner = append(top.inner, m.lookFor(f.Type))
+	}
+	// An object is deep when it has a readonly field or a field whose value
+	// can hold a deep object. A type can hold itself, so this is found by
+	// marking until nothing changes.
+	deep := map[*object]bool{}
+	reaches := func(l *look) bool {
+		for l != nil && l.obj == nil {
+			l = cmp.Or(l.list, l.dict)
+		}
+		return l != nil && deep[l.obj]
+	}
+	for changed := true; changed; {
+		changed = false
+		for _, o := range m {
+			if deep[o] {
+				continue
+			}
+			for i := range o.keys {
+				if o.readonly[i] || reaches(o.inner[i]) {
+					deep[o], changed = true, true
+					break
+				}
+			}
+		}
+	}
+	for _, o := range append(slices.Collect(maps.Values(m)), top) {
+		for i, l := range o.inner {
+			if !reaches(l) {
+				o.inner[i] = nil
+			}
+		}
+	}
+	return top
+}
+
+// match returns the index of the key a JSON object's key, written as sent,
+// sets, as encoding/json chooses it: the key itself, else the first that is
+// the same but for case; and the key as text. It is -1 when none is.
+func (o *object) match(quoted []byte) (int, []byte) {
+	name := quoted[1 : len(quoted)-1]
+	if bytes.IndexByte(name, '\\') >= 0 {
+		var s string
+		json.Unmarshal(quoted, &s) // the body is valid JSON
+		name = []byte(s)
+	}
+	for i, k := range o.keys {
+		if bytes.Equal(name, k) {
+			return i, name
+		}
+	}
+	for i, k := range o.keys {
+		if bytes.EqualFold(name, k) {
+			return i, name
+		}
+	}
+	return -1, name
+}
+
+// walk reads data, a JSON object the view has taken, in one pass. It
+// returns the top-level keys it sent, in its order, each once and as the
+// route names it, or nil when it sent none; or, when it sends a readonly
+// field anywhere inside it, the answer that the route does not take it. It
+// allocates the list it returns, and the text of a key with an escape.
+func (p *plan) walk(data []byte) ([]string, error) {
+	s := bodyScan{data: data}
+	if _, err := s.object(0, p.keys, true); err != nil {
+		return nil, err
+	}
+	return s.sent, nil
+}
+
+// bodyScan is one walk over a body.
+type bodyScan struct {
+	data []byte
+	sent []string
+	seen uint64 // the first 64 of the top keys sent; more for the others
+	more []bool
+}
+
+// object reads the object at i as o's and returns where it ends. With top it
+// records the keys sent.
+func (s *bodyScan) object(i int, o *object, top bool) (int, error) {
+	i = s.space(i + 1)
+	if s.data[i] == '}' {
+		return i + 1, nil
+	}
+	for {
+		end := s.str(i)
+		k, name := o.match(s.data[i:end])
+		if k >= 0 && o.readonly[k] {
+			return 0, unknown(string(name))
+		}
+		if top && k >= 0 {
+			s.record(o, k)
+		}
+		i = s.space(s.space(end) + 1) // past the colon
+		var err error
+		if k >= 0 && o.inner[k] != nil {
+			i, err = s.value(i, o.inner[k])
+		} else {
+			i = s.skip(i)
+		}
+		if err != nil {
+			return 0, err
+		}
+		if i = s.space(i); s.data[i] == '}' {
+			return i + 1, nil
+		}
+		i = s.space(i + 1) // past the comma
+	}
+}
+
+func (s *bodyScan) record(o *object, k int) {
+	if bit := uint64(1) << k; k < 64 {
+		if s.seen&bit != 0 {
+			return
+		}
+		s.seen |= bit
+	} else {
+		if s.more == nil {
+			s.more = make([]bool, len(o.keys))
+		}
+		if s.more[k] {
+			return
+		}
+		s.more[k] = true
+	}
+	if s.sent == nil {
+		s.sent = make([]string, 0, len(o.keys))
+	}
+	s.sent = append(s.sent, o.names[k])
+}
+
+// value reads the value at i as l says, and returns where it ends.
+func (s *bodyScan) value(i int, l *look) (int, error) {
+	var err error
+	switch c := s.data[i]; {
+	case l.obj != nil && c == '{':
+		return s.object(i, l.obj, false)
+	case l.list != nil && c == '[':
+		if i = s.space(i + 1); s.data[i] == ']' {
+			return i + 1, nil
+		}
+		for {
+			if i, err = s.value(i, l.list); err != nil {
+				return 0, err
+			}
+			if i = s.space(i); s.data[i] == ']' {
+				return i + 1, nil
+			}
+			i = s.space(i + 1)
+		}
+	case l.dict != nil && c == '{':
+		if i = s.space(i + 1); s.data[i] == '}' {
+			return i + 1, nil
+		}
+		for {
+			i = s.space(s.space(s.str(i)) + 1)
+			if i, err = s.value(i, l.dict); err != nil {
+				return 0, err
+			}
+			if i = s.space(i); s.data[i] == '}' {
+				return i + 1, nil
+			}
+			i = s.space(i + 1)
+		}
+	}
+	return s.skip(i), nil
+}
+
+// skip returns where the value at i ends.
+func (s *bodyScan) skip(i int) int {
+	switch s.data[i] {
+	case '"':
+		return s.str(i)
+	case '{', '[':
+		depth := 0
+		for ; ; i++ {
+			switch s.data[i] {
+			case '"':
+				i = s.str(i) - 1
+			case '{', '[':
+				depth++
+			case '}', ']':
+				if depth--; depth == 0 {
+					return i + 1
+				}
+			}
+		}
+	}
+	for ; i < len(s.data); i++ { // a number, true, false or null
+		switch s.data[i] {
+		case ',', '}', ']', ' ', '\t', '\r', '\n':
+			return i
+		}
+	}
+	return i
+}
+
+// str returns where the string at i ends, after its closing quote.
+func (s *bodyScan) str(i int) int {
+	for i++; ; i++ {
+		switch s.data[i] {
+		case '\\':
+			i++
+		case '"':
+			return i + 1
+		}
+	}
+}
+
+func (s *bodyScan) space(i int) int {
+	for i < len(s.data) && (s.data[i] == ' ' || s.data[i] == '\t' || s.data[i] == '\r' || s.data[i] == '\n') {
+		i++
+	}
+	return i
 }
