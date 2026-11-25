@@ -317,10 +317,10 @@ func TestRoutesDescribeThemselves(t *testing.T) {
 	mustRegister(t, app)
 	in, item, none := reflect.TypeFor[ShowIn](), reflect.TypeFor[Item](), reflect.TypeFor[None]()
 	want := []Route{
-		{Method: "GET", Path: "/api/items/{id}", In: in, Out: item, Status: 200},
-		{Method: "POST", Path: "/api/items", In: none, Out: item, Status: 201},
-		{Method: "PUT", Path: "/api/items/{id}", In: in, Out: item, Status: 202},
-		{Method: "DELETE", Path: "/api/items/{id}", In: in, Out: none, Status: 204},
+		{Name: "items", Method: "GET", Path: "/api/items/{id}", In: in, Out: item, Status: 200},
+		{Name: "post_items", Method: "POST", Path: "/api/items", In: none, Out: item, Status: 201},
+		{Name: "put_items", Method: "PUT", Path: "/api/items/{id}", In: in, Out: item, Status: 202},
+		{Name: "delete_items", Method: "DELETE", Path: "/api/items/{id}", In: in, Out: none, Status: 204},
 	}
 	if got := app.Routes(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("Routes() = %v\nwant %v", got, want)

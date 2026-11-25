@@ -173,7 +173,7 @@ func TestHandleUnderAPI(t *testing.T) {
 	if w := serve(t, app.Handler(), "GET", "/api/ping"); w.Code != 200 || w.Body.String() != "pong" {
 		t.Fatalf("status %d, body %q", w.Code, w.Body.String())
 	}
-	if want := []Route{{Method: "GET", Path: "/api/ping"}}; !reflect.DeepEqual(app.Routes(), want) {
+	if want := []Route{{Module: "ping", Name: "ping", Method: "GET", Path: "/api/ping"}}; !reflect.DeepEqual(app.Routes(), want) {
 		t.Fatalf("Routes() = %+v, want %+v", app.Routes(), want)
 	}
 }
@@ -186,7 +186,7 @@ func TestHandleWithoutMethod(t *testing.T) {
 			t.Fatalf("%s: status %d, body %q", method, w.Code, w.Body.String())
 		}
 	}
-	if want := []Route{{Path: "/api/any"}}; !reflect.DeepEqual(app.Routes(), want) {
+	if want := []Route{{Name: "any", Path: "/api/any"}}; !reflect.DeepEqual(app.Routes(), want) {
 		t.Fatalf("Routes() = %+v, want %+v", app.Routes(), want)
 	}
 }
@@ -197,7 +197,7 @@ func TestHandleStatusIsRecorded(t *testing.T) {
 	if w := serve(t, app.Handler(), "POST", "/api/jobs"); w.Code != 200 {
 		t.Fatalf("status %d, want the handler's own 200", w.Code)
 	}
-	if want := []Route{{Method: "POST", Path: "/api/jobs", Status: 202}}; !reflect.DeepEqual(app.Routes(), want) {
+	if want := []Route{{Name: "post_jobs", Method: "POST", Path: "/api/jobs", Status: 202}}; !reflect.DeepEqual(app.Routes(), want) {
 		t.Fatalf("Routes() = %+v, want %+v", app.Routes(), want)
 	}
 }
@@ -234,7 +234,7 @@ func TestRouteConflict(t *testing.T) {
 	if lines := strings.Split(errText(app.Err()), "\n"); len(lines) != 2 || !strings.HasPrefix(lines[1], `warp: route "GET /{bad" cannot be registered: `) {
 		t.Fatalf("Err() = %q", lines)
 	}
-	if want := []Route{{Method: "GET", Path: "/api/x"}}; !reflect.DeepEqual(app.Routes(), want) {
+	if want := []Route{{Name: "x", Method: "GET", Path: "/api/x"}}; !reflect.DeepEqual(app.Routes(), want) {
 		t.Fatalf("Routes() = %+v, want %+v", app.Routes(), want)
 	}
 }
@@ -375,4 +375,190 @@ func TestWrapOrder(t *testing.T) {
 	if want := []string{"wrap 1", "wrap 2", "with 1", "with 2", "handler"}; !reflect.DeepEqual(order, want) {
 		t.Fatalf("order %v, want %v", order, want)
 	}
+}
+
+// inModule is a module named name whose Register runs register.
+func inModule(name string, register func(app *App)) *testMod {
+	return &testMod{name: name, log: new([]string), register: register}
+}
+
+func TestRouteModuleAndName(t *testing.T) {
+	app := New(Config{})
+	app.Use(inModule("greet", func(app *App) {
+		Get(app, "/hello", func(context.Context, None) (Item, error) { return Item{}, nil })
+		app.Use(inModule("inner", func(app *App) {
+			app.Handle("GET /inner", text("inner"))
+		}))
+		Post(app, "/hello/greet", func(context.Context, None) (Item, error) { return Item{}, nil })
+	}))
+	app.Handle("GET /", text("index"))
+	app.Handle("DELETE /line-items/{id}", text("deleted"))
+	app.Handle("GET /Files/{rest...}", text("files"))
+	app.Handle("PUT /{id}", text("put"))
+	app.Handle("POST /{$}", text("post"))
+	if err := app.Err(); err != nil {
+		t.Fatal(err)
+	}
+	type named struct{ Module, Name, Method, Path string }
+	var got []named
+	for _, r := range app.Routes() {
+		got = append(got, named{r.Module, r.Name, r.Method, r.Path})
+	}
+	want := []named{
+		{"greet", "hello", "GET", "/api/hello"},
+		{"inner", "inner", "GET", "/api/inner"},
+		{"greet", "post_hello_greet", "POST", "/api/hello/greet"},
+		{"", "index", "GET", "/api/"},
+		{"", "delete_line_items", "DELETE", "/api/line-items/{id}"},
+		{"", "files", "GET", "/api/Files/{rest...}"},
+		{"", "put", "PUT", "/api/{id}"},
+		{"", "post", "POST", "/api/{$}"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Routes() =\n%v\nwant\n%v", got, want)
+	}
+	other := New(Config{})
+	other.Handle("/any/Thing", text("any"))
+	if r := other.Routes(); len(r) != 1 || r[0].Name != "any_thing" {
+		t.Fatalf("Routes() = %+v", r)
+	}
+}
+
+func TestNameOverridesAndClashes(t *testing.T) {
+	app := New(Config{})
+	app.Use(inModule("products", func(app *App) {
+		Get(app, "/products", func(context.Context, None) ([]Item, error) { return nil, nil }, Name("list"))
+		app.Handle("GET /products/all", text("all"), Name("list"))
+		Get(app, "/products/{id}", func(context.Context, None) (Item, error) { return Item{}, nil })
+		Get(app, "/products/{id}/{$}", func(context.Context, None) (Item, error) { return Item{}, nil })
+		app.Handle("GET /empty", text("x"), Name(""))
+	}))
+	app.Use(inModule("orders", func(app *App) {
+		app.Handle("GET /orders", text("x"), Name("list"))
+	}))
+	app.Use(inModule("dup", func(app *App) {
+		app.Handle("GET /dup", text("1"))
+		app.Handle("GET /dup", text("2"))
+	}))
+	// Outside a module names are not checked.
+	app.Handle("GET /a", text("a"))
+	app.Handle("GET /a/{id}", text("a"))
+	want := strings.Join([]string{
+		`warp: module "products" has two routes named "list" (GET /products and GET /products/all); give one a warp.Name.`,
+		`warp: module "products" has two routes named "products" (GET /products/{id} and GET /products/{id}/{$}); give one a warp.Name.`,
+		`warp: Name("") is empty; give the route a name.`,
+	}, "\n")
+	lines := strings.Split(errText(app.Err()), "\n")
+	if len(lines) != 4 || strings.Join(lines[:3], "\n") != want ||
+		!strings.HasPrefix(lines[3], `warp: route "GET /dup" cannot be registered: `) || !strings.Contains(lines[3], "conflicts") {
+		t.Fatalf("Err() =\n%s\nwant\n%s\nand the mux's conflict", errText(app.Err()), want)
+	}
+	var got []string
+	for _, r := range app.Routes() {
+		got = append(got, r.Module+"."+r.Name+" "+r.Path)
+	}
+	if want := []string{"products.list /api/products", "products.products /api/products/{id}", "orders.list /api/orders", "dup.dup /api/dup", ".a /api/a", ".a /api/a/{id}"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Routes() = %v, want %v", got, want)
+	}
+	if w := serve(t, app.Handler(), "GET", "/api/products/all"); w.Body.String() == "all" {
+		t.Fatal("a route whose name clashed was served")
+	}
+	if w := serve(t, app.Handler(), "GET", "/api/empty"); w.Code != 404 {
+		t.Fatalf("a route named \"\" was served: status %d", w.Code)
+	}
+}
+
+func TestOptionsApplyInOrder(t *testing.T) {
+	var order []string
+	mark := func(name string) func(http.Handler) http.Handler {
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				order = append(order, name)
+				next.ServeHTTP(w, r)
+			})
+		}
+	}
+	guard := Options(Permission("products:edit"), With(mark("guard")))
+	app := New(Config{})
+	app.Handle("POST /products", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		order = append(order, "handler")
+	}), With(mark("first")), guard, Options(Name("one"), Name("two")), With(mark("last")))
+	serve(t, mustRegister(t, app), "POST", "/api/products")
+	if want := []string{"first", "guard", "last", "handler"}; !reflect.DeepEqual(order, want) {
+		t.Fatalf("order %v, want %v", order, want)
+	}
+	r := app.Routes()[0]
+	if r.Permission != "products:edit" || r.Name != "two" {
+		t.Fatalf("Permission %q, Name %q", r.Permission, r.Name)
+	}
+	if p := (Route{}).Permission; p != "" {
+		t.Fatal(p)
+	}
+}
+
+type testDB struct{ name string }
+
+func TestProvideAndNeed(t *testing.T) {
+	t.Run("provided", func(t *testing.T) {
+		app := New(Config{})
+		var db *testDB
+		var n int
+		app.Use(
+			inModule("data", func(app *App) { Provide(app, &testDB{"main"}); Provide(app, 7) }),
+			inModule("products", func(app *App) { db = Need[*testDB](app, "data"); n = Need[int](app, "data") }),
+		)
+		if err := app.Err(); err != nil {
+			t.Fatal(err)
+		}
+		if db == nil || db.name != "main" || n != 7 {
+			t.Fatalf("Need = %v, %d", db, n)
+		}
+		if got := Need[*testDB](app, "data"); got != db {
+			t.Fatalf("Need outside a module = %v", got)
+		}
+	})
+	t.Run("missing", func(t *testing.T) {
+		app := New(Config{})
+		var db *testDB
+		var n int
+		app.Use(inModule("products", func(app *App) { db = Need[*testDB](app, "data") }))
+		n = Need[int](app, "clock")
+		want := strings.Join([]string{
+			`warp: module "products" needs the "data" module; list data.Module() before it in app/modules.go.`,
+			`warp: the app needs the "clock" module; list clock.Module() in app/modules.go.`,
+		}, "\n")
+		if got := errText(app.Err()); got != want {
+			t.Fatalf("Err() =\n%s\nwant\n%s", got, want)
+		}
+		if db != nil || n != 0 {
+			t.Fatalf("Need = %v, %d, want the zero values", db, n)
+		}
+	})
+	t.Run("twice", func(t *testing.T) {
+		app := New(Config{})
+		app.Use(
+			inModule("a", func(app *App) { Provide(app, &testDB{"a"}) }),
+			inModule("b", func(app *App) { Provide(app, &testDB{"b"}) }),
+		)
+		if want := `warp: two modules provide a *warp.testDB; list only one of them.`; errText(app.Err()) != want {
+			t.Fatalf("Err() = %q, want %q", errText(app.Err()), want)
+		}
+		if got := Need[*testDB](app, "a"); got.name != "a" {
+			t.Fatalf("Need = %v, want the first", got)
+		}
+	})
+	t.Run("after start", func(t *testing.T) {
+		captureLog(t)
+		app := New(Config{})
+		if err := app.Start(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		Provide(app, &testDB{"late"})
+		if want := `warp: Provide was called after the app started; provide every value in a module's Register.`; errText(app.Err()) != want {
+			t.Fatalf("Err() = %q, want %q", errText(app.Err()), want)
+		}
+		if err := app.Stop(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	})
 }

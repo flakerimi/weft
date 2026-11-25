@@ -438,3 +438,127 @@ func TestRunNeedsAListener(t *testing.T) {
 		t.Fatalf("Run = %q", errText(err))
 	}
 }
+
+func TestStartAndStop(t *testing.T) {
+	ctx := context.Background()
+	t.Run("order", func(t *testing.T) {
+		var log []string
+		app := New(Config{})
+		app.Use(mod("a", &log), mod("b", &log), mod("c", &log))
+		app.Handle("GET /ping", text("pong"))
+		if err := app.Start(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if w := serve(t, app.Handler(), "GET", "/api/ping"); w.Body.String() != "pong" {
+			t.Fatalf("body %q", w.Body.String())
+		}
+		if err := app.Stop(ctx); err != nil {
+			t.Fatal(err)
+		}
+		want := []string{
+			"register:a", "register:b", "register:c",
+			"migrate:a", "migrate:b", "migrate:c",
+			"start:a", "start:b", "start:c",
+			"stop:c", "stop:b", "stop:a",
+		}
+		if !reflect.DeepEqual(log, want) {
+			t.Fatalf("log %v\nwant %v", log, want)
+		}
+		if err := app.Stop(ctx); err != nil || len(log) != len(want) {
+			t.Fatalf("a second Stop: %v, log %v", err, log)
+		}
+		if err := app.Start(ctx); errText(err) != "warp: the app was already started." {
+			t.Fatalf("a second Start = %q", errText(err))
+		}
+	})
+	t.Run("a failing start stops the earlier ones", func(t *testing.T) {
+		var log []string
+		b := mod("b", &log)
+		b.startErr = errors.New("boom")
+		app := New(Config{})
+		app.Use(mod("a", &log), b, mod("c", &log))
+		if err := app.Start(ctx); errText(err) != `warp: module "b" could not start: boom` {
+			t.Fatalf("Start = %q", errText(err))
+		}
+		if want := []string{"start:a", "start:b", "stop:a"}; !reflect.DeepEqual(log[len(log)-3:], want) {
+			t.Fatalf("log %v", log)
+		}
+		n := len(log)
+		if err := app.Stop(ctx); err != nil || len(log) != n {
+			t.Fatalf("Stop after a failed Start: %v, log %v", err, log)
+		}
+	})
+	t.Run("a failing migrate starts nothing", func(t *testing.T) {
+		var log []string
+		b := mod("b", &log)
+		b.migrateErr = errors.New("table exists")
+		app := New(Config{})
+		app.Use(mod("a", &log), b)
+		if err := app.Start(ctx); errText(err) != `warp: module "b" could not migrate: table exists` {
+			t.Fatalf("Start = %q", errText(err))
+		}
+		if err := app.Stop(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if want := []string{"register:a", "register:b", "migrate:a", "migrate:b"}; !reflect.DeepEqual(log, want) {
+			t.Fatalf("log %v", log)
+		}
+	})
+	t.Run("stop failures are joined", func(t *testing.T) {
+		var log []string
+		a, c := mod("a", &log), mod("c", &log)
+		a.stopErr, c.stopErr = errors.New("a stuck"), errors.New("c stuck")
+		app := New(Config{})
+		app.Use(a, mod("b", &log), c)
+		if err := app.Start(ctx); err != nil {
+			t.Fatal(err)
+		}
+		want := "warp: module \"c\" could not stop: c stuck\nwarp: module \"a\" could not stop: a stuck"
+		if err := app.Stop(ctx); errText(err) != want || !errors.Is(err, a.stopErr) {
+			t.Fatalf("Stop = %q, want %q", errText(err), want)
+		}
+	})
+	t.Run("registration mistakes come first", func(t *testing.T) {
+		var log []string
+		app := New(Config{})
+		app.Use(mod("a", &log), mod("a", &log))
+		if err := app.Start(ctx); errText(err) != `warp: two modules are named "a"; give one another name.` {
+			t.Fatalf("Start = %q", errText(err))
+		}
+		if want := []string{"register:a"}; !reflect.DeepEqual(log, want) {
+			t.Fatalf("log %v", log)
+		}
+	})
+	t.Run("Run after Start", func(t *testing.T) {
+		app := New(Config{})
+		if err := app.Start(ctx); err != nil {
+			t.Fatal(err)
+		}
+		ln := listenLocal(t)
+		if err := app.Run(ctx, ln, nil); errText(err) != "warp: the app was already started." {
+			t.Fatalf("Run = %q", errText(err))
+		}
+		if !closed(ln.Addr().String()) {
+			t.Fatal("the listener is still open")
+		}
+	})
+	t.Run("Start after Run", func(t *testing.T) {
+		var log []string
+		app := New(Config{})
+		app.Use(mod("a", &log))
+		app.Handle("GET /ping", text("pong"))
+		r := startApp(t, app, nil)
+		if status, _ := fetch(t, r.url+"/api/ping"); status != 200 {
+			t.Fatalf("status %d", status)
+		}
+		if err := app.Start(ctx); errText(err) != "warp: the app was already started." {
+			t.Fatalf("Start = %q", errText(err))
+		}
+		if err := r.stop(t); err != nil {
+			t.Fatal(err)
+		}
+		if want := []string{"register:a", "migrate:a", "start:a", "stop:a"}; !reflect.DeepEqual(notes(&log), want) {
+			t.Fatalf("log %v", notes(&log))
+		}
+	})
+}

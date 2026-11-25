@@ -71,46 +71,23 @@ func untilEOF(parent context.Context, r io.Reader) (context.Context, context.Can
 	return ctx, cancel
 }
 
-// Run runs the app on ln until ctx ends: it migrates every Migrator and
-// starts every Starter, in the order the modules were listed, then serves
-// dist and the API (the API alone when dist is nil). When ctx ends it lets
-// the requests in flight finish, for up to 10 seconds, and stops every
-// Stopper in reverse order. When a step fails, the modules already started
-// are stopped. Run closes ln, and returns nil after a clean stop.
+// Run runs the app on ln until ctx ends: it starts the app, as Start does,
+// then serves dist and the API (the API alone when dist is nil). When ctx
+// ends it lets the requests in flight finish, for up to 10 seconds, and
+// stops the app, as Stop does. Run closes ln, and returns nil after a clean
+// stop.
 func (a *App) Run(ctx context.Context, ln net.Listener, dist fs.FS, opts ...ServeOption) error {
 	if ln == nil {
 		return errors.New("warp: Run needs a listener; call Serve, or pass one from net.Listen.")
 	}
-	if err := a.Err(); err != nil {
+	if err := a.Start(ctx); err != nil {
 		ln.Close()
 		return err
 	}
-	a.mu.Lock()
-	a.started = true
-	modules := slices.Clone(a.modules)
-	a.mu.Unlock()
 
 	h := a.Handler()
 	if dist != nil {
 		h = Serve(dist, h, opts...)
-	}
-
-	for _, m := range modules {
-		if mg, ok := m.(Migrator); ok {
-			if err := mg.Migrate(ctx); err != nil {
-				ln.Close()
-				return fmt.Errorf("warp: module %q could not migrate: %w", m.Name(), err)
-			}
-		}
-	}
-	for i, m := range modules {
-		if s, ok := m.(Starter); ok {
-			if err := s.Start(ctx); err != nil {
-				ln.Close()
-				err = fmt.Errorf("warp: module %q could not start: %w", m.Name(), err)
-				return errors.Join(append([]error{err}, stopAll(modules[:i])...)...)
-			}
-		}
 	}
 
 	srv := newServer(h)
@@ -125,7 +102,61 @@ func (a *App) Run(ctx context.Context, ln net.Listener, dist fs.FS, opts ...Serv
 		errs = append(errs, drain(srv)...)
 		<-served
 	}
-	return errors.Join(append(errs, stopAll(modules)...)...)
+	return errors.Join(append(errs, a.stop(context.WithoutCancel(ctx))...)...)
+}
+
+// Start starts the app without listening: it migrates every Migrator, then
+// starts every Starter, in the order the modules were listed. When a module
+// fails to start, the ones already started are stopped. It returns the
+// registration mistakes first, as Err does, and may be called once; Run
+// calls it. A test that serves Handler calls Start and Stop around it.
+func (a *App) Start(ctx context.Context) error {
+	if err := a.Err(); err != nil {
+		return err
+	}
+	a.mu.Lock()
+	if a.started {
+		a.mu.Unlock()
+		return errors.New("warp: the app was already started.")
+	}
+	a.started = true
+	modules := slices.Clone(a.modules)
+	a.mu.Unlock()
+
+	for _, m := range modules {
+		if mg, ok := m.(Migrator); ok {
+			if err := mg.Migrate(ctx); err != nil {
+				return fmt.Errorf("warp: module %q could not migrate: %w", m.Name(), err)
+			}
+		}
+	}
+	for i, m := range modules {
+		if s, ok := m.(Starter); ok {
+			if err := s.Start(ctx); err != nil {
+				err = fmt.Errorf("warp: module %q could not start: %w", m.Name(), err)
+				return errors.Join(append([]error{err}, stopAll(context.WithoutCancel(ctx), modules[:i])...)...)
+			}
+		}
+	}
+	a.mu.Lock()
+	a.running = modules
+	a.mu.Unlock()
+	return nil
+}
+
+// Stop stops every Stopper that Start started, last first, giving them up
+// to 10 seconds, and returns what failed. After a Start that failed, or a
+// second time, it does nothing.
+func (a *App) Stop(ctx context.Context) error {
+	return errors.Join(a.stop(ctx)...)
+}
+
+func (a *App) stop(ctx context.Context) []error {
+	a.mu.Lock()
+	modules := a.running
+	a.running = nil
+	a.mu.Unlock()
+	return stopAll(ctx, modules)
 }
 
 // drain shuts srv down, letting the requests in flight finish for up to 10
@@ -140,10 +171,10 @@ func drain(srv *http.Server) []error {
 	return nil
 }
 
-// stopAll stops every Stopper in modules, last first, and returns what
-// failed.
-func stopAll(modules []Module) []error {
-	ctx, cancel := context.WithTimeout(context.Background(), stopLimit)
+// stopAll stops every Stopper in modules, last first, within 10 seconds of
+// ctx, and returns what failed.
+func stopAll(ctx context.Context, modules []Module) []error {
+	ctx, cancel := context.WithTimeout(ctx, stopLimit)
 	defer cancel()
 	var errs []error
 	for _, m := range slices.Backward(modules) {

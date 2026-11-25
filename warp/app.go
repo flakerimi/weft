@@ -38,21 +38,53 @@ type Stopper interface {
 	Stop(ctx context.Context) error
 }
 
-// Route describes one registered route. Path has /api in front; In and Out
-// are nil for a route registered with Handle.
+// Route describes one registered route. Module is the name of the module
+// whose Register added it, empty for a route added outside one. Name is the
+// one Name gave, or one made from the method and path. Path has /api in
+// front; In and Out are nil for a route registered with Handle. Permission
+// is the one Permission recorded.
 type Route struct {
-	Method, Path string
-	In, Out      reflect.Type
-	Status       int
+	Module, Name, Method, Path string
+	In, Out                    reflect.Type
+	Status                     int
+	Permission                 string
 }
 
 // RouteOption changes one route.
 type RouteOption func(*routeConfig)
 
 type routeConfig struct {
-	status    int
-	statusSet bool // Status was given
-	wraps     []func(http.Handler) http.Handler
+	status     int
+	statusSet  bool // Status was given
+	name       string
+	nameSet    bool // Name was given
+	permission string
+	wraps      []func(http.Handler) http.Handler
+}
+
+// Name names the route within its module, in place of the name made from its
+// method and path. Two routes of one module with one name are a mistake,
+// reported by Err; routes added outside a module are not checked.
+func Name(name string) RouteOption {
+	return func(c *routeConfig) { c.name, c.nameSet = name, true }
+}
+
+// Permission records the permission the route needs, for Routes to report.
+// It does not guard the route: the module that enforces permissions supplies
+// an option that does, built with Options.
+func Permission(permission string) RouteOption {
+	return func(c *routeConfig) { c.permission = permission }
+}
+
+// Options makes one route option out of several, applied in the order given,
+// so a package can write an option that, say, records a permission and
+// guards the route with With.
+func Options(opts ...RouteOption) RouteOption {
+	return func(c *routeConfig) {
+		for _, opt := range opts {
+			opt(c)
+		}
+	}
 }
 
 // With puts mw around this route alone, inside every Wrap. The first With
@@ -74,25 +106,37 @@ type App struct {
 	cfg Config
 	mux *http.ServeMux
 
-	mu       sync.Mutex
-	modules  []Module
-	names    map[string]bool
-	routes   []Route
-	wraps    []func(http.Handler) http.Handler
-	mistakes []error
-	started  bool
+	mu         sync.Mutex
+	modules    []Module
+	names      map[string]bool
+	current    string            // the module whose Register is running
+	routeNames map[string]string // a module's name and a route's name to the route
+	routes     []Route
+	wraps      []func(http.Handler) http.Handler
+	provided   map[reflect.Type]any
+	mistakes   []error
+	started    bool
+	running    []Module // the modules Start started, which Stop stops
 }
 
 // New returns an app configured by cfg, with no modules. A mistake in cfg is
 // reported by Err, and by Run.
 func New(cfg Config) *App {
-	return &App{cfg: cfg.withDefaults(), mux: http.NewServeMux(), names: map[string]bool{}}
+	return &App{
+		cfg:        cfg.withDefaults(),
+		mux:        http.NewServeMux(),
+		names:      map[string]bool{},
+		routeNames: map[string]string{},
+		provided:   map[reflect.Type]any{},
+	}
 }
 
 // Config returns the app's configuration, with its defaults filled in.
 func (a *App) Config() Config { return a.cfg }
 
-// Use registers each module at once, in order. A mistake is reported by Err.
+// Use registers each module at once, in order. A module's Register may call
+// Use itself; while the inner module registers, its routes are its own. A
+// mistake is reported by Err.
 func (a *App) Use(modules ...Module) {
 	for _, m := range modules {
 		name := m.Name()
@@ -110,10 +154,68 @@ func (a *App) Use(modules ...Module) {
 		a.names[name] = true
 		a.modules = append(a.modules, m)
 		a.mu.Unlock()
-		if err := m.Register(a); err != nil {
+		if err := a.register(m); err != nil {
 			a.fail("module %q could not register: %w", name, err)
 		}
 	}
+}
+
+// register runs m's Register with m as the current module.
+func (a *App) register(m Module) error {
+	a.mu.Lock()
+	outer := a.current
+	a.current = m.Name()
+	a.mu.Unlock()
+	defer func() {
+		a.mu.Lock()
+		a.current = outer
+		a.mu.Unlock()
+	}()
+	return m.Register(a)
+}
+
+// Provide stores value as the one value of its Go type T, for a later module
+// to get with Need. A module calls it from its Register. A second value of
+// one type, or a Provide after the app started, is a mistake, reported by
+// Err.
+func Provide[T any](app *App, value T) {
+	t := reflect.TypeFor[T]()
+	app.mu.Lock()
+	_, taken := app.provided[t]
+	started := app.started
+	if !started && !taken {
+		app.provided[t] = value
+	}
+	app.mu.Unlock()
+	switch {
+	case started:
+		app.fail("Provide was called after the app started; provide every value in a module's Register.")
+	case taken:
+		app.fail("two modules provide a %s; list only one of them.", t)
+	}
+}
+
+// Need returns the value of type T that the module named module provided.
+// When there is none it returns the zero T and records a mistake, reported
+// by Err, that says to list that module first. A module wraps it in a typed
+// function of its own, such as data.For(app).
+func Need[T any](app *App, module string) T {
+	t := reflect.TypeFor[T]()
+	app.mu.Lock()
+	v, ok := app.provided[t]
+	current := app.current
+	app.mu.Unlock()
+	if !ok {
+		if current != "" {
+			app.fail("module %q needs the %q module; list %s.Module() before it in app/modules.go.", current, module, module)
+		} else {
+			app.fail("the app needs the %q module; list %s.Module() in app/modules.go.", module, module)
+		}
+		var zero T
+		return zero
+	}
+	value, _ := v.(T) // a nil interface value is stored as nil
+	return value
 }
 
 // Handle registers h at pattern, which is a method, a space and a path
@@ -160,11 +262,29 @@ func (a *App) route(method, path string, in, out reflect.Type, status int, mk fu
 		a.fail("%s: Status(%d) is not a status a route can answer with; use one from 200 to 599.", name, rc.status)
 		ok = false
 	}
+	if rc.nameSet && rc.name == "" {
+		a.fail(`Name("") is empty; give the route a name.`)
+		ok = false
+	}
 	for _, m := range mistakes {
 		a.fail("%s: %s", name, m)
 		ok = false
 	}
 	if !ok {
+		return
+	}
+	if !rc.nameSet {
+		rc.name = defaultName(method, path)
+	}
+	// Names are unique within a module. The same pattern twice is left to the
+	// mux, whose reason says more.
+	a.mu.Lock()
+	module := a.current
+	key := module + "\x00" + rc.name
+	other, clash := a.routeNames[key]
+	a.mu.Unlock()
+	if module != "" && clash && other != name {
+		a.fail("module %q has two routes named %q (%s and %s); give one a warp.Name.", module, rc.name, other, name)
 		return
 	}
 	if out == noneType {
@@ -180,8 +300,35 @@ func (a *App) route(method, path string, in, out reflect.Type, status int, mk fu
 		return
 	}
 	a.mu.Lock()
-	a.routes = append(a.routes, Route{Method: method, Path: "/api" + path, In: in, Out: out, Status: rc.status})
+	if module != "" {
+		a.routeNames[key] = name
+	}
+	a.routes = append(a.routes, Route{
+		Module: module, Name: rc.name, Method: method, Path: "/api" + path,
+		In: in, Out: out, Status: rc.status, Permission: rc.permission,
+	})
 	a.mu.Unlock()
+}
+
+// defaultName is the name of a route given no Name: the static segments of
+// its path joined by _, in lower case with - turned to _, and the method and
+// _ in front unless the method is GET or empty. Wildcards are left out; a path
+// of wildcards alone is index under GET, and the method alone otherwise.
+func defaultName(method, path string) string {
+	var parts []string
+	for seg := range strings.SplitSeq(path, "/") {
+		if seg == "" || strings.HasPrefix(seg, "{") {
+			continue
+		}
+		parts = append(parts, strings.ReplaceAll(strings.ToLower(seg), "-", "_"))
+	}
+	if method != "" && method != http.MethodGet {
+		parts = append([]string{strings.ToLower(method)}, parts...)
+	}
+	if len(parts) == 0 {
+		return "index"
+	}
+	return strings.Join(parts, "_")
 }
 
 // registeredAt is where the mux says a pattern was registered, which is
