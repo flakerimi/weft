@@ -1,6 +1,6 @@
-// The benchmark's one image, for both sites.
+// The benchmark's one image, for every site.
 //
-// bench/image/hero.jpg is the source both sites start from. It is made here
+// bench/image/hero.jpg is the source every site starts from. It is made here
 // once, if it is missing: a seeded, photo-like landscape (fractal noise and
 // film grain, 2400 x 1350), so it compresses like a photograph and not like a
 // flat graphic, and anyone can make the same file again.
@@ -8,8 +8,10 @@
 // Astro sizes it with its own <Image>. Weft has no <Image> yet, so this script
 // makes the WebP the Weft site serves (bench/weft/public/hero.webp) the way
 // Astro's sharp service does for <Image width={1600}>: rotate by EXIF, resize
-// to 1600 px wide without enlarging, WebP at sharp's default quality.
-import { existsSync, mkdirSync } from 'node:fs'
+// to 1600 px wide without enlarging, WebP at sharp's default quality. The
+// Nuxt, Next and SvelteKit sites serve a copy of that same file from their own
+// public folders, so all of them send the same image bytes.
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
@@ -17,6 +19,7 @@ import sharp from 'sharp'
 const bench = join(dirname(fileURLToPath(import.meta.url)), '..')
 const source = join(bench, 'image', 'hero.jpg')
 const weftImage = join(bench, 'weft', 'public', 'hero.webp')
+const copies = ['nuxt/public', 'next/public', 'sveltekit/static'].map((d) => join(bench, d, 'hero.webp'))
 const WIDTH = 1600
 
 // mulberry32: a small seeded generator, so the source is the same every time.
@@ -87,3 +90,7 @@ if (!existsSync(source)) await makeSource()
 mkdirSync(dirname(weftImage), { recursive: true })
 const out = await sharp(source).rotate().resize({ width: WIDTH, withoutEnlargement: true }).webp().toFile(weftImage)
 process.stdout.write(`images: ${weftImage} is ${out.width} x ${out.height}, ${out.size} B\n`)
+for (const copy of copies) {
+  mkdirSync(dirname(copy), { recursive: true })
+  copyFileSync(weftImage, copy)
+}

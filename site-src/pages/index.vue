@@ -185,7 +185,7 @@ for (const s of scenes) {
           <h2 id="speed-title">One binary, nothing left to do per request.</h2>
           <p>
             Pages are rendered and compressed when you build. The Go binary keeps every byte in memory and only sends it.
-            The benchmark’s landing page, requests per second:
+            The benchmark’s landing page, each framework behind the server it ships with, requests per second:
           </p>
         </div>
         <div class="landing-bench" role="table" aria-label="Requests per second">
@@ -198,9 +198,14 @@ for (const s of scenes) {
           </div>
         </div>
         <p class="landing-bench-note">
-          Requests per second, the median of {{ facts.runs }} runs on an {{ facts.machine }} ({{ facts.date }}). The Go
-          servers run on one core; <code>astro preview</code> is not held to one. Part of the gap is the server: Weft
-          sends the brotli it made at build time, Astro's servers compress each response. Astro's page with no framework
+          Requests per second, the median of {{ facts.runs }} runs on an {{ facts.machine }} ({{ facts.date }}). Weft's
+          server runs on one core; the others are Node and are not held to one. The gap is the server, not the pages.
+          <template v-if="facts.packed">
+            Behind a plain Go server that also keeps brotli made at build in memory, the other sites' static builds
+            answer {{ formatCount(facts.packed.min) }} to {{ formatCount(facts.packed.max) }}. Weft puts that server in
+            your binary.
+          </template>
+          Astro's page with no framework
           island still ships less JavaScript than ours ({{ formatBytes(facts.plainJS) }} against
           {{ formatBytes(facts.weftJS) }}), and the benchmark says where,
           <template v-if="repoPublic">in <a href="https://github.com/flakerimi/weft/tree/main/bench">its README</a>.</template>

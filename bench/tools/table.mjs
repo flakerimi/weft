@@ -24,7 +24,9 @@ const lines = [
   '',
   `Machine: ${m.chip}, ${m.cores} cores (${m.performance_cores} performance), ${m.memory_gb} GB, macOS ${m.macos} (${m.macos_build}). ` +
     `Node ${v.node}, ${v.go}, Chrome ${chrome} headless. Weft at \`${v.weft_commit}\` with Vue ${v.vue_weft}; ` +
-    `Astro ${v.astro}, @astrojs/vue ${v.astrojs_vue}, Vue ${v.vue_astro}; Lighthouse ${v.lighthouse}.`,
+    `Astro ${v.astro}, @astrojs/vue ${v.astrojs_vue}, Vue ${v.vue_astro}; ` +
+    (v.nuxt ? `Nuxt ${v.nuxt}, Vue ${v.vue_nuxt}; Next.js ${v.next}, React ${v.react}; SvelteKit ${v.sveltekit}, Svelte ${v.svelte}; ` : '') +
+    `Lighthouse ${v.lighthouse}.`,
   '',
   '| Site | Server | HTML+CSS (br) | JS files (br) | Inline JS (raw) | Total (br) | Requests | TTFB, ms | Lighthouse | LCP, ms | Req/s (Go servers at GOMAXPROCS=1) | p50 / p99, ms |',
   '|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|',
@@ -44,7 +46,7 @@ lines.push(
     `${r.method.ttfb_requests} requests on new connections, [p25–p75]. Lighthouse and LCP: median of ${r.method.lighthouse_runs} mobile runs, [min–max]. ` +
     `Load: ${r.method.load.connections} connections, ${r.method.load.warmup} warm-up, ${r.method.load.duration} measured, ` +
     `median of ${r.method.load.runs} rounds [min–max]; p50 and p99 are the medians of the rounds' own. No errors unless noted. ` +
-    'The Go servers (Weft, Go static) run at GOMAXPROCS=1; `astro preview` is not held to one core (Node, with gzip on libuv\'s thread pool).',
+    'The Go servers (Weft, Go static, Go pre-compressed) run at GOMAXPROCS=1; the frameworks\' own servers are Node and are not held to one core.',
   '',
   'What each server really sent (Accept-Encoding: br, gzip):',
   '',
