@@ -47,52 +47,92 @@ func Validate(v any) error {
 		return nil
 	}
 	fields := map[string]string{}
-	validateStruct(rv, "", fields)
+	var at []segment
+	validateStruct(rv, &at, fields)
 	if len(fields) == 0 {
 		return nil
 	}
 	return Invalid(fields)
 }
 
-func validateStruct(rv reflect.Value, prefix string, fields map[string]string) {
+// segment is one step of a field's key: a field's or a map entry's name, or a
+// list index when index is not negative. The walk keeps the steps to where it
+// is as a stack, pushing one before it goes in and popping it after, and
+// writes them out as a key only for a field that fails: a value that passes
+// costs no string. (A chain of segments linked to their parents would not
+// stay on the stack: Go moves a value whose address flows back into itself
+// through recursion to the heap.)
+type segment struct {
+	name  string
+	index int
+}
+
+// key writes the steps as a dotted key, such as lines.0.sku.
+func key(at []segment) string {
+	var digits [20]byte
+	size := len(at) - 1
+	for _, s := range at {
+		if s.index >= 0 {
+			size += len(strconv.AppendInt(digits[:0], int64(s.index), 10))
+		} else {
+			size += len(s.name)
+		}
+	}
+	var b strings.Builder
+	b.Grow(size)
+	for i, s := range at {
+		if i > 0 {
+			b.WriteByte('.')
+		}
+		if s.index >= 0 {
+			b.Write(strconv.AppendInt(digits[:0], int64(s.index), 10))
+		} else {
+			b.WriteString(s.name)
+		}
+	}
+	return b.String()
+}
+
+func validateStruct(rv reflect.Value, at *[]segment, fields map[string]string) {
+	depth := len(*at)
 	for _, spec := range specsOf(rv.Type()) {
 		fv, ok := fieldByIndex(rv, spec.index)
 		if !ok {
 			continue
 		}
-		key := spec.key
-		if prefix != "" {
-			key = prefix + "." + key
-		}
+		*at = append((*at)[:depth], segment{name: spec.key, index: -1})
 		if msg := checkField(fv, spec.rules); msg != "" {
-			fields[key] = msg
+			fields[key(*at)] = msg
 		}
 		if !holdsStructs(fv.Type()) {
 			continue
 		}
 		if inner, ok := reachable(fv); ok {
-			validateInside(inner, key, fields)
+			validateInside(inner, at, fields)
 		}
 	}
+	*at = (*at)[:depth]
 }
 
 // validateInside validates the structs in v, a struct, or a slice, array or
 // map whose element type can hold them, as reachable gives it. A list's
-// entries are keyed by their index after key, a map's by its keys, formatted
-// with fmt.Sprint and visited in sorted order. An entry's key is made only
-// for an entry that holds something to validate, so a long list of anything
-// else costs nothing.
-func validateInside(v reflect.Value, key string, fields map[string]string) {
+// entries are keyed by their index after at, a map's by its keys, formatted
+// with fmt.Sprint and visited in sorted order. at is the stack of steps to v;
+// it is as long again when validateInside returns.
+func validateInside(v reflect.Value, at *[]segment, fields map[string]string) {
+	depth := len(*at)
+	defer func() { *at = (*at)[:depth] }()
 	switch v.Kind() {
 	case reflect.Struct:
-		validateStruct(v, key, fields)
+		validateStruct(v, at, fields)
 	case reflect.Slice, reflect.Array:
 		if !holdsStructs(v.Type().Elem()) {
 			return
 		}
 		for i := 0; i < v.Len(); i++ {
 			if inner, ok := reachable(v.Index(i)); ok {
-				validateInside(inner, key+"."+strconv.Itoa(i), fields)
+				*at = append((*at)[:depth], segment{index: i})
+				validateInside(inner, at, fields)
 			}
 		}
 	case reflect.Map:
@@ -114,7 +154,8 @@ func validateInside(v reflect.Value, key string, fields map[string]string) {
 		}
 		slices.SortFunc(entries, func(a, b entry) int { return strings.Compare(a.name, b.name) })
 		for _, e := range entries {
-			validateInside(e.value, key+"."+e.name, fields)
+			*at = append((*at)[:depth], segment{name: e.name, index: -1})
+			validateInside(e.value, at, fields)
 		}
 	}
 }

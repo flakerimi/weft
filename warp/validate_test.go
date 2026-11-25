@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -539,4 +540,86 @@ func BenchmarkValidateLongStrings(b *testing.B) {
 	for b.Loop() {
 		Validate(&doc)
 	}
+}
+
+type deepNode struct {
+	Name string     `json:"name" warp:"max=10"`
+	Kids []deepNode `json:"k"`
+}
+
+type bareNode struct {
+	Kids []bareNode `json:"children_of_this_comment_thread"`
+}
+
+func deepNodes(depth int, bottom string) deepNode {
+	n := deepNode{Name: bottom}
+	for range depth {
+		n = deepNode{Kids: []deepNode{n}}
+	}
+	return n
+}
+
+func bareNodes(depth int) bareNode {
+	var n bareNode
+	for range depth {
+		n = bareNode{Kids: []bareNode{n}}
+	}
+	return n
+}
+
+func TestValidateDeepPassingCostsNothing(t *testing.T) {
+	ok := deepNodes(4000, "short")
+	if err := Validate(&ok); err != nil {
+		t.Fatal(err)
+	}
+	if allocs := testing.AllocsPerRun(5, func() { Validate(&ok) }); allocs >= 50 {
+		t.Fatalf("Validate on nodes 4000 deep: %.0f allocations a run, want fewer than 50", allocs)
+	}
+	bare := bareNodes(4000)
+	if allocs := testing.AllocsPerRun(5, func() { Validate(&bare) }); allocs >= 50 {
+		t.Fatalf("Validate on rule-less nodes 4000 deep: %.0f allocations a run, want fewer than 50", allocs)
+	}
+}
+
+func TestValidateDeepFailureNamesTheWholePath(t *testing.T) {
+	bad := deepNodes(4000, "far too long")
+	want := map[string]string{strings.Repeat("k.0.", 4000) + "name": "Use at most 10 characters."}
+	if got := fieldsOf(t, &bad); !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %d fields, want the one at the bottom", len(got))
+	}
+	if allocs := testing.AllocsPerRun(5, func() { Validate(&bad) }); allocs >= 100 {
+		t.Fatalf("Validate with one failure 4000 deep: %.0f allocations a run, want fewer than 100", allocs)
+	}
+}
+
+func TestValidateFlatListCostsNothing(t *testing.T) {
+	type Line struct {
+		SKU string `json:"sku" warp:"required"`
+	}
+	doc := struct {
+		Lines []Line `json:"lines"`
+	}{Lines: make([]Line, 100000)}
+	for i := range doc.Lines {
+		doc.Lines[i].SKU = "a"
+	}
+	if allocs := testing.AllocsPerRun(5, func() { Validate(&doc) }); allocs >= 50 {
+		t.Fatalf("Validate on 100000 valid lines: %.0f allocations a run, want fewer than 50", allocs)
+	}
+}
+
+func BenchmarkValidateDeepNodes(b *testing.B) {
+	short := deepNodes(4990, "")
+	long := bareNodes(4990)
+	b.Run("k", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			Validate(&short)
+		}
+	})
+	b.Run("children_of_this_comment_thread", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			Validate(&long)
+		}
+	})
 }
