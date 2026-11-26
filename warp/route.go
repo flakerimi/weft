@@ -20,6 +20,13 @@ var noneType = reflect.TypeFor[None]()
 // from the query and the path, checked by Validate, and given to fn; what fn
 // returns is answered as JSON with 200. A mistake is reported by Err.
 //
+// The answer never holds null for a list, a map or bytes, as the description
+// types them: a nil slice or map in it, at any depth (in nested structs, list
+// elements, map values and through pointers), is written as [] or {}, and nil
+// bytes as "". A nil pointer is written as null, and a field tagged omitempty
+// or omitzero is left out, as encoding/json does. What fn returned is not
+// changed: the answer is fixed up on copies of what it shares.
+//
 // A query field that is a map[string]string takes every key[name] of the
 // query, key being its tag's name: Filter map[string]string `query:"filter"`
 // takes filter[status]=live as "status": "live", a name given twice keeping
@@ -136,6 +143,7 @@ func SentKeys(ctx context.Context) []string {
 func typed[In, Out any](app *App, method, path string, status int, fn func(context.Context, In) (Out, error), opts []RouteOption) {
 	in, out := reflect.TypeFor[In](), reflect.TypeFor[Out]()
 	p, mistakes := planFor(in, method, path)
+	empty := emptyPlanFor(out) // nil when nothing in Out is ever a null list
 	limit := app.cfg.MaxBodyBytes
 	app.route(method, path, in, out, p, status, func(status int) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -157,6 +165,9 @@ func typed[In, Out any](app *App, method, path string, status int, fn func(conte
 			if err != nil {
 				WriteError(w, c.r, err)
 				return
+			}
+			if empty != nil && status != http.StatusNoContent {
+				output = emptied(empty, output)
 			}
 			WriteJSON(w, status, output)
 		})

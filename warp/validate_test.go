@@ -250,7 +250,7 @@ func TestCheckRules(t *testing.T) {
 	}
 	got := checkRules(reflect.TypeOf(Product{}))
 	want := []string{
-		`Product.Price has the rule "emial", which warp does not know; use required, email, url, min=, max=, enum= or unique.`,
+		`Product.Price has the rule "emial", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`,
 		`Product.Mail has the rule "email", which is for text; remove it or make the field a string.`,
 		`Product.Name has "min=abc"; write a number after min=.`,
 		`Product.Name has "max=-1"; write a number after max=.`,
@@ -293,7 +293,7 @@ type node struct {
 
 func TestCheckRulesSelfReferencing(t *testing.T) {
 	got := checkRules(reflect.TypeOf(node{}))
-	want := []string{`node.Name has the rule "bogus", which warp does not know; use required, email, url, min=, max=, enum= or unique.`}
+	want := []string{`node.Name has the rule "bogus", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q", got)
 	}
@@ -317,7 +317,7 @@ func TestCheckRulesNestedAndEmbedded(t *testing.T) {
 	}
 	got := checkRules(reflect.TypeOf(Order{}))
 	want := []string{
-		`Base.ID has the rule "nope", which warp does not know; use required, email, url, min=, max=, enum= or unique.`,
+		`Base.ID has the rule "nope", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`,
 		`Line.SKU has the rule "url", which is for text; remove it or make the field a string.`,
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -376,8 +376,8 @@ func TestCheckRulesDeclarationOrder(t *testing.T) {
 	}
 	got := checkRules(reflect.TypeOf(Outer{}))
 	want := []string{
-		`Inner.X has the rule "inner", which warp does not know; use required, email, url, min=, max=, enum= or unique.`,
-		`Outer.B has the rule "outer", which warp does not know; use required, email, url, min=, max=, enum= or unique.`,
+		`Inner.X has the rule "inner", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`,
+		`Outer.B has the rule "outer", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q", got)
@@ -881,5 +881,30 @@ func TestCheckRulesReadonly(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got:\n%q\nwant:\n%q", got, want)
+	}
+}
+
+// The url rule is the browser's (isWebAddress in packages/ui's
+// forms/schema.ts), on the rows of its test.
+func TestURLRuleIsTheBrowsers(t *testing.T) {
+	type U struct {
+		Site string `json:"site" warp:"url"`
+	}
+	for _, ok := range []string{
+		"http://x.com", "HTTPS://X.COM/a?b#c", "http://u:p@x.com", "http://x.com:8080", "http://[::1]:8080/",
+		"https://u@p@x.com", "http://x.com?q", "http://x.com#f", "http://1.2.3.4:1",
+	} {
+		if err := Validate(&U{Site: ok}); err != nil {
+			t.Errorf("%q was refused: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{
+		"ftp://x", "http://", "//x.com", "http:x.com", "http://a b.com", "http://x.com/a b", "http://:8080",
+		"https:///x.com", "http://x.com ", "http://x\t.com", "http://x.com/\na", `http://x.com\a`, "http://x:999999",
+		"http://x:", "http://x:8a", "http://u@", "http://x.com\u00a0", "http://x.com\ufeff", "\x00http://x.com", "http://x\x7f.com",
+	} {
+		if fieldsOf(t, &U{Site: bad})["site"] != "Enter a web address that starts with http:// or https://." {
+			t.Errorf("%q was taken", bad)
+		}
 	}
 }

@@ -71,9 +71,12 @@ func TooMany(message string) *Error {
 	return &Error{Status: http.StatusTooManyRequests, Code: "rate_limited", Message: message}
 }
 
-// WriteJSON answers with v as JSON. A nil slice is written as [], and a 204
-// has no body. A value that cannot be written as JSON, such as a NaN or a
-// channel, is logged and answered as a 500.
+// WriteJSON answers with v as JSON. A nil slice at the top is written as [],
+// and a 204 has no body. Inside v it writes what encoding/json writes, so a
+// nil slice, map or []byte there is null; a typed route's answer has none
+// (see Get), and a plain handler that wants the same writes empty values. A
+// value that cannot be written as JSON, such as a NaN or a channel, is
+// logged and answered as a 500.
 func WriteJSON(w http.ResponseWriter, status int, v any) {
 	if status == http.StatusNoContent {
 		w.WriteHeader(status)

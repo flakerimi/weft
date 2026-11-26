@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"net/mail"
-	"net/url"
 	"reflect"
 	"slices"
 	"strconv"
@@ -40,7 +39,7 @@ var (
 	timeType  = reflect.TypeOf(time.Time{})
 )
 
-const ruleList = "required, email, url, min=, max=, enum= or unique"
+const ruleList = "required, email, url, min=, max=, enum=, unique or readonly"
 
 // The limits on what a 422 lists, so that a small body cannot make a huge
 // answer: at most maxListed fields, at most maxKeyBytes of key bytes in all,
@@ -423,6 +422,66 @@ func checkField(fv reflect.Value, rules []rule) string {
 	return ""
 }
 
+// isWebAddress is the url rule, written as the browser's isWebAddress (in
+// packages/ui, src/forms/schema.ts) is, so a form and the server agree: no
+// whitespace, control character or backslash anywhere; http:// or https://
+// in any case; then the authority, up to the first /, ? or #, which with
+// anything up to its last @ dropped is host or host:port, the host not empty
+// (an IPv6 host in brackets is one) and the port one to five digits.
+func isWebAddress(s string) bool {
+	for _, r := range s {
+		if r <= 0x1f || r == 0x7f || r == '\\' || isJSSpace(r) {
+			return false
+		}
+	}
+	rest, ok := cutPrefixFold(s, "http://")
+	if !ok {
+		if rest, ok = cutPrefixFold(s, "https://"); !ok {
+			return false
+		}
+	}
+	authority := rest
+	if i := strings.IndexAny(rest, "/?#"); i >= 0 {
+		authority = rest[:i]
+	}
+	authority = authority[strings.LastIndexByte(authority, '@')+1:]
+	host, port := authority, ""
+	// A port is what follows the last colon when no colon or ] comes after
+	// it, as the browser's /:([^:\]]*)$/ reads it.
+	if i := strings.LastIndexByte(authority, ':'); i >= 0 && !strings.ContainsRune(authority[i+1:], ']') {
+		host, port = authority[:i], authority[i+1:]
+		if len(port) < 1 || len(port) > 5 || strings.Trim(port, "0123456789") != "" {
+			return false
+		}
+	}
+	return host != ""
+}
+
+// cutPrefixFold is strings.CutPrefix with the prefix, which is in lower
+// case, in any ASCII case, as a JavaScript regular expression's i flag takes
+// it (so "ſ" is not "s").
+func cutPrefixFold(s, prefix string) (string, bool) {
+	if len(s) < len(prefix) {
+		return s, false
+	}
+	for i := range len(prefix) {
+		if c := s[i]; c != prefix[i] && c+'a'-'A' != prefix[i] {
+			return s, false
+		}
+	}
+	return s[len(prefix):], true
+}
+
+// isJSSpace reports whether r is whitespace as JavaScript's \s has it (the
+// space characters below U+0020 are control characters, refused already).
+func isJSSpace(r rune) bool {
+	switch r {
+	case ' ', 0xa0, 0x1680, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000, 0xfeff:
+		return true
+	}
+	return r >= 0x2000 && r <= 0x200a
+}
+
 func checkRule(v reflect.Value, r rule) string {
 	k := v.Kind()
 	switch r.name {
@@ -438,8 +497,7 @@ func checkRule(v reflect.Value, r rule) string {
 		if k != reflect.String {
 			return ""
 		}
-		u, err := url.Parse(v.String())
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		if !isWebAddress(v.String()) {
 			return "Enter a web address that starts with http:// or https://."
 		}
 	case "enum":

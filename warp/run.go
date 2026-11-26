@@ -147,9 +147,11 @@ func (a *App) Run(ctx context.Context, ln net.Listener, dist fs.FS, opts ...Serv
 
 // Start starts the app without listening: it migrates every Migrator, then
 // starts every Starter, in the order the modules were listed. When a module
-// fails to start, the ones already started are stopped. It returns the
-// registration mistakes first, as Err does, and may be called once; Run
-// calls it. A test that serves Handler calls Start and Stop around it.
+// fails to migrate or to start, every module that already migrated or
+// started is stopped, last first, so that what a Migrate opened (data's
+// database) is closed. It returns the registration mistakes first, as Err
+// does, and may be called once; Run calls it. A test that serves Handler
+// calls Start and Stop around it.
 func (a *App) Start(ctx context.Context) error {
 	if err := a.Err(); err != nil {
 		return err
@@ -163,19 +165,32 @@ func (a *App) Start(ctx context.Context) error {
 	modules := slices.Clone(a.modules)
 	a.mu.Unlock()
 
-	for _, m := range modules {
+	// done[i] is whether modules[i] migrated or started, and so is stopped
+	// when a later one fails.
+	done := make([]bool, len(modules))
+	failed := func(err error) error {
+		var undo []Module
+		for i, m := range modules {
+			if done[i] {
+				undo = append(undo, m)
+			}
+		}
+		return errors.Join(append([]error{err}, stopAll(context.WithoutCancel(ctx), undo)...)...)
+	}
+	for i, m := range modules {
 		if mg, ok := m.(Migrator); ok {
 			if err := mg.Migrate(ctx); err != nil {
-				return fmt.Errorf("warp: module %q could not migrate: %w", m.Name(), err)
+				return failed(fmt.Errorf("warp: module %q could not migrate: %w", m.Name(), err))
 			}
+			done[i] = true
 		}
 	}
 	for i, m := range modules {
 		if s, ok := m.(Starter); ok {
 			if err := s.Start(ctx); err != nil {
-				err = fmt.Errorf("warp: module %q could not start: %w", m.Name(), err)
-				return errors.Join(append([]error{err}, stopAll(context.WithoutCancel(ctx), modules[:i])...)...)
+				return failed(fmt.Errorf("warp: module %q could not start: %w", m.Name(), err))
 			}
+			done[i] = true
 		}
 	}
 	a.mu.Lock()
@@ -185,8 +200,11 @@ func (a *App) Start(ctx context.Context) error {
 }
 
 // Stop stops every Stopper that Start started, last first, giving them up
-// to 10 seconds, and returns what failed. After a Start that failed, or a
-// second time, it does nothing.
+// to 10 seconds, and returns what failed. It is for an app started with
+// Start; Run stops its own. After a Start that failed, or a second time, it
+// does nothing. A Stop called while Start is still running is not supported:
+// it may find nothing started yet and return, leaving Start's modules
+// running.
 func (a *App) Stop(ctx context.Context) error {
 	return errors.Join(a.stop(ctx)...)
 }

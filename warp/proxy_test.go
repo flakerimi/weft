@@ -46,6 +46,23 @@ func TestClientIPAndHTTPS(t *testing.T) {
 			header: []string{"X-Forwarded-Proto", "HTTPS"}, ip: "10.0.0.2", https: true},
 		{name: "trusted, TLS without a header", trust: true, remote: "10.0.0.2:80", tls: true, ip: "10.0.0.2", https: true},
 		{name: "a remote address without a port", remote: "192.0.2.1", ip: "192.0.2.1"},
+		{name: "IPv6 with a zone", remote: "[fe80::1%eth0]:4321", ip: "fe80::1"},
+		{name: "IPv6 with a zone, no port", remote: "fe80::1%eth0", ip: "fe80::1"},
+		{name: "IPv4 in IPv6", remote: "[::ffff:1.2.3.4]:4321", ip: "1.2.3.4"},
+		{name: "trusted, IPv6 with a zone", trust: true, remote: "10.0.0.2:80",
+			header: []string{"X-Forwarded-For", "fe80::7%25en0, fe80::9%en0"}, ip: "fe80::9"},
+		{name: "trusted, IPv4 in IPv6", trust: true, remote: "10.0.0.2:80",
+			header: []string{"X-Forwarded-For", "::ffff:1.2.3.4"}, ip: "1.2.3.4"},
+		{name: "trusted, a trailing comma", trust: true, remote: "10.0.0.2:80",
+			header: []string{"X-Forwarded-For", "203.0.113.9,"}, ip: "10.0.0.2"},
+		{name: "trusted, unknown", trust: true, remote: "10.0.0.2:80",
+			header: []string{"X-Forwarded-For", "unknown"}, ip: "10.0.0.2"},
+		{name: "trusted, an opening bracket alone", trust: true, remote: "10.0.0.2:80",
+			header: []string{"X-Forwarded-For", "[2001:db8::7"}, ip: "10.0.0.2"},
+		{name: "trusted, a closing bracket alone", trust: true, remote: "10.0.0.2:80",
+			header: []string{"X-Forwarded-For", "2001:db8::7]"}, ip: "10.0.0.2"},
+		{name: "trusted, brackets without a port", trust: true, remote: "10.0.0.2:80",
+			header: []string{"X-Forwarded-For", "[2001:db8::7]"}, ip: "2001:db8::7"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			vars := map[string]string{}
@@ -68,5 +85,30 @@ func TestClientIPAndHTTPS(t *testing.T) {
 				t.Errorf("IsHTTPS = %v, want %v", got, c.https)
 			}
 		})
+	}
+}
+
+// ClientKey is the address for IPv4 and the /64 for IPv6, since one client
+// is given a whole /64.
+func TestClientKey(t *testing.T) {
+	for remote, want := range map[string]string{
+		"192.0.2.1:4321":              "192.0.2.1",
+		"[2001:db8:1:2:3:4:5:6]:4321": "2001:db8:1:2::/64",
+		"[2001:db8:1:2:ffff::1]:80":   "2001:db8:1:2::/64",
+		"[fe80::1%eth0]:80":           "fe80::/64",
+		"[::ffff:1.2.3.4]:80":         "1.2.3.4",
+		"pipe":                        "pipe",
+	} {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.RemoteAddr = remote
+		if got := New(Config{}).ClientKey(r); got != want {
+			t.Errorf("ClientKey(%s) = %q, want %q", remote, got, want)
+		}
+	}
+	r := httptest.NewRequest("GET", "/", nil)
+	r.RemoteAddr = "10.0.0.2:80"
+	r.Header.Set("X-Forwarded-For", "2001:db8:9:9::5")
+	if got := New(ConfigFrom(map[string]string{"TRUST_PROXY": "on"})).ClientKey(r); got != "2001:db8:9:9::/64" {
+		t.Errorf("ClientKey behind a proxy = %q", got)
 	}
 }

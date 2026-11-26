@@ -206,7 +206,7 @@ func TestAppURL(t *testing.T) {
 			t.Errorf("APP_URL=%s: Err() = %v, URL %q, want %q", in, cfg.Err(), New(cfg).Config().URL, want)
 		}
 	}
-	for _, in := range []string{"shop.example.com", "ftp://shop.example.com", "https://", "https://shop.example.com/app", "https://shop.example.com?a=1", "https://shop.example.com/#top", "/setup", "http://%zz"} {
+	for _, in := range []string{"shop.example.com", "ftp://shop.example.com", "https://", "https://shop.example.com/app", "https://shop.example.com?a=1", "https://shop.example.com/#top", "/setup", "http://%zz", "https://:8080", "http://:80/"} {
 		want := `APP_URL is "` + in + `"; set it to an address like https://shop.example.com.`
 		if err := ConfigFrom(map[string]string{"APP_URL": in}).Err(); errText(err) != want {
 			t.Errorf("APP_URL=%s: Err() = %v, want %q", in, err, want)

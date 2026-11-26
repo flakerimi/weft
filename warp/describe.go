@@ -110,14 +110,16 @@ type RuleInfo struct {
 // before or after Start; it runs no module. Two types with one name, an
 // unnamed struct, a field JSON cannot carry, a map keyed by anything but text
 // or a whole number, a field with json ",string" and a type with half an
-// encoding are mistakes, returned joined.
+// encoding are mistakes, returned joined; a ,string that registration
+// already reported, on a type a route also reads, is not reported again.
 func (a *App) Describe() (Description, error) {
 	a.mu.Lock()
 	routes := slices.Clone(a.routes)
 	plans := slices.Clone(a.plans)
+	registered := slices.Clone(a.mistakes)
 	a.mu.Unlock()
 
-	d := &describer{fields: map[reflect.Type][]descField{}, read: map[reflect.Type]bool{}, half: map[reflect.Type]bool{}}
+	d := &describer{fields: map[reflect.Type][]descField{}, read: map[reflect.Type]bool{}, half: map[reflect.Type]bool{}, registered: registered}
 	for _, p := range plans {
 		if p != nil && p.bodyType != nil {
 			d.markRead(p.bodyType)
@@ -207,6 +209,20 @@ type describer struct {
 	read     map[reflect.Type]bool // the types a body is read into, at any depth
 	half     map[reflect.Type]bool // the types with half an encoding, reported once
 	mistakes []error
+	// registered are the app's registration mistakes, so that a ,string a
+	// route reading the type reported is not reported again.
+	registered []error
+}
+
+// reportedAt reports whether a registration mistake already ends with
+// sentence, as one a route found in the type it reads does.
+func (d *describer) reportedAt(sentence string) bool {
+	for _, err := range d.registered {
+		if strings.HasSuffix(err.Error(), ": "+sentence) {
+			return true
+		}
+	}
+	return false
 }
 
 // descField is a field of a type's JSON: its key, its Go name, its type,
@@ -287,7 +303,7 @@ func (d *describer) use(t reflect.Type, route, where, fix string) {
 		d.types = append(d.types, t)
 		for _, f := range fields {
 			at := typeName(t) + "." + f.goName
-			if f.quoted {
+			if f.quoted && !d.reportedAt(stringOption(at)) {
 				d.fail("%s: %s", route, stringOption(at))
 			}
 			d.use(f.typ, route, at+" is", `give it another type, or tag it json:"-"`)

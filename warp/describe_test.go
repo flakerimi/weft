@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"net"
@@ -655,6 +656,24 @@ func TestDescribeStringOption(t *testing.T) {
 	want := `warp: GET /counts: descCount.N has json:",string"; remove ,string, since Warp sends and reads a number as a number.`
 	if errText(err) != want {
 		t.Fatalf("Describe = %q, want %q", errText(err), want)
+	}
+}
+
+// A type both read and answered has its ,string reported once: by the route
+// that reads it, at registration, and not again by Describe for the route
+// that answers it.
+func TestDescribeStringOptionOnce(t *testing.T) {
+	app := New(Config{})
+	Post(app, "/counts", func(context.Context, descCounts) (None, error) { return None{}, nil })
+	Get(app, "/counts", func(context.Context, None) (descCounts, error) { return descCounts{}, nil })
+	_, err := app.Describe()
+	all := errText(errors.Join(app.Err(), err))
+	const sentence = `descCount.N has json:",string"; remove ,string, since Warp sends and reads a number as a number.`
+	if n := strings.Count(all, sentence); n != 1 {
+		t.Fatalf("reported %d times:\n%s", n, all)
+	}
+	if !strings.Contains(errText(app.Err()), "POST /counts: "+sentence) {
+		t.Fatalf("Err() = %q", errText(app.Err()))
 	}
 }
 

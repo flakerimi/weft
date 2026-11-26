@@ -375,7 +375,7 @@ func TestStatusOutOfRange(t *testing.T) {
 		"warp: GET /b: Status(600)" + tail,
 		"warp: POST /c: Status(99)" + tail,
 		"warp: GET /d: Status(-1)" + tail,
-		"warp: GET /d: ShowIn.Name has no json, query or path tag; add one.",
+		"warp: GET /d: ShowIn.Name has no json, query, path or body tag; add one.",
 		"warp: GET /h: Status(100)" + tail,
 		"warp: GET /i: Status(199)" + tail,
 	}, "\n")

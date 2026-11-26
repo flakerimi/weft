@@ -157,8 +157,49 @@ func TestRefusalComesBeforeWrap(t *testing.T) {
 }
 
 func TestOutsideAPIIsNotChecked(t *testing.T) {
-	h, _ := originApp(t, ConfigFrom(nil))
-	if w := originSend(h, "POST", "/other", "", map[string]string{"Sec-Fetch-Site": "cross-site"}); w.Code == 403 && strings.Contains(w.Body.String(), crossSiteSentence) {
-		t.Error("a request outside /api was refused as cross-site")
+	h, ran := originApp(t, ConfigFrom(nil))
+	for _, target := range []string{"/other", "/apix", "/ap/i"} {
+		w := originSend(h, "POST", target, "", map[string]string{"Sec-Fetch-Site": "cross-site"})
+		want := `{"error":{"code":"not_found","message":"Nothing is at ` + target + `."}}` + "\n"
+		if w.Code != 404 || w.Body.String() != want {
+			t.Errorf("%s: status %d, body %q, want 404 %q", target, w.Code, w.Body, want)
+		}
+	}
+	if *ran != 3 {
+		t.Errorf("the Wrap ran %d times, want 3", *ran)
+	}
+}
+
+// A path is checked as it is and as the mux cleans it, so a doubled slash
+// or a dot does not take a request past the check to the mux's redirect,
+// with the app's Wraps run on the way. Every method but GET, HEAD and
+// OPTIONS is checked, a made-up one included.
+func TestCrossSiteCheckedOnEveryAPIPath(t *testing.T) {
+	for _, target := range []string{"/api", "/api/", "/api/things", "/api/../api/things", "//api/things", "/api//things", "/./api/things", "///api"} {
+		for _, method := range []string{"POST", "TRACE", "BREW"} {
+			h, ran := originApp(t, ConfigFrom(nil))
+			w := originSend(h, method, target, "", map[string]string{"Sec-Fetch-Site": "cross-site"})
+			if w.Code != 403 || !strings.Contains(w.Body.String(), crossSiteSentence) || *ran != 0 {
+				t.Errorf("%s %s: status %d, body %s, ran %d; want 403 before any Wrap", method, target, w.Code, w.Body, *ran)
+			}
+		}
+	}
+}
+
+// TRUSTED_ORIGINS is checked once, as it is read: New uses the protection
+// ConfigFrom made, unless the list was changed since.
+func TestTrustedOriginsCheckedOnce(t *testing.T) {
+	cfg := ConfigFrom(map[string]string{"TRUSTED_ORIGINS": "https://a.example.com,bad"})
+	if cfg.xo == nil || New(cfg).xo != cfg.xo {
+		t.Fatal("New made the protection again")
+	}
+	cfg.TrustedOrigins = []string{"https://b.example.com"}
+	app := New(cfg)
+	if app.xo == cfg.xo {
+		t.Fatal("New kept a protection made for another list")
+	}
+	h := app.Handler()
+	if w := originSend(h, "POST", "/api/x", "", map[string]string{"Origin": "https://b.example.com", "Sec-Fetch-Site": "cross-site"}); w.Code == 403 {
+		t.Error("the changed list was not used")
 	}
 }

@@ -325,14 +325,14 @@ func TestRegistrationMistakes(t *testing.T) {
 				Name string
 			}
 			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
-		}, []string{"ShowIn.Name has no json, query or path tag; add one."}},
+		}, []string{"ShowIn.Name has no json, query, path or body tag; add one."}},
 		{"json:\"-\" is no tag", func(app *App) {
 			type ShowIn struct {
 				ID   int    `path:"id"`
 				Name string `json:"-"`
 			}
 			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
-		}, []string{"ShowIn.Name has no json, query or path tag; add one."}},
+		}, []string{"ShowIn.Name has no json, query, path or body tag; add one."}},
 		{"path tag without wildcard", func(app *App) {
 			type ShowIn struct {
 				ID  int `path:"id"`
@@ -398,7 +398,7 @@ func TestRegistrationMistakes(t *testing.T) {
 				Name string `query:"name" warp:"emal"`
 			}
 			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
-		}, []string{`ShowIn.Name has the rule "emal", which warp does not know; use required, email, url, min=, max=, enum= or unique.`}},
+		}, []string{`ShowIn.Name has the rule "emal", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`}},
 		{"every mistake", func(app *App) {
 			type ShowIn struct {
 				Name string
@@ -407,7 +407,7 @@ func TestRegistrationMistakes(t *testing.T) {
 			}
 			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
 		}, []string{
-			"ShowIn.Name has no json, query or path tag; add one.",
+			"ShowIn.Name has no json, query, path or body tag; add one.",
 			"ShowIn.Body is tagged json, and GET reads no body; tag it query or path.",
 			`the path has {id}, and ShowIn has no field tagged path:"id".`,
 			`ShowIn.Tag has "min=x"; write a number after min=.`,
@@ -619,7 +619,7 @@ func TestTypedRouteAfterStart(t *testing.T) {
 	app.started = true
 	app.mu.Unlock()
 	Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil }, Status(0))
-	want := `warp: route "GET /products/{id}" was registered after the app started serving; register every route before Serve.`
+	want := `warp: route "GET /products/{id}" was registered after the app started; register every route before Serve or Start.`
 	if got := errText(app.Err()); got != want {
 		t.Fatalf("Err() = %q\nwant %q", got, want)
 	}
@@ -728,7 +728,7 @@ func TestNestedBodyMistakes(t *testing.T) {
 		}, []string{
 			"Geo.Lat has no json tag; add one.",
 			"Address.Zone has no json tag; add one.",
-			"OrderIn.Note has no json, query or path tag; add one.",
+			"OrderIn.Note has no json, query, path or body tag; add one.",
 		}},
 		{"a self-referencing type", func(app *App) {
 			type Node struct {
@@ -1173,6 +1173,30 @@ func TestBodyFieldMistakes(t *testing.T) {
 			}
 			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
 		}, []string{`warp: PATCH /products/{id}: Address.Body is tagged body inside a body field; only the route's input itself has a body field.`}},
+		{"not exported", func(app *App) {
+			type UpdateIn struct {
+				ID   int        `path:"id"`
+				body bodyFields `body:"json"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: UpdateIn.body is tagged body and is not exported; export it.`}},
+		{"on an embedded struct", func(app *App) {
+			type Base struct {
+				Name string `json:"name"`
+			}
+			type UpdateIn struct {
+				ID   int `path:"id"`
+				Base `body:"json"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: UpdateIn embeds Base tagged body; give the body field a name.`}},
+		{"readonly", func(app *App) {
+			type UpdateIn struct {
+				ID   int        `path:"id"`
+				Body bodyFields `body:"json" warp:"readonly"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: UpdateIn.Body is tagged body and readonly; a body is always read, so remove readonly.`}},
 		{"the body's own fields are checked", func(app *App) {
 			type Base struct {
 				Name string `json:"name"`
@@ -1236,6 +1260,7 @@ type roProduct struct {
 	Lines   []roLine           `json:"lines"`
 	ByName  map[string]*roLine `json:"by_name"`
 	Any     any                `json:"any"`
+	Where   *roAddress         `json:"where"`
 }
 
 func TestReadonly(t *testing.T) {
@@ -1283,6 +1308,16 @@ func TestReadonly(t *testing.T) {
 		{"/api/products", `{"lines":[{"sku":"a"},{"sku":"b","id":1}]}`, "id"},
 		{"/api/products", `{"by_name":{"x":{"id":1,"sku":"b"}}}`, "id"},
 		{"/api/plain", `{"id":1}`, "id"},
+		// Through a pointer to a struct.
+		{"/api/products", `{"where":{"id":1}}`, "id"},
+		{"/api/products", `{"where":{"city":"x","ID":1}}`, "ID"},
+		// Sent with a type it does not take: still the field it does not take,
+		// not the type it would need.
+		{"/api/products", `{"address":{"id":"x"}}`, "id"},
+		{"/api/products", `{"lines":[{"id":"x"}]}`, "id"},
+		{"/api/products", `{"where":{"id":[1]}}`, "id"},
+		{"/api/products", `{"by_name":{"x":{"ID":{}}}}`, "ID"},
+		{"/api/products", `{"name":5,"address":{"id":"x"}}`, "id"},
 	} {
 		w := send(t, h, "POST", c.path, c.body)
 		want := `The body has the field "` + c.field + `", which this route does not take.`

@@ -106,7 +106,8 @@ func TestRunStartFailureStopsEarlier(t *testing.T) {
 	if want := `warp: module "b" could not start: boom`; errText(err) != want {
 		t.Fatalf("Run = %q, want %q", errText(err), want)
 	}
-	if want := []string{"start:a", "start:b", "stop:a"}; !reflect.DeepEqual(log[len(log)-3:], want) {
+	// Every module migrated before any started, so every one is stopped.
+	if want := []string{"start:a", "start:b", "stop:c", "stop:b", "stop:a"}; !reflect.DeepEqual(log[len(log)-5:], want) {
 		t.Fatalf("log %v", log)
 	}
 	if !closed(ln.Addr().String()) {
@@ -124,7 +125,7 @@ func TestRunMigrateFailure(t *testing.T) {
 	if want := `warp: module "b" could not migrate: table exists`; errText(err) != want {
 		t.Fatalf("Run = %q, want %q", errText(err), want)
 	}
-	if want := []string{"register:a", "register:b", "register:c", "migrate:a", "migrate:b"}; !reflect.DeepEqual(log, want) {
+	if want := []string{"register:a", "register:b", "register:c", "migrate:a", "migrate:b", "stop:a"}; !reflect.DeepEqual(log, want) {
 		t.Fatalf("log %v", log)
 	}
 }
@@ -323,9 +324,9 @@ func TestRegisteringAfterStartIsAMistake(t *testing.T) {
 		t.Fatal(err)
 	}
 	mistakes := []string{
-		"warp: Use was called after the app started serving; list every module before Serve.",
-		`warp: route "GET /x" was registered after the app started serving; register every route before Serve.`,
-		"warp: Wrap was called after the app started serving; wrap before Serve.",
+		"warp: Use was called after the app started; list every module before Serve or Start.",
+		`warp: route "GET /x" was registered after the app started; register every route before Serve or Start.`,
+		"warp: Wrap was called after the app started; wrap before Serve or Start.",
 	}
 	if want := strings.Join(mistakes, "\n"); errText(app.Err()) != want {
 		t.Fatalf("Err() = %q\nwant %q", errText(app.Err()), want)
@@ -471,7 +472,7 @@ func TestStartAndStop(t *testing.T) {
 			t.Fatalf("a second Start = %q", errText(err))
 		}
 	})
-	t.Run("a failing start stops the earlier ones", func(t *testing.T) {
+	t.Run("a failing start stops every module that migrated", func(t *testing.T) {
 		var log []string
 		b := mod("b", &log)
 		b.startErr = errors.New("boom")
@@ -480,7 +481,7 @@ func TestStartAndStop(t *testing.T) {
 		if err := app.Start(ctx); errText(err) != `warp: module "b" could not start: boom` {
 			t.Fatalf("Start = %q", errText(err))
 		}
-		if want := []string{"start:a", "start:b", "stop:a"}; !reflect.DeepEqual(log[len(log)-3:], want) {
+		if want := []string{"start:a", "start:b", "stop:c", "stop:b", "stop:a"}; !reflect.DeepEqual(log[len(log)-5:], want) {
 			t.Fatalf("log %v", log)
 		}
 		n := len(log)
@@ -488,7 +489,7 @@ func TestStartAndStop(t *testing.T) {
 			t.Fatalf("Stop after a failed Start: %v, log %v", err, log)
 		}
 	})
-	t.Run("a failing migrate starts nothing", func(t *testing.T) {
+	t.Run("a failing migrate starts nothing and stops what migrated", func(t *testing.T) {
 		var log []string
 		b := mod("b", &log)
 		b.migrateErr = errors.New("table exists")
@@ -500,8 +501,33 @@ func TestStartAndStop(t *testing.T) {
 		if err := app.Stop(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if want := []string{"register:a", "register:b", "migrate:a", "migrate:b"}; !reflect.DeepEqual(log, want) {
+		if want := []string{"register:a", "register:b", "migrate:a", "migrate:b", "stop:a"}; !reflect.DeepEqual(log, want) {
 			t.Fatalf("log %v", log)
+		}
+	})
+	t.Run("a module that only migrates is stopped when a later one fails", func(t *testing.T) {
+		for _, fail := range []string{"migrate", "start"} {
+			var log []string
+			db := &migrateOnly{name: "db", log: &log}
+			later := mod("later", &log)
+			if fail == "migrate" {
+				later.migrateErr = errors.New("boom")
+			} else {
+				later.startErr = errors.New("boom")
+			}
+			plain := &stopOnly{name: "plain", log: &log} // neither migrates nor started: left alone
+			app := New(Config{})
+			app.Use(db, plain, later)
+			if err := app.Start(ctx); err == nil {
+				t.Fatalf("%s: Start succeeded", fail)
+			}
+			want := []string{"migrate:db", "migrate:later", "stop:db"}
+			if fail == "start" {
+				want = []string{"migrate:db", "migrate:later", "start:later", "stop:later", "stop:db"}
+			}
+			if got := notes(&log)[1:]; !reflect.DeepEqual(got, want) { // after register:later
+				t.Fatalf("%s fails: log %v, want %v", fail, got, want)
+			}
 		}
 	})
 	t.Run("stop failures are joined", func(t *testing.T) {
@@ -562,3 +588,25 @@ func TestStartAndStop(t *testing.T) {
 		}
 	})
 }
+
+// migrateOnly migrates and stops, and has nothing to start, as data's module
+// opens its database in Migrate.
+type migrateOnly struct {
+	name string
+	log  *[]string
+}
+
+func (m *migrateOnly) Name() string                  { return m.name }
+func (m *migrateOnly) Register(*App) error           { return nil }
+func (m *migrateOnly) Migrate(context.Context) error { note(m.log, "migrate:"+m.name); return nil }
+func (m *migrateOnly) Stop(context.Context) error    { note(m.log, "stop:"+m.name); return nil }
+
+// stopOnly has only a Stop, which no failed Start reaches.
+type stopOnly struct {
+	name string
+	log  *[]string
+}
+
+func (m *stopOnly) Name() string               { return m.name }
+func (m *stopOnly) Register(*App) error        { return nil }
+func (m *stopOnly) Stop(context.Context) error { note(m.log, "stop:"+m.name); return nil }

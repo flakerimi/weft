@@ -125,7 +125,10 @@ type App struct {
 // New returns an app configured by cfg, with no modules. A mistake in cfg is
 // reported by Err, and by Run.
 func New(cfg Config) *App {
-	xo, bad := newOriginProtection(cfg.TrustedOrigins)
+	xo, bad := cfg.xo, []string(nil)
+	if xo == nil || !slices.Equal(cfg.TrustedOrigins, cfg.xoFor) {
+		xo, bad = newOriginProtection(cfg.TrustedOrigins) // a Config made by hand, or changed since
+	}
 	a := &App{
 		cfg:        cfg.withDefaults(),
 		mux:        http.NewServeMux(),
@@ -152,7 +155,7 @@ func (a *App) Use(modules ...Module) {
 		a.mu.Lock()
 		if a.started {
 			a.mu.Unlock()
-			a.fail("Use was called after the app started serving; list every module before Serve.")
+			a.fail("Use was called after the app started; list every module before Serve or Start.")
 			return
 		}
 		if a.names[name] {
@@ -206,8 +209,9 @@ func Provide[T any](app *App, value T) {
 
 // Need returns the value of type T that the module named module provided.
 // When there is none it returns the zero T and records a mistake, reported
-// by Err, that says to list that module first. A module wraps it in a typed
-// function of its own, such as data.For(app).
+// by Err, that says to list that module first; after the app started it is
+// also logged. A module wraps it in a typed function of its own, such as
+// data.For(app).
 func Need[T any](app *App, module string) T {
 	t := reflect.TypeFor[T]()
 	app.mu.Lock()
@@ -252,7 +256,7 @@ func (a *App) route(method, path string, in, out reflect.Type, p *plan, status i
 	started := a.started
 	a.mu.Unlock()
 	if started {
-		a.fail("route %q was registered after the app started serving; register every route before Serve.", name)
+		a.fail("route %q was registered after the app started; register every route before Serve or Start.", name)
 		return
 	}
 	ok := true
@@ -365,7 +369,7 @@ func (a *App) Wrap(mw func(http.Handler) http.Handler) {
 	a.mu.Lock()
 	if a.started {
 		a.mu.Unlock()
-		a.fail("Wrap was called after the app started serving; wrap before Serve.")
+		a.fail("Wrap was called after the app started; wrap before Serve or Start.")
 		return
 	}
 	defer a.mu.Unlock()

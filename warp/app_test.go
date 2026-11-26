@@ -491,9 +491,6 @@ func TestOptionsApplyInOrder(t *testing.T) {
 	if r.Permission != "products:edit" || r.Name != "two" {
 		t.Fatalf("Permission %q, Name %q", r.Permission, r.Name)
 	}
-	if p := (Route{}).Permission; p != "" {
-		t.Fatal(p)
-	}
 }
 
 type testDB struct{ name string }
@@ -545,6 +542,20 @@ func TestProvideAndNeed(t *testing.T) {
 		}
 		if got := Need[*testDB](app, "a"); got.name != "a" {
 			t.Fatalf("Need = %v, want the first", got)
+		}
+	})
+	t.Run("a miss after start is logged", func(t *testing.T) {
+		logs := captureLog(t)
+		app := New(Config{})
+		if err := app.Start(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if db := Need[*testDB](app, "data"); db != nil {
+			t.Fatalf("Need = %v", db)
+		}
+		want := `warp: the app needs the \"data\" module; list data.Module() in app/modules.go.`
+		if !strings.Contains(logs.String(), want) || !strings.Contains(errText(app.Err()), "needs the \"data\" module") {
+			t.Fatalf("log %q, Err() %q", logs, app.Err())
 		}
 	})
 	t.Run("after start", func(t *testing.T) {

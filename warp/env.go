@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/http"
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -25,6 +27,10 @@ type Config struct {
 
 	vars map[string]string
 	err  error
+	// xo is the protection ConfigFrom made from TrustedOrigins, which it
+	// held when xoFor was taken; New uses it while they are the same.
+	xo    *http.CrossOriginProtection
+	xoFor []string
 }
 
 const (
@@ -116,8 +122,8 @@ func build(vars map[string]string, problems []error) Config {
 			problems = append(problems, fmt.Errorf("MAX_BODY_MB is %q; set it to a whole number of megabytes, 1 or more, in .env or the environment.", m))
 		}
 	}
-	origins, bad := trustedOrigins(vars["TRUSTED_ORIGINS"])
-	c.TrustedOrigins = origins
+	xo, origins, bad := trustedOrigins(vars["TRUSTED_ORIGINS"])
+	c.TrustedOrigins, c.xo, c.xoFor = origins, xo, slices.Clone(origins)
 	for _, o := range bad {
 		problems = append(problems, fmt.Errorf("TRUSTED_ORIGINS has %q; write each origin like https://admin.example.com.", o))
 	}
@@ -125,12 +131,12 @@ func build(vars map[string]string, problems []error) Config {
 	return c
 }
 
-// appURL reads APP_URL: an http or https address with a host and no path
-// beyond /, query or fragment. It returns the address without a trailing
-// slash.
+// appURL reads APP_URL: an http or https address with a host name (not a
+// port alone) and no path beyond /, query or fragment. It returns the
+// address without a trailing slash.
 func appURL(v string) (string, bool) {
 	u, err := url.Parse(v)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Opaque != "" || u.User != nil ||
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.Opaque != "" || u.User != nil ||
 		(u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.HasSuffix(v, "#") {
 		return "", false
 	}
