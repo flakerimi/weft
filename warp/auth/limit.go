@@ -11,7 +11,9 @@ import (
 // maxTries tries in a window that begins at the first; and per address across
 // every email, maxAddressTries. A try is counted when it begins, before any
 // hashing, so tries sent at once cannot pass together. A success clears its
-// email and address; an address's count only ends with its window.
+// email and address; an address's count only ends with its window. A try
+// that finds no hashing slot in time is given back on both counts. The
+// address is the app's ClientKey: an IPv6 client is counted by its /64.
 const (
 	maxTries        = 5
 	maxAddressTries = 30
@@ -98,4 +100,21 @@ func (l *limiter) size() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.order.Len()
+}
+
+// give hands back one try of key, taken by a try that then never ran, such
+// as a login that found no hashing slot; a key left with none is forgotten.
+func (l *limiter) give(key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	e := l.keys[key]
+	if e == nil {
+		return
+	}
+	if t := e.Value.(*tries); t.n > 1 {
+		t.n--
+		return
+	}
+	l.order.Remove(e)
+	delete(l.keys, key)
 }

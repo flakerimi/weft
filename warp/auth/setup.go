@@ -44,6 +44,12 @@ func (m *module) setup(ctx context.Context, in SetupInput) (User, error) {
 		return User{}, err
 	}
 	m.endSetup()
-	m.signIn(ctx, row)
-	return row.user(), nil
+	// Signed in with the row as stored, whose created_at the session names:
+	// a database that keeps fewer digits than Go has rounded it.
+	stored, err := m.users.Get(ctx, row.ID)
+	if err != nil {
+		return User{}, err
+	}
+	m.signIn(ctx, stored)
+	return stored.user(), nil
 }

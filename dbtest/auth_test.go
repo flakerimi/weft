@@ -386,8 +386,7 @@ func TestRemovedUserIsOut(t *testing.T) {
 	login(sc, second.Email, "second password").Want(200)
 	sc.Get("/api/things").Want(200)
 
-	// Removing users is not auth's yet, so the test removes the row itself.
-	if _, err := data.For(c.App).SQL().Exec(`DELETE FROM "users" WHERE "id" = ?`, second.ID); err != nil {
+	if err := auth.RemoveUser(context.Background(), c.App, second.ID); err != nil {
 		t.Fatal(err)
 	}
 	wantError(t, sc.Get("/api/things"), 401, "unauthorized", "Sign in to do that.")
@@ -660,4 +659,60 @@ func TestDescribeHidesTheHash(t *testing.T) {
 	if !maps.Equal(routes, want) {
 		t.Fatalf("auth's routes are %v, want %v", routes, want)
 	}
+}
+
+func TestRemoveUser(t *testing.T) {
+	c, _ := startAuth(t, authEnv(t))
+	authtest.Owner(t, c)
+	u, err := auth.AddUser(context.Background(), c.App, "second@example.com", "second password", "owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := auth.RemoveUser(context.Background(), c.App, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	wantError(t, login(c.Fork(), u.Email, "second password"), 401, "unauthorized", "That email and password do not match.")
+	var e *warp.Error
+	if err := auth.RemoveUser(context.Background(), c.App, u.ID); !errors.As(err, &e) || e.Status != 404 {
+		t.Fatalf("removing a user twice = %v, want a 404", err)
+	}
+	app := warp.New(warp.ConfigFrom(nil))
+	if err := auth.RemoveUser(context.Background(), app, 1); err == nil ||
+		err.Error() != "auth: RemoveUser was given an app without the auth module; list auth.Module() in app/modules.go." {
+		t.Fatalf("RemoveUser without the module = %v", err)
+	}
+}
+
+// One client is given a whole /64 of IPv6, so its tries are counted by the
+// /64, not by the address: a guess from each of five addresses in it spends
+// the email's tries for all of them.
+func TestLoginIsLimitedByTheIPv6Prefix(t *testing.T) {
+	c, _ := startAuth(t, authEnv(t))
+	authtest.Owner(t, c)
+	try := func(password, remote string) *warptest.Response {
+		return c.Fork().Do(request(http.MethodPost, "/api/auth/login", map[string]string{"email": ownerEmail, "password": password}, remote))
+	}
+	for i := range 5 {
+		try("wrong", fmt.Sprintf("[2001:db8:1:2::%x]:1000", i+1)).Want(401)
+	}
+	wantError(t, try(authtest.Password, "[2001:db8:1:2:ffff::9]:1000"), 429, "rate_limited", "Too many tries; wait a minute and try again.")
+	try(authtest.Password, "[2001:db8:1:3::1]:1000").Want(200)
+}
+
+// Setup signs the owner in with the row as the database keeps it: its
+// cookie names the stored created_at, which a database that keeps fewer
+// digits than Go would round. A trigger stands in for such a database here.
+func TestSetupSignsInWithTheStoredRow(t *testing.T) {
+	c, logged := startAuth(t, authEnv(t))
+	token := setupLine.FindStringSubmatch(logged)[1]
+	if _, err := data.For(c.App).Exec(ctx, `CREATE TRIGGER "round" AFTER INSERT ON "users" BEGIN `+
+		`UPDATE "users" SET "created_at" = '2001-02-03T04:05:06.000000000Z' WHERE "id" = NEW."id"; END`); err != nil {
+		t.Fatal(err)
+	}
+	var owner auth.User
+	c.Post("/api/auth/setup", map[string]string{"token": token, "password": authtest.Password}).Want(201).JSON(&owner)
+	if want := time.Date(2001, 2, 3, 4, 5, 6, 0, time.UTC); !owner.CreatedAt.Equal(want) {
+		t.Fatalf("setup answered created_at %v, want the stored %v", owner.CreatedAt, want)
+	}
+	c.Get("/api/auth/me").Want(200)
 }

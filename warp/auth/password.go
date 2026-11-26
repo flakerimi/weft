@@ -7,8 +7,13 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
+	"net/http"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/flakerimi/weft/warp"
 )
 
 // A password is kept as pbkdf2-sha256$<iterations>$<salt>$<key>, the salt and
@@ -47,17 +52,42 @@ func hashWith(password string, n int) (string, error) {
 	return scheme + "$" + strconv.Itoa(n) + "$" + b64.EncodeToString(salt) + "$" + b64.EncodeToString(key), nil
 }
 
+// slotWait is how long a request waits for a hashing slot before it is
+// answered 503.
+const slotWait = 3 * time.Second
+
+// errBusy is the answer to a request that found no hashing slot in time.
+const errBusy = "The server is busy signing people in; try again in a moment."
+
 // slot waits for one of the module's hashing slots, of which there are
-// GOMAXPROCS, so that a flood of logins cannot take every core; it gives up
-// when ctx ends. The caller calls the release it returns.
+// GOMAXPROCS, so that a flood of logins cannot take every core. It waits at
+// most m.slotWait, and not past ctx's end; then it gives up with the 503,
+// warp.Unavailable, which is no error of the server's and is not logged. The
+// caller calls the release it returns.
 func (m *module) slot(ctx context.Context) (release func(), err error) {
+	release = func() { <-m.slots }
 	select {
 	case m.slots <- struct{}{}:
 		m.hashes.Add(1)
-		return func() { <-m.slots }, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
+		return release, nil
+	default:
 	}
+	timer := time.NewTimer(m.slotWait)
+	defer timer.Stop()
+	select {
+	case m.slots <- struct{}{}:
+		m.hashes.Add(1)
+		return release, nil
+	case <-timer.C:
+	case <-ctx.Done():
+	}
+	return nil, warp.Unavailable(errBusy)
+}
+
+// isBusy reports whether err is slot's giving up.
+func isBusy(err error) bool {
+	var e *warp.Error
+	return errors.As(err, &e) && e.Status == http.StatusServiceUnavailable && e.Message == errBusy
 }
 
 // hash is hashPassword in one of the module's slots.

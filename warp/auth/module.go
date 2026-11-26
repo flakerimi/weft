@@ -60,6 +60,7 @@ type module struct {
 	perKey     *limiter      // tries per email and address
 	perAddress *limiter      // tries per address, across emails
 	slots      chan struct{} // one per password hash running
+	slotWait   time.Duration // how long a request waits for a slot
 	hashes     atomic.Int64  // hashes begun, for tests
 	// find is the user with an email, as stored; the users store's First.
 	find func(ctx context.Context, email string) (userRow, bool, error)
@@ -80,6 +81,7 @@ func newModule(now func() time.Time) *module {
 		perKey:     newLimiter(now, maxKeys, maxTries),
 		perAddress: newLimiter(now, maxKeys, maxAddressTries),
 		slots:      make(chan struct{}, runtime.GOMAXPROCS(0)),
+		slotWait:   slotWait,
 	}
 }
 
@@ -218,4 +220,16 @@ func AddUser(ctx context.Context, app *warp.App, email, password, role string) (
 	}
 	m.endSetup()
 	return row.user(), nil
+}
+
+// RemoveUser removes the user with the id, whose sessions end at once, since
+// every guarded request reads the user. A user no one has is a
+// warp.NotFound. It is for tools and tests, after the app has started, as
+// AddUser is.
+func RemoveUser(ctx context.Context, app *warp.App, id int64) error {
+	m := of(app)
+	if m == nil {
+		return errors.New("auth: RemoveUser was given an app without the auth module; list auth.Module() in app/modules.go.")
+	}
+	return m.users.Delete(ctx, id)
 }

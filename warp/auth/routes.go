@@ -39,7 +39,7 @@ func (m *module) routes() {
 // after one hash either way.
 func (m *module) login(ctx context.Context, in LoginInput) (User, error) {
 	r := warp.Request(ctx)
-	row, err := m.attempt(ctx, in.Email, in.Password, m.app.ClientIP(r))
+	row, err := m.attempt(ctx, in.Email, in.Password, m.app.ClientKey(r))
 	if err != nil {
 		return User{}, err
 	}
@@ -47,10 +47,11 @@ func (m *module) login(ctx context.Context, in LoginInput) (User, error) {
 	return row.user(), nil
 }
 
-// attempt checks one login from the address ip. Before anything is looked up
-// or hashed it takes a try from the address's count and from the email's,
-// either of which, when spent, is the 429. A success clears the email's
-// count.
+// attempt checks one login from the client ip, as ClientKey names it (an
+// IPv6 client by its /64). Before anything is looked up or hashed it takes a
+// try from the address's count and from the email's, either of which, when
+// spent, is the 429. A success clears the email's count. A try that finds no
+// hashing slot in time gives both back: no hash ran and nothing was learned.
 func (m *module) attempt(ctx context.Context, email, password, ip string) (userRow, error) {
 	email = normalEmail(email)
 	key := limitKey(email, ip)
@@ -67,6 +68,10 @@ func (m *module) attempt(ctx context.Context, email, password, ip string) (userR
 	}
 	ok, err := m.verify(ctx, stored, password)
 	if err != nil {
+		if isBusy(err) {
+			m.perAddress.give(ip)
+			m.perKey.give(key)
+		}
 		return userRow{}, err
 	}
 	if !ok || !found {
