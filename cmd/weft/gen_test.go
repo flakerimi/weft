@@ -657,6 +657,18 @@ const out = {
   ],
   skipped: await api.products.list({ fields: [null, 'a', undefined], filter: { status: undefined, kind: '', tag: null, ok: 'x' } }),
   notJSON: await caught(() => api.app.health()),
+  // What JSON cannot carry, or would write as null, is refused before sending.
+  unsendable: [
+    await caught(() => api.products.update(7, { name: 'x', price: NaN })),
+    await caught(() => api.products.update(7, { price: -Infinity })),
+    await caught(() => api.products.update(7, { lines: [{ qty: NaN }] })),
+    await caught(() => api.products.update(7, { tags: ['a', undefined] })),
+    await caught(() => api.products.update(7, { price: 10n })),
+    await caught(() => { const o = {}; o.self = o; return api.products.update(7, o) }),
+    await caught(() => api.products.update(NaN, { name: 'x' })),
+    await caught(() => api.hello.delete('\ud800')),
+    await caught(() => api.products.list({ page: NaN })),
+  ],
 }
 setBase('http://' + process.argv[3])
 const network = await caught(() => api.app.health())
@@ -680,6 +692,12 @@ console.log(JSON.stringify(out))
 	refused := func(name string) map[string]any {
 		return map[string]any{"api": true, "status": 0.0, "code": "bad_request", "message": "The " + name + ` in the address cannot be empty, "." or "..".`, "fields": map[string]any{}, "cause": false}
 	}
+	plain := func(message string) map[string]any {
+		return map[string]any{"api": true, "status": 0.0, "code": "bad_request", "message": message, "fields": map[string]any{}, "cause": false}
+	}
+	wrong := func(field, says string) map[string]any {
+		return map[string]any{"api": true, "status": 0.0, "code": "bad_request", "message": "1 field has the wrong type.", "fields": map[string]any{field: says}, "cause": false}
+	}
 	badFilter := map[string]any{"api": true, "status": 0.0, "code": "bad_request", "message": "A filter name cannot be empty or contain [ or ].", "fields": map[string]any{}, "cause": false}
 	wantRes := map[string]any{
 		"list":        map[string]any{"items": []any{}, "total": 0.0, "page": 2.0, "per_page": 20.0},
@@ -694,7 +712,15 @@ console.log(JSON.stringify(out))
 		"filterNames": []any{badFilter, badFilter, badFilter},
 		"skipped":     map[string]any{"items": []any{}, "total": 0.0, "page": 2.0, "per_page": 20.0},
 		"notJSON":     map[string]any{"api": true, "status": 200.0, "code": "http", "message": "The answer was not JSON.", "fields": map[string]any{}, "cause": true},
-		"network":     map[string]any{"api": true, "status": 0.0, "code": "network", "message": "a message", "fields": map[string]any{}, "cause": true},
+		"unsendable": []any{
+			wrong("price", "Send a number."), wrong("price", "Send a number."), wrong("lines.qty", "Send a number."),
+			wrong("tags", "Send a value, not null."), wrong("price", "Send a number."),
+			map[string]any{"api": true, "status": 0.0, "code": "bad_request", "message": "The body cannot be written as JSON; its cause says why.", "fields": map[string]any{}, "cause": true},
+			plain("The id in the address is NaN; give it a value."),
+			plain("The slug in the address is not well-formed text."),
+			plain("The page in the query is NaN; give it a value."),
+		},
+		"network": map[string]any{"api": true, "status": 0.0, "code": "network", "message": "a message", "fields": map[string]any{}, "cause": true},
 	}
 	g, _ := json.Marshal(res)
 	w, _ := json.Marshal(wantRes)

@@ -25,15 +25,27 @@ export function setBase(url: string): void {
 }
 
 /** The ApiError for arguments that would reach another route, or that the server would misread; no request is sent. */
-function refuse(message: string): ApiError {
-  return new ApiError(0, 'bad_request', message)
+function refuse(message: string, fields: Record<string, string> = {}, cause?: unknown): ApiError {
+  return new ApiError(0, 'bad_request', message, fields, cause)
 }
 
-/** One path parameter, encoded. One that is empty, "." or ".." (or only dots) would reach another route, so it is refused. */
+/** Refuses a parameter that has no value to send: undefined, null, or a number that is not finite (NaN, Infinity). */
+function given(where: string, value: unknown): void {
+  if (value === undefined || value === null || (typeof value === 'number' && !Number.isFinite(value))) {
+    throw refuse(`The ${where} is ${String(value)}; give it a value.`)
+  }
+}
+
+/** One path parameter, encoded. One that is empty, "." or ".." (or only dots) would reach another route, so it is refused, and so is one with no value or that is not well-formed text. */
 function segment(name: string, value: string | number | boolean): string {
+  given(`${name} in the address`, value)
   const text = String(value)
   if (/^\.*$/.test(text)) throw refuse(`The ${name} in the address cannot be empty, "." or "..".`)
-  return encodeURIComponent(text)
+  try {
+    return encodeURIComponent(text)
+  } catch {
+    throw refuse(`The ${name} in the address is not well-formed text.`)
+  }
 }
 
 /** A {name...} path parameter: its segments, each encoded and checked as segment does. */
@@ -56,6 +68,7 @@ function search(query: Record<string, string | number | boolean | (string | null
         if (item !== undefined && item !== null && item !== '') params.append(`${name}[${key}]`, item)
       }
     } else {
+      given(`${name} in the query`, value)
       params.append(name, String(value))
     }
   }
@@ -63,12 +76,32 @@ function search(query: Record<string, string | number | boolean | (string | null
   return text === '' ? '' : `?${text}`
 }
 
+/** body as JSON. A number JSON cannot carry (NaN, an infinity, a bigint) and an undefined in a list, which JSON.stringify writes as null or cannot write, are refused on their field, named as the server names fields (the keys of objects joined by dots, a list's index left out), so the server never reads them as null. */
+function json(body: unknown): string {
+  const paths = new WeakMap<object, string>()
+  try {
+    return JSON.stringify(body, function (this: unknown, key: string, value: unknown) {
+      const holder = paths.get(this as object) ?? ''
+      const path = key === '' || Array.isArray(this) ? holder : holder === '' ? key : `${holder}.${key}`
+      if (typeof value === 'bigint' || (typeof value === 'number' && !Number.isFinite(value))) {
+        throw refuse('1 field has the wrong type.', { [path]: 'Send a number.' })
+      }
+      if (value === undefined && Array.isArray(this)) throw refuse('1 field has the wrong type.', { [path]: 'Send a value, not null.' })
+      if (typeof value === 'object' && value !== null) paths.set(value, path)
+      return value
+    })
+  } catch (error) {
+    if (error instanceof ApiError) throw error
+    throw refuse('The body cannot be written as JSON; its cause says why.', {}, error)
+  }
+}
+
 /** Sends one request, with body as JSON when given, and reads the answer as JSON unless the route answers nothing. */
 async function send<T>(method: string, path: string, options: { body?: unknown; none?: boolean } = {}): Promise<T> {
   const init: { method: string; credentials: 'same-origin'; headers?: Record<string, string>; body?: string } = { method, credentials: 'same-origin' }
   if ('body' in options) {
     init.headers = { 'Content-Type': 'application/json' }
-    init.body = JSON.stringify(options.body)
+    init.body = json(options.body)
   }
   let res: Response
   try {
