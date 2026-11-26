@@ -1,9 +1,11 @@
 package dbtest
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -411,4 +413,64 @@ func TestTwoConnectionsSeeEachOther(t *testing.T) {
 	if err := db.QueryRow(`SELECT count(*) FROM "products"`).Scan(&n); err != nil || n != 2 {
 		t.Fatalf("%d rows, %v", n, err)
 	}
+}
+
+// A database another connection holds is a 503 with a sentence to try again,
+// not a 500, for a store call, a Tx and the developer's own SQL alike.
+func TestBusyIsUnavailable(t *testing.T) {
+	file := dbFile(t)
+	var s *data.Store[Product]
+	c := warptest.New(t, map[string]string{"DB_DRIVER": "sqlite", "DB_URL": "file:" + file + "?_busy_timeout=0"},
+		data.Module(), resourceModule[Product]{&s, nil})
+	db := data.For(c.App)
+	if err := s.Create(ctx, &Product{Name: "Lamp"}); err != nil {
+		t.Fatal(err)
+	}
+	other, err := sql.Open("sqlite", "file:"+file+"?_busy_timeout=0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	release := lockWrites(t, other)
+	defer release()
+
+	busy := func(what string, err error) {
+		t.Helper()
+		var e *warp.Error
+		if !errors.As(err, &e) || e.Status != 503 || e.Code != "unavailable" || e.Message != "The database is busy; try again in a moment." {
+			t.Errorf("%s while the database is held = %v, want the 503", what, err)
+		}
+	}
+	busy("Create", s.Create(ctx, &Product{Name: "Desk"}))
+	_, err = s.Update(ctx, 1, &Product{Name: "Desk"}, []string{"name"})
+	busy("Update", err)
+	busy("Delete", s.Delete(ctx, 1))
+	busy("Tx", db.Tx(ctx, func(context.Context) error { return nil }))
+	_, err = db.Exec(ctx, `UPDATE "products" SET "price" = 1`)
+	busy("Exec", err)
+	// Reading is not held up: the WAL journal lets readers past a writer.
+	if _, err := s.Get(ctx, 1); err != nil {
+		t.Errorf("Get while the database is held = %v", err)
+	}
+
+	logs := captureErrors(t)
+	if e := c.Post("/api/products", map[string]any{"name": "Chair"}).Want(503).Error(); e.Code != "unavailable" || e.Message != "The database is busy; try again in a moment." {
+		t.Fatalf("POST while the database is held: %+v", e)
+	}
+	if logs.Len() != 0 {
+		t.Fatalf("the 503 was logged as an error: %s", logs)
+	}
+	release()
+	c.Post("/api/products", map[string]any{"name": "Chair"}).Want(201)
+}
+
+// captureErrors collects what slog writes at error level for the rest of the
+// test.
+func captureErrors(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})))
+	t.Cleanup(func() { slog.SetDefault(old) })
+	return &buf
 }

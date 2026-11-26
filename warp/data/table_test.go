@@ -241,6 +241,25 @@ func TestIndexNameClash(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("mistakes\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
+
+	// Tables and indexes share one set of names in SQLite, so a table named
+	// like another store's unique index is a mistake too, either way round.
+	got = stores(t, func(db *DB) {
+		NewStore[A_B](db, "a_b")
+		NewStore[Plain](db, "a_b_c_unique")
+	})
+	want = []string{`warp: a_b_c_unique: the table would be named like the unique index for A_B.C of the a_b store; rename the table.`}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("mistakes\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	got = stores(t, func(db *DB) {
+		NewStore[Plain](db, "a_b_c_unique")
+		NewStore[A_B](db, "a_b")
+	})
+	want = []string{`warp: a_b: the unique index for A_B.C would be named a_b_c_unique, which is the a_b_c_unique store's table; rename one field or table.`}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("mistakes\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
 }
 
 func TestBusy(t *testing.T) {
@@ -401,6 +420,12 @@ func TestDSN(t *testing.T) {
 		{":memory:", ":memory:?" + settings, "", true},
 		{"file::memory:?cache=shared", "file::memory:?cache=shared&" + settings, "", true},
 		{"file:x.db?mode=memory", "file:x.db?mode=memory&" + settings, "", true},
+		// Warp's own settings replace the URL's for the keys the store relies
+		// on, aliases and escaped keys included; a busy timeout is kept.
+		{"file:app.db?_txlock=deferred&cache=shared", "file:app.db?cache=shared&" + settings, ".", false},
+		{"file:app.db?_journal=DELETE&_journal_mode=OFF&_fk=0&_foreign_keys=no&%5Ftxlock=exclusive", "file:app.db?" + settings, ".", false},
+		{"file:app.db?_busy_timeout=0", "file:app.db?_busy_timeout=0&" + settings, ".", false},
+		{"file:app.db?_txlock=deferred", "file:app.db?" + settings, ".", false},
 	}
 	for _, c := range cases {
 		dsn, dir, memory := d.dsn(c.url)

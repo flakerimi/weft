@@ -55,8 +55,9 @@ type DB struct {
 	clock   func() time.Time
 }
 
-// SQL returns the database for queries of the app's own. It is nil until the
-// app has started.
+// SQL returns the database's pool, for queries of the app's own that need it
+// whole. It is nil until the app has started. It never runs in a transaction:
+// for work inside Tx, use Exec, Query and QueryRow, which do.
 func (db *DB) SQL() *sql.DB {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -94,8 +95,14 @@ func (db *DB) add(t *table) bool {
 	db.mu.Lock()
 	started, taken := db.started, db.names[t.name]
 	// Index names join the table and the column with _, which either may
-	// hold, so two stores can ask for one name.
+	// hold, so two stores can ask for one name. Tables and indexes share one
+	// set of names in SQLite, so a table may not be named like an index
+	// either, nor an index like a table.
 	var clashes []string
+	if other := db.indexes[t.name]; other != nil {
+		clashes = append(clashes, fmt.Sprintf("%s: the table would be named like the unique index for %s of the %s store; rename the table.",
+			t.name, other.col.field, other.table))
+	}
 	for _, c := range t.cols {
 		if !c.unique {
 			continue
@@ -104,6 +111,10 @@ func (db *DB) add(t *table) bool {
 		if other := db.indexes[name]; other != nil {
 			clashes = append(clashes, fmt.Sprintf("%s: the unique index for %s would be named %s, which the %s store's %s already uses; rename one field or table.",
 				t.name, c.field, name, other.table, other.col.field))
+		}
+		if db.names[name] {
+			clashes = append(clashes, fmt.Sprintf("%s: the unique index for %s would be named %s, which is the %s store's table; rename one field or table.",
+				t.name, c.field, name, name))
 		}
 	}
 	ok := !started && !taken && len(clashes) == 0
@@ -232,6 +243,90 @@ func ping(ctx context.Context, conn *sql.DB, d dialect) error {
 	}
 }
 
+// errBeforeStart is the answer to a use of the database before it is open.
+var errBeforeStart = errors.New("warp: the database was used before the app started; use it from a handler, or after Start.")
+
+// busyMessage is the answer to a call the database refused because another
+// connection held it past the busy timeout.
+const busyMessage = "The database is busy; try again in a moment."
+
+// unavailable is err, or the 503 when the dialect says the database was busy
+// or locked.
+func unavailable(d dialect, err error) error {
+	if err != nil && d != nil && d.busy(err) {
+		return warp.Unavailable(busyMessage)
+	}
+	return err
+}
+
+// on returns what a call on ctx runs on, the transaction on ctx or the pool,
+// and the dialect; or the error of a call before start.
+func (db *DB) on(ctx context.Context) (querier, dialect, error) {
+	conn, d := db.handle()
+	if conn == nil {
+		return nil, nil, errBeforeStart
+	}
+	return db.q(ctx, conn), d, nil
+}
+
+// Exec runs a statement of the app's own, in the transaction on ctx when
+// there is one (inside Tx) and on the pool otherwise. A database held past
+// the busy timeout is a warp.Unavailable, a 503.
+func (db *DB) Exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	q, d, err := db.on(ctx)
+	if err != nil {
+		return nil, err
+	}
+	res, err := q.ExecContext(ctx, query, args...)
+	return res, unavailable(d, err)
+}
+
+// Query runs a query of the app's own as Exec does, and returns its rows,
+// which the caller closes.
+func (db *DB) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	q, d, err := db.on(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := q.QueryContext(ctx, query, args...)
+	return rows, unavailable(d, err)
+}
+
+// QueryRow runs a query of the app's own as Exec does, for at most one row,
+// which its Scan reads. Its errors wait for Scan, as database/sql's do.
+func (db *DB) QueryRow(ctx context.Context, query string, args ...any) *Row {
+	q, d, err := db.on(ctx)
+	if err != nil {
+		return &Row{err: err}
+	}
+	return &Row{row: q.QueryRowContext(ctx, query, args...), d: d}
+}
+
+// Row is the result of QueryRow: a *sql.Row whose errors are the database's
+// own, a busy database's 503 and the error of a call before start.
+type Row struct {
+	row *sql.Row
+	d   dialect
+	err error
+}
+
+// Scan copies the row's columns into dest, as sql.Row's Scan does; with no
+// row it returns sql.ErrNoRows.
+func (r *Row) Scan(dest ...any) error {
+	if r.err != nil {
+		return r.err
+	}
+	return unavailable(r.d, r.row.Scan(dest...))
+}
+
+// Err returns the error of the query, if any, without scanning.
+func (r *Row) Err() error {
+	if r.err != nil {
+		return r.err
+	}
+	return unavailable(r.d, r.row.Err())
+}
+
 // txKey is where a DB keeps its transaction on a context; one key per DB, so
 // two databases' transactions never mix.
 type txKey struct{ db *DB }
@@ -247,7 +342,9 @@ func (db *DB) q(ctx context.Context, conn *sql.DB) querier {
 
 // Tx runs fn in a transaction, which it commits when fn returns nil and rolls
 // back otherwise, or when fn panics, which it then panics with again. A store
-// call made with fn's context runs in the transaction.
+// call, and Exec, Query and QueryRow, made with fn's context run in the
+// transaction. A database another connection holds past the busy timeout, so
+// that the transaction cannot begin or commit, is a warp.Unavailable, a 503.
 //
 // A Tx inside another one joins it: it runs fn in the outer transaction and
 // returns fn's error, and only the outer Tx commits or rolls back. So when an
@@ -257,12 +354,15 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context) error) error 
 	if _, ok := ctx.Value(txKey{db}).(*sql.Tx); ok {
 		return fn(ctx)
 	}
-	conn, _ := db.handle()
+	conn, d := db.handle()
 	if conn == nil {
-		return errors.New("warp: the database was used before the app started; use it from a handler, or after Start.")
+		return errBeforeStart
 	}
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
+		if d.busy(err) {
+			return warp.Unavailable(busyMessage)
+		}
 		return fmt.Errorf("data: cannot begin a transaction: %w", err)
 	}
 	committing := false
@@ -276,6 +376,9 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context) error) error 
 	}
 	committing = true
 	if err := tx.Commit(); err != nil {
+		if d.busy(err) {
+			return warp.Unavailable(busyMessage)
+		}
 		return fmt.Errorf("data: cannot commit the transaction: %w", err)
 	}
 	return nil

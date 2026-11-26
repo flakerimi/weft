@@ -116,6 +116,7 @@ func TestStatuses(t *testing.T) {
 		{UnsupportedMedia("x"), http.StatusUnsupportedMediaType, "unsupported_media_type"},
 		{Invalid(map[string]string{"a": "b"}), http.StatusUnprocessableEntity, "validation"},
 		{TooMany("x"), http.StatusTooManyRequests, "rate_limited"},
+		{Unavailable("x"), http.StatusServiceUnavailable, "unavailable"},
 	} {
 		if c.err.Status != c.status || c.err.Code != c.code {
 			t.Errorf("%s: got %d %s", c.code, c.err.Status, c.err.Code)

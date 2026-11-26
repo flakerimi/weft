@@ -79,3 +79,44 @@ func TestFirstBeforeStart(t *testing.T) {
 		t.Fatalf("First before start = %v, %v; want the error Get gives, %v", ok, err, want)
 	}
 }
+
+// Status is a named text type, as a model's field may have.
+type Status string
+
+// First converts its value as a write does, and refuses one no column holds.
+func TestFirstConvertsItsValue(t *testing.T) {
+	_, s := shop[Product](t, dbFile(t))
+	for _, p := range []Product{{Name: "Lamp", Price: 12, Status: "draft"}, {Name: "Desk", Price: 80, Status: "live"}} {
+		if err := s.Create(ctx, &p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	desk, _ := s.Get(ctx, 2)
+	name := "Desk"
+	for what, value := range map[string]any{
+		"a pointer to a time": &desk.CreatedAt,
+		"a named text type":   Status("live"),
+		"a pointer to text":   &name,
+	} {
+		field := map[string]string{"a pointer to a time": "created_at", "a named text type": "status", "a pointer to text": "name"}[what]
+		if got, ok, err := s.First(ctx, field, value); err != nil || !ok || got.ID != 2 {
+			t.Errorf("First(%s, %s) = %+v, %v, %v; want id 2", field, what, got, ok, err)
+		}
+	}
+	for _, c := range []struct {
+		field string
+		value any
+		want  string
+	}{
+		{"name", nil, `data: products cannot look up "name" by nil, which no value equals; give it a value.`},
+		{"name", (*string)(nil), `data: products cannot look up "name" by nil, which no value equals; give it a value.`},
+		{"name", Product{}, `data: products cannot look up "name" by a dbtest.Product; give it text.`},
+		{"name", []string{"Desk"}, `data: products cannot look up "name" by a []string; give it text.`},
+		{"price", "80", `data: products cannot look up "price" by a string; give it a number.`},
+		{"created_at", "2026-11-25", `data: products cannot look up "created_at" by a string; give it a time.Time.`},
+	} {
+		if _, ok, err := s.First(ctx, c.field, c.value); err == nil || err.Error() != c.want || ok {
+			t.Errorf("First(%s, %#v) = %v, %v; want %q", c.field, c.value, ok, err, c.want)
+		}
+	}
+}

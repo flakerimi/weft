@@ -7,6 +7,7 @@ import (
 	"fmt"
 	neturl "net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
@@ -200,13 +201,26 @@ func (sqlite) busy(err error) bool {
 // are the ones both modernc.org/sqlite and mattn/go-sqlite3 read.
 const settings = "_busy_timeout=5000&_foreign_keys=1&_journal_mode=WAL&_txlock=immediate"
 
+// ownSettings are the keys of settings the store relies on, with the
+// drivers' aliases for them: dsn drops them from a DB_URL, so Warp's values
+// are the connection's whatever the URL says. A busy timeout is only how long
+// to wait, so a DB_URL's (_busy_timeout or _timeout) is kept, and wins, since
+// the drivers read the first value.
+var ownSettings = []string{"_txlock", "_journal_mode", "_journal", "_foreign_keys", "_fk"}
+
 func (sqlite) dsn(url string) (string, string, bool) {
 	path, query, _ := strings.Cut(url, "?")
-	sep := "?"
-	if query != "" {
-		sep = "&"
+	var kept []string
+	for part := range strings.SplitSeq(query, "&") {
+		key, _, _ := strings.Cut(part, "=")
+		if unescaped, err := neturl.QueryUnescape(key); err == nil {
+			key = unescaped
+		}
+		if part != "" && !slices.Contains(ownSettings, key) {
+			kept = append(kept, part)
+		}
 	}
-	dsn := url + sep + settings
+	dsn := path + "?" + strings.Join(append(kept, settings), "&")
 	values := "&" + query + "&"
 	if path == ":memory:" || path == "file::memory:" || path == "file:" || path == "" || strings.Contains(values, "&mode=memory&") {
 		return dsn, "", true

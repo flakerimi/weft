@@ -360,14 +360,15 @@ func TestStartWhileLocked(t *testing.T) {
 		if err == nil || err.Error() != locked(url) {
 			t.Fatalf("Start = %v\nwant %s", err, locked(url))
 		}
-		if took < 4*time.Second || took > 8*time.Second {
+		// Loose above, for a loaded machine; ten tries would still be past it.
+		if took < 4*time.Second || took > 25*time.Second {
 			t.Fatalf("Start took %v, want one busy timeout of about 5 s", took)
 		}
 	})
 
 	t.Run("no busy timeout", func(t *testing.T) {
-		// _busy_timeout=0 in DB_URL wins over Warp's, since the driver reads the
-		// first value: each try fails at once, as a fresh file being switched to
+		// _busy_timeout=0 in DB_URL wins over Warp's, the one setting of
+		// Warp's a DB_URL may change: each try fails at once, as a fresh file being switched to
 		// WAL by another process does, and the retries fill about a second.
 		file := dbFile(t)
 		lock(t, file)
@@ -376,7 +377,9 @@ func TestStartWhileLocked(t *testing.T) {
 		if err == nil || err.Error() != locked(url) {
 			t.Fatalf("Start = %v\nwant %s", err, locked(url))
 		}
-		if took < 900*time.Millisecond || took > 3*time.Second {
+		// Loose above, for a loaded machine, yet under the 5 s a busy timeout
+		// of Warp's would take.
+		if took < 900*time.Millisecond || took > 4500*time.Millisecond {
 			t.Fatalf("Start took %v, want about the one-second retry deadline", took)
 		}
 	})

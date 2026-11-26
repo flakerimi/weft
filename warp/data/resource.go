@@ -82,8 +82,14 @@ type selfChecker interface {
 // A value another record has in a unique field is a 422 on that field. Call
 // it from a module's Register; a mistake is reported by the app.
 func Resource[T any](app *warp.App, path string, store *Store[T], opts ...ResourceOption) {
-	// /api alone is refused too, since its routes would be /api/{id}.
-	if rest, ok := strings.CutPrefix(path, "/api"); ok && goodPath(rest) {
+	// /api alone is refused too, since its routes would be /api/{id}. Every
+	// /api in front is dropped from the path suggested: /api/api/products is
+	// to be /products.
+	rest, ok := strings.CutPrefix(path, "/api")
+	for ok && strings.HasPrefix(rest, "/api/") {
+		rest = rest[len("/api"):]
+	}
+	if ok && goodPath(rest) {
 		app.Mistake("data.Resource was given the path %q; write it without /api, as %s.", path, rest)
 		return
 	}

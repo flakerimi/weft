@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -434,6 +435,12 @@ func TestResourceMistakes(t *testing.T) {
 	if want := []string{`warp: data.Resource was given the path "/api/products"; write it without /api, as /products.`}; !reflect.DeepEqual(got, want) || len(routes) != 0 {
 		t.Errorf("/api in front: %q, %d routes", got, len(routes))
 	}
+	got, routes = mistakes(func(app *warp.App) {
+		data.Resource(app, "/api/api/products", data.NewStore[Product](data.For(app), "products"))
+	})
+	if want := []string{`warp: data.Resource was given the path "/api/api/products"; write it without /api, as /products.`}; !reflect.DeepEqual(got, want) || len(routes) != 0 {
+		t.Errorf("/api twice in front: %q, %d routes", got, len(routes))
+	}
 	for _, path := range []string{"/products", "/shop/order-items", "/v2/things_1", "/v1.2/items", "/apis"} {
 		got, routes := mistakes(func(app *warp.App) {
 			data.Resource(app, path, data.NewStore[Product](data.For(app), "products"))
@@ -467,5 +474,56 @@ func TestResourceMistakes(t *testing.T) {
 	})
 	if want := []string{`warp: plain: Plain does not embed data.Record; embed it, since a store needs an id and two times.`}; !reflect.DeepEqual(got, want) {
 		t.Errorf("a refused model: %q", got)
+	}
+}
+
+// Raced checks that its sale is no more than its price, slowly, so that two
+// updates that were not one after the other would both pass.
+type Raced struct {
+	data.Record
+	Price float64 `json:"price"`
+	Sale  float64 `json:"sale"`
+}
+
+func (r Raced) Validate(ctx context.Context) error {
+	time.Sleep(5 * time.Millisecond)
+	if r.Sale > r.Price {
+		return warp.Invalid(map[string]string{"sale": "Make the sale price no more than the price."})
+	}
+	return nil
+}
+
+// Two PATCHes that each pass the check alone, and together break it, are one
+// after the other: one is answered 200 and the other 422, and the stored
+// record never breaks the rule. Without the transaction around update's
+// read, check and write, both would read price 10 and sale 5 and pass.
+func TestResourcePatchesDoNotRace(t *testing.T) {
+	c, s := withResource[Raced](t)
+	var rec Raced
+	c.Post("/api/products", map[string]any{"price": 10, "sale": 5}).Want(201).JSON(&rec)
+	path := fmt.Sprintf("/api/products/%d", rec.ID)
+	for i := range 30 {
+		if _, err := s.Update(ctx, rec.ID, &Raced{Price: 10, Sale: 5}, []string{"price", "sale"}); err != nil {
+			t.Fatal(err)
+		}
+		statuses := make([]int, 2)
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		for j, body := range []map[string]any{{"price": 6}, {"sale": 8}} {
+			wg.Go(func() {
+				<-start
+				statuses[j] = c.Patch(path, body).Status
+			})
+		}
+		close(start)
+		wg.Wait()
+		got, err := s.Get(ctx, rec.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		slices.Sort(statuses)
+		if !slices.Equal(statuses, []int{200, 422}) || got.Sale > got.Price {
+			t.Fatalf("pair %d: answered %v, stored price %g and sale %g; want 200 and 422, and a sale no more than the price", i, statuses, got.Price, got.Sale)
+		}
 	}
 }

@@ -32,7 +32,8 @@ type ID struct {
 // json:"-" is not kept. Text, numbers, bools, times and bytes can be kept, a
 // pointer to one as a column that may be NULL. A field with the rule unique
 // gets a unique index, and a value another record has is answered 422 on that
-// field.
+// field. A call the database refuses because another connection holds it past
+// the busy timeout is a warp.Unavailable, answered 503.
 type Store[T any] struct {
 	db   *DB
 	name string
@@ -80,15 +81,15 @@ func (s *Store[T]) notFound(id int64) error {
 	return warp.NotFound(fmt.Sprintf("No %s has id %d.", s.t.singular, id))
 }
 
-// taken turns a unique violation into a 422 on the field; any other error is
-// returned as it is.
+// taken turns a unique violation into a 422 on the field, and a busy
+// database into the 503; any other error is returned as it is.
 func (s *Store[T]) taken(d dialect, err error) error {
 	if name, ok := d.uniqueColumn(err, s.name); ok {
 		if c := s.t.col(name); c != nil {
 			return warp.Invalid(map[string]string{c.name: "This is already taken."})
 		}
 	}
-	return err
+	return unavailable(d, err)
 }
 
 // Get returns the record with the id, or a warp.NotFound.
@@ -102,7 +103,7 @@ func (s *Store[T]) Get(ctx context.Context, id int64) (T, error) {
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, s.notFound(id)
 	}
-	return v, err
+	return v, unavailable(d, err)
 }
 
 // Create adds v as a new record and sets its ID, CreatedAt and UpdatedAt,
@@ -200,7 +201,7 @@ func (s *Store[T]) Delete(ctx context.Context, id int64) error {
 	}
 	res, err := q.ExecContext(ctx, s.t.deleteSQL(d), id)
 	if err != nil {
-		return err
+		return unavailable(d, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {

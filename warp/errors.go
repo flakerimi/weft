@@ -71,6 +71,12 @@ func TooMany(message string) *Error {
 	return &Error{Status: http.StatusTooManyRequests, Code: "rate_limited", Message: message}
 }
 
+// Unavailable is a 503 answer, for a server that cannot answer now and may
+// in a moment, such as a database another connection holds.
+func Unavailable(message string) *Error {
+	return &Error{Status: http.StatusServiceUnavailable, Code: "unavailable", Message: message}
+}
+
 // WriteJSON answers with v as JSON. A nil slice at the top is written as [],
 // and a 204 has no body. Inside v it writes what encoding/json writes, so a
 // nil slice, map or []byte there is null; a typed route's answer has none
