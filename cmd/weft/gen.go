@@ -16,6 +16,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -233,8 +234,10 @@ func genFailed(stderr io.Writer, command string, err error) int {
 }
 
 // devBinary is where weft dev, weft gen and weft build build the app's Go
-// server with the dev tag.
-func devBinary(appDir string) string { return filepath.Join(appDir, ".weft", "dev", "app") }
+// server with the dev tag, for this machine: app, or app.exe on Windows.
+func devBinary(appDir string) string {
+	return filepath.Join(appDir, ".weft", "dev", "app"+exeSuffix(runtime.GOOS))
+}
 
 // genTypes builds the app with the dev tag, as weft dev does, and writes its
 // typed client; it says whether the file changed. An app that makes no

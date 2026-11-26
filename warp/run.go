@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"slices"
 	"syscall"
 	"time"
@@ -61,7 +62,7 @@ func (a *App) Serve(dist fs.FS, opts ...ServeOption) error {
 	addr := net.JoinHostPort(a.cfg.Host, a.cfg.Port)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		if errors.Is(err, syscall.EADDRINUSE) {
+		if addrInUse(err) {
 			err = fmt.Errorf("warp: port %s is taken; stop what uses it or set PORT in .env.", a.cfg.Port)
 		} else {
 			err = fmt.Errorf("warp: cannot listen on %s (%w); set HOST and PORT in .env.", addr, err)
@@ -72,6 +73,12 @@ func (a *App) Serve(dist fs.FS, opts ...ServeOption) error {
 		log.Printf("listening on http://localhost:%d", ln.Addr().(*net.TCPAddr).Port)
 	}
 	return a.serve(ctx, ln, dist, opts...)
+}
+
+// addrInUse says whether err is a listen on an address in use: EADDRINUSE,
+// or on Windows WSAEADDRINUSE (10048), which syscall does not take for it.
+func addrInUse(err error) bool {
+	return errors.Is(err, syscall.EADDRINUSE) || runtime.GOOS == "windows" && errors.Is(err, syscall.Errno(10048))
 }
 
 // notifyContext is signal.NotifyContext; a test puts another in its place.

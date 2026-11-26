@@ -13,9 +13,10 @@ if [ $# -ne 1 ]; then
 	exit 2
 fi
 root=$(cd "$(dirname "$0")/.." && pwd)
-# Resolve OUT against the caller's folder before anything changes directory.
+# Resolve OUT against the caller's folder before anything changes directory;
+# C:/... and C:\... are absolute too, as Go on Windows passes them to Git Bash.
 case "$1" in
-/*) out="$1" ;;
+/* | [A-Za-z]:[/\\]*) out="$1" ;;
 *) out="$PWD/$1" ;;
 esac
 

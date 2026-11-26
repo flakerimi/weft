@@ -69,6 +69,17 @@ func copyApp(t *testing.T, dir string) string {
 	return filepath.Join(dir, "myapp")
 }
 
+// A binary for Windows is named .exe, as weft build's default and the dev
+// build are there; for any other system it has no suffix.
+func TestExeSuffix(t *testing.T) {
+	if exeSuffix("windows") != ".exe" || exeSuffix("linux") != "" || exeSuffix("darwin") != "" {
+		t.Errorf("exeSuffix: windows %q, linux %q, darwin %q; want .exe and none", exeSuffix("windows"), exeSuffix("linux"), exeSuffix("darwin"))
+	}
+	if want := filepath.Join("a", ".weft", "dev", "app"+exeSuffix(runtime.GOOS)); devBinary("a") != want {
+		t.Errorf("devBinary(a) = %q, want %q", devBinary("a"), want)
+	}
+}
+
 // build runs weft build with args in the current folder.
 func build(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
@@ -200,7 +211,7 @@ func TestHostBuildEnv(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module probe\n\ngo 1.26\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n\nfunc main() { println(\"ran\") }\n"), 0o644)
-	bin := filepath.Join(dir, "probe")
+	bin := filepath.Join(dir, "probe"+exeSuffix(runtime.GOOS))
 	var stderr bytes.Buffer
 	if !goBuild(context.Background(), "gen", dir, bin, &stderr) {
 		t.Fatalf("goBuild failed: %s", stderr.String())
@@ -218,13 +229,13 @@ func TestBuildMakesBinary(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s%s", code, out, errs)
 	}
-	if !strings.HasSuffix(out, "Built myapp\n") {
+	if !strings.HasSuffix(out, "Built myapp"+exeSuffix(runtime.GOOS)+"\n") {
 		t.Errorf("stdout ends %q", out[max(0, len(out)-80):])
 	}
 	if !strings.Contains(out, "weft: built 2 pages into web/dist") {
 		t.Errorf("the page build's output was not passed through: %q", out)
 	}
-	assertServes(t, filepath.Join(app, "myapp"))
+	assertServes(t, filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS)))
 
 	// A build for another system is one command: GOOS and GOARCH pass through.
 	t.Setenv("GOOS", "linux")
@@ -333,7 +344,7 @@ func TestBuildFreshClone(t *testing.T) {
 	if got := unpacked(app); got != "0.0.0-dev" {
 		t.Errorf(".weft/VERSION = %q", got)
 	}
-	assertServes(t, filepath.Join(app, "myapp"))
+	assertServes(t, filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS)))
 }
 
 func TestBuildUnpacksAnOlderWeft(t *testing.T) {
@@ -580,7 +591,7 @@ func TestBuildInPathWithSpace(t *testing.T) {
 		t.Fatalf("exit %d: %s%s", code, out, errs)
 	}
 	wd, _ := os.Getwd()
-	assertServes(t, filepath.Join(wd, "myapp"))
+	assertServes(t, filepath.Join(wd, "myapp"+exeSuffix(runtime.GOOS)))
 }
 
 func TestBuildFromSubfolder(t *testing.T) {
@@ -599,5 +610,32 @@ func TestBuildFromSubfolder(t *testing.T) {
 	}
 	if exists(t, "myapp") || exists(t, "web") {
 		t.Error("the build wrote into the subfolder")
+	}
+}
+
+// weft build names its binary for the system go builds for, which go env
+// says, whether GOOS is in the environment or was set with go env -w.
+func TestTargetGOOS(t *testing.T) {
+	dir := t.TempDir()
+	goenv := filepath.Join(t.TempDir(), "env")
+	os.WriteFile(goenv, []byte("GOOS=windows\n"), 0o644)
+	for _, c := range []struct {
+		env  []string
+		want string
+	}{
+		{[]string{"GOENV=off", "GOOS=windows"}, "windows"},
+		{[]string{"GOENV=off", "GOOS=linux"}, "linux"},
+		{[]string{"GOENV=" + goenv}, "windows"},
+		{[]string{"GOENV=off"}, runtime.GOOS},
+	} {
+		var env []string
+		for _, kv := range os.Environ() {
+			if !strings.HasPrefix(kv, "GOOS=") && !strings.HasPrefix(kv, "GOENV=") {
+				env = append(env, kv)
+			}
+		}
+		if got := targetGOOS(dir, append(env, c.env...)); got != c.want {
+			t.Errorf("targetGOOS with %v = %q, want %q", c.env, got, c.want)
+		}
 	}
 }

@@ -305,6 +305,7 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 				return stopAsked()
 			case <-time.After(devGrace):
 			}
+			unpin(api.cmd) // its process was waited for: let its handle go (Windows)
 			api = nil
 			fmt.Fprintln(stderr, "weft dev: the Go server stopped after the restart; fix it and save again.")
 			continue
@@ -358,11 +359,25 @@ func startChild(name string, cmd *exec.Cmd) (*child, error) {
 	return c, nil
 }
 
-// stop stops the child's group and waits for the child.
+// stop stops the child's group and waits for the child. A child that has
+// exited and been waited for is left alone: once it is waited for, its
+// process id may be given to another program (on Windows at once), whose
+// processes a stop would reach. What it started reads the end of its input
+// and exits when weft dev does.
 func (c *child) stop() {
-	stopGroup(c.cmd)
+	select {
+	case <-c.done:
+		unpin(c.cmd)
+		return
+	default:
+	}
+	stopChild(c.cmd)
 	<-c.done
+	unpin(c.cmd)
 }
+
+// stopChild is stopGroup; a test puts another in its place.
+var stopChild = stopGroup
 
 // goBuild builds the app with the dev tag into bin, passing the compiler's
 // output through; it says whether the build succeeded. command names the
@@ -372,13 +387,23 @@ func goBuild(ctx context.Context, command, appDir, bin string, stderr io.Writer)
 		fmt.Fprintf(stderr, "weft %s: cannot make %s (%v); make the app's folder writable.\n", command, filepath.Dir(bin), err)
 		return false
 	}
+	// A running binary cannot be written over on Windows, where weft dev's
+	// Go server runs from bin while the next build is made.
+	setAside(bin)
 	cmd := exec.CommandContext(ctx, "go", "build", "-tags", "dev", "-o", bin, ".")
 	cmd.Dir, cmd.Env = appDir, hostBuildEnv(os.Environ())
 	cmd.Stdout, cmd.Stderr = stderr, stderr
-	// Stopped as a Ctrl-C would, so go stops the compilers it started.
-	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
+	// Stopped as a Ctrl-C would, so go stops the compilers it started; on
+	// Windows, which has none to send, go and what it started are killed.
+	// Cancel runs before Wait returns, so always while go is pinned.
+	cmd.Cancel = func() error { return interrupt(cmd) }
 	cmd.WaitDelay = 3 * time.Second
-	return cmd.Run() == nil
+	if cmd.Start() != nil {
+		return false
+	}
+	pin(cmd)
+	defer unpin(cmd)
+	return cmd.Wait() == nil
 }
 
 // hostBuildEnv is environ with GOOS and GOARCH set to this machine's, and
@@ -458,7 +483,7 @@ func portFree(port int) bool {
 		l, err := net.Listen("tcp", addr)
 		if err == nil {
 			l.Close()
-		} else if errors.Is(err, syscall.EADDRINUSE) {
+		} else if addrInUse(err) {
 			return false
 		}
 		if c, err := net.DialTimeout("tcp", addr, 500*time.Millisecond); err == nil {
@@ -467,6 +492,12 @@ func portFree(port int) bool {
 		}
 	}
 	return true
+}
+
+// addrInUse says whether err is a listen on an address in use: EADDRINUSE,
+// or on Windows WSAEADDRINUSE (10048), which syscall does not take for it.
+func addrInUse(err error) bool {
+	return errors.Is(err, syscall.EADDRINUSE) || runtime.GOOS == "windows" && errors.Is(err, syscall.Errno(10048))
 }
 
 // portFreeAt is portFree; a test puts another in its place.

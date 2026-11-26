@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -33,7 +34,9 @@ func TestMain(m *testing.M) {
 				panic(err)
 			}
 			defer os.RemoveAll(dir)
-			cmd := exec.Command("../../scripts/bundle.sh", filepath.Join(dir, "bundle"))
+			// Through sh, which Windows does not find from the script's first
+			// line; the folder with forward slashes, as Git Bash's sh reads it.
+			cmd := exec.Command("sh", "../../scripts/bundle.sh", filepath.ToSlash(filepath.Join(dir, "bundle")))
 			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
 				println("scripts/bundle.sh failed:", err.Error())
@@ -94,7 +97,7 @@ func assertCreated(t *testing.T, dir string) {
 		t.Errorf("package.json has the wrong name: %q", read("package.json"))
 	}
 	ignore := strings.Split(read(".gitignore"), "\n")
-	for _, want := range []string{".weft/", ".weft.lock", ".weft-new-*/", ".weft-old-*/", "node_modules/", "web/dist/", "web/.weft-types/", ".env", "/" + filepath.Base(dir)} {
+	for _, want := range []string{".weft/", ".weft.lock", ".weft-new-*/", ".weft-old-*/", "node_modules/", "web/dist/", "web/.weft-types/", ".env", "/" + filepath.Base(dir), "/" + filepath.Base(dir) + ".exe"} {
 		found := false
 		for _, l := range ignore {
 			found = found || l == want
@@ -270,8 +273,12 @@ func TestCreateInPathWithSpace(t *testing.T) {
 func fakePnpm(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
-	script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 10.0.0; exit 0; fi\necho \"fake pnpm: $*\" >&2\nexit 1\n"
-	if err := os.WriteFile(filepath.Join(dir, "pnpm"), []byte(script), 0o755); err != nil {
+	name, script := "pnpm", "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 10.0.0; exit 0; fi\necho \"fake pnpm: $*\" >&2\nexit 1\n"
+	if runtime.GOOS == "windows" {
+		// Windows runs a program found on PATH by its extension, not its first line.
+		name, script = "pnpm.cmd", "@echo off\r\nif \"%~1\"==\"--version\" (\r\n  echo 10.0.0\r\n  exit /b 0\r\n)\r\necho fake pnpm: %* 1>&2\r\nexit /b 1\r\n"
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))

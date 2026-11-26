@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 )
@@ -30,6 +31,13 @@ var commands = map[string]command{
 }
 
 func main() {
+	// On Windows an update sets the binary it replaced aside as weft.exe.old,
+	// which cannot be removed while it runs; the next run removes it.
+	if runtime.GOOS == "windows" {
+		if exe, err := os.Executable(); err == nil {
+			removeSetAside(exe)
+		}
+	}
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 

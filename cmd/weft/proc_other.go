@@ -1,4 +1,4 @@
-//go:build !unix
+//go:build !unix && !windows
 
 package main
 
@@ -10,8 +10,8 @@ import (
 // stopSignals are the signals weft dev stops its children on and exits 0.
 var stopSignals = []os.Signal{os.Interrupt}
 
-// startGroup starts cmd. Outside Unix there are no process groups to make:
-// weft is released for darwin and linux only.
+// startGroup starts cmd. Outside Unix and Windows (weft is released for
+// neither) there are no process groups to make.
 func startGroup(cmd *exec.Cmd) error {
 	return cmd.Start()
 }
@@ -20,3 +20,14 @@ func startGroup(cmd *exec.Cmd) error {
 func stopGroup(cmd *exec.Cmd) {
 	cmd.Process.Kill()
 }
+
+// interrupt kills cmd.
+func interrupt(cmd *exec.Cmd) error {
+	return cmd.Process.Kill()
+}
+
+func pin(*exec.Cmd)   {}
+func unpin(*exec.Cmd) {}
+
+// setAside does nothing.
+func setAside(string) {}

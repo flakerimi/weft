@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 )
@@ -82,10 +83,11 @@ func buildCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// -o is relative to where weft build runs; the default is the app's name
-	// in the app's folder.
+	// in the app's folder, with .exe for Windows.
 	shown, target := *out, *out
 	if target == "" {
-		target = filepath.Join(appDir, binaryName(cfg, appDir))
+		goos := targetGOOS(appDir, goBuildEnv(os.Environ()))
+		target = filepath.Join(appDir, binaryName(cfg, appDir)+exeSuffix(goos))
 		shown = target
 		if wd, err := os.Getwd(); err == nil {
 			if rel, err := filepath.Rel(wd, target); err == nil {
@@ -136,6 +138,28 @@ func binaryName(cfg appConfig, appDir string) string {
 		return cfg.Name
 	}
 	return filepath.Base(appDir)
+}
+
+// targetGOOS is the system go build builds for in appDir with environ, as go
+// env GOOS says, so a GOOS set with go env -w counts too; this machine's if
+// go cannot say.
+func targetGOOS(appDir string, environ []string) string {
+	cmd := exec.Command("go", "env", "GOOS")
+	cmd.Dir, cmd.Env = appDir, environ
+	out, err := cmd.Output()
+	if goos := strings.TrimSpace(string(out)); err == nil && goos != "" {
+		return goos
+	}
+	return runtime.GOOS
+}
+
+// exeSuffix is ".exe" for a binary built for goos windows, where a program
+// runs by that name only, and "" for any other system.
+func exeSuffix(goos string) string {
+	if goos == "windows" {
+		return ".exe"
+	}
+	return ""
 }
 
 // runIn runs name with args in dir, passing its output through. There is no
