@@ -24,7 +24,9 @@ jobs:
       - run: scripts/site.sh build
       - run: pnpm --filter weft-bench build
       - run: go vet ./...
-      - run: go test ./...
+      # The weft command's tests build apps, install them and build a release:
+      # about eight minutes here, past go test's default limit of ten on a runner.
+      - run: go test -timeout 30m ./...
 
   web:
     runs-on: ubuntu-latest
