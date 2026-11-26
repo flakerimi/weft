@@ -70,6 +70,9 @@ var notifyContext = signal.NotifyContext
 // its place.
 var describeOut io.Writer = os.Stdout
 
+// exit ends the process; a test puts another in its place.
+var exit = os.Exit
+
 // describeTo writes the description to w as indented JSON, unless the app has
 // a registration mistake or Describe one.
 func (a *App) describeTo(w io.Writer) error {
@@ -127,7 +130,7 @@ func (a *App) Run(ctx context.Context, ln net.Listener, dist fs.FS, opts ...Serv
 
 	h := a.Handler()
 	if dist != nil {
-		h = Serve(dist, h, opts...)
+		h = serveBuild(dist, h, opts...)
 	}
 
 	srv := newServer(h)

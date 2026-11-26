@@ -2,8 +2,10 @@
 package warp
 
 import (
+	"fmt"
 	"io/fs"
 	"net/http"
+	"os"
 	"path"
 	"strings"
 )
@@ -45,7 +47,25 @@ const (
 // Serve panics if dist has no index.html.
 //
 // Options add to what is served: WithFiles serves a folder on disk beside dist.
+//
+// With WARP_DESCRIBE=1 in the environment, as weft gen, weft routes and weft
+// build run an app, Serve writes the description of an App with no routes to
+// standard output and ends the process with status 0, so an app that serves
+// without a warp.App describes itself as having no typed routes and never
+// listens while weft waits. An App's own Serve and Run do not come here.
 func Serve(dist fs.FS, api http.Handler, opts ...ServeOption) http.Handler {
+	if os.Getenv("WARP_DESCRIBE") == "1" {
+		if err := New(Config{}).describeTo(describeOut); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			exit(1)
+		}
+		exit(0)
+	}
+	return serveBuild(dist, api, opts...)
+}
+
+// serveBuild is Serve without its WARP_DESCRIBE check, for Run.
+func serveBuild(dist fs.FS, api http.Handler, opts ...ServeOption) http.Handler {
 	if api == nil {
 		api = http.HandlerFunc(noAPI)
 	}

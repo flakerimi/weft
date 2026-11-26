@@ -1028,3 +1028,50 @@ func TestDescribeOmitemptyOnTwin(t *testing.T) {
 		t.Fatalf("title optional on descTitled %v, on descTitledInput %v; want true, false", full.Optional, input.Optional)
 	}
 }
+
+// An app that serves with the package-level Serve and has no App, as one made
+// by Weft 0.0.7 does, describes itself as an App with no routes would, and
+// exits 0 without serving; Run, which an App's Serve calls, never does that.
+func TestPackageServeDescribesNothing(t *testing.T) {
+	out := describeTo(t)
+	code := -1
+	old := exit
+	exit = func(c int) { code = c; panic(exited{}) }
+	t.Cleanup(func() { exit = old })
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if _, ok := r.(exited); !ok {
+					panic(r)
+				}
+			}
+		}()
+		Serve(dist, nil)
+		t.Fatal("Serve returned a handler under WARP_DESCRIBE=1")
+	}()
+	if code != 0 {
+		t.Fatalf("exit code %d, want 0", code)
+	}
+	var want bytes.Buffer
+	if err := New(Config{}).describeTo(&want); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != want.String() {
+		t.Fatalf("Serve printed %q, want %q", out, &want)
+	}
+
+	// Run serves the build with the same handler, and does not exit.
+	out.Reset()
+	code = -1
+	ln := listenLocal(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := New(Config{}).Run(ctx, ln, dist); err != nil {
+		t.Fatalf("Run = %v", err)
+	}
+	if code != -1 || out.Len() != 0 {
+		t.Fatalf("Run under WARP_DESCRIBE=1 exited %d and printed %q", code, out)
+	}
+}
+
+type exited struct{}
