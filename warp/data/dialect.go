@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"math"
 	neturl "net/url"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // dialect is what the store needs to know of one database engine. The store
@@ -55,10 +55,17 @@ type dialect interface {
 	// inside one or cannot tell.
 	outsideTx(ctx context.Context, conn *sql.Conn) bool
 	// dsn is the driver's name for url with the settings every connection
-	// needs, the folder to make for the file (none for memory), whether the
-	// database lives in memory, where one connection must hold it, and a
-	// sentence for each setting of url's that Warp's replaced.
-	dsn(url string) (dsn, dir string, memory bool, notes []string)
+	// needs, the database's file (none for memory), whether the database
+	// lives in memory, where one connection must hold it, and a sentence for
+	// each setting of url's that Warp's replaced.
+	dsn(url string) (dsn, file string, memory bool, notes []string)
+	// readOnly reports whether url opens the database for reading alone.
+	readOnly(url string) bool
+	// cannotWrite reports whether err says the database cannot be written.
+	cannotWrite(err error) bool
+	// probeWrite writes to the database, in the transaction q, changing
+	// nothing, so that one the app cannot write is found at start.
+	probeWrite(ctx context.Context, q querier) error
 	// contains is the condition that the column named name holds the n-th
 	// value, written by containsText, ignoring case as far as the engine does.
 	contains(name string, n int) string
@@ -247,18 +254,20 @@ func (sqlite) busy(err error) bool {
 // (two statements, a quoted name, a comment). On two connections (one for a
 // database in memory, which has one), held at once, since every connection
 // runs the settings anew, it reads back:
-//   - busy_timeout, which must be at least busyTimeout;
+//   - busy_timeout, which must be at least busyTimeout and at most
+//     maxBusyTimeout;
 //   - journal_mode, which must be wal (memory for a database in memory);
 //   - foreign_keys, which must be 1;
 //   - locking_mode, which must be normal.
 //
-// A _pragma that names journal_mode or locking_mode is refused before that,
-// whatever it sets: the drivers run it on each new connection before
-// Warp's _journal_mode, so it switches the file's mode while another
-// connection has it open, and the second connection then fails to open;
-// that cannot be read back afterwards. SQLite compares a name without regard
-// to case and cannot spell it otherwise (quotes, brackets and comments go
-// around it), so a search for the name finds every spelling.
+// A _pragma that sets locking_mode otherwise than normal is refused by what
+// is read back. journal_mode cannot be read back so: the drivers run a
+// _pragma on each new connection before Warp's _journal_mode, so every
+// connection ends in WAL, and a journal_mode(DELETE) before it switches the
+// file out of WAL whenever a connection opens alone, under another
+// process's feet. So pragmaJournal reads a _pragma's journal_mode itself:
+// WAL, in any case, starts; a mention in a comment starts; any other value,
+// or a spelling it cannot read, is refused.
 //
 // The transaction lock mode cannot be read back: a connection does not say
 // how its driver begins a transaction. It holds because SQL cannot set it (no
@@ -275,12 +284,9 @@ func (sqlite) settingsProblem(ctx context.Context, pool *sql.DB, url string, mem
 		if unescaped, err := neturl.QueryUnescape(value); err == nil {
 			value = unescaped
 		}
-		if key != "_pragma" {
-			continue
-		}
-		for _, name := range []string{"journal_mode", "locking_mode"} {
-			if strings.Contains(strings.ToLower(value), name) {
-				return fmt.Errorf("DB_URL sets %s in _pragma=%s, and the store needs Warp's own; remove it from DB_URL.", name, value)
+		if key == "_pragma" {
+			if err := pragmaJournal(value); err != nil {
+				return err
 			}
 		}
 	}
@@ -314,6 +320,8 @@ func (sqlite) settingsProblem(ctx context.Context, pool *sql.DB, url string, mem
 		switch {
 		case wait < busyTimeout:
 			return fmt.Errorf("DB_URL sets busy_timeout to %d, and the store needs at least %d; remove it from DB_URL.", wait, busyTimeout)
+		case wait > maxBusyTimeout:
+			return fmt.Errorf("DB_URL sets busy_timeout to %d, and the store allows at most %d; remove it from DB_URL.", wait, maxBusyTimeout)
 		case journal != "wal" && !(memory && journal == "memory"):
 			return fmt.Errorf("DB_URL sets journal_mode to %s, and the store needs wal; remove it from DB_URL.", journal)
 		case fk != 1:
@@ -323,6 +331,116 @@ func (sqlite) settingsProblem(ctx context.Context, pool *sql.DB, url string, mem
 		}
 	}
 	return nil
+}
+
+// pragmaJournal is the refusal of a _pragma value (SQL run after PRAGMA)
+// that sets journal_mode to anything but WAL, or names it where it cannot be
+// read; nil otherwise. Comments are left out first. Each statement is read
+// as [PRAGMA] [schema .] name (= value | (value)), the name and the value
+// in quotes, brackets or backticks or not, in any case.
+func pragmaJournal(pragma string) error {
+	sql := stripComments(pragma)
+	if !strings.Contains(strings.ToLower(sql), "journal_mode") {
+		return nil
+	}
+	for stmt := range strings.SplitSeq(sql, ";") {
+		if !strings.Contains(strings.ToLower(stmt), "journal_mode") {
+			continue
+		}
+		name, value, set, ok := readPragma(stmt)
+		switch {
+		case !ok || name != "journal_mode":
+			return fmt.Errorf("DB_URL has _pragma=%s, which names journal_mode in a way Warp cannot read; write it as journal_mode(WAL), or remove it from DB_URL.", pragma)
+		case set && !strings.EqualFold(value, "wal"):
+			return fmt.Errorf("DB_URL sets journal_mode to %s in _pragma=%s, and the store needs wal; remove it from DB_URL.", strings.ToLower(value), pragma)
+		}
+	}
+	return nil
+}
+
+// stripComments is SQL with its /* */ and -- comments left out, each as a
+// space.
+func stripComments(sql string) string {
+	var b strings.Builder
+	for i := 0; i < len(sql); {
+		switch {
+		case strings.HasPrefix(sql[i:], "/*"):
+			end := strings.Index(sql[i+2:], "*/")
+			if end < 0 {
+				return b.String()
+			}
+			b.WriteByte(' ')
+			i += 2 + end + 2
+		case strings.HasPrefix(sql[i:], "--"):
+			end := strings.IndexByte(sql[i:], '\n')
+			if end < 0 {
+				return b.String()
+			}
+			b.WriteByte(' ')
+			i += end
+		default:
+			b.WriteByte(sql[i])
+			i++
+		}
+	}
+	return b.String()
+}
+
+// readPragma reads one pragma statement: its name, in lower case and out of
+// its quotes, and the value it sets, out of its quotes; set is false for a
+// question (no value), and ok false when the statement is not that shape.
+func readPragma(stmt string) (name, value string, set, ok bool) {
+	s := strings.TrimSpace(stmt)
+	if len(s) > 6 && strings.EqualFold(s[:6], "pragma") && (s[6] == ' ' || s[6] == '\t' || s[6] == '\n') {
+		s = strings.TrimSpace(s[6:])
+	}
+	word := func(s string) (string, string, bool) {
+		if s == "" {
+			return "", "", false
+		}
+		if close, quoted := map[byte]byte{'"': '"', '[': ']', '`': '`', '\'': '\''}[s[0]]; quoted {
+			end := strings.IndexByte(s[1:], close)
+			if end < 0 {
+				return "", "", false
+			}
+			return s[1 : 1+end], strings.TrimSpace(s[2+end:]), true
+		}
+		end := strings.IndexFunc(s, func(r rune) bool {
+			return !(r == '_' || r == '-' || r == '+' || unicode.IsLetter(r) || unicode.IsDigit(r))
+		})
+		if end < 0 {
+			end = len(s)
+		}
+		return s[:end], strings.TrimSpace(s[end:]), end > 0
+	}
+	name, rest, ok := word(s)
+	if !ok {
+		return "", "", false, false
+	}
+	if strings.HasPrefix(rest, ".") { // a schema
+		if name, rest, ok = word(strings.TrimSpace(rest[1:])); !ok {
+			return "", "", false, false
+		}
+	}
+	name = strings.ToLower(name)
+	switch {
+	case rest == "":
+		return name, "", false, true
+	case strings.HasPrefix(rest, "="):
+		value, rest, ok = word(strings.TrimSpace(rest[1:]))
+	case strings.HasPrefix(rest, "("):
+		value, rest, ok = word(strings.TrimSpace(rest[1:]))
+		if ok && rest != ")" {
+			return "", "", false, false
+		}
+		rest = ""
+	default:
+		return "", "", false, false
+	}
+	if !ok || rest != "" {
+		return "", "", false, false
+	}
+	return name, value, true, true
 }
 
 // outsideTx asks SQLite whether the connection is in autocommit mode, outside
@@ -353,6 +471,10 @@ const settings = "_foreign_keys=1&_journal_mode=WAL&_txlock=immediate"
 // turns by waiting it out.
 const busyTimeout = 5000
 
+// maxBusyTimeout is the most a DB_URL may raise the busy timeout to: a
+// request waits that long for the write lock at worst.
+const maxBusyTimeout = 60000
+
 // ownSettings are the keys of settings the store relies on, with the
 // drivers' aliases for them, and Warp's value for each: dsn drops them from
 // a DB_URL, so Warp's values are the connection's whatever the URL says.
@@ -371,8 +493,9 @@ var ownSettings = map[string]string{
 //     before the name and the value quoted, as SQL takes them.
 //
 // Every key and value may be percent-escaped, a + is a space. A DB_URL may
-// raise the busy timeout above busyTimeout and never lower it: dsn drops
-// every one of these and writes the largest of Warp's and theirs. A value
+// raise the busy timeout above busyTimeout, up to maxBusyTimeout, and never
+// lower it: dsn drops every one of these and writes the largest of Warp's and
+// theirs, at most maxBusyTimeout. A value
 // that is not a whole number from 0 to 2147483647 (SQLite's int; a larger
 // one is read as none) counts as not given.
 var busyKeys = []string{"_busy_timeout", "_timeout"}
@@ -413,7 +536,36 @@ func waitOf(value string) (int, bool) {
 	return int(max(n, 0)), true
 }
 
-func (sqlite) dsn(url string) (dsn, dir string, memory bool, notes []string) {
+func (sqlite) readOnly(url string) bool {
+	_, query, _ := strings.Cut(url, "?")
+	return strings.Contains("&"+query+"&", "&mode=ro&")
+}
+
+// sqliteReadOnly is SQLITE_READONLY, the low byte of each of its extended
+// codes.
+const sqliteReadOnly = 8
+
+// cannotWrite reads the driver's code as busy does, or SQLite's own words
+// for it when the error has none.
+func (sqlite) cannotWrite(err error) bool {
+	var coded interface{ Code() int }
+	if errors.As(err, &coded) {
+		return coded.Code()&0xff == sqliteReadOnly
+	}
+	return strings.Contains(err.Error(), "attempt to write a readonly database")
+}
+
+// probeWrite sets the schema's user version to what it is, which writes.
+func (sqlite) probeWrite(ctx context.Context, q querier) error {
+	var version int
+	if err := q.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		return err
+	}
+	_, err := q.ExecContext(ctx, "PRAGMA user_version = "+strconv.Itoa(version))
+	return err
+}
+
+func (sqlite) dsn(url string) (dsn, file string, memory bool, notes []string) {
 	path, query, _ := strings.Cut(url, "?")
 	var kept []string
 	wait := busyTimeout
@@ -446,6 +598,9 @@ func (sqlite) dsn(url string) (dsn, dir string, memory bool, notes []string) {
 				notes = append(notes, fmt.Sprintf("DB_URL sets %s, which is not a busy timeout SQLite keeps; Warp's %d is used.", written, busyTimeout))
 			case n < busyTimeout:
 				notes = append(notes, fmt.Sprintf("DB_URL sets %s, below Warp's %d; %d is used, since the app's own writers wait on it.", written, busyTimeout, busyTimeout))
+			case n > maxBusyTimeout:
+				notes = append(notes, fmt.Sprintf("DB_URL sets %s, above the %d a DB_URL may raise it to; %d is used.", written, maxBusyTimeout, maxBusyTimeout))
+				n = maxBusyTimeout
 			}
 			if ok {
 				wait = max(wait, n)
@@ -466,7 +621,7 @@ func (sqlite) dsn(url string) (dsn, dir string, memory bool, notes []string) {
 			path = unescaped
 		}
 	}
-	return dsn, filepath.Dir(path), false, notes
+	return dsn, path, false, notes
 }
 
 // contains uses LIKE, which in SQLite ignores the case of ASCII letters alone,

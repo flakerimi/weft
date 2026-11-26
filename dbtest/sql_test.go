@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -294,9 +295,9 @@ func TestStartChecksTheSettings(t *testing.T) {
 		}
 	}
 	for pragma, want := range map[string]string{
-		"journal_mode(DELETE)":      `warp: module "data" could not migrate: DB_URL sets journal_mode in _pragma=journal_mode(DELETE), and the store needs Warp's own; remove it from DB_URL.`,
-		"locking_mode(EXCLUSIVE)":   `warp: module "data" could not migrate: DB_URL sets locking_mode in _pragma=locking_mode(EXCLUSIVE), and the store needs Warp's own; remove it from DB_URL.`,
-		`/**/"JOURNAL_MODE"=delete`: `warp: module "data" could not migrate: DB_URL sets journal_mode in _pragma=/**/"JOURNAL_MODE"=delete, and the store needs Warp's own; remove it from DB_URL.`,
+		"journal_mode(DELETE)":      `warp: module "data" could not migrate: DB_URL sets journal_mode to delete in _pragma=journal_mode(DELETE), and the store needs wal; remove it from DB_URL.`,
+		"locking_mode(EXCLUSIVE)":   `warp: module "data" could not migrate: DB_URL sets locking_mode to exclusive, and the store needs normal; remove it from DB_URL.`,
+		`/**/"JOURNAL_MODE"=delete`: `warp: module "data" could not migrate: DB_URL sets journal_mode to delete in _pragma=/**/"JOURNAL_MODE"=delete, and the store needs wal; remove it from DB_URL.`,
 	} {
 		if _, err := startWith(t, "file:"+dbFile(t)+"?_pragma="+url.QueryEscape(pragma)); err == nil || err.Error() != want {
 			t.Errorf("_pragma=%s: Start = %v\nwant %s", pragma, err, want)
@@ -314,5 +315,63 @@ func TestStartChecksTheSettings(t *testing.T) {
 	}
 	if err := db.QueryRow(ctx, "PRAGMA cache_size").Scan(&cache); err != nil || cache != -2000 {
 		t.Errorf("cache_size %d, %v; want -2000", cache, err)
+	}
+}
+
+// A DB_URL may raise the busy timeout to 60 s and no further: above, the
+// store starts with 60 s and says so once; a spelling the rewriting does not
+// read is refused by the read-back.
+func TestBusyTimeoutIsCapped(t *testing.T) {
+	_, warns := captureLevels(t)
+	base := "file:" + dbFile(t) + "?"
+	for q, want := range map[string]int{
+		"_busy_timeout=2147483647": 60000, "_pragma=busy_timeout(99999)": 60000, "_busy_timeout=60000": 60000, "_busy_timeout=30000": 30000,
+	} {
+		warns.Reset()
+		app, err := startWith(t, base+q)
+		if err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+		var got int
+		if err := data.For(app).QueryRow(ctx, "PRAGMA busy_timeout").Scan(&got); err != nil || got != want {
+			t.Errorf("%s: busy_timeout %d, %v; want %d", q, got, err, want)
+		}
+		line := "data: DB_URL sets " + q + ", above the 60000 a DB_URL may raise it to; 60000 is used."
+		if n := strings.Count(warns.String(), strconv.Quote(line)); (want == 60000 && q != "_busy_timeout=60000") != (n == 1) {
+			t.Errorf("%s: warn lines %q", q, warns)
+		}
+		app.Stop(ctx)
+	}
+	_, err := startWith(t, base+"_pragma="+url.QueryEscape("/*x*/busy_timeout(99999)"))
+	if want := `warp: module "data" could not migrate: DB_URL sets busy_timeout to 99999, and the store allows at most 60000; remove it from DB_URL.`; err == nil || err.Error() != want {
+		t.Errorf("Start = %v\nwant %s", err, want)
+	}
+}
+
+// A _pragma that sets what Warp sets, as Warp sets it, starts; so does one
+// that only mentions a setting. One that sets another journal or locking mode
+// is refused, by what the database says.
+func TestJournalPragmas(t *testing.T) {
+	for _, pragma := range []string{"journal_mode(WAL)", "journal_mode=wal", "JOURNAL_MODE(Wal)", "locking_mode(normal)", "cache_size(10)/* not journal_mode */"} {
+		app, err := startWith(t, "file:"+dbFile(t)+"?_pragma="+url.QueryEscape(pragma))
+		if err != nil {
+			t.Errorf("_pragma=%s: %v", pragma, err)
+			continue
+		}
+		var mode string
+		if err := data.For(app).QueryRow(ctx, "PRAGMA journal_mode").Scan(&mode); err != nil || mode != "wal" {
+			t.Errorf("_pragma=%s: journal_mode %q, %v", pragma, mode, err)
+		}
+	}
+	for pragma, want := range map[string]string{
+		"journal_mode(DELETE)":                                   `warp: module "data" could not migrate: DB_URL sets journal_mode to delete in _pragma=journal_mode(DELETE), and the store needs wal; remove it from DB_URL.`,
+		`/**/"JOURNAL_MODE"=delete`:                              `warp: module "data" could not migrate: DB_URL sets journal_mode to delete in _pragma=/**/"JOURNAL_MODE"=delete, and the store needs wal; remove it from DB_URL.`,
+		"cache_size(10);pragma main.[journal_mode] = 'truncate'": `warp: module "data" could not migrate: DB_URL sets journal_mode to truncate in _pragma=cache_size(10);pragma main.[journal_mode] = 'truncate', and the store needs wal; remove it from DB_URL.`,
+		"locking_mode(EXCLUSIVE)":                                `warp: module "data" could not migrate: DB_URL sets locking_mode to exclusive, and the store needs normal; remove it from DB_URL.`,
+		"/* journal_mode */ locking_mode=exclusive":              `warp: module "data" could not migrate: DB_URL sets locking_mode to exclusive, and the store needs normal; remove it from DB_URL.`,
+	} {
+		if _, err := startWith(t, "file:"+dbFile(t)+"?_pragma="+url.QueryEscape(pragma)); err == nil || err.Error() != want {
+			t.Errorf("_pragma=%s: Start = %v\nwant %s", pragma, err, want)
+		}
 	}
 }

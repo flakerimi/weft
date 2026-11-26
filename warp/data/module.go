@@ -10,10 +10,13 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -197,7 +200,7 @@ func (db *DB) open(ctx context.Context) error {
 	case driver == "":
 		return errors.New("DB_DRIVER is not set; add DB_DRIVER=sqlite and DB_URL=file:data/app.db to .env.")
 	case driver != "sqlite":
-		return fmt.Errorf("DB_DRIVER is %q; this version of Warp speaks sqlite.", driver)
+		return fmt.Errorf("DB_DRIVER is %q, and this version of Warp speaks sqlite alone; set DB_DRIVER=sqlite in .env.", driver)
 	case !slices.Contains(sql.Drivers(), driver):
 		return fmt.Errorf("no database driver is named %q; import one in main.go, such as _ \"modernc.org/sqlite\".", driver)
 	case url == "":
@@ -207,13 +210,28 @@ func (db *DB) open(ctx context.Context) error {
 	cannot := func(err error) error {
 		return fmt.Errorf("the database at %s cannot be opened (%v); check DB_URL in .env.", url, err)
 	}
-	dsn, dir, memory, notes := d.dsn(url)
+	if path, query, _ := strings.Cut(url, "?"); path == "file:" && !strings.Contains("&"+query+"&", "&mode=memory&") {
+		return errors.New("DB_URL is file: with no file name, which SQLite opens as a temporary database lost when the app stops; name a file, as file:data/app.db, or write :memory: for a database in memory.")
+	}
+	dsn, file, memory, notes := d.dsn(url)
 	for _, note := range notes {
 		slog.Warn("data: " + note)
 	}
-	if dir != "" {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+	// The folder and the file hold every record and the password hashes, so
+	// what Warp makes of them is the app's user's alone; what was there is
+	// left as it is. SQLite gives its -wal and -shm files the file's mode.
+	if file != "" {
+		if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
 			return cannot(err)
+		}
+		if _, err := os.Stat(file); errors.Is(err, fs.ErrNotExist) && !d.readOnly(url) {
+			f, err := os.OpenFile(file, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+			if err == nil {
+				err = f.Close()
+			}
+			if err != nil && !errors.Is(err, fs.ErrExist) {
+				return cannot(err)
+			}
 		}
 	}
 	conn, err := sql.Open(driver, dsn)

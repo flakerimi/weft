@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -335,7 +336,7 @@ func TestStartWithoutDriver(t *testing.T) {
 	cases := map[string]string{
 		"sqlite": `no database driver is named "sqlite"; import one in main.go, such as _ "modernc.org/sqlite".`,
 		"":       `DB_DRIVER is not set; add DB_DRIVER=sqlite and DB_URL=file:data/app.db to .env.`,
-		"oracle": `DB_DRIVER is "oracle"; this version of Warp speaks sqlite.`,
+		"oracle": `DB_DRIVER is "oracle", and this version of Warp speaks sqlite alone; set DB_DRIVER=sqlite in .env.`,
 	}
 	for driver, want := range cases {
 		app := warp.New(warp.ConfigFrom(map[string]string{"DB_DRIVER": driver, "DB_URL": "file:" + t.TempDir() + "/app.db"}))
@@ -473,7 +474,11 @@ func TestDSN(t *testing.T) {
 		{"file:app.db?_pragma=cache_size(-2000)", "file:app.db?_pragma=cache_size(-2000)&" + settings, ".", false, 0},
 	}
 	for _, c := range cases {
-		dsn, dir, memory, notes := d.dsn(c.url)
+		dsn, file, memory, notes := d.dsn(c.url)
+		dir := ""
+		if file != "" {
+			dir = filepath.Dir(file)
+		}
 		if dsn != c.dsn || dir != c.dir || memory != c.memory || len(notes) != c.notes {
 			t.Errorf("dsn(%q) = %q, %q, %v, %q; want %q, %q, %v and %d notes", c.url, dsn, dir, memory, notes, c.dsn, c.dir, c.memory, c.notes)
 		}

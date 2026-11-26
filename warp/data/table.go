@@ -450,6 +450,9 @@ func migrate(ctx context.Context, db *sql.DB, d dialect, tables []*table, url st
 		if d.busy(err) {
 			return fmt.Errorf("the database at %s is locked by another process; stop that process, or wait and start again.", url)
 		}
+		if d.cannotWrite(err) {
+			return fmt.Errorf("the database at %s cannot be written (%v); let the app write the file and its folder, and take mode=ro out of DB_URL.", url, err)
+		}
 		return fmt.Errorf("the database at %s could not be brought up to date (%v); look at the error in brackets and start again.", url, err)
 	}
 	tx, err := db.BeginTx(ctx, nil)
@@ -457,6 +460,11 @@ func migrate(ctx context.Context, db *sql.DB, d dialect, tables []*table, url st
 		return nil, raw(err)
 	}
 	defer tx.Rollback()
+	// A database the app cannot write would start and then answer every
+	// write with a 500.
+	if err := d.probeWrite(ctx, tx); err != nil {
+		return nil, raw(err)
+	}
 
 	type step struct {
 		t     *table

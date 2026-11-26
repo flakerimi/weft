@@ -259,7 +259,8 @@ func TestStartMistakes(t *testing.T) {
 		want string
 	}{
 		{map[string]string{"DB_URL": "file:x.db"}, `DB_DRIVER is not set; add DB_DRIVER=sqlite and DB_URL=file:data/app.db to .env.`},
-		{map[string]string{"DB_DRIVER": "oracle", "DB_URL": "file:x.db"}, `DB_DRIVER is "oracle"; this version of Warp speaks sqlite.`},
+		{map[string]string{"DB_DRIVER": "oracle", "DB_URL": "file:x.db"}, `DB_DRIVER is "oracle", and this version of Warp speaks sqlite alone; set DB_DRIVER=sqlite in .env.`},
+		{map[string]string{"DB_DRIVER": "sqlite", "DB_URL": "file:"}, `DB_URL is file: with no file name, which SQLite opens as a temporary database lost when the app stops; name a file, as file:data/app.db, or write :memory: for a database in memory.`},
 		{map[string]string{"DB_DRIVER": "sqlite"}, `DB_URL is not set; add DB_URL=file:data/app.db to .env.`},
 		{map[string]string{"DB_DRIVER": "sqlite", "DB_URL": "file:" + blocked + "?mode=ro"}, `the database at file:` + blocked + `?mode=ro cannot be opened (`},
 	}
@@ -528,4 +529,45 @@ func captureErrors(t *testing.T) *bytes.Buffer {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})))
 	t.Cleanup(func() { slog.SetDefault(old) })
 	return &buf
+}
+
+// Warp makes the database's folder and file readable by the app's user
+// alone: they hold every record and the password hashes. A folder or file
+// that was there is left as it is.
+func TestDatabaseFileIsPrivate(t *testing.T) {
+	file := dbFile(t)
+	c, s := shop[Product](t, file)
+	if err := s.Create(ctx, &Product{Name: "Lamp"}); err != nil {
+		t.Fatal(err)
+	}
+	for path, want := range map[string]os.FileMode{filepath.Dir(file): 0o700, file: 0o600, file + "-wal": 0o600} {
+		fi, err := os.Stat(path)
+		if err != nil || fi.Mode().Perm() != want {
+			t.Errorf("%s: %v, %v; want %v", filepath.Base(path), fi.Mode().Perm(), err, want)
+		}
+	}
+	c.App.Stop(ctx)
+	other := filepath.Join(t.TempDir(), "mine.db")
+	os.WriteFile(other, nil, 0o640)
+	_, _ = shop[Product](t, other)
+	if fi, _ := os.Stat(other); fi.Mode().Perm() != 0o640 {
+		t.Errorf("an existing file became %v", fi.Mode().Perm())
+	}
+}
+
+// A database the app cannot write to stops the start with a sentence, where
+// it would otherwise start and answer every write with a 500.
+func TestReadOnlyDatabaseStopsTheStart(t *testing.T) {
+	file := dbFile(t)
+	c, _ := shop[Product](t, file)
+	c.App.Stop(ctx)
+	for _, url := range []string{"file:" + file + "?mode=ro"} {
+		app := warp.New(warp.ConfigFrom(map[string]string{"DB_DRIVER": "sqlite", "DB_URL": url}))
+		app.Use(data.Module(), stores{"products", func(db *data.DB) { data.NewStore[Product](db, "products") }})
+		err := app.Start(ctx)
+		want := `warp: module "data" could not migrate: the database at ` + url + ` cannot be written (`
+		if err == nil || !strings.HasPrefix(err.Error(), want) || !strings.HasSuffix(err.Error(), "); let the app write the file and its folder, and take mode=ro out of DB_URL.") {
+			t.Errorf("%s: Start = %v", url, err)
+		}
+	}
 }
