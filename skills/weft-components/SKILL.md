@@ -5,7 +5,7 @@ description: Use before writing or changing the markup of a Weft page, island or
 
 # Choosing and composing Weft components
 
-Weft has 76 Vapor components in `@weft/ui`. Each one adapts to touch or pointer, to a landing page or an app, and to the width of its own container. Pick the right one and compose it; never rebuild it. Read the catalogue before you write markup: it says what each component is for, when not to use it, and what it does on each axis.
+Weft has 76 Vapor components in `@weft/ui`. Each one adapts to touch or pointer, to a landing page or an app, and to the width of its own container. Pick the right one and compose it; never rebuild it. The catalogue says what each component is for, when not to use it, and what it does on each axis.
 
 ## Read the catalogue first
 
@@ -25,7 +25,7 @@ Without `weft`, fetch one entry, such as `https://weft.base.al/components/date-p
 
 ## Choose by `use` and `avoid`
 
-Read `avoid` every time: it names the component to use instead. The choices most often got wrong:
+Always read `avoid`: it names the component to use instead. The choices most often got wrong:
 
 | You need | Use | Not |
 | --- | --- | --- |
@@ -55,7 +55,7 @@ The main value is always `v-model`, and names mean one thing everywhere:
 
 ## Compose
 
-A page the build renders, and every island and component in it, may use Weft's components without importing them: `@weft/vite` adds `import { … } from '@weft/ui'` for each tag the template uses. It leaves your own names alone: a name the file imports or declares, the component's own file name, lowercase tags and anything inside `v-pre`. Import other things you need, such as `useWeft`, `useToast` or a type, yourself. Writing the component imports by hand, as here, works the same. A settings page:
+A page the build renders, and every island and component in it, may use Weft's components without importing them: `@weft/vite` adds `import { … } from '@weft/ui'` for each tag the template uses. It leaves your own names alone: a name the file imports or declares, the component's own file name, lowercase tags and anything inside `v-pre`. Import anything else, such as `useWeft`, `useToast` or a type, yourself. Writing the component imports by hand, as here, works the same. A settings page:
 
 ```vue
 <script setup vapor lang="ts">
@@ -105,7 +105,7 @@ On a page the build renders, a form works only inside an `Island` (see `weft-sit
 
 ## Not yet
 
-Planned but not built, so do not look for them (phases at https://weft.base.al/docs/coming-next):
+Planned, not built, so do not look for them (phases at https://weft.base.al/docs/coming-next):
 
 - `DataTable`, `EntityDialog`, the charts, the landing blocks (`Hero`, `FeatureGrid`, `Pricing`, `Testimonials`, `Faq`, `Cta`) and `Image`. Use `Table`, `Dialog` with a `Form`, `StatCard`, and a `Grid` of `Card`s today;
 - `weft mcp`, which will serve the catalogue to agents over MCP; run `weft catalog` instead;

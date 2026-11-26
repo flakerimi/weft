@@ -4,7 +4,7 @@ description: Every command, flag and error of weft, weft-build-pages and weft-de
 order: 35
 ---
 
-Every command and flag `weft` has today, the flags of the page build and the page dev server, and the installer's settings. What is planned and not built is under [Coming next](../coming-next.md).
+What is planned and not built is under [Coming next](../coming-next.md).
 
 ## weft
 
@@ -75,15 +75,15 @@ Before it writes anything it checks that `go`, `node` 22.18 or later and `pnpm` 
 
 ### weft dev
 
-Runs an app while you work. It builds the Go code with the `dev` tag into `.weft/dev/app` and runs it on a free port, starts [weft-dev](#weft-dev) beside it with the app's theme, which renders each page when it is asked for and sends `/api` to the Go server, and prints `weft dev: http://localhost:<n>` once both answer. Open that address with `localhost`, not `127.0.0.1`: the page server may listen on `::1` only. Run it anywhere inside the app; it checks the app as `weft build` does. It reads the theme once: restart it after changing `"theme"` in `package.json`.
+Runs an app while you work. It builds the Go code with the `dev` tag into `.weft/dev/app` and runs it on a free port, starts [weft-dev](#weft-dev) beside it with the app's theme, which renders each page when asked for and sends `/api` to the Go server, and prints `weft dev: http://localhost:<n>` once both answer. Open that address with `localhost`, not `127.0.0.1`: the page server may listen on `::1` only. Run it anywhere inside the app; it checks the app as `weft build` does. It reads the theme once: restart it after changing `"theme"` in `package.json`.
 
 | Flag | What it does |
 | --- | --- |
 | `--port n` | The page server's port. Default `5173`; `0` takes a free one |
 
-Every 300 ms it looks for a changed `.go` file outside `.weft/`, `.git/`, `node_modules/` and `web/`, and for a changed `.env` in the app's folder. When one changed it builds again and, if the build succeeds, replaces the running Go server. A failed build prints the compiler's output; the last build serves `/api` until you save the fix. A rebuilt server that stops by itself, such as one that panics as it starts, prints `weft dev: the Go server stopped after the restart; fix it and save again.`, and the next save builds and starts it again. An unreadable folder is skipped, and named once. A change under `web/` reloads the browser and needs no build; a change to `web/vite.config` needs a restart. The Go server's own output is passed through. It runs with `PORT` set to a free port, `HOST=127.0.0.1`, `WEFT_DEV_PARENT=1` and `APP_URL=http://localhost:<the page server's port>`, which win over `.env`, so it listens on `127.0.0.1` only and prints no address. A non-empty `APP_URL` in `weft dev`'s own environment is passed on instead.
+Every 300 ms it looks for a changed `.go` file outside `.weft/`, `.git/`, `node_modules/` and `web/`, and for a changed `.env` in the app's folder. When one changed it builds again and, if that succeeds, replaces the running Go server. A failed build prints the compiler's output; the last build serves `/api` until you save the fix. A rebuilt server that stops by itself, such as one that panics as it starts, prints `weft dev: the Go server stopped after the restart; fix it and save again.`, and the next save builds and starts it again. An unreadable folder is skipped and named once. A change under `web/` reloads the browser and needs no build; a change to `web/vite.config` needs a restart. The Go server's own output passes through. It runs with `PORT` set to a free port, `HOST=127.0.0.1`, `WEFT_DEV_PARENT=1` and `APP_URL=http://localhost:<the page server's port>`, which win over `.env`, so it listens on `127.0.0.1` only and prints no address. A non-empty `APP_URL` in `weft dev`'s own environment is passed on instead.
 
-The Go server must listen on the port in the `PORT` variable, which warp's `Serve` reads. If it does not answer there within 30 s of starting, `weft dev` stops both servers and says `weft dev: the Go server did not answer within 30 s; check that main.go serves the app (warp's Serve reads PORT), and run weft dev again.`, with exit status 1. The page server has the same 30 s, after which it says `weft dev: the page server did not answer within 30 s; see its output above.` The app has 5 s to describe itself after each build, else `weft dev: the app did not describe itself within 5 s, so web/.weft-types/api.ts is as it was; make sure main.go calls Serve before doing other work.` and goes on.
+The Go server must listen on `PORT`, which warp's `Serve` reads. If it does not answer there within 30 s of starting, `weft dev` stops both servers and says `weft dev: the Go server did not answer within 30 s; check that main.go serves the app (warp's Serve reads PORT), and run weft dev again.`, with exit status 1. The page server has the same 30 s, after which it says `weft dev: the page server did not answer within 30 s; see its output above.` The app has 5 s to describe itself after each build, else `weft dev: the app did not describe itself within 5 s, so web/.weft-types/api.ts is as it was; make sure main.go calls Serve before doing other work.` and goes on.
 
 Ctrl-C, SIGTERM, closing the terminal (SIGHUP) or `Ctrl-\` (SIGQUIT) stops both servers, with exit status 0. Killed, as by SIGKILL, it leaves neither running: each exits when its standard input, a pipe `weft dev` holds, ends. If the page server, or the Go server it started with, stops by itself, `weft dev` stops the other and says `weft dev: the page server stopped; see its output above.` (or `the Go server`), with exit status 1. A port in use is the sentence `weft dev: port <n> is in use; stop what is using it or pass --port.`, checked before anything else, so nothing is installed or started. Wrong usage exits with status 2.
 
@@ -95,7 +95,7 @@ Builds an app: writes the typed client as [weft gen](#weft-gen) does, type-check
 go build -trimpath -ldflags "-s -w" -o <file> .
 ```
 
-`-trimpath` leaves the build machine's paths out, and `-s -w` the debug tables. It adds `CGO_ENABLED=0`, for a static binary, unless the environment sets it. `GOOS` and `GOARCH` pass through from the environment, so `GOOS=linux GOARCH=arm64 weft build` builds for a Linux server on arm64. Run it anywhere inside the app; it finds the nearest `package.json` with a `"weft"` object. A `package.json` on the way that is not valid JSON stops the search: the command names it and says to fix it.
+`-trimpath` leaves the build machine's paths out, and `-s -w` the debug tables. It adds `CGO_ENABLED=0`, for a static binary, unless the environment sets it. `GOOS` and `GOARCH` pass through from the environment, so `GOOS=linux GOARCH=arm64 weft build` builds for Linux on arm64. Run it anywhere inside the app; it finds the nearest `package.json` with a `"weft"` object. A `package.json` on the way that is not valid JSON stops the search: the command names it and says to fix it.
 
 | Flag | What it does |
 | --- | --- |
@@ -237,11 +237,11 @@ weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app b
 | `--preload-font` | A font file, such as `lucide.woff2`, to preload on the pages whose CSS names it, besides the Latin faces of the families they use. Give it once per font. |
 | `--separate-runtime` | A section of the site, such as `/components`, whose pages' islands get a runtime of their own, with only the Vue they use, so heavy islands do not grow the shared one. A page is in the longest section it is in or under: `/components/button` is in `/components`. Give it once per section, as a path with no trailing `/`. |
 
-It prints `weft: built N pages into <dist>`. It needs Node 22.18 or later, which runs TypeScript without a build step. Any error is one sentence, and the folder at `--out` is left as it was.
+It prints `weft: built N pages into <dist>`. It needs Node 22.18 or later, which runs TypeScript without a build step. Any error is one sentence; the folder at `--out` is left as it was.
 
 ## weft-dev
 
-The page dev server. It comes with `@weft/vite`, beside `weft-build-pages`.
+The page dev server. It comes with `@weft/vite`.
 
 ```text
 weft-dev --root <site> [--port n] [--host h] [--api <url>] [--theme neutral|lisa|weft] [--exit-with-parent]
@@ -252,7 +252,7 @@ weft-dev --root <site> [--port n] [--host h] [--api <url>] [--theme neutral|lisa
 | `--root` | The site's folder, which holds `pages/`. Required. Its `package.json` may be in a folder above. |
 | `--port` | The port to listen on. Default `5173`; `0` takes a free one. |
 | `--host` | The host to listen on. Default `localhost`. Any other exposes Vite's file serving, the app's folder included, to the network. |
-| `--api` | Where `/api` and every path under it go, such as `http://127.0.0.1:8081`. Without it they are pages like any other path. |
+| `--api` | Where `/api` and every path under it go, such as `http://127.0.0.1:8081`. Without it they are pages like any other. |
 | `--theme` | `neutral` (the default), `lisa` or `weft`, as for the build. |
 | `--exit-with-parent` | Stop, with exit status 0, when standard input ends. `weft dev` passes it with a pipe it holds open. Without it standard input is not read. |
 
