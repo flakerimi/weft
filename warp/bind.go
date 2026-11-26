@@ -130,7 +130,7 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 	var jsonFields []string // the names of the input's own json fields
 	fields, embedded := inputFields(t, nil)
 	mistakes = append(mistakes, embedded...)
-	visited := map[reflect.Type]bool{} // the struct types inside json fields, checked once
+	visited := &bodyChecks{body: map[reflect.Type]bool{}, decoders: map[reflect.Type]bool{}}
 	for _, f := range fields {
 		at := name + "." + f.Name
 		jsonKey, jsonOpts, isJSON := jsonTagOf(f.StructField)
@@ -373,17 +373,29 @@ func decodesItself(t reflect.Type) bool {
 // a usable json name, json:"-" leaves a field out, and a query, path or body
 // tag is a mistake. time.Time, a type that decodes itself and what a readonly
 // field holds are not looked inside.
-func bodyMistakes(t reflect.Type, visited map[reflect.Type]bool) []string {
+//
+// Its two questions are kept apart: the ordinary checks of a struct type are
+// made once, in body, and the readonly fields inside each type that decodes
+// itself are looked for once for that type, with a set of its own, so that
+// neither answer depends on which field meets a type first.
+func bodyMistakes(t reflect.Type, visited *bodyChecks) []string {
 	for !decodesItself(t) && isContainer(t.Kind()) {
 		t = t.Elem()
 	}
 	if t != timeType && decodesItself(t) {
-		return readonlyInside(t, t, visited)
+		for t.Kind() == reflect.Pointer && decodesItself(t.Elem()) {
+			t = t.Elem() // *T and T are one decoder
+		}
+		if visited.decoders[t] {
+			return nil
+		}
+		visited.decoders[t] = true
+		return readonlyInside(t, t, map[reflect.Type]bool{})
 	}
-	if t.Kind() != reflect.Struct || t == timeType || visited[t] {
+	if t.Kind() != reflect.Struct || t == timeType || visited.body[t] {
 		return nil
 	}
-	visited[t] = true
+	visited.body[t] = true
 	name := typeName(t)
 	fields, mistakes := inputFields(t, nil)
 	owner := map[string]string{}
@@ -430,6 +442,13 @@ func bodyMistakes(t reflect.Type, visited map[reflect.Type]bool) []string {
 	return mistakes
 }
 
+// bodyChecks are the types bodyMistakes has checked: body, the struct types
+// given the ordinary checks; decoders, the types that decode themselves
+// searched for readonly fields, each with a set of its own.
+type bodyChecks struct {
+	body, decoders map[reflect.Type]bool
+}
+
 // foldOwners are the keys of one object, folded as encoding/json folds them
 // (appendFolded), to the Go name of the field that has each.
 type foldOwners map[string]string
@@ -453,7 +472,8 @@ func (o foldOwners) claim(in, field, key string) string {
 // readonlyInside returns the mistakes of the type t holds, inside dec, a
 // type that decodes itself: a field tagged readonly there, at any depth, is
 // one, since Warp cannot see what dec's own decoder sets, so it can neither
-// refuse the key nor put the field back to zero.
+// refuse the key nor put the field back to zero. visited is dec's own: a type
+// another field or another such type reaches is searched again for this one.
 func readonlyInside(dec, t reflect.Type, visited map[reflect.Type]bool) []string {
 	for isContainer(t.Kind()) {
 		t = t.Elem()
@@ -907,8 +927,9 @@ const cannotTake = "The body has a value its field cannot take."
 
 // fieldPath is the path of a type error's field, field as the decoder gives
 // it in a value of type t, keeping only the keys of struct fields: a list's
-// index and a map's key are left out ("tags", not "tags.0"), as encoding/json
-// v1 writes it and jsonv2 does not.
+// index is left out ("tags", not "tags.0"), as encoding/json v1 writes it and
+// jsonv2 does not, and the path ends at a map's field, since the key after it
+// may hold dots ("by_name", whatever the key and what is inside its value).
 func fieldPath(t reflect.Type, field string) string {
 	var kept []string
 	for seg := range strings.SplitSeq(field, ".") {
@@ -918,8 +939,12 @@ func fieldPath(t reflect.Type, field string) string {
 		switch {
 		case t == nil:
 			kept = append(kept, seg)
-		case t.Kind() == reflect.Slice || t.Kind() == reflect.Array || t.Kind() == reflect.Map:
-			t = t.Elem() // seg is an index or a key
+		case t.Kind() == reflect.Map:
+			// A key may hold dots, so nothing after it can be read as a path:
+			// the map's field names the value, as encoding/json v1 does.
+			return strings.Join(kept, ".")
+		case t.Kind() == reflect.Slice || t.Kind() == reflect.Array:
+			t = t.Elem() // seg is an index
 		case t.Kind() == reflect.Struct:
 			kept = append(kept, seg)
 			t = fieldByJSONKey(t, seg)

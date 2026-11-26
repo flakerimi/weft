@@ -408,3 +408,31 @@ func TestAnswerWithoutPlanCostsNothingExtra(t *testing.T) {
 		t.Fatalf("a typed route costs %v allocations over WriteJSON when it answers flatOut, and %v when it answers nothing", answered, none)
 	}
 }
+
+// pDag is built by a handler into a diamond: each level's two pointers are
+// the same pointer, so 18 levels are 2^18 paths to one nil list.
+type pDag struct {
+	Tags []string `json:"tags"`
+	A    *pDag    `json:"a"`
+	B    *pDag    `json:"b"`
+}
+
+// A pointer the answer reaches through several paths is fixed once, so a
+// diamond costs its levels, not its paths.
+func TestAnswerDiamondIsFixedOnce(t *testing.T) {
+	var leaf *pDag = &pDag{}
+	for range 18 {
+		leaf = &pDag{A: leaf, B: leaf}
+	}
+	p, _ := emptyPlanFor(reflect.TypeFor[*pDag]())
+	allocs := testing.AllocsPerRun(3, func() { emptied(p, leaf) })
+	if allocs > 200 {
+		t.Fatalf("a diamond of 18 levels cost %.0f allocations, want at most 200 (its levels, not its 2^18 paths)", allocs)
+	}
+	out := emptied(p, leaf)
+	for n := out; n != nil; n = n.A {
+		if n.Tags == nil || n.A != n.B {
+			t.Fatal("a level was not fixed, or the diamond came apart")
+		}
+	}
+}

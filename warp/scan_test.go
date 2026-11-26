@@ -445,11 +445,33 @@ const (
 // The scan is written by hand, to match keys as encoding/json does. This
 // holds it to that on generated bodies, so a change in encoding/json that
 // would let a readonly field be set, or a key be sent unseen, fails here.
+// shuffledPlan is the plan of the model's body with its top-level fields in
+// an order the seed gives, so that nothing the scan or the zeroing decides
+// can depend on the order the fields were declared in.
+func shuffledPlan(t testing.TB, r *rand.Rand) *plan {
+	t.Helper()
+	body := reflect.TypeFor[pzBody]()
+	fields := make([]reflect.StructField, body.NumField())
+	for i := range fields {
+		fields[i] = body.Field(i)
+	}
+	r.Shuffle(len(fields), func(a, b int) { fields[a], fields[b] = fields[b], fields[a] })
+	in := reflect.StructOf([]reflect.StructField{{Name: "Body", Type: reflect.StructOf(fields), Tag: `body:"json"`}})
+	p, mistakes := planFor(in, "POST", "/x")
+	if mistakes != nil {
+		t.Fatal(mistakes)
+	}
+	return p
+}
+
 func TestScanMatchesEncodingJSON(t *testing.T) {
-	p := scanPlan(t)
+	r := rand.New(rand.NewPCG(scanSeed, 2))
+	// The model as declared, then three shuffles of its top-level fields.
+	plans := []*plan{scanPlan(t), shuffledPlan(t, r), shuffledPlan(t, r), shuffledPlan(t, r)}
 	g := &bodyGen{r: rand.New(rand.NewPCG(scanSeed, 0))}
 	decoded, refused, stricter := 0, 0, 0
-	for range scanCases {
+	for i := range scanCases {
+		p := plans[i%len(plans)]
 		data := g.body()
 		hitSeq, roWritten = 0, false
 		ok, no, problem := scanAgrees(p, data)

@@ -229,6 +229,20 @@ type emptyWalk struct {
 	depth     int
 	inside    map[any]struct{}
 	abandoned bool
+	// fixed is what each pointer met below the top came to, so a value the
+	// answer reaches through several paths (a diamond of shared pointers) is
+	// fixed once; made at the first such pointer.
+	fixed map[fixedKey]fixedPtr
+}
+
+type fixedKey struct {
+	ptr uintptr
+	typ reflect.Type
+}
+
+type fixedPtr struct {
+	v       reflect.Value
+	changed bool
 }
 
 // emptied returns v with its null lists, maps and bytes made empty, or v as
@@ -292,21 +306,27 @@ func (p *emptyPlan) apply(v reflect.Value, own bool, w *emptyWalk) (_ reflect.Va
 		if v.IsNil() || p.elem == nil {
 			return v, false
 		}
+		// A pointer at the top, or one level down, is met once in nearly every
+		// answer; past that, one met before is not fixed again.
+		fk := fixedKey{v.Pointer(), p.typ}
+		if w.depth >= 1 {
+			if f, ok := w.fixed[fk]; ok {
+				return f.v, f.changed
+			}
+		}
 		key, ok := w.enter(v)
 		if !ok {
 			return v, false
 		}
 		defer w.leave(key)
-		inner, changed := p.elem.apply(v.Elem(), false, w)
-		if !changed || w.abandoned {
-			return v, false
+		out, changed := p.fixPointer(v, w)
+		if w.depth > 1 && !w.abandoned {
+			if w.fixed == nil {
+				w.fixed = map[fixedKey]fixedPtr{}
+			}
+			w.fixed[fk] = fixedPtr{out, changed}
 		}
-		if inner.CanAddr() && (p.elem.kind == reflect.Struct || p.elem.kind == reflect.Array) {
-			return inner.Addr(), true // the copy apply made
-		}
-		ptr := reflect.New(p.typ.Elem())
-		ptr.Elem().Set(inner)
-		return ptr, true
+		return out, changed
 	case reflect.Slice, reflect.Map:
 		if v.IsNil() {
 			return p.empty, true
@@ -409,6 +429,21 @@ func (p *emptyPlan) apply(v reflect.Value, own bool, w *emptyWalk) (_ reflect.Va
 		return out, true
 	}
 	return v, false
+}
+
+// fixPointer is apply for a pointer that is not nil and whose target has
+// a plan: a copy of the target, fixed, when it changes.
+func (p *emptyPlan) fixPointer(v reflect.Value, w *emptyWalk) (reflect.Value, bool) {
+	inner, changed := p.elem.apply(v.Elem(), false, w)
+	if !changed || w.abandoned {
+		return v, false
+	}
+	if inner.CanAddr() && (p.elem.kind == reflect.Struct || p.elem.kind == reflect.Array) {
+		return inner.Addr(), true // the copy apply made
+	}
+	ptr := reflect.New(p.typ.Elem())
+	ptr.Elem().Set(inner)
+	return ptr, true
 }
 
 // applyMap returns the map v with its values fixed, copied when one changes.

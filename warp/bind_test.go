@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand/v2"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1663,5 +1665,151 @@ func TestBodyKeyMistakes(t *testing.T) {
 				t.Fatalf("Err() =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(c.want, "\n"))
 			}
 		})
+	}
+}
+
+// The types of TestBodyChecksIgnoreFieldOrder. rT has a readonly field and
+// is used both plainly and inside types that decode themselves; rBad has
+// ordinary mistakes and is used inside one too.
+type rT struct {
+	ID   int    `json:"id" warp:"readonly"`
+	Name string `json:"name"`
+}
+
+type rBad struct {
+	X     int `json:"x"`
+	Y     int `json:"X"`
+	NoTag int
+}
+
+// rNode holds itself and a readonly field.
+type rNode struct {
+	Mark string `json:"mark" warp:"readonly"`
+	Next *rNode `json:"next"`
+}
+
+type rD struct {
+	Inner rT `json:"inner"`
+}
+
+func (d *rD) UnmarshalJSON(b []byte) error {
+	type alias rD
+	return json.Unmarshal(b, (*alias)(d))
+}
+
+// rD2 is another type that decodes itself, holding the same rT.
+type rD2 struct {
+	Inner []rT `json:"inner"`
+}
+
+func (d *rD2) UnmarshalJSON(b []byte) error {
+	type alias rD2
+	return json.Unmarshal(b, (*alias)(d))
+}
+
+type rDBad struct {
+	Inner rBad `json:"inner"`
+}
+
+func (d *rDBad) UnmarshalJSON(b []byte) error {
+	type alias rDBad
+	return json.Unmarshal(b, (*alias)(d))
+}
+
+type rDNode struct {
+	Head rNode `json:"head"`
+}
+
+func (d *rDNode) UnmarshalJSON(b []byte) error {
+	type alias rDNode
+	return json.Unmarshal(b, (*alias)(d))
+}
+
+// What an input's fields find, whatever order they are in: each check runs
+// on every type it is for, never skipped because another check met the type
+// first. A seeded shuffle tries many orders.
+func TestBodyChecksIgnoreFieldOrder(t *testing.T) {
+	const ro = " decodes itself, so Warp cannot see what it sets, and "
+	fields := []reflect.StructField{
+		{Name: "A", Type: reflect.TypeFor[rT](), Tag: `json:"a"`},
+		{Name: "B", Type: reflect.TypeFor[rD](), Tag: `json:"b"`},
+		{Name: "C", Type: reflect.TypeFor[rD2](), Tag: `json:"c"`},
+		{Name: "D", Type: reflect.TypeFor[rBad](), Tag: `json:"d"`},
+		{Name: "E", Type: reflect.TypeFor[rDBad](), Tag: `json:"e"`},
+		{Name: "F", Type: reflect.TypeFor[*rD](), Tag: `json:"f"`},
+		{Name: "G", Type: reflect.TypeFor[[]rD2](), Tag: `json:"g"`},
+		{Name: "H", Type: reflect.TypeFor[map[string]rDNode](), Tag: `json:"h"`},
+	}
+	want := []string{
+		"warp: POST /x: rBad has the fields X and Y, whose keys differ only in case; rename one.",
+		"warp: POST /x: rBad.NoTag has no json tag; add one.",
+		"warp: POST /x: rD" + ro + "rT.ID is tagged readonly; drop the tag or the type's own decoding.",
+		"warp: POST /x: rD2" + ro + "rT.ID is tagged readonly; drop the tag or the type's own decoding.",
+		"warp: POST /x: rDNode" + ro + "rNode.Mark is tagged readonly; drop the tag or the type's own decoding.",
+	}
+	slices.Sort(want)
+	mistakesOf := func(order []reflect.StructField) []string {
+		in := reflect.StructOf(order)
+		_, mistakes := planFor(in, "POST", "/x")
+		var got []string
+		for _, m := range mistakes {
+			got = append(got, "warp: POST /x: "+m)
+		}
+		slices.Sort(got)
+		return got
+	}
+	r := rand.New(rand.NewPCG(20261125, 3))
+	for i := range 200 {
+		order := slices.Clone(fields)
+		if i > 0 {
+			r.Shuffle(len(order), func(a, b int) { order[a], order[b] = order[b], order[a] })
+		}
+		var names []string
+		for _, f := range order {
+			names = append(names, f.Name)
+		}
+		if got := mistakesOf(order); !slices.Equal(got, want) {
+			t.Fatalf("fields in the order %v:\n%s\nwant\n%s", names, strings.Join(got, "\n"), strings.Join(want, "\n"))
+		}
+	}
+}
+
+// A readonly field inside a type that decodes itself is refused when a
+// plain use of its type comes first, so it never reaches a handler.
+func TestReadonlyInsideADecoderAfterAPlainUse(t *testing.T) {
+	for _, in := range []reflect.Type{
+		reflect.TypeFor[struct {
+			A rT `json:"a"`
+			B rD `json:"b"`
+		}](),
+		reflect.TypeFor[struct {
+			B rD `json:"b"`
+			A rT `json:"a"`
+		}](),
+	} {
+		_, mistakes := planFor(in, "POST", "/x")
+		if want := "rD decodes itself, so Warp cannot see what it sets, and rT.ID is tagged readonly; drop the tag or the type's own decoding."; !slices.Equal(mistakes, []string{want}) {
+			t.Errorf("%s: %q", in, mistakes)
+		}
+	}
+}
+
+// A type error under a map, whose key may hold dots, is named by the map's
+// field, on both builds.
+func TestTypeErrorUnderAMap(t *testing.T) {
+	type Line struct {
+		SKU string `json:"sku"`
+	}
+	type In struct {
+		ByName map[string]Line `json:"by_name"`
+	}
+	app := New(Config{})
+	Post(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+	h := mustRegister(t, app)
+	for _, body := range []string{`{"by_name":{"a.b.c":{"sku":123}}}`, `{"by_name":{"a":{"sku":123}}}`} {
+		w := send(t, h, "POST", "/api/x", body)
+		if _, _, fields := apiError(t, w); w.Code != 400 || !reflect.DeepEqual(fields, map[string]string{"by_name": "Send text."}) {
+			t.Errorf("%s: %d %v", body, w.Code, fields)
+		}
 	}
 }
