@@ -111,6 +111,15 @@ func TestTTFB(t *testing.T) {
 	if res.P25Ms > res.MedianMs || res.P75Ms < res.MedianMs {
 		t.Errorf("p25 %.2f, median %.2f, p75 %.2f are out of order", res.P25Ms, res.MedianMs, res.P75Ms)
 	}
+	// Every timed request is in the result, so rounds can be pooled.
+	if len(res.SamplesMs) != 9 || len(res.FirstByteMs) != 9 {
+		t.Fatalf("%d samples and %d first bytes; want one of each per timed request", len(res.SamplesMs), len(res.FirstByteMs))
+	}
+	for i, s := range res.SamplesMs {
+		if s < 3 || res.FirstByteMs[i] >= s || s < res.MinMs || s > res.MaxMs {
+			t.Errorf("sample %d: %.2f ms, first byte %.2f ms; want >= 3 ms, after the 103, inside [%.2f, %.2f]", i, s, res.FirstByteMs[i], res.MinMs, res.MaxMs)
+		}
+	}
 	if want := int64(9 + ttfbWarmup); conns.Load() != want {
 		t.Errorf("%d connections for %d requests; want a new one each", conns.Load(), want)
 	}

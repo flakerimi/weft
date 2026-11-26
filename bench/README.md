@@ -68,7 +68,11 @@ to `<file>` and leaves `results/` and this page alone.
   2026-11-26 `warp.Serve` sends them no 103 Early Hints (see [Where Weft loses](#where-weft-loses)).
 - **TTFB.** 50 requests one after another, each on a new connection, after 5 untimed ones, timed to the final
   response's headers, past any 103 Early Hints (the first byte of anything, a 103 included, is in the JSON as
-  `first_byte_median_ms`). Like the load, these requests get no 103 from Weft since 2026-11-26.
+  `first_byte_median_ms`). Three rounds per target, as for the load, after the Lighthouse runs are over, a 5 s
+  pause and one untimed round of every target; each round visits the targets in an order shuffled from a fixed
+  seed (in the JSON as `ttfb_order`), so no server is always timed first or after the same one. The median and
+  quartiles of all 150 requests. Since 2026-11-27; before, each target had one series, in a fixed order, Weft's
+  straight after the last Chrome quit. Like the load, these requests get no 103 from Weft since 2026-11-26.
 - **Lighthouse.** Lighthouse 13.6.0, the default mobile preset (simulated throttling), headless Chrome, a fresh
   profile each run, five runs per target interleaved so drift hits all targets alike. Median and range.
 - **Bytes.** The resources a Lighthouse run loaded (status 200), each fetched again. Text is counted as brotli
