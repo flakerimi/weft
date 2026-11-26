@@ -109,6 +109,7 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 		owner[kind+" "+key] = at
 		return true
 	}
+	folds := foldOwners{}
 	var view, raw []reflect.StructField
 	var top []topField // the body's keys for the scan, readonly ones included
 	addView := func(key, opts string, ft reflect.Type, index []int) {
@@ -201,8 +202,11 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 			ok := false
 			if m := jsonNameMistake(at, f.Name, jsonKey); m != "" {
 				mistakes = append(mistakes, m)
-			} else {
-				ok = claim("json", jsonKey, at)
+			} else if ok = claim("json", jsonKey, at); ok {
+				if m := folds.claim(name, f.Name, jsonKey); m != "" {
+					mistakes = append(mistakes, m)
+					ok = false
+				}
 			}
 			if hasJSONOption(jsonOpts, "string") {
 				mistakes = append(mistakes, stringOption(at))
@@ -333,6 +337,9 @@ func inputFields(t reflect.Type, prefix []int) ([]inputField, []string) {
 						typeName(t), typeName(f.Type), key, typeName(f.Type)))
 					continue
 				}
+				if isReadonly(f) {
+					mistakes = append(mistakes, fmt.Sprintf("%s embeds %s tagged readonly; tag the fields inside it, or give the field a name.", typeName(t), typeName(f.Type)))
+				}
 				fields, more := inputFields(f.Type, index)
 				out, mistakes = append(out, fields...), append(mistakes, more...)
 				continue
@@ -370,13 +377,17 @@ func bodyMistakes(t reflect.Type, visited map[reflect.Type]bool) []string {
 	for !decodesItself(t) && isContainer(t.Kind()) {
 		t = t.Elem()
 	}
-	if t.Kind() != reflect.Struct || t == timeType || decodesItself(t) || visited[t] {
+	if t != timeType && decodesItself(t) {
+		return readonlyInside(t, t, visited)
+	}
+	if t.Kind() != reflect.Struct || t == timeType || visited[t] {
 		return nil
 	}
 	visited[t] = true
 	name := typeName(t)
 	fields, mistakes := inputFields(t, nil)
 	owner := map[string]string{}
+	folds := foldOwners{}
 	for _, f := range fields {
 		at := name + "." + f.Name
 		key, opts, hasJSON := jsonTagOf(f.StructField)
@@ -408,10 +419,61 @@ func bodyMistakes(t reflect.Type, visited map[reflect.Type]bool) []string {
 			mistakes = append(mistakes, fmt.Sprintf("%s and %s both have the json key %q; rename one.", owner[key], at, key))
 		default:
 			owner[key] = at
+			if m := folds.claim(name, f.Name, key); m != "" {
+				mistakes = append(mistakes, m)
+			}
 		}
 		if !isReadonly(f.StructField) { // never read, so what is inside it is not the body's
 			mistakes = append(mistakes, bodyMistakes(f.Type, visited)...)
 		}
+	}
+	return mistakes
+}
+
+// foldOwners are the keys of one object, folded as encoding/json folds them
+// (appendFolded), to the Go name of the field that has each.
+type foldOwners map[string]string
+
+// claim records the field named field, of the type named in, with key, and
+// returns the mistake when another field of the object has a key that
+// differs from it only in case. encoding/json would set the one or the other
+// for a key sent in another case, and a decoder may choose either (jsonv2
+// takes the shallowest), so the body scan would have to read the value as
+// both, at every level; with one field to each folded key it reads each
+// value once.
+func (o foldOwners) claim(in, field, key string) string {
+	f := string(appendFolded(nil, []byte(key)))
+	if other, taken := o[f]; taken {
+		return fmt.Sprintf("%s has the fields %s and %s, whose keys differ only in case; rename one.", in, other, field)
+	}
+	o[f] = field
+	return ""
+}
+
+// readonlyInside returns the mistakes of the type t holds, inside dec, a
+// type that decodes itself: a field tagged readonly there, at any depth, is
+// one, since Warp cannot see what dec's own decoder sets, so it can neither
+// refuse the key nor put the field back to zero.
+func readonlyInside(dec, t reflect.Type, visited map[reflect.Type]bool) []string {
+	for isContainer(t.Kind()) {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct || t == timeType || visited[t] {
+		return nil
+	}
+	visited[t] = true
+	var mistakes []string
+	for i := range t.NumField() {
+		f := t.Field(i)
+		if !f.IsExported() && !f.Anonymous || f.Tag.Get("json") == "-" {
+			continue
+		}
+		if isReadonly(f) {
+			mistakes = append(mistakes, fmt.Sprintf("%s decodes itself, so Warp cannot see what it sets, and %s.%s is tagged readonly; drop the tag or the type's own decoding.",
+				typeName(dec), typeName(t), f.Name))
+			continue
+		}
+		mistakes = append(mistakes, readonlyInside(dec, f.Type, visited)...)
 	}
 	return mistakes
 }

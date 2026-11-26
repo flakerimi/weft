@@ -14,16 +14,16 @@ import (
 	"testing"
 )
 
-// The model of TestScanMatchesEncodingJSON: keys that differ only in case
-// ("name" and "NAME"), a writable and a readonly key that fold onto each
-// other at the top ("id" and "ID") and one level down, where one of them is
-// in an embedded struct ("id" beside the embedded "Id"; the embedded
-// readonly "key" beside "KEY"); embedded structs exported and not; a Go name
-// shadowed by an embedded struct's (SKU, as "sku" and as "code"); keys with
-// an s or a k, which fold with ſ and the Kelvin sign; readonly fields at
-// every depth, through pointers, lists, map values and embedded structs; and
-// a type that holds itself. A body type cannot embed a pointer (registration
-// refuses it), so no embedded pointer is here.
+// The model of TestScanMatchesEncodingJSON: readonly keys beside writable
+// keys that look like them ("id" beside "ident"; the embedded readonly
+// "key" beside "keys"), which a key sent in another case may fold onto;
+// embedded structs exported and not; a Go name shadowed by an embedded
+// struct's (SKU, as "sku" and as "code"); keys with an s or a k, which fold
+// with ſ and the Kelvin sign; readonly fields at every depth, through
+// pointers, lists, map values and embedded structs; and types that hold
+// themselves, through a pointer and through a list, so depth is reached.
+// Two keys of one object that fold the same, and an embedded pointer, are
+// registration mistakes, so neither is here.
 type pzGeo struct {
 	Lat float64 `json:"lat"`
 	Key string  `json:"key" warp:"readonly"`
@@ -38,7 +38,7 @@ type PzStamp struct {
 // pzLabel is embedded, unexported: a writable key that folds onto the
 // outer type's readonly "id", and a field whose Go name the outer type has.
 type pzLabel struct {
-	Ident int    `json:"Id"`
+	Ident int    `json:"label_id"`
 	SKU   string `json:"code"`
 	Mark  string `json:"mark" warp:"readonly"`
 }
@@ -46,18 +46,19 @@ type pzLabel struct {
 type pzLine struct {
 	pzLabel
 	PzStamp
-	ID   int64  `json:"id" warp:"readonly"`
-	SKU  string `json:"sku"`
-	Shut string `json:"KEY"`
-	Qty  *int   `json:"qty"`
-	Geo  *pzGeo `json:"geo"`
+	ID   int64    `json:"id" warp:"readonly"`
+	SKU  string   `json:"sku"`
+	Shut string   `json:"keys"`
+	Qty  *int     `json:"qty"`
+	Geo  *pzGeo   `json:"geo"`
+	Sub  []pzLine `json:"sub"`
 }
 
 type pzBody struct {
 	ID     int64             `json:"id" warp:"readonly"`
-	Ident  int64             `json:"ID"`
+	Ident  int64             `json:"ident"`
 	Name   string            `json:"name"`
-	Shout  string            `json:"NAME"`
+	Shout  string            `json:"shout"`
 	Kind   string            `json:"kind"`
 	Status string            `json:"status"`
 	Price  float64           `json:"price"`
@@ -126,7 +127,7 @@ type MStamp struct {
 }
 
 type mLabel struct {
-	Ident hit[int]    `json:"Id"`
+	Ident hit[int]    `json:"label_id"`
 	SKU   hit[string] `json:"code"`
 	Mark  ro[string]  `json:"mark"`
 }
@@ -134,18 +135,19 @@ type mLabel struct {
 type mLine struct {
 	mLabel
 	MStamp
-	ID   ro[int64]   `json:"id"`
-	SKU  hit[string] `json:"sku"`
-	Shut hit[string] `json:"KEY"`
-	Qty  hit[*int]   `json:"qty"`
-	Geo  hit[*mGeo]  `json:"geo"`
+	ID   ro[int64]    `json:"id"`
+	SKU  hit[string]  `json:"sku"`
+	Shut hit[string]  `json:"keys"`
+	Qty  hit[*int]    `json:"qty"`
+	Geo  hit[*mGeo]   `json:"geo"`
+	Sub  hit[[]mLine] `json:"sub"`
 }
 
 type mBody struct {
 	ID     ro[int64]             `json:"id"`
-	Ident  hit[int64]            `json:"ID"`
+	Ident  hit[int64]            `json:"ident"`
 	Name   hit[string]           `json:"name"`
-	Shout  hit[string]           `json:"NAME"`
+	Shout  hit[string]           `json:"shout"`
 	Kind   hit[string]           `json:"kind"`
 	Status hit[string]           `json:"status"`
 	Price  hit[float64]          `json:"price"`
@@ -310,13 +312,13 @@ type genField struct {
 
 var genObjects = map[string][]genField{
 	"body": {
-		{"id", "num"}, {"ID", "num"}, {"name", "str"}, {"NAME", "str"}, {"kind", "str"}, {"status", "str"}, {"price", "num"},
+		{"id", "num"}, {"ident", "num"}, {"name", "str"}, {"shout", "str"}, {"kind", "str"}, {"status", "str"}, {"price", "num"},
 		{"live", "bool"}, {"tags", "list:str"}, {"lines", "list:obj:line"}, {"by_key", "map:obj:line"},
 		{"geo", "obj:geo"}, {"next", "obj:body"}, {"any", "any"}, {"raw", "any"}, {"key", "str"}, {"note", "str"},
 	},
 	"line": {
-		{"id", "num"}, {"Id", "num"}, {"sku", "str"}, {"code", "str"}, {"qty", "num"}, {"geo", "obj:geo"},
-		{"key", "str"}, {"KEY", "str"}, {"note", "str"}, {"mark", "str"},
+		{"id", "num"}, {"label_id", "num"}, {"sku", "str"}, {"code", "str"}, {"qty", "num"}, {"geo", "obj:geo"},
+		{"key", "str"}, {"keys", "str"}, {"note", "str"}, {"mark", "str"}, {"sub", "list:obj:line"},
 	},
 	"geo": {{"lat", "num"}, {"key", "str"}},
 }
@@ -478,7 +480,7 @@ func FuzzScan(f *testing.F) {
 	}
 	f.Add([]byte(`{"next":{"Id":1}}`))
 	f.Add([]byte(`{"lines":[{"ID":1}]}`))
-	f.Add([]byte(`{"lines":[{"Key":"x"}]}`))
+	f.Add([]byte(`{"lines":[{"sub":[{"sub":[{"Key":"x"}]}]}]}`))
 	p := scanPlan(f)
 	f.Fuzz(func(t *testing.T, data []byte) {
 		data = bytes.Trim(data, " \t\r\n")
@@ -570,6 +572,7 @@ func TestReadonlyIsZeroedWhateverTheScanSays(t *testing.T) {
 		`{"lines":[{"mark":"x"}]}`,                    // an unexported embedded struct
 		`{"by_key":{"a":{"geo":{"key":"x"}}}}`,        // a pointer inside a map value
 		`{"next":{"key":"x","lines":[{"MARK":"y"}]}}`, // folded, deep
+		`{"lines":[{"sub":[{"sub":[{"id":5}]}]}]}`,    // a list of the type itself
 	} {
 		view := reflect.New(p.view)
 		if err := decodeStrict([]byte(body), view.Interface()); err != nil {
@@ -603,44 +606,35 @@ type sWBase struct {
 	Ident int `json:"Id"`
 }
 
-// sShallowRO has a writable key in an embedded struct that comes first and
-// the outer type's own readonly key, which folds onto it: encoding/json v1
-// sets the first for "ID", and jsonv2 the shallower, the readonly one.
+// sShallowRO has a writable key in an embedded struct and the outer type's
+// own readonly key, which differ only in case: encoding/json v1 would set
+// the first for "ID", and jsonv2 the shallower, the readonly one. Such a
+// type is refused at registration.
 type sShallowRO struct {
 	sWBase
 	ID int `json:"id" warp:"readonly"`
 }
 
-// A key that folds onto a readonly field is refused, whichever field the
-// decoder would choose, and the readonly field is never set.
 func TestReadonlyFoldedBesideAnEmbeddedKey(t *testing.T) {
 	type In struct {
 		Body struct {
 			In sShallowRO `json:"in"`
 		} `body:"json"`
 	}
-	got, ran := -1, false
 	app := New(Config{})
-	Post(app, "/x", func(_ context.Context, in In) (None, error) { got, ran = in.Body.In.ID, true; return None{}, nil })
-	h := mustRegister(t, app)
-	for _, body := range []string{`{"in":{"ID":5}}`, `{"in":{"iD":5}}`, `{"in":{"id":5}}`} {
-		w := send(t, h, "POST", "/api/x", body)
-		if code, _, _ := apiError(t, w); w.Code != 400 || code != "bad_request" || ran {
-			t.Errorf("%s: status %d, ran %v (saw ID %d)", body, w.Code, ran, got)
-		}
-	}
-	if w := send(t, h, "POST", "/api/x", `{"in":{"Id":5}}`); w.Code != 204 || got != 0 {
-		t.Errorf(`{"in":{"Id":5}}: status %d, ID %d`, w.Code, got)
+	Post(app, "/x", func(_ context.Context, in In) (None, error) { return None{}, nil })
+	if want := `warp: POST /x: sShallowRO has the fields Ident and ID, whose keys differ only in case; rename one.`; errText(app.Err()) != want {
+		t.Fatalf("Err() = %q\nwant %q", errText(app.Err()), want)
 	}
 }
 
 // The top level refuses as the levels below do: a key that folds onto a
-// readonly field is refused there too, though the view, which leaves the
-// readonly field out, would set its writable sibling.
+// readonly field is refused there too, though the view leaves the readonly
+// field out.
 func TestReadonlyFoldedAtTheTop(t *testing.T) {
 	type Top struct {
 		ID    int `json:"id" warp:"readonly"`
-		Ident int `json:"ID"`
+		Other int `json:"other"`
 	}
 	top, mistakes := planFor(reflect.TypeFor[struct {
 		Body Top `body:"json"`
@@ -659,11 +653,38 @@ func TestReadonlyFoldedAtTheTop(t *testing.T) {
 	for _, c := range []struct {
 		key   string
 		taken bool
-	}{{"id", false}, {"Id", false}, {"iD", false}, {"ID", true}} {
+	}{{"id", false}, {"Id", false}, {"iD", false}, {"ID", false}, {"other", true}, {"OTHER", true}} {
 		_, errTop := top.walk([]byte(`{"` + c.key + `":5}`))
 		_, errNested := nested.walk([]byte(`{"in":{"` + c.key + `":5}}`))
 		if (errTop == nil) != c.taken || (errNested == nil) != c.taken {
 			t.Errorf("%q: at the top %v, one level down %v; want taken %v at both", c.key, errTop, errNested, c.taken)
 		}
+	}
+}
+
+// zDeep holds itself through two keys that both reach a readonly field: a
+// deep body is read once, each key looked up at most twice, however many
+// fields its keys could fold onto.
+type zDeep struct {
+	ID int    `json:"id" warp:"readonly"`
+	A  *zDeep `json:"ab"`
+	B  *zDeep `json:"cd"`
+}
+
+func TestScanDeepBodyCost(t *testing.T) {
+	p, mistakes := planFor(reflect.TypeFor[struct {
+		Body zDeep `body:"json"`
+	}](), "POST", "/x")
+	if mistakes != nil {
+		t.Fatal(mistakes)
+	}
+	const depth = maxNesting - 1
+	body := []byte(strings.Repeat(`{"Ab":`, depth) + "{}" + strings.Repeat("}", depth))
+	s := bodyScan{data: body}
+	if _, err := s.object(0, p.keys, true); err != nil {
+		t.Fatal(err)
+	}
+	if s.compares > 2*depth {
+		t.Fatalf("a body %d deep took %d looks, want at most %d", depth, s.compares, 2*depth)
 	}
 }

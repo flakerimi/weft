@@ -10,7 +10,9 @@ import (
 // body's value holds, at any depth: through pointers, lists, arrays, map
 // values and embedded structs, exported or not. It is what makes "a readonly
 // field is never read" hold whatever the decoder chose, even where the scan
-// and the decoder disagree. It is made once per plan, when the route is
+// and the decoder disagree. It does not look inside a type that decodes
+// itself, and need not: registration refuses a readonly field there
+// (readonlyInside), since what such a decoder sets cannot be seen. It is made once per plan, when the route is
 // registered; a type that holds no readonly field has no plan (nil), and
 // costs nothing.
 type zeroPlan struct {
@@ -104,39 +106,47 @@ func (b *zeroBuilder) plan(t reflect.Type) *zeroPlan {
 	return nil
 }
 
-// zero puts back to zero, in place, the readonly fields v holds. v is a
-// value the decoder has just made, which no one else holds.
-func (p *zeroPlan) zero(v reflect.Value) {
+// zero puts back to zero, in place, the readonly fields v holds, and
+// reports whether one was set. v is a value the decoder has just made, which
+// no one else holds. A map's value is written back only when a field of it
+// was set, so a map that sent none costs one value to read entries into.
+func (p *zeroPlan) zero(v reflect.Value) (changed bool) {
 	switch p.kind {
 	case reflect.Pointer:
 		if !v.IsNil() && p.elem != nil {
-			p.elem.zero(v.Elem())
+			return p.elem.zero(v.Elem())
 		}
 	case reflect.Slice, reflect.Array:
 		if p.elem != nil {
 			for i := range v.Len() {
-				p.elem.zero(v.Index(i))
+				changed = p.elem.zero(v.Index(i)) || changed
 			}
 		}
 	case reflect.Map:
 		if p.elem == nil || v.Len() == 0 {
-			return
+			return false
 		}
 		value := reflect.New(p.typ.Elem()).Elem() // a map value cannot be set in place
 		iter := v.MapRange()
 		for iter.Next() {
 			value.SetIterValue(iter)
-			p.elem.zero(value)
-			v.SetMapIndex(iter.Key(), value)
+			if p.elem.zero(value) {
+				v.SetMapIndex(iter.Key(), value)
+				changed = true
+			}
 		}
 	case reflect.Struct:
 		for _, f := range p.fields {
 			fv := v.Field(f.index)
 			if f.readonly {
-				fv.SetZero()
+				if !fv.IsZero() {
+					fv.SetZero()
+					changed = true
+				}
 			} else {
-				f.plan.zero(fv)
+				changed = f.plan.zero(fv) || changed
 			}
 		}
 	}
+	return changed
 }

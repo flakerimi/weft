@@ -52,7 +52,10 @@ func Get[In, Out any](app *App, path string, fn func(context.Context, In) (Out, 
 // field with the rule readonly, at any depth, is answered and never read:
 // a body that sends it, by its key or by a key that differs from it only in
 // case, is a 400, and it is never validated. Whatever the decoder does, the
-// handler gets every readonly field of the body as zero.
+// handler gets every readonly field of the body as zero. Two keys of one
+// object that differ only in case, a readonly field inside a type that
+// decodes itself, and readonly on an embedded struct are mistakes, reported
+// by Err.
 //
 // A body that is not empty must be sent as application/json (or a type
 // ending in +json), else the answer is 415. A cross-site form or fetch can

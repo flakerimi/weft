@@ -2,6 +2,7 @@ package warp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http/httptest"
 	"reflect"
@@ -1550,5 +1551,117 @@ func TestJSONStringOption(t *testing.T) {
 	}
 	if len(app.Routes()) != 0 {
 		t.Fatalf("routes %v registered", app.Routes())
+	}
+}
+
+// zFan's two keys differ only in case, and the type holds itself through
+// both: a body could make the scan read a value once for each, at every
+// level. Two keys of one object that fold the same are a registration
+// mistake.
+type zFan struct {
+	ID int   `json:"id" warp:"readonly"`
+	A  *zFan `json:"ab"`
+	AA *zFan `json:"AB"`
+}
+
+type FoldBase struct {
+	Kind string `json:"kind"`
+}
+
+// zSelf decodes itself, with the usual alias, so Warp cannot see what its
+// decoder sets.
+type zSelf struct {
+	ID   int    `json:"id" warp:"readonly"`
+	Name string `json:"name"`
+}
+
+func (z *zSelf) UnmarshalJSON(b []byte) error {
+	type alias zSelf
+	return json.Unmarshal(b, (*alias)(z))
+}
+
+type zText struct {
+	ID int `json:"id" warp:"readonly"`
+}
+
+func (z *zText) UnmarshalText(b []byte) error { return nil }
+
+func TestBodyKeyMistakes(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		register func(app *App)
+		want     []string
+	}{
+		{"two keys that differ only in case, at the top", func(app *App) {
+			type In struct {
+				Ab int `json:"ab"`
+				AB int `json:"AB"`
+			}
+			Post(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+		}, []string{`warp: POST /x: In has the fields Ab and AB, whose keys differ only in case; rename one.`}},
+		{"in a body field's type, a readonly one among them", func(app *App) {
+			type Top struct {
+				ID    int `json:"id" warp:"readonly"`
+				Ident int `json:"ID"`
+			}
+			Post(app, "/x", func(context.Context, struct {
+				Body Top `body:"json"`
+			}) (None, error) {
+				return None{}, nil
+			})
+		}, []string{`warp: POST /x: Top has the fields ID and Ident, whose keys differ only in case; rename one.`}},
+		{"nested, in a type that holds itself", func(app *App) {
+			type In struct {
+				Fan zFan `json:"fan"`
+			}
+			Post(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+		}, []string{`warp: POST /x: zFan has the fields A and AA, whose keys differ only in case; rename one.`}},
+		{"promoted from an embedded struct", func(app *App) {
+			type Line struct {
+				FoldBase
+				KIND string `json:"KIND"`
+			}
+			type In struct {
+				Lines []Line `json:"lines"`
+			}
+			Post(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+		}, []string{`warp: POST /x: Line has the fields Kind and KIND, whose keys differ only in case; rename one.`}},
+		{"by Unicode folding, k and the Kelvin sign", func(app *App) {
+			type In struct {
+				Kb int `json:"kb"`
+				KB int `json:"Kb"`
+			}
+			Put(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+		}, []string{"warp: PUT /x: In has the fields Kb and KB, whose keys differ only in case; rename one."}},
+		{"a readonly field inside a type that decodes itself", func(app *App) {
+			type In struct {
+				Self  zSelf  `json:"self"`
+				Ptr   *zSelf `json:"ptr"`
+				Text  zText  `json:"text"`
+				Fine  zSelf  `json:"fine" warp:"readonly"` // never read: nothing to see
+				Lines []struct {
+					Deep map[string]zSelf `json:"deep"`
+				} `json:"lines"`
+			}
+			Post(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+		}, []string{
+			`warp: POST /x: zSelf decodes itself, so Warp cannot see what it sets, and zSelf.ID is tagged readonly; drop the tag or the type's own decoding.`,
+			`warp: POST /x: zText decodes itself, so Warp cannot see what it sets, and zText.ID is tagged readonly; drop the tag or the type's own decoding.`,
+		}},
+		{"readonly on an embedded struct", func(app *App) {
+			type In struct {
+				FoldBase `warp:"readonly"`
+				Name     string `json:"name"`
+			}
+			Post(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+		}, []string{`warp: POST /x: In embeds FoldBase tagged readonly; tag the fields inside it, or give the field a name.`}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			app := New(Config{})
+			c.register(app)
+			if got := strings.Split(errText(app.Err()), "\n"); !reflect.DeepEqual(got, c.want) {
+				t.Fatalf("Err() =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(c.want, "\n"))
+			}
+		})
 	}
 }

@@ -5,11 +5,13 @@ package warp
 // body sent and refuses a readonly key at any depth.
 //
 // It mirrors encoding/json v1's matching of a key to a field (decode.go,
-// object): the field whose key is the key itself, else the first whose key
-// folds the same (foldName), the key unquoted as unquoteBytes does. Where
-// another decoder could choose another of the folded fields (jsonv2 prefers
-// the shallowest), the scan takes all of them into account, so its refusal
-// does not depend on the choice. TestScanMatchesEncodingJSON and FuzzScan
+// object): the field whose key is the key itself, else the one whose key
+// folds the same (foldName), the key unquoted as unquoteBytes does.
+// Registration refuses two keys of one object that fold the same
+// (foldOwners), so a key sent in any case names at most one field, and the
+// choice between folded fields that encoding/json v1 and jsonv2 make
+// differently (the first, the shallowest) never arises; the scan reads each
+// value once, as that one field. TestScanMatchesEncodingJSON and FuzzScan
 // hold it to encoding/json. Should the two part all the same, what holds is
 // plan.readonly: every readonly field is put back to zero after decoding, so
 // a readonly field is never set, whatever the scan said.
@@ -27,28 +29,27 @@ import (
 // object is what may be sent where a struct is: the json keys of its
 // fields in field order, which of them are readonly, and how to look inside
 // each one's value, nil where nothing inside it can be readonly. exact finds
-// the field of a key as sent; folded the fields whose keys are the same once
-// folded, in field order, all of them.
+// the field of a key as sent; folded the one whose key is the same once
+// folded, of which registration allows one.
 type object struct {
 	names    []string
 	readonly []bool
 	inner    []*look
 	exact    map[string]int
-	folded   map[string][]int
-	single   []int // 0, 1, 2, …: single[k:k+1] is the one field k, without allocating
-	longest  int   // the length of the longest folded name, in bytes
+	folded   map[string]int
+	longest  int // the length of the longest folded name, in bytes
 }
 
 // index makes o's exact and folded maps from its names.
 func (o *object) index() {
 	o.exact = make(map[string]int, len(o.names))
-	o.folded = make(map[string][]int, len(o.names))
-	o.single = make([]int, len(o.names))
+	o.folded = make(map[string]int, len(o.names))
 	for i, name := range o.names {
 		o.exact[name] = i
-		o.single[i] = i
 		f := string(appendFolded(nil, []byte(name)))
-		o.folded[f] = append(o.folded[f], i)
+		if _, taken := o.folded[f]; !taken { // registration refuses a second
+			o.folded[f] = i
+		}
 		o.longest = max(o.longest, len(f))
 	}
 }
@@ -172,34 +173,30 @@ func topObject(fields []topField) *object {
 	return top
 }
 
-// match returns the fields of o that a JSON object's key, written as sent,
-// may set: the field of the key itself, else every field whose key is the
-// same once folded, in field order; and the key as text. It is nil when
-// there is none. encoding/json (v1) sets the exact field, else the first of
-// the folded ones; another decoder may choose another of them (jsonv2 takes
-// the shallowest), so the scan refuses a key when any of them is readonly
-// and looks inside its value as each of them. A key is unquoted and folded
-// in the scan's own buffers, so it allocates nothing unless the key's text
-// is longer than 64 bytes and has an escape, or is longer than 64 bytes and
-// could still match a field once folded.
-func (s *bodyScan) match(o *object, quoted []byte) ([]int, []byte) {
+// match returns the index of o's field that a JSON object's key, written
+// as sent, sets: the field of the key itself, else the one whose key is the
+// same once folded; and the key as text. It is -1 when there is none. A key
+// is unquoted and folded in the scan's own buffers, so it allocates nothing
+// unless the key's text is longer than 64 bytes and has an escape, or is
+// longer than 64 bytes and could still match a field once folded.
+func (s *bodyScan) match(o *object, quoted []byte) (int, []byte) {
 	name := quoted[1 : len(quoted)-1]
 	if needsUnquote(name) {
 		name = appendUnquoted(s.keyBuf[:0], name)
 	}
 	s.compares++
 	if k, ok := o.exact[string(name)]; ok {
-		return o.single[k : k+1], name
+		return k, name
 	}
 	// A rune of up to 4 bytes folds to one of at least 1, so a key longer
 	// than 4 times every folded name cannot be one of them.
 	if len(name) <= 4*o.longest {
 		s.compares++
-		if ks, ok := o.folded[string(appendFolded(s.foldBuf[:0], name))]; ok {
-			return ks, name
+		if k, ok := o.folded[string(appendFolded(s.foldBuf[:0], name))]; ok {
+			return k, name
 		}
 	}
-	return nil, name
+	return -1, name
 }
 
 // needsUnquote reports whether the text of a JSON string, without its
@@ -342,7 +339,8 @@ type bodyScan struct {
 	// match's scratch, for a key unquoted and for it folded.
 	keyBuf, foldBuf [64]byte
 	// compares counts each look of a key among the fields, a map lookup or
-	// a comparison with one field, which TestScanWideStructCost bounds.
+	// a comparison with one field, which TestScanWideStructCost and
+	// TestScanDeepBodyCost bound.
 	compares int
 }
 
@@ -355,31 +353,23 @@ func (s *bodyScan) object(i int, o *object, top bool) (int, error) {
 	}
 	for {
 		end := s.str(i)
-		ks, name := s.match(o, s.data[i:end])
-		for _, k := range ks {
-			if o.readonly[k] {
-				return 0, unknown(string(name))
-			}
+		k, name := s.match(o, s.data[i:end])
+		if k >= 0 && o.readonly[k] {
+			return 0, unknown(string(name))
 		}
-		if top && len(ks) > 0 {
-			s.record(o, ks[0]) // the field encoding/json sets
+		if top && k >= 0 {
+			s.record(o, k)
 		}
 		i = s.space(s.space(end) + 1) // past the colon
-		next, looked := 0, false
-		for _, k := range ks {
-			if o.inner[k] == nil {
-				continue
-			}
-			var err error
-			if next, err = s.value(i, o.inner[k]); err != nil {
-				return 0, err
-			}
-			looked = true
+		var err error
+		if k >= 0 && o.inner[k] != nil {
+			i, err = s.value(i, o.inner[k])
+		} else {
+			i = s.skip(i)
 		}
-		if !looked {
-			next = s.skip(i)
+		if err != nil {
+			return 0, err
 		}
-		i = next
 		if i = s.space(i); s.data[i] == '}' {
 			return i + 1, nil
 		}
