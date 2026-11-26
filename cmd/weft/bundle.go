@@ -13,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // bundleFS holds what scripts/bundle.sh staged into cmd/weft/bundle at release
@@ -74,11 +75,17 @@ func bundleHash(bundle fs.FS) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+// hashBundle is bundleHash; a test counts its calls.
+var hashBundle = bundleHash
+
 // refreshWeft unpacks the bundle into appDir/.weft when .weft/VERSION holds
 // another version or there is none, and says whether it did. For devVersion
 // it also unpacks when the hash VERSION records is not the bundle's, so a
 // change to the framework reaches the app; a release is the version it says.
 // A development weft with no bundle of its own leaves a .weft that is there.
+//
+// The bundle is hashed once. Another weft command unpacking in the same app
+// is waited for, and what it unpacked is not unpacked again.
 func refreshWeft(appDir, version string) (bool, error) {
 	have, haveHash := unpackedRecord(appDir)
 	need := have != version
@@ -92,16 +99,64 @@ func refreshWeft(appDir, version string) (bool, error) {
 		}
 		return false, nil
 	}
-	if !need {
-		hash, err := bundleHash(bundle)
-		if err != nil {
-			return false, fmt.Errorf("cannot read the bundle to compare it with %s (%v); run the command again, or fix the folder WEFT_BUNDLE names", filepath.Join(appDir, ".weft"), err)
+	hash := ""
+	if version == devVersion {
+		if hash, err = hashBundle(bundle); err != nil {
+			return false, unreadableBundle(err)
 		}
-		if hash == haveHash {
+		if !need && hash == haveHash {
 			return false, nil
 		}
 	}
-	return true, unpack(bundle, appDir, version)
+	unlock, err := lockWeft(appDir)
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
+	if have, haveHash := unpackedRecord(appDir); have == version && (version != devVersion || haveHash == hash) {
+		return false, nil // another weft command unpacked it while this one waited
+	}
+	return true, unpackHashed(bundle, appDir, version, hash)
+}
+
+// unreadableBundle is the sentence for a bundle a file of which cannot be
+// read, naming the folder WEFT_BUNDLE names, or the bundle weft carries.
+func unreadableBundle(err error) error {
+	if dir := os.Getenv("WEFT_BUNDLE"); dir != "" {
+		return fmt.Errorf("cannot read the bundle in %s (%v); make its files readable, or point WEFT_BUNDLE at a folder made by scripts/bundle.sh", dir, err)
+	}
+	return fmt.Errorf("cannot read the bundle this weft carries (%v); install weft again from https://weft.base.al/install", err)
+}
+
+// lockWait is how long a weft command waits for another one unpacking in
+// the same app, and how old a lock may be before it is taken as left behind.
+var lockWait = 2 * time.Minute
+
+// lockWeft makes appDir/.weft.lock, waiting while another weft command holds
+// it, and returns the function that removes it. A lock older than lockWait
+// was left by a command that did not finish, and is taken over.
+func lockWeft(appDir string) (unlock func(), err error) {
+	lock := filepath.Join(appDir, ".weft.lock")
+	began := time.Now()
+	for {
+		f, err := os.OpenFile(lock, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err == nil {
+			fmt.Fprintf(f, "%d\n", os.Getpid())
+			f.Close()
+			return func() { os.Remove(lock) }, nil
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return nil, fmt.Errorf("cannot make %s (%v); make the app folder writable", lock, err)
+		}
+		if fi, err := os.Stat(lock); err == nil && time.Since(fi.ModTime()) > lockWait {
+			os.Remove(lock) // left by a weft command that did not finish
+			continue
+		}
+		if time.Since(began) > lockWait {
+			return nil, fmt.Errorf("another weft command has been unpacking .weft in %s for %s (it holds %s); let it finish, and run the command again", appDir, lockWait, lock)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 // unpack replaces appDir/.weft with the bundle's weft/ folder and records
@@ -111,8 +166,23 @@ func refreshWeft(appDir, version string) (bool, error) {
 // its own (.weft-new-*), moves the old .weft into another (.weft-old-*), and
 // renames the new tree into place; it removes only those two folders, on
 // success and on failure, and puts the old .weft back when the last rename
-// fails. Nothing else beside .weft is touched, whatever its name.
-func unpack(bundle fs.FS, appDir, version string) (err error) {
+// fails. Beside .weft it makes only those and .weft.lock, which it holds
+// while it works and then removes; nothing else is touched, whatever its
+// name.
+//
+// Another weft command unpacking in the same app is waited for.
+func unpack(bundle fs.FS, appDir, version string) error {
+	unlock, err := lockWeft(appDir)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return unpackHashed(bundle, appDir, version, "")
+}
+
+// unpackHashed is unpack, under the app's lock, with the bundle's hash when
+// the caller has it already ("" to take it here, under devVersion).
+func unpackHashed(bundle fs.FS, appDir, version, hash string) (err error) {
 	src, err := fs.Sub(bundle, "weft")
 	if err != nil {
 		return err
@@ -139,6 +209,10 @@ func unpack(bundle fs.FS, appDir, version string) (err error) {
 		return err
 	}
 	if err := copyFS(src, tmp); err != nil {
+		var pe *fs.PathError
+		if errors.As(err, &pe) && !strings.HasPrefix(pe.Path, tmp) {
+			return unreadableBundle(err) // the bundle's file, named within it
+		}
 		return err
 	}
 	// go:embed leaves out a folder that holds a go.mod, so the bundle keeps
@@ -149,9 +223,10 @@ func unpack(bundle fs.FS, appDir, version string) (err error) {
 	}
 	record := version + "\n"
 	if version == devVersion {
-		hash, err := bundleHash(bundle)
-		if err != nil {
-			return fmt.Errorf("cannot read the bundle to hash it (%v); run the command again", err)
+		if hash == "" {
+			if hash, err = hashBundle(bundle); err != nil {
+				return unreadableBundle(err)
+			}
 		}
 		record += hash + "\n"
 	}

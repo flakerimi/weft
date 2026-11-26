@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -461,5 +462,107 @@ func TestUnpackCommand(t *testing.T) {
 	}
 	if code, _, errs := runCmd("unpack", "x"); code != 2 || errs != "weft unpack: \"x\" is not a flag; usage is weft unpack.\n" {
 		t.Errorf("argument: exit %d, stderr %q", code, errs)
+	}
+}
+
+// countHashes counts the bundle hashes taken for the rest of the test.
+func countHashes(t *testing.T) *int {
+	t.Helper()
+	n := new(int)
+	was := hashBundle
+	hashBundle = func(b fs.FS) (string, error) { *n++; return was(b) }
+	t.Cleanup(func() { hashBundle = was })
+	return n
+}
+
+// A development refresh hashes the bundle once, whether .weft is missing or
+// its hash is old.
+func TestRefreshHashesOnce(t *testing.T) {
+	app := t.TempDir()
+	bundle := folderBundle(t, map[string]string{"weft/a": "one"})
+	n := countHashes(t)
+	if did, err := refreshWeft(app, devVersion); err != nil || !did || *n != 1 {
+		t.Fatalf("first refresh = %v, %v, %d hashes; want an unpack and one hash", did, err, *n)
+	}
+	os.WriteFile(filepath.Join(bundle, "weft", "a"), []byte("two"), 0o644)
+	*n = 0
+	if did, err := refreshWeft(app, devVersion); err != nil || !did || *n != 1 {
+		t.Fatalf("changed: refresh = %v, %v, %d hashes; want an unpack and one hash", did, err, *n)
+	}
+}
+
+// A bundle that cannot be read for its hash is named, with what to do.
+func TestRefreshNamesAnUnreadableBundle(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads every file")
+	}
+	app := t.TempDir()
+	bundle := folderBundle(t, map[string]string{"weft/a": "one"})
+	os.Chmod(filepath.Join(bundle, "weft", "a"), 0)
+	t.Cleanup(func() { os.Chmod(filepath.Join(bundle, "weft", "a"), 0o644) })
+	_, err := refreshWeft(app, devVersion)
+	if err == nil || !strings.HasPrefix(err.Error(), "cannot read the bundle in "+bundle+" (") || !strings.HasSuffix(err.Error(), "); make its files readable, or point WEFT_BUNDLE at a folder made by scripts/bundle.sh") {
+		t.Errorf("refresh = %v", err)
+	}
+}
+
+// A VERSION an older development build wrote, one line with no hash, is
+// unpacked again; one written with CRLF line endings is read as written.
+func TestRefreshReadsOlderAndCRLFVersions(t *testing.T) {
+	app := t.TempDir()
+	folderBundle(t, map[string]string{"weft/a": "one"})
+	if _, err := refreshWeft(app, devVersion); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(app, ".weft", "VERSION"))
+	hash := strings.Split(strings.TrimSpace(string(b)), "\n")[1]
+	for record, want := range map[string]bool{
+		devVersion + "\n":                   true,
+		devVersion + "\r\n":                 true,
+		devVersion + "\r\n" + hash + "\r\n": false,
+		devVersion + "\n" + hash + "\n":     false,
+		"0.0.1\r\n":                         true,
+	} {
+		os.WriteFile(filepath.Join(app, ".weft", "VERSION"), []byte(record), 0o644)
+		if did, err := refreshWeft(app, devVersion); err != nil || did != want {
+			t.Errorf("VERSION %q: refresh = %v, %v; want %v", record, did, err, want)
+		}
+	}
+	os.WriteFile(filepath.Join(app, ".weft", "VERSION"), []byte("0.1.0\r\n"), 0o644)
+	if did, err := refreshWeft(app, "0.1.0"); err != nil || did {
+		t.Errorf("a release VERSION with CRLF: refresh = %v, %v; want none", did, err)
+	}
+}
+
+// Two weft commands unpacking in one app at once both succeed, ten times
+// over, and leave one whole .weft and nothing of theirs beside it.
+func TestTwoUnpacksAtOnce(t *testing.T) {
+	app := t.TempDir()
+	bundle := folderBundle(t, map[string]string{"weft/a": "zero", "weft/sub/b": "b"})
+	for i := range 10 {
+		os.WriteFile(filepath.Join(bundle, "weft", "a"), []byte(strconv.Itoa(i)), 0o644)
+		errs := make(chan error, 2)
+		for range 2 {
+			go func() {
+				_, err := refreshWeft(app, devVersion)
+				errs <- err
+			}()
+		}
+		for range 2 {
+			if err := <-errs; err != nil {
+				t.Fatalf("round %d: %v", i, err)
+			}
+		}
+		if got, _ := os.ReadFile(filepath.Join(app, ".weft", "a")); string(got) != strconv.Itoa(i) || !exists(t, filepath.Join(app, ".weft", "sub", "b")) {
+			t.Fatalf("round %d: .weft/a = %q", i, got)
+		}
+		entries, _ := os.ReadDir(app)
+		if len(entries) != 1 {
+			var names []string
+			for _, e := range entries {
+				names = append(names, e.Name())
+			}
+			t.Fatalf("round %d: the app folder holds %q", i, names)
+		}
 	}
 }
