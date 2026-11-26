@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	neturl "net/url"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -670,8 +671,20 @@ func (sqlite) dsn(url string) (dsn, file string, memory bool, notes []string) {
 		if unescaped, err := neturl.PathUnescape(path); err == nil {
 			path = unescaped
 		}
+		path = uriFile(path, runtime.GOOS == "windows")
 	}
 	return dsn, path, false, notes
+}
+
+// uriFile is the file a file: URI's path names. On Windows SQLite reads a
+// path that starts with a drive after its slash, /C:/srv/app.db, as that
+// drive's, C:/srv/app.db, so Warp makes that file's folder and not \C:\srv.
+func uriFile(path string, windows bool) string {
+	if windows && len(path) >= 3 && path[0] == '/' && path[2] == ':' && (len(path) == 3 || path[3] == '/') &&
+		('a' <= path[1] && path[1] <= 'z' || 'A' <= path[1] && path[1] <= 'Z') {
+		return path[1:]
+	}
+	return path
 }
 
 // contains uses LIKE, which in SQLite ignores the case of ASCII letters alone,
