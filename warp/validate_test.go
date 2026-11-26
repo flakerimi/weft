@@ -801,7 +801,7 @@ func TestValidateSentPointerZero(t *testing.T) {
 	got := fieldsOf(t, S{N: &zero, Text: &empty, Mail: &empty, Kind: &empty, Need: &zero})
 	want := map[string]string{
 		"n":    "Enter 1 or more.",
-		"text": "Use at least 1 characters.",
+		"text": "Use at least 1 character.",
 		"mail": "Enter an email address.",
 		"kind": "Choose one of: a, b.",
 	}
@@ -934,5 +934,35 @@ func TestEmailRuleIsTheBrowsers(t *testing.T) {
 		if fieldsOf(t, &E{Mail: bad})["mail"] != "Enter an email address." {
 			t.Errorf("%q was taken", bad)
 		}
+	}
+}
+
+// A count of one character is said in the singular, as the browser's schema
+// says it.
+func TestValidateSaysOneCharacter(t *testing.T) {
+	type One struct {
+		A string `json:"a" warp:"min=1"`
+		B string `json:"b" warp:"max=1"`
+	}
+	type Two struct {
+		A string `json:"a" warp:"min=2"`
+		B string `json:"b" warp:"max=2"`
+	}
+	if got := fieldsOf(t, One{A: " ", B: "xy"}); !reflect.DeepEqual(got, map[string]string{"b": "Use at most 1 character."}) {
+		t.Errorf("one: %v", got)
+	}
+	if got := fieldsOf(t, &struct {
+		A string `json:"a" warp:"min=1"`
+	}{A: ""}); got != nil {
+		t.Errorf("empty passes min: %v", got)
+	}
+	if got := fieldsOf(t, Two{A: "x", B: "xyz"}); !reflect.DeepEqual(got, map[string]string{"a": "Use at least 2 characters.", "b": "Use at most 2 characters."}) {
+		t.Errorf("two: %v", got)
+	}
+	type OneMin struct {
+		A string `json:"a" warp:"min=2,max=1"`
+	}
+	if got := fieldsOf(t, OneMin{A: "x"}); got["a"] != "Use at least 2 characters." {
+		t.Errorf("min first: %v", got)
 	}
 }

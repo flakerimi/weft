@@ -525,6 +525,9 @@ func checkRule(v reflect.Value, r rule) string {
 		case k == reflect.String:
 			size = float64(utf8.RuneCountInString(v.String()))
 			low, high = "Use at least %s characters.", "Use at most %s characters."
+			if r.num == 1 { // as the browser's schema says it
+				low, high = "Use at least %s character.", "Use at most %s character."
+			}
 		case isNumberKind(k):
 			size = toFloat(v)
 			low, high = "Enter %s or more.", "Enter %s or less."
