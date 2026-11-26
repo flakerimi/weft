@@ -8,12 +8,12 @@ import (
 )
 
 func routesCmd(args []string, stdout, stderr io.Writer) int {
+	ctx, stop := signal.NotifyContext(context.Background(), stopSignals...)
+	defer stop()
 	appDir, code, ok := appCommand("routes", args, stdout, stderr)
 	if !ok {
 		return code
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), stopSignals...)
-	defer stop()
 	d, err := buildAndDescribe(ctx, "routes", appDir, stderr)
 	if err != nil {
 		return genFailed(stderr, "routes", err)

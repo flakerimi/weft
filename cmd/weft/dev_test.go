@@ -1076,7 +1076,7 @@ func TestDevRunsGenAfterGoChange(t *testing.T) {
 	file := filepath.Join(app, "web", ".weft-types", "api.ts")
 	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
 	src, err := os.ReadFile(file)
-	if err != nil || !strings.Contains(string(src), "    hello(): Promise<Message> {\n") {
+	if err != nil || !strings.Contains(string(src), "    async hello(): Promise<Message> {\n") {
 		t.Fatalf("weft dev wrote no client before it started: %v\n%s", err, src)
 	}
 	waitFor := func(want string) {

@@ -110,20 +110,18 @@ Outside an app it says `weft build: no Weft app here; run it in a folder made by
 
 ### weft gen
 
-Writes `web/.weft-types/api.ts` from the app's Go code. It builds the app with the `dev` tag into `.weft/dev/app`, as `weft dev` does, runs it with `WARP_DESCRIBE=1`, so warp's `Serve` prints the app's routes and types as JSON instead of serving, and writes from that an interface for each Go type, `api.<module>.<name>()` for each typed route (routes outside a module are under `api.app`), the `ApiError` a failed request throws, and `schema`, the rules of each type a route takes as its body. It prints `Wrote web/.weft-types/api.ts`, or `web/.weft-types/api.ts is up to date` when the file already holds those bytes, which it then leaves alone. `weft dev` runs it after each Go build that succeeds, before it starts the Go server, and `weft build` before the page build. The file is regenerated, so never edit it; the app's `.gitignore` leaves `web/.weft-types/` out.
+Writes `web/.weft-types/api.ts` from the app's Go code. It builds the app with the `dev` tag, as `weft dev` does, and runs it with `WARP_DESCRIBE=1`, so warp's `Serve` prints the routes and types as JSON. From that it writes an interface per Go type, `api.<module>.<name>()` per typed route (`api.app` for routes outside a module), the `ApiError` every failed call rejects with, and `schema`, the rules of each body type for a form to check before it sends; `unique` and the rules of nested types are checked by the server only, and arrive as its field errors. It prints `Wrote web/.weft-types/api.ts`, or `web/.weft-types/api.ts is up to date` and leaves the file alone. `weft dev` runs it after each Go build that succeeds, and `weft build` before the page build. Never edit the file.
 
-An app that does not build, or does not describe itself, gets its own output and then `weft gen: the app did not describe itself; fix what its output above says and run weft gen again.`, with exit status 1, and the file stays as it was. `weft build` says the same under its own name; `weft dev` says `weft dev: the app did not describe itself, so web/.weft-types/api.ts is as it was; fix what its output above says.` and keeps running. Two module or route names that become one in camelCase (`post_hello_greet` is `postHelloGreet`) are a sentence that says which to rename.
+An app that does not build or describe itself gets its own output, then `weft gen: the app did not describe itself; fix what its output above says and run weft gen again.`, exit status 1, and the file is left as it was; `weft build` says the same under its name, and `weft dev` says so and keeps running. A name the file cannot use (two routes that become one in camelCase, a type named as TypeScript reserves, a field named `constructor` or `toString`) is a sentence that says what to rename.
 
 ### weft routes
 
-Builds and describes the app as `weft gen` does, and prints its routes, in the order they were registered:
+Builds and describes the app as `weft gen` does, and prints its routes in the order registered. A route that takes every method is `ANY`; no module or no permission is `-`.
 
 ```text
 METHOD  PATH        MODULE  NAME   PERMISSION
 GET     /api/hello  hello   hello  -
 ```
-
-A route that takes every method is `ANY`; no module or no permission is `-`.
 
 ### weft upgrade
 

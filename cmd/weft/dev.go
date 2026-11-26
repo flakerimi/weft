@@ -146,7 +146,10 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		_, err := regenerate(ctx, appDir, bin, devReadyWithin, stderr)
 		switch {
 		case err == nil, ctx.Err() != nil:
-		case errors.Is(err, errNoDescription), errors.Is(err, errDescribeTimeout):
+		case errors.Is(err, errNoDescription), errors.Is(err, errDescribeTimeout), errors.As(err, new(outputError)):
+			if errors.As(err, new(outputError)) {
+				fail(stderr, "dev", err)
+			}
 			fmt.Fprintln(stderr, "weft dev: the app did not describe itself, so web/.weft-types/api.ts is as it was; fix what its output above says.")
 		default:
 			fail(stderr, "dev", err)
@@ -355,11 +358,13 @@ func goBuild(ctx context.Context, command, appDir, bin string, stderr io.Writer)
 	return cmd.Run() == nil
 }
 
-// hostBuildEnv is environ with GOOS and GOARCH set to this machine's, since
-// the dev build runs here even when the environment asks weft build for
-// another system.
+// hostBuildEnv is environ with GOOS and GOARCH set to this machine's, and
+// every variable that picks a CPU level reset to its default, since the dev
+// build runs here even when the environment asks weft build for another
+// system.
 func hostBuildEnv(environ []string) []string {
-	return append(slices.Clone(environ), "GOOS="+runtime.GOOS, "GOARCH="+runtime.GOARCH)
+	return append(slices.Clone(environ), "GOOS="+runtime.GOOS, "GOARCH="+runtime.GOARCH, "GOAMD64=", "GOARM=", "GOARM64=",
+		"GO386=", "GOMIPS=", "GOMIPS64=", "GOPPC64=", "GORISCV64=", "GOWASM=")
 }
 
 // goFiles returns the modification time of every .go file in the app, and of

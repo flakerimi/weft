@@ -26,6 +26,40 @@ var apiTypes = filepath.Join("web", ".weft-types", "api.ts")
 // describeWithin is how long the app's binary has to print its description.
 var describeWithin = 30 * time.Second
 
+const (
+	// describeMax is the most a description is read of.
+	describeMax = 8 << 20
+	// shownMax is how much of an output that is not a description is shown.
+	shownMax = 200
+)
+
+// outputError is an app whose standard output was not its description.
+type outputError struct{ sentence string }
+
+func (e outputError) Error() string { return e.sentence }
+
+// cappedBuffer keeps what is written up to max bytes and calls over, once,
+// when more comes. The buffer is a field, not embedded, so io.Copy cannot
+// reach past Write through bytes.Buffer's ReadFrom.
+type cappedBuffer struct {
+	buf  bytes.Buffer
+	max  int
+	over func()
+	full bool
+}
+
+func (c *cappedBuffer) Write(p []byte) (int, error) {
+	if c.full {
+		return len(p), nil
+	}
+	if c.buf.Len()+len(p) > c.max {
+		c.full = true
+		c.over()
+		return len(p), nil
+	}
+	return c.buf.Write(p)
+}
+
 var (
 	// errNoDescription is an app that failed to build, exited with an
 	// error, or printed something that is not a description; its own output
@@ -106,12 +140,17 @@ func parseDescription(b []byte) (description, error) {
 }
 
 func genCmd(args []string, stdout, stderr io.Writer) int {
+	ctx, stop := signal.NotifyContext(context.Background(), stopSignals...)
+	defer stop()
+	return gen(ctx, args, stdout, stderr)
+}
+
+// gen is weft gen until ctx is done.
+func gen(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	appDir, code, ok := appCommand("gen", args, stdout, stderr)
 	if !ok {
 		return code
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), stopSignals...)
-	defer stop()
 	wrote, err := genTypes(ctx, "gen", appDir, stderr)
 	if err != nil {
 		return genFailed(stderr, "gen", err)
@@ -150,9 +189,12 @@ func appCommand(command string, args []string, stdout, stderr io.Writer) (appDir
 }
 
 // genFailed says why weft gen's work failed, under the command's name, and
-// returns 1.
+// returns 1; stopped by a signal, as weft dev is, it says nothing and
+// returns 130.
 func genFailed(stderr io.Writer, command string, err error) int {
 	switch {
+	case errors.Is(err, context.Canceled):
+		return 130
 	case errors.Is(err, errDescribeTimeout):
 		fmt.Fprintf(stderr, "weft %s: the app did not describe itself within %d s; check that main.go serves a warp.App, whose Serve prints the description under WARP_DESCRIBE=1, and run weft %s again.\n", command, int(describeWithin.Seconds()), command)
 	case errors.Is(err, errNoDescription):
@@ -201,33 +243,50 @@ func regenerate(ctx context.Context, appDir, bin string, within time.Duration, s
 
 // describeApp runs bin in the app's folder with the environment and
 // WARP_DESCRIBE=1, for at most within, and reads the description from its
-// standard output. Its standard error passes through; its standard output
-// does too when it is not a description, so the app's own words come
-// before weft's sentence.
+// standard output, at most describeMax of it. Its standard error passes
+// through; of a standard output that is not a description, the first
+// shownMax bytes do too, so the app's own words come before weft's sentence.
 func describeApp(ctx context.Context, appDir, bin string, within time.Duration, stderr io.Writer) (description, error) {
 	run, cancel := context.WithTimeout(ctx, within)
 	defer cancel()
 	cmd := exec.CommandContext(run, bin)
 	cmd.Dir = appDir
 	cmd.Env = append(os.Environ(), "WARP_DESCRIBE=1")
-	var out bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, stderr
+	out := &cappedBuffer{max: describeMax, over: cancel}
+	cmd.Stdout, cmd.Stderr = out, stderr
 	cmd.WaitDelay = time.Second
 	err := cmd.Run()
+	show := func() {
+		b := out.buf.Bytes()[:min(out.buf.Len(), shownMax)]
+		if len(b) > 0 {
+			stderr.Write(b)
+			if b[len(b)-1] != '\n' {
+				io.WriteString(stderr, "\n")
+			}
+		}
+	}
 	switch {
 	case ctx.Err() != nil:
 		return description{}, ctx.Err()
+	case out.full:
+		return description{}, outputError{"the app printed more than 8 MB where its description should be; make sure nothing but Warp writes to standard output when WARP_DESCRIBE is set"}
 	case errors.Is(run.Err(), context.DeadlineExceeded):
-		stderr.Write(out.Bytes())
+		show()
 		return description{}, errDescribeTimeout
 	case err != nil:
-		stderr.Write(out.Bytes())
+		show()
+		return description{}, errNoDescription
+	case out.buf.Len() == 0:
 		return description{}, errNoDescription
 	}
-	d, err := parseDescription(out.Bytes())
+	d, err := parseDescription(out.buf.Bytes())
 	if err != nil {
-		stderr.Write(out.Bytes())
-		return description{}, errNoDescription
+		show()
+		start := out.buf.Bytes()[:min(out.buf.Len(), 60)]
+		for !utf8.Valid(start) {
+			start = start[:len(start)-1]
+		}
+		return description{}, outputError{fmt.Sprintf("the app's standard output was not its description (it starts with %s); make sure nothing else prints there when WARP_DESCRIBE is set", strconv.Quote(string(start)))}
 	}
 	return d, nil
 }
@@ -275,17 +334,18 @@ func writeAPI(appDir string, d description) (bool, error) {
 // its request with.
 const generatedHeader = `// Generated by weft gen from the description the app's Go code prints; do not edit it.
 // weft dev writes it again after each Go change, and weft build before the pages.
+// Requests go to the pages' own origin, under what setBase names; an API on another origin than the pages is not supported yet.
 `
 
 const clientCode = `
-/** A request the API answered with an error: its HTTP status, and the error shape's code, message and fields. */
+/** Every rejection of an api function is an ApiError. From the server: its HTTP status and the error shape's code, message and fields. Without an answer: status 0, with code network when the request could not be sent, or bad_request when the arguments would reach another route or be misread. cause holds the error behind it. */
 export class ApiError extends Error {
   status: number
   code: string
   fields: Record<string, string>
 
-  constructor(status: number, code: string, message: string, fields: Record<string, string>) {
-    super(message)
+  constructor(status: number, code: string, message: string, fields: Record<string, string> = {}, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
     this.name = 'ApiError'
     this.status = status
     this.code = code
@@ -295,26 +355,48 @@ export class ApiError extends Error {
 
 let base = ''
 
-/** Sends the requests to url, for an app whose pages are served from another origin than its API; by default they go to the page's own. */
+/** Puts url in front of every request's path: a path prefix or an absolute URL of the pages' own origin, or, for a script or a test that calls fetch outside a browser, the API's address. An API on another origin than the pages is not supported yet: a browser sends it no session cookie. */
 export function setBase(url: string): void {
   base = url.replace(/\/+$/, '')
 }
 
-/** The query string for query: undefined and null are left out, a list is repeated, and a map is written name[key]=value. */
-function search(query: Record<string, string | number | boolean | string[] | Record<string, string> | null | undefined> = {}): string {
+/** The ApiError for arguments that would reach another route, or that the server would misread; no request is sent. */
+function refuse(message: string): ApiError {
+  return new ApiError(0, 'bad_request', message)
+}
+
+/** One path parameter, encoded. One that is empty, "." or ".." (or only dots) would reach another route, so it is refused. */
+function segment(name: string, value: string | number | boolean): string {
+  const text = String(value)
+  if (/^\.*$/.test(text)) throw refuse(` + "`" + `The ${name} in the address cannot be empty, "." or "..".` + "`" + `)
+  return encodeURIComponent(text)
+}
+
+/** A {name...} path parameter: its segments, each encoded and checked as segment does. */
+function segments(name: string, value: string | number | boolean): string {
+  return String(value).split('/').map((part) => segment(name, part)).join('/')
+}
+
+/** The query string for query. An undefined or null value is left out, at the top and inside a list or a filter, and so is a filter whose value is ''; a list is repeated, and a filter map is written name[key]=value. */
+function search(query: Record<string, string | number | boolean | (string | null | undefined)[] | Record<string, string | null | undefined> | null | undefined> = {}): string {
   const params = new URLSearchParams()
   for (const [name, value] of Object.entries(query)) {
     if (value === undefined || value === null) continue
     if (Array.isArray(value)) {
-      for (const item of value) params.append(name, item)
+      for (const item of value) {
+        if (item !== undefined && item !== null) params.append(name, item)
+      }
     } else if (typeof value === 'object') {
-      for (const [key, item] of Object.entries(value)) params.append(` + "`${name}[${key}]`" + `, item)
+      for (const [key, item] of Object.entries(value)) {
+        if (key === '' || /[[\]]/.test(key)) throw refuse('A filter name cannot be empty or contain [ or ].')
+        if (item !== undefined && item !== null && item !== '') params.append(` + "`" + `${name}[${key}]` + "`" + `, item)
+      }
     } else {
       params.append(name, String(value))
     }
   }
   const text = params.toString()
-  return text === '' ? '' : ` + "`?${text}`" + `
+  return text === '' ? '' : ` + "`" + `?${text}` + "`" + `
 }
 
 /** Sends one request, with body as JSON when given, and reads the answer as JSON unless the route answers nothing. */
@@ -324,10 +406,19 @@ async function send<T>(method: string, path: string, options: { body?: unknown; 
     init.headers = { 'Content-Type': 'application/json' }
     init.body = JSON.stringify(options.body)
   }
-  const res = await fetch(base + path, init)
+  let res: Response
+  try {
+    res = await fetch(base + path, init)
+  } catch (error) {
+    throw new ApiError(0, 'network', error instanceof Error ? error.message : String(error), {}, error)
+  }
   if (!res.ok) throw await failure(res)
   if (options.none || res.status === 204) return undefined as T
-  return (await res.json()) as T
+  try {
+    return (await res.json()) as T
+  } catch (error) {
+    throw new ApiError(res.status, 'http', 'The answer was not JSON.', {}, error)
+  }
 }
 
 /** The ApiError for an answer that is not a success: from the error shape, or from the status when the body is not that shape. */
@@ -340,12 +431,12 @@ async function failure(res: Response): Promise<ApiError> {
       return new ApiError(res.status, code, message, typeof fields === 'object' && fields !== null ? (fields as Record<string, string>) : {})
     }
   }
-  return new ApiError(res.status, 'http', res.statusText || String(res.status), {})
+  return new ApiError(res.status, 'http', res.statusText || String(res.status))
 }
 `
 
 const fieldRulesCode = `
-/** The rules of one field, which @weft/ui's Form checks in the browser as the server does, and the kind of value it holds, so a form knows what control to draw. */
+/** The rules of one field that @weft/ui's Form checks in the browser, and the kind of value it holds, so a form knows what control to draw. */
 export interface FieldRules {
   kind: 'string' | 'number' | 'boolean' | 'list' | 'record' | 'object' | 'unknown'
   required?: boolean
@@ -358,19 +449,42 @@ export interface FieldRules {
 `
 
 // ownTypeNames are the type names the generated file declares or uses
-// itself, which an app's type may not have: TypeScript's own type keywords,
-// and the global types the file names.
+// itself, which an app's type may not have.
 var ownTypeNames = map[string]bool{
 	"ApiError": true, "FieldRules": true, "Partial": true, "Promise": true, "Record": true, "Response": true,
-	"any": true, "unknown": true, "never": true, "string": true, "number": true, "boolean": true, "object": true,
-	"symbol": true, "bigint": true, "undefined": true, "null": true, "void": true,
+}
+
+// reservedTypeNames are the names TypeScript refuses for an interface, or
+// misreads where one is used as a type: ECMAScript's reserved words, those
+// strict mode reserves, TypeScript's predefined types, and its type
+// operators.
+var reservedTypeNames = map[string]bool{}
+
+func init() {
+	for _, w := range strings.Fields(`await break case catch class const continue debugger default delete do else enum export
+		extends false finally for function if import in instanceof new null return super switch this throw true try typeof var
+		void while with yield
+		implements interface let package private protected public static
+		any bigint boolean never number object string symbol undefined unknown
+		infer keyof readonly unique`) {
+		reservedTypeNames[w] = true
+	}
+}
+
+// objectMembers are the properties every JavaScript object has. TypeScript
+// checks an optional property of one of these names against the object's
+// own, so a field or query parameter named so refuses every value.
+var objectMembers = map[string]bool{
+	"constructor": true, "toString": true, "toLocaleString": true, "valueOf": true, "hasOwnProperty": true,
+	"isPrototypeOf": true, "propertyIsEnumerable": true,
 }
 
 // paramReserved are the names a path parameter cannot keep in TypeScript:
 // JavaScript's reserved words, and the names a route's function uses inside
 // it, which a parameter of that name would hide.
 var paramReserved = map[string]bool{
-	"body": true, "query": true, "send": true, "search": true, "encodeURIComponent": true, "String": true,
+	"body": true, "query": true, "send": true, "search": true, "segment": true, "segments": true, "refuse": true,
+	"encodeURIComponent": true, "String": true,
 	"arguments": true, "eval": true, "undefined": true, "await": true, "break": true, "case": true, "catch": true,
 	"class": true, "const": true, "continue": true, "debugger": true, "default": true, "delete": true, "do": true,
 	"else": true, "enum": true, "export": true, "extends": true, "false": true, "finally": true, "for": true,
@@ -397,6 +511,14 @@ func generate(d description) ([]byte, error) {
 	for _, t := range d.Types {
 		if ownTypeNames[t.Name] {
 			return nil, fmt.Errorf("the type %s (%s) has a name the generated file uses itself; rename the Go type", t.Name, t.Go)
+		}
+		if reservedTypeNames[t.Name] {
+			return nil, fmt.Errorf("the type %s (%s) has a name TypeScript reserves; rename the Go type", t.Name, t.Go)
+		}
+		for _, f := range t.Fields {
+			if objectMembers[f.Name] {
+				return nil, fmt.Errorf("the field %s.%s has the name of a property every JavaScript object has, which TypeScript then cannot check; give it another json name", t.Name, f.Name)
+			}
 		}
 	}
 	modules, err := apiModules(d.Routes)
@@ -467,8 +589,15 @@ func apiModules(routes []routeInfo) ([]*apiModule, error) {
 			m = &apiModule{name: r.Module, key: "app"}
 			if r.Module != "" {
 				m.key = camel(r.Module)
-				if !isIdent(m.key) {
-					return nil, fmt.Errorf("module %q becomes api.%s, which TypeScript cannot use as a name; rename the module so it starts with a letter", r.Module, m.key)
+				if why, digit := notIdent(m.key); why != "" {
+					fix := "rename the module to letters, digits and _"
+					if digit {
+						fix = "rename the module so it starts with a letter"
+					}
+					if m.key == "" {
+						return nil, fmt.Errorf("module %q becomes nothing, since it is only _, - and .; %s", r.Module, fix)
+					}
+					return nil, fmt.Errorf("module %q becomes api.%s, which TypeScript cannot use as a name since %s; %s", r.Module, m.key, why, fix)
 				}
 			}
 			if other := byKey[m.key]; other != nil {
@@ -489,8 +618,23 @@ func apiModules(routes []routeInfo) ([]*apiModule, error) {
 			where = "outside any module"
 		}
 		k := camel(r.Name)
-		if !isIdent(k) {
-			return nil, fmt.Errorf("route %q %s becomes %s, which TypeScript cannot use as a name; give it a warp.Name that starts with a letter", r.Name, where, k)
+		if why, digit := notIdent(k); why != "" {
+			fix := "give it a warp.Name of letters, digits and _"
+			if digit {
+				fix = "give it a warp.Name that starts with a letter"
+			}
+			if k == "" {
+				return nil, fmt.Errorf("route %q %s becomes nothing, since it is only _, - and .; %s", r.Name, where, fix)
+			}
+			return nil, fmt.Errorf("route %q %s becomes %s, which TypeScript cannot use as a name since %s; %s", r.Name, where, k, why, fix)
+		}
+		if err := checkParams(r, where); err != nil {
+			return nil, err
+		}
+		for _, q := range r.Query {
+			if objectMembers[q.Name] {
+				return nil, fmt.Errorf("route %q %s has the query parameter %s, the name of a property every JavaScript object has, which TypeScript then cannot check; give it another query name", r.Name, where, q.Name)
+			}
 		}
 		if i := slices.Index(m.keys, k); i >= 0 {
 			return nil, fmt.Errorf("routes %q and %q %s both become %s; give one a warp.Name", m.routes[i].Name, r.Name, where, k)
@@ -499,6 +643,52 @@ func apiModules(routes []routeInfo) ([]*apiModule, error) {
 		m.keys = append(m.keys, k)
 	}
 	return modules, nil
+}
+
+// wildcards returns the path's wildcards, in order, as {name} or {name...}
+// are written: each one's name and whether it takes the rest of the path.
+// {$} is left out.
+func wildcards(path string) (names []string, rest []bool) {
+	for {
+		open := strings.IndexByte(path, '{')
+		if open < 0 {
+			return names, rest
+		}
+		end := strings.IndexByte(path[open:], '}')
+		if end < 0 {
+			return names, rest
+		}
+		wild := path[open+1 : open+end]
+		path = path[open+end+1:]
+		if wild == "$" {
+			continue
+		}
+		names = append(names, strings.TrimSuffix(wild, "..."))
+		rest = append(rest, strings.HasSuffix(wild, "..."))
+	}
+}
+
+// paramIdent is a path parameter's name in TypeScript: as it is, with _
+// after a name it cannot keep.
+func paramIdent(name string) string {
+	if paramReserved[name] || !isIdent(name) {
+		return name + "_"
+	}
+	return name
+}
+
+// checkParams refuses a route two of whose path parameters become one name.
+func checkParams(r routeInfo, where string) error {
+	names, _ := wildcards(r.Path)
+	seen := map[string]string{}
+	for _, n := range names {
+		id := paramIdent(n)
+		if other, ok := seen[id]; ok {
+			return fmt.Errorf("route %q %s has the path parameters {%s} and {%s}, which both become %s in TypeScript; rename one", r.Name, where, other, n, id)
+		}
+		seen[id] = n
+	}
+	return nil
 }
 
 // writeRoute writes one route's function: its path parameters in path
@@ -528,10 +718,7 @@ func writeRoute(b *strings.Builder, name string, r routeInfo) {
 		}
 		many := strings.HasSuffix(wild, "...")
 		wild = strings.TrimSuffix(wild, "...")
-		ident := wild
-		if paramReserved[ident] || !isIdent(ident) {
-			ident += "_"
-		}
+		ident := paramIdent(wild)
 		ts := types[wild]
 		if ts == "" {
 			ts = "string"
@@ -539,9 +726,9 @@ func writeRoute(b *strings.Builder, name string, r routeInfo) {
 		params = append(params, ident+": "+ts)
 		hasParams = true
 		if many {
-			fmt.Fprintf(&path, "${String(%s).split('/').map(encodeURIComponent).join('/')}", ident)
+			fmt.Fprintf(&path, "${segments(%s, %s)}", quote(wild), ident)
 		} else {
-			fmt.Fprintf(&path, "${encodeURIComponent(%s)}", ident)
+			fmt.Fprintf(&path, "${segment(%s, %s)}", quote(wild), ident)
 		}
 	}
 	if r.Body != "" {
@@ -593,7 +780,7 @@ func writeRoute(b *strings.Builder, name string, r routeInfo) {
 		doc += " (" + r.Permission + ")"
 	}
 	fmt.Fprintf(b, "    /** %s */\n", comment(doc))
-	fmt.Fprintf(b, "    %s(%s): Promise<%s> {\n", name, strings.Join(params, ", "), out)
+	fmt.Fprintf(b, "    async %s(%s): Promise<%s> {\n", name, strings.Join(params, ", "), out)
 	fmt.Fprintf(b, "      return %s\n", call)
 	b.WriteString("    },\n")
 }
@@ -614,7 +801,7 @@ func writeSchema(b *strings.Builder, d description) {
 			delete(bodies, t.Name)
 		}
 	}
-	b.WriteString("\n/** The rules of each type a route takes as its body, by the type's name and then the field's. */\n")
+	b.WriteString("\n/** The rules of each type a route takes as its body, by the type's name and then the field's, for a form to check before it sends. unique, and every rule of a nested type, are checked by the server only, and arrive as its field errors. */\n")
 	if len(types) == 0 {
 		b.WriteString("export const schema = {}\n")
 		return
@@ -625,12 +812,12 @@ func writeSchema(b *strings.Builder, d description) {
 	}
 	b.WriteString("} = {\n")
 	for _, t := range types {
-		fmt.Fprintf(b, "  %s: {\n", key(t.Name))
+		fmt.Fprintf(b, "  %s: {\n", literalKey(t.Name))
 		for _, f := range t.Fields {
 			if f.Readonly {
 				continue
 			}
-			fmt.Fprintf(b, "    %s: { %s },\n", key(f.Name), strings.Join(fieldRules(f), ", "))
+			fmt.Fprintf(b, "    %s: { %s },\n", literalKey(f.Name), strings.Join(fieldRules(f), ", "))
 		}
 		b.WriteString("  },\n")
 	}
@@ -687,6 +874,27 @@ func camel(name string) string {
 	return strings.Join(parts, "")
 }
 
+// notIdent says why s is not a name in JavaScript, "" when it is one, and
+// whether that is because it starts with a digit.
+func notIdent(s string) (why string, digit bool) {
+	if s == "" {
+		return "it is empty", false
+	}
+	for i, r := range s {
+		switch {
+		case unicode.IsLetter(r) || r == '_' || r == '$':
+		case unicode.IsDigit(r) && i == 0:
+			return "it starts with a digit", true
+		case unicode.IsDigit(r):
+		case r == ' ':
+			return "it has a space", false
+		default:
+			return "it has " + strconv.Quote(string(r)), false
+		}
+	}
+	return "", false
+}
+
 // isIdent reports whether s is a name in JavaScript: a letter, _ or $, then
 // letters, digits, _ and $. A reserved word is one too, as a property name.
 func isIdent(s string) bool {
@@ -707,6 +915,16 @@ func key(s string) string {
 		return s
 	}
 	return quote(s)
+}
+
+// literalKey is a property name in an object literal: as key writes it,
+// and __proto__, which there would set the object's prototype, as a computed
+// key.
+func literalKey(s string) string {
+	if s == "__proto__" {
+		return "['__proto__']"
+	}
+	return key(s)
 }
 
 // quote writes s as a TypeScript string in single quotes.
