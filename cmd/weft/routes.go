@@ -18,7 +18,7 @@ func routesCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	d, err := buildAndDescribe(ctx, "routes", appDir, stderr)
 	if errors.Is(err, errNoWarpApp) {
-		fmt.Fprintf(stdout, "weft routes: %s, as none of its Go files calls warp.New, so there are no routes to print.\n", errNoWarpApp)
+		fmt.Fprintf(stdout, "weft routes: %s, as no package it is built from calls warp.New, so there are no routes to print.\n", errNoWarpApp)
 		return 0
 	}
 	if err != nil {

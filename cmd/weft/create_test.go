@@ -94,7 +94,7 @@ func assertCreated(t *testing.T, dir string) {
 		t.Errorf("package.json has the wrong name: %q", read("package.json"))
 	}
 	ignore := strings.Split(read(".gitignore"), "\n")
-	for _, want := range []string{".weft/", ".weft.lock", "node_modules/", "web/dist/", "web/.weft-types/", ".env", "/" + filepath.Base(dir)} {
+	for _, want := range []string{".weft/", ".weft.lock", ".weft-new-*/", ".weft-old-*/", "node_modules/", "web/dist/", "web/.weft-types/", ".env", "/" + filepath.Base(dir)} {
 		found := false
 		for _, l := range ignore {
 			found = found || l == want

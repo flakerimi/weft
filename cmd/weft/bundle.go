@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -202,8 +203,8 @@ func lockWeft(appDir string) (unlock func(), err error) {
 // renames the new tree into place; it removes only those two folders, on
 // success and on failure, and puts the old .weft back when the last rename
 // fails. Beside .weft it makes only those and .weft.lock, which it holds
-// while it works and then removes; nothing else is touched, whatever its
-// name.
+// while it works and then removes; such folders an unpack that was killed
+// left are removed first, and nothing else is touched, whatever its name.
 //
 // Another weft command unpacking in the same app is waited for.
 func unpack(bundle fs.FS, appDir, version string) error {
@@ -225,6 +226,7 @@ func unpackHashed(bundle fs.FS, appDir, version, hash string) (err error) {
 	if err != nil {
 		return err
 	}
+	removeLeftOver(appDir)
 	dst := filepath.Join(appDir, ".weft")
 	_, statErr := os.Lstat(dst)
 	had := statErr == nil
@@ -293,6 +295,26 @@ func unpackHashed(bundle fs.FS, appDir, version, hash string) (err error) {
 		return err
 	}
 	return os.RemoveAll(hold)
+}
+
+// leftOver is the name of a folder an unpack makes beside .weft, with
+// os.MkdirTemp, and removes when it is done.
+var leftOver = regexp.MustCompile(`^\.weft-(new|old)-[0-9]+$`)
+
+// removeLeftOver removes the folders an unpack that did not finish (a weft
+// command killed while it unpacked) left beside .weft. It runs under the
+// lock, while no other weft command unpacks, so every such folder is left
+// over; a folder of any other name is not touched.
+func removeLeftOver(appDir string) {
+	entries, err := os.ReadDir(appDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() && leftOver.MatchString(e.Name()) {
+			os.RemoveAll(filepath.Join(appDir, e.Name()))
+		}
+	}
 }
 
 // renameDir renames a folder; a test makes it fail.

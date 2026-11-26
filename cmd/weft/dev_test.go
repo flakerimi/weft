@@ -1112,9 +1112,10 @@ func main() {
 	}
 }
 
-// An app that makes no warp.App, as Weft 0.0.7 made them, is not run to
-// describe itself under weft dev: it gets the client of an app with no
-// routes, and nothing is said.
+// An app that makes no warp.App, as a 0.0.6 app is after weft upgrade's
+// two-line change, is not run to describe itself under weft dev: it gets the
+// client of an app with no routes, and nothing is said; over a client that
+// has routes, the file is left and that is said once.
 func TestDevAppWithoutWarpApp(t *testing.T) {
 	app := devApp(t)
 	main := `package main
@@ -1134,16 +1135,33 @@ func main() {
 	if err := os.WriteFile(filepath.Join(app, "main.go"), []byte(main), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	file := filepath.Join(app, "web", ".weft-types", "api.ts")
 	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
-	src, err := os.ReadFile(filepath.Join(app, "web", ".weft-types", "api.ts"))
+	src, err := os.ReadFile(file)
 	if err != nil || string(src) != mustGenerate(t, noRoutes) {
 		t.Errorf("api.ts is not the client of an app with no routes: %v\n%s", err, src)
 	}
 	if exists(t, filepath.Join(app, "described.txt")) {
 		t.Error("the app was run to describe itself")
 	}
-	if code := r.stop(t); code != 0 || strings.Contains(r.stderr.String(), "describe") {
+	if code := r.stop(t); code != 0 || strings.Contains(r.stderr.String(), "describe") || strings.Contains(r.stderr.String(), "warp.App") {
 		t.Errorf("exit %d: %s", code, r.stderr)
+	}
+
+	// Over a client with routes: left as it is, said once, through a rebuild.
+	const routes = "export const api = { hello: {} }\n"
+	os.WriteFile(file, []byte(routes), 0o644)
+	r = startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
+	os.WriteFile(filepath.Join(app, "main.go"), []byte(main+"\n// saved again\n"), 0o644)
+	want := "weft dev: the app has no warp.App, as no package it is built from calls warp.New, so web/.weft-types/api.ts, which has routes, was left as it was; if the app has routes, make sure its main package is built from one that calls warp.New, and if it has none, remove the file.\n"
+	for deadline := time.Now().Add(10 * time.Second); !strings.Contains(r.stderr.String(), want) && time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+	}
+	time.Sleep(3 * time.Second) // the rebuild after the save, which says nothing again
+	if got, _ := os.ReadFile(file); string(got) != routes {
+		t.Errorf("api.ts was changed: %q", got)
+	}
+	if code := r.stop(t); code != 0 || strings.Count(r.stderr.String(), want) != 1 {
+		t.Errorf("exit %d, stderr %q, want %q once", code, r.stderr, want)
 	}
 }
 

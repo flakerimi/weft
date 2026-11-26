@@ -939,20 +939,44 @@ func TestBuildGoesOnWithoutDescription(t *testing.T) {
 	}
 }
 
-// An app that makes no warp.App, as Weft 0.0.7 made them (main.go listens
-// itself, and under the dev tag never reaches warp.Serve), is not run to
-// describe itself: weft build writes the client of an app with no routes and
-// says nothing, with no wait; weft gen and weft routes say why there are no
-// routes. An app whose warp.New is in a package under app/ still describes.
+// An app that makes no warp.App, as a 0.0.6 app is after weft upgrade's
+// two-line change (main.go listens itself, and under the dev tag never
+// reaches warp.Serve), is not run to describe itself. Over a client that has
+// routes, weft build leaves the file and says so once, and weft gen refuses;
+// with no such client, weft build writes the client of an app with no
+// routes, says nothing and does not wait, and weft gen and weft routes say
+// why there are no routes. An app whose warp.New is in a package under app/
+// still describes.
 func TestNoWarpAppIsNotDescribed(t *testing.T) {
 	app := genApp(t)
 	file := filepath.Join(app, "web", ".weft-types", "api.ts")
+	if code, out, errs := runCmd("gen"); code != 0 {
+		t.Fatalf("the new app: exit %d: %s%s", code, out, errs)
+	}
+	withRoutes, _ := os.ReadFile(file)
 	old := "package main\n\nimport (\n\t\"io/fs\"\n\t\"log\"\n\t\"net/http\"\n\t\"os\"\n\n\t\"github.com/flakerimi/weft/warp\"\n)\n\nvar dist fs.FS\n\nfunc handler() http.Handler {\n\tif dist != nil {\n\t\treturn warp.Serve(dist, http.NotFoundHandler())\n\t}\n\treturn http.NotFoundHandler()\n}\n\nfunc main() {\n\tif os.Getenv(\"WARP_DESCRIBE\") != \"\" {\n\t\tos.WriteFile(\"described.txt\", nil, 0o644)\n\t}\n\tlog.Fatal(http.ListenAndServe(\"127.0.0.1:\"+os.Getenv(\"PORT\"), handler()))\n}\n"
 	if err := os.WriteFile(filepath.Join(app, "main.go"), []byte(old), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	start := time.Now()
+	kept := func(command string) string {
+		return "weft " + command + ": the app has no warp.App, as no package it is built from calls warp.New, so web/.weft-types/api.ts, which has routes, was left as it was; if the app has routes, make sure its main package is built from one that calls warp.New, and if it has none, remove the file.\n"
+	}
 	code, out, errs := build(t)
+	if code != 0 || errs != kept("build") {
+		t.Errorf("over a client with routes: exit %d, stdout %q, stderr %q, want %q", code, out, errs, kept("build"))
+	}
+	code, out, errs = runCmd("gen")
+	if code != 1 || errs != kept("gen") {
+		t.Errorf("weft gen over a client with routes: exit %d, stdout %q, stderr %q, want %q", code, out, errs, kept("gen"))
+	}
+	if now, _ := os.ReadFile(file); !bytes.Equal(now, withRoutes) {
+		t.Error("the client with routes was changed")
+	}
+	os.Remove(file)
+	os.Remove(filepath.Join(app, "myapp"))
+
+	start := time.Now()
+	code, out, errs = build(t)
 	if code != 0 || errs != "" {
 		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errs)
 	}
@@ -972,11 +996,11 @@ func TestNoWarpAppIsNotDescribed(t *testing.T) {
 	os.Remove(filepath.Join(app, "myapp"))
 
 	code, out, errs = runCmd("gen")
-	if want := "weft gen: the app has no warp.App, as none of its Go files calls warp.New, so there are no routes to write and web/.weft-types/api.ts is the client of an app with none.\n"; code != 0 || out != want || errs != "" {
+	if want := "weft gen: the app has no warp.App, as no package it is built from calls warp.New, so there are no routes to write and web/.weft-types/api.ts is the client of an app with none.\n"; code != 0 || out != want || errs != "" {
 		t.Errorf("weft gen: exit %d, stdout %q, stderr %q, want %q", code, out, errs, want)
 	}
 	code, out, errs = runCmd("routes")
-	if want := "weft routes: the app has no warp.App, as none of its Go files calls warp.New, so there are no routes to print.\n"; code != 0 || out != want || errs != "" {
+	if want := "weft routes: the app has no warp.App, as no package it is built from calls warp.New, so there are no routes to print.\n"; code != 0 || out != want || errs != "" {
 		t.Errorf("weft routes: exit %d, stdout %q, stderr %q, want %q", code, out, errs, want)
 	}
 	if exists(t, filepath.Join(app, "described.txt")) {
@@ -1078,48 +1102,92 @@ func TestGenerateSecondResource(t *testing.T) {
 	}
 }
 
-// makesApp finds a call of warp.New in the app's own Go, under the name the
-// file imports Warp by, in any package of the app; not in a test, a comment,
-// a string, .weft, node_modules or another module.
+// makesApp asks the Go tool what the app's main package is built from, with
+// the dev tag, and finds a call of warp.New, under the name each file
+// imports Warp by, in the files built: in the app, in a sibling module by
+// replace, through a symlink, in a vendored or a nested module; not in a
+// test, a comment, a string, a file a build tag leaves out, or a package the
+// main package does not import. An app the Go tool cannot list, or a file
+// of a package that imports Warp that does not parse, counts as making one,
+// so the describing build reports it.
 func TestMakesApp(t *testing.T) {
-	const old = "package main\n\nimport (\n\t\"net/http\"\n\n\t\"github.com/flakerimi/weft/warp\"\n)\n\nfunc main() { http.ListenAndServe(\":8080\", warp.Serve(nil, nil)) }\n"
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("no go")
+	}
+	repo, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const imp = "\"github.com/flakerimi/weft/warp\""
+	const old = "package main\n\nimport (\n\t\"net/http\"\n\n\t" + imp + "\n)\n\nfunc main() { http.ListenAndServe(\":8080\", warp.Serve(nil, nil)) }\n"
+	const makes = "package main\n\nimport " + imp + "\n\nfunc main() { warp.New(warp.FromEnv()).Serve(nil) }\n"
+	const wrapper = "package fw\n\nimport " + imp + "\n\n// NewApp makes the app.\nfunc NewApp() *warp.App { return warp.New(warp.Config{}) }\n"
+	const usesFW = "package main\n\nimport \"example.com/fw\"\n\nfunc main() { fw.NewApp().Serve(nil) }\n"
+	gomod := "module myapp\n\ngo 1.26\n\nrequire github.com/flakerimi/weft v0.0.0\n\nreplace github.com/flakerimi/weft => " + repo + "\n"
+	withFW := func(dir string) string {
+		return strings.Replace(gomod, "require github.com/flakerimi/weft v0.0.0\n", "require (\n\tgithub.com/flakerimi/weft v0.0.0\n\texample.com/fw v0.0.0\n)\n", 1) + "\nreplace example.com/fw => " + dir + "\n"
+	}
+	fwMod := "module example.com/fw\n\ngo 1.26\n\nrequire github.com/flakerimi/weft v0.0.0\n\nreplace github.com/flakerimi/weft => " + repo + "\n"
+	outside := t.TempDir()
+	os.MkdirAll(filepath.Join(outside, "server"), 0o755)
+	os.WriteFile(filepath.Join(outside, "server", "server.go"), []byte("package server\n\nimport "+imp+"\n\nvar App = warp.New(warp.Config{})\n"), 0o644)
+	sibling := t.TempDir()
+	os.WriteFile(filepath.Join(sibling, "go.mod"), []byte(fwMod), 0o644)
+	os.WriteFile(filepath.Join(sibling, "fw.go"), []byte(wrapper), 0o644)
 	for _, c := range []struct {
 		name  string
+		mod   string
 		files map[string]string
+		link  string // a symlink app/server to outside/server
 		want  bool
 	}{
-		{"an app made by Weft 0.0.7", map[string]string{"main.go": old, "api/api.go": "package api\n\nfunc Handler() {}\n"}, false},
-		{"an App in main.go", map[string]string{"main.go": "package main\n\nimport \"github.com/flakerimi/weft/warp\"\n\nfunc main() { warp.New(warp.FromEnv()).Serve(nil) }\n"}, true},
-		{"an App made under app/", map[string]string{"main.go": old, "app/server/server.go": "package server\n\nimport \"github.com/flakerimi/weft/warp\"\n\nvar App = warp.New(warp.Config{})\n"}, true},
-		{"Warp under another name", map[string]string{"main.go": "package main\n\nimport w \"github.com/flakerimi/weft/warp\"\n\nfunc main() { w.New(w.Config{}) }\n"}, true},
-		{"Warp's names imported bare", map[string]string{"main.go": "package main\n\nimport . \"github.com/flakerimi/weft/warp\"\n\nfunc main() { New(Config{}) }\n"}, true},
-		{"New taken as a value", map[string]string{"main.go": "package main\n\nimport \"github.com/flakerimi/weft/warp\"\n\nvar make = warp.New\n\nfunc main() {}\n"}, true},
-		{"a file that does not parse", map[string]string{"main.go": "package main\n\nfunc main() {\n"}, true},
-		{"only a test", map[string]string{"main.go": old, "main_test.go": "package main\n\nimport \"github.com/flakerimi/weft/warp\"\n\nvar _ = warp.New(warp.Config{})\n"}, false},
-		{"a comment and a string", map[string]string{"main.go": "package main\n\n// warp.New(\nvar s = \"warp.New(\"\n\nfunc main() {}\n"}, false},
-		{"another package's New", map[string]string{"main.go": "package main\n\nimport warp \"example.com/other\"\n\nfunc main() { warp.New() }\n"}, false},
-		{"Warp's New in what is not the app's", map[string]string{
-			"main.go":                   old,
-			".weft/go/warp/app.go":      "package warp\n\nfunc x() { warp.New() }\n",
-			"node_modules/x/x.go":       "package x\n\nimport \"github.com/flakerimi/weft/warp\"\n\nvar _ = warp.New\n",
-			"tools/go.mod":              "module tools\n",
-			"tools/main.go":             "package main\n\nimport \"github.com/flakerimi/weft/warp\"\n\nvar _ = warp.New\n",
-			"web/node_modules/y/y.go":   "package y\n\nimport \"github.com/flakerimi/weft/warp\"\n\nvar _ = warp.New\n",
-			"internal/testdata/t.go":    "package t\n\nimport \"github.com/flakerimi/weft/warp\"\n\nvar _ = warp.New\n",
-			"vendor/example.com/v/v.go": "package v\n\nimport \"github.com/flakerimi/weft/warp\"\n\nvar _ = warp.New\n",
-		}, false},
+		{"a 0.0.6 app after the upgrade's change", gomod, map[string]string{"main.go": old, "api/api.go": "package api\n\nfunc Handler() {}\n"}, "", false},
+		{"an App in main.go", gomod, map[string]string{"main.go": makes}, "", true},
+		{"an App made under app/", gomod, map[string]string{"main.go": "package main\n\nimport \"myapp/app/server\"\n\nfunc main() { server.App.Serve(nil) }\n", "app/server/server.go": "package server\n\nimport " + imp + "\n\nvar App = warp.New(warp.Config{})\n"}, "", true},
+		{"Warp under another name", gomod, map[string]string{"main.go": "package main\n\nimport w " + imp + "\n\nfunc main() { w.New(w.Config{}) }\n"}, "", true},
+		{"Warp's names imported bare", gomod, map[string]string{"main.go": "package main\n\nimport . " + imp + "\n\nfunc main() { New(Config{}) }\n"}, "", true},
+		{"Warp imported twice, once as _", gomod, map[string]string{"main.go": "package main\n\nimport (\n\t" + imp + "\n\t_ " + imp + "\n)\n\nfunc main() { warp.New(warp.Config{}) }\n"}, "", true},
+		{"New taken as a value", gomod, map[string]string{"main.go": "package main\n\nimport " + imp + "\n\nvar make = warp.New\n\nfunc main() { _ = make }\n"}, "", true},
+		{"a file of Warp's that does not parse", gomod, map[string]string{"main.go": "package main\n\nimport " + imp + "\n\nfunc main() {\n"}, "", true},
+		{"an import the Go tool cannot find", gomod, map[string]string{"main.go": "package main\n\nimport \"example.com/gone\"\n\nfunc main() { gone.X() }\n"}, "", true},
+		{"only a test", gomod, map[string]string{"main.go": old, "main_test.go": "package main\n\nimport " + imp + "\n\nvar _ = warp.New(warp.Config{})\n"}, "", false},
+		{"a comment and a string", gomod, map[string]string{"main.go": "package main\n\n// warp.New(\nvar s = \"warp.New(\"\n\nfunc main() { _ = s }\n"}, "", false},
+		{"a file a build tag leaves out", gomod, map[string]string{"main.go": old, "ignored.go": "//go:build ignore\n\npackage main\n\nimport " + imp + "\n\nvar _ = warp.New(warp.Config{})\n", "prod.go": "//go:build !dev\n\npackage main\n\nimport " + imp + "\n\nvar _ = warp.New(warp.Config{})\n"}, "", false},
+		{"a file under the dev tag", gomod, map[string]string{"main.go": old, "dev.go": "//go:build dev\n\npackage main\n\nimport " + imp + "\n\nvar _ = warp.New(warp.Config{})\n"}, "", true},
+		{"a package main does not import", gomod, map[string]string{"main.go": old, "tools/tools.go": "package tools\n\nimport " + imp + "\n\nvar _ = warp.New(warp.Config{})\n"}, "", false},
+		{"a sibling module by replace", withFW(sibling), map[string]string{"main.go": usesFW}, "", true},
+		{"a module nested in the app, by replace", withFW("./core"), map[string]string{"main.go": usesFW, "core/go.mod": fwMod, "core/fw.go": wrapper}, "", true},
+		{"a symlinked package", gomod, map[string]string{"main.go": "package main\n\nimport \"myapp/server\"\n\nfunc main() { server.App.Serve(nil) }\n"}, "server", true},
 	} {
 		app := t.TempDir()
-		os.WriteFile(filepath.Join(app, "go.mod"), []byte("module myapp\n"), 0o644)
+		os.WriteFile(filepath.Join(app, "go.mod"), []byte(c.mod), 0o644)
 		for p, src := range c.files {
 			os.MkdirAll(filepath.Dir(filepath.Join(app, p)), 0o755)
 			if err := os.WriteFile(filepath.Join(app, p), []byte(src), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		}
+		if c.link != "" {
+			if err := os.Symlink(filepath.Join(outside, "server"), filepath.Join(app, c.link)); err != nil {
+				t.Fatal(err)
+			}
+		}
 		if got := makesApp(app); got != c.want {
 			t.Errorf("%s: makesApp = %v, want %v", c.name, got, c.want)
 		}
+	}
+
+	// Vendored: the wrapper is a copy under vendor/, which go mod vendor writes.
+	app := t.TempDir()
+	os.WriteFile(filepath.Join(app, "go.mod"), []byte(withFW(sibling)), 0o644)
+	os.WriteFile(filepath.Join(app, "main.go"), []byte(usesFW), 0o644)
+	vendor := exec.Command("go", "mod", "vendor")
+	vendor.Dir = app
+	if out, err := vendor.CombinedOutput(); err != nil {
+		t.Fatalf("go mod vendor: %v\n%s", err, out)
+	}
+	if !makesApp(app) {
+		t.Error("vendored: makesApp = false, want true")
 	}
 }
 

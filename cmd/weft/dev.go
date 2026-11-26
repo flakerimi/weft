@@ -165,6 +165,8 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		_, err := regenerate(ctx, appDir, bin, devDescribeWithin, stderr)
 		switch {
 		case err == nil, ctx.Err() != nil:
+		case errors.Is(err, errKeptClient):
+			say(fmt.Sprintf("weft dev: %s.", err))
 		case errors.Is(err, errDescribeTimeout):
 			fmt.Fprintln(stderr, "weft dev: the app did not describe itself within 5 s, so web/.weft-types/api.ts is as it was; make sure main.go calls Serve before doing other work.")
 		case errors.Is(err, errNoDescription), errors.As(err, new(outputError)):

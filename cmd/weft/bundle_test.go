@@ -742,3 +742,23 @@ func TestUnpackWhoseFolderWentMeanwhile(t *testing.T) {
 		t.Errorf("a rename that failed: %v, want a sentence", err)
 	}
 }
+
+// The folders an unpack that was killed left beside .weft (.weft-new-* and
+// .weft-old-*, which only weft makes, under its lock) are removed by the
+// next unpack, under the lock; a folder of another name is left alone.
+func TestUnpackRemovesWhatAKilledOneLeft(t *testing.T) {
+	app := t.TempDir()
+	folderBundle(t, map[string]string{"weft/a": "one"})
+	for _, d := range []string{".weft-new-123", ".weft-old-456/.weft", ".weft-mine", ".weft-new-x"} {
+		os.MkdirAll(filepath.Join(app, d), 0o755)
+		os.WriteFile(filepath.Join(app, d, "f"), []byte("x"), 0o644)
+	}
+	if _, err := refreshWeft(app, devVersion); err != nil {
+		t.Fatal(err)
+	}
+	for d, want := range map[string]bool{".weft-new-123": false, ".weft-old-456": false, ".weft-mine": true, ".weft-new-x": true, ".weft": true} {
+		if got := exists(t, filepath.Join(app, d)); got != want {
+			t.Errorf("%s there: %v, want %v", d, got, want)
+		}
+	}
+}

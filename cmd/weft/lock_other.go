@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"time"
 )
 
 // tryLock takes the lock at path without waiting: errLockHeld when the file
@@ -25,13 +24,8 @@ func tryLock(path string) (unlock func(), err error) {
 		if !errors.Is(err, fs.ErrExist) {
 			return nil, err
 		}
-		fi, err := os.Stat(path)
-		if err != nil {
-			continue // let go of meanwhile
-		}
-		if time.Since(fi.ModTime()) <= lockWait {
+		if !takeOverOld(path) {
 			return nil, errLockHeld
 		}
-		os.Remove(path)
 	}
 }

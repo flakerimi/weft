@@ -38,13 +38,16 @@ func buildCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	// The typed client first, so the pages are built and checked against it.
 	// An app that makes no warp.App is not run: it gets the client of an
-	// app with no routes, and nothing is said. One that makes one, builds and
+	// app with no routes, and nothing is said, unless the client it has has
+	// routes, which is left as it is and said. One that makes one, builds and
 	// runs, but does not describe itself (it never reaches its Serve, or
 	// prints something else) is said, as weft dev says it, and the pages are
 	// built with the file as it was; one that does not compile or exits with
 	// an error stops the build.
 	if _, err := genTypes(context.Background(), "build", appDir, stderr); err != nil {
 		switch {
+		case errors.Is(err, errKeptClient):
+			fail(stderr, "build", err)
 		case errors.Is(err, errNoWarpApp):
 		case errors.Is(err, errDescribeTimeout):
 			fmt.Fprintf(stderr, "weft build: the app did not describe itself within %d s, so web/.weft-types/api.ts is as it was; make sure main.go calls Serve before doing other work.\n", int(describeWithin.Seconds()))

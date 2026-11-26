@@ -4,8 +4,11 @@ package main
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // A command that opened the lock's file just as its holder let go of it and
@@ -36,6 +39,44 @@ func TestLockFileRemovedMeanwhile(t *testing.T) {
 		if unlock != nil {
 			unlock()
 		}
+	}
+	third()
+}
+
+// On a file system with no flock, the lock is the file itself, made with an
+// exclusive create, as it was before flock: a second command waits for the
+// first, and a file older than lockWait is taken over.
+func TestLockWithoutFlock(t *testing.T) {
+	app := t.TempDir()
+	lock := filepath.Join(app, ".weft.lock")
+	was, wait := flockFile, lockWait
+	t.Cleanup(func() { flockFile, lockWait = was, wait })
+	flockFile = func(int) error { return syscall.ENOTSUP }
+	lockWait = 300 * time.Millisecond
+
+	first, err := lockWeft(app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tryLock(lock); !errors.Is(err, errLockHeld) {
+		t.Fatalf("a second command: %v, want errLockHeld while the first holds it", err)
+	}
+	first()
+	if exists(t, lock) {
+		t.Fatal("the lock is left after unlock")
+	}
+	second, err := lockWeft(app)
+	if err != nil {
+		t.Fatalf("after the first let go: %v", err)
+	}
+	second()
+
+	os.WriteFile(lock, []byte("12345\n"), 0o644)
+	old := time.Now().Add(-time.Minute)
+	os.Chtimes(lock, old, old)
+	third, err := lockWeft(app)
+	if err != nil {
+		t.Fatalf("a lock older than lockWait: %v", err)
 	}
 	third()
 }
