@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha256"
@@ -32,14 +33,51 @@ const dummyHash = "pbkdf2-sha256$600000$yQrLJNXLN6xr8kFGZmyx+A$Xq9wZOYrYz4CsZHcR
 var b64 = base64.RawStdEncoding
 
 // hashPassword hashes password with a new random salt.
-func hashPassword(password string) (string, error) {
+func hashPassword(password string) (string, error) { return hashWith(password, iterations) }
+
+// hashWith hashes password with a new random salt and n iterations; a test
+// uses a low n to make many tries quickly.
+func hashWith(password string, n int) (string, error) {
 	salt := make([]byte, saltBytes)
 	rand.Read(salt) // never fails, as crypto/rand documents
-	key, err := pbkdf2.Key(sha256.New, password, salt, iterations, keyBytes)
+	key, err := pbkdf2.Key(sha256.New, password, salt, n, keyBytes)
 	if err != nil {
 		return "", err
 	}
-	return scheme + "$" + strconv.Itoa(iterations) + "$" + b64.EncodeToString(salt) + "$" + b64.EncodeToString(key), nil
+	return scheme + "$" + strconv.Itoa(n) + "$" + b64.EncodeToString(salt) + "$" + b64.EncodeToString(key), nil
+}
+
+// slot waits for one of the module's hashing slots, of which there are
+// GOMAXPROCS, so that a flood of logins cannot take every core; it gives up
+// when ctx ends. The caller calls the release it returns.
+func (m *module) slot(ctx context.Context) (release func(), err error) {
+	select {
+	case m.slots <- struct{}{}:
+		m.hashes.Add(1)
+		return func() { <-m.slots }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// hash is hashPassword in one of the module's slots.
+func (m *module) hash(ctx context.Context, password string) (string, error) {
+	release, err := m.slot(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	return hashPassword(password)
+}
+
+// verify is verifyPassword in one of the module's slots.
+func (m *module) verify(ctx context.Context, stored, password string) (bool, error) {
+	release, err := m.slot(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer release()
+	return verifyPassword(stored, password), nil
 }
 
 type parsedHash struct {

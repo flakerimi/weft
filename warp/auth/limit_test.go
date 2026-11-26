@@ -3,33 +3,46 @@ package auth
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
-type testClock struct{ now time.Time }
+type testClock struct {
+	mu  sync.Mutex
+	now time.Time
+}
 
-func (c *testClock) Now() time.Time { return c.now }
+func (c *testClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *testClock) set(t time.Time) {
+	c.mu.Lock()
+	c.now = t
+	c.mu.Unlock()
+}
 
 func TestLimit(t *testing.T) {
 	clock := &testClock{now: testNow}
-	l := newLimiter(clock.Now, maxKeys)
+	l := newLimiter(clock.Now, maxKeys, maxTries)
 	key := limitKey("owner@example.com", "192.0.2.1")
 
 	for i := range maxTries {
-		if l.blocked(key) {
+		if !l.take(key) {
 			t.Fatalf("try %d is refused, want the first %d to pass", i+1, maxTries)
 		}
-		l.fail(key)
-		clock.now = clock.now.Add(time.Second)
+		clock.set(clock.Now().Add(time.Second))
 	}
-	if !l.blocked(key) {
-		t.Fatalf("try %d passes after %d failures", maxTries+1, maxTries)
+	if l.take(key) {
+		t.Fatalf("try %d passes after %d tries", maxTries+1, maxTries)
 	}
-	if l.blocked(limitKey("owner@example.com", "192.0.2.2")) {
+	if !l.take(limitKey("owner@example.com", "192.0.2.2")) {
 		t.Error("another address is refused")
 	}
-	if l.blocked(limitKey("other@example.com", "192.0.2.1")) {
+	if !l.take(limitKey("other@example.com", "192.0.2.1")) {
 		t.Error("another email is refused")
 	}
 	// The email is compared lower-cased and trimmed.
@@ -37,64 +50,87 @@ func TestLimit(t *testing.T) {
 		t.Error("the key differs by case or spaces")
 	}
 
-	// Until the minute that began with the first failure ends.
-	clock.now = testNow.Add(window - time.Nanosecond)
-	if !l.blocked(key) {
+	// Refused until the minute that began with the first try ends; a refused
+	// try is not counted, so it does not move the end.
+	clock.set(testNow.Add(window - time.Nanosecond))
+	if l.take(key) {
 		t.Error("refusing ended before the minute did")
 	}
-	clock.now = testNow.Add(window)
-	if l.blocked(key) {
+	clock.set(testNow.Add(window))
+	if !l.take(key) {
 		t.Error("still refused once the minute ended")
 	}
-	// A new minute counts afresh.
+	// The new minute began with that try, and counts afresh.
 	for range maxTries - 1 {
-		l.fail(key)
+		l.take(key)
 	}
-	if l.blocked(key) {
-		t.Errorf("%d failures in a new minute refuse", maxTries-1)
+	if l.take(key) {
+		t.Errorf("%d tries in a new minute pass", maxTries+1)
 	}
 
 	// A success clears the count.
 	l.clear(key)
-	for range maxTries - 1 {
-		l.fail(key)
+	for i := range maxTries {
+		if !l.take(key) {
+			t.Fatalf("try %d after a success is refused", i+1)
+		}
 	}
-	if l.blocked(key) {
-		t.Error("the failures before a success still count")
+}
+
+// Tries at the same moment are counted at once: of 20, 5 pass.
+func TestLimitIsAtomic(t *testing.T) {
+	l := newLimiter((&testClock{now: testNow}).Now, maxKeys, maxTries)
+	key := limitKey("owner@example.com", "192.0.2.1")
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	passed := 0
+	for range 20 {
+		wg.Go(func() {
+			if l.take(key) {
+				mu.Lock()
+				passed++
+				mu.Unlock()
+			}
+		})
+	}
+	wg.Wait()
+	if passed != maxTries {
+		t.Fatalf("%d of 20 tries at once passed, want %d", passed, maxTries)
 	}
 }
 
 func TestLimitKeepsAtMostMaxKeys(t *testing.T) {
 	clock := &testClock{now: testNow}
-	l := newLimiter(clock.Now, maxKeys)
+	l := newLimiter(clock.Now, maxKeys, maxTries)
 	block := func(key string) {
 		for range maxTries {
-			l.fail(key)
+			l.take(key)
 		}
 	}
 	first := limitKey("first@example.com", "192.0.2.1")
 	block(first)
 	for i := range maxKeys - 1 {
-		clock.now = clock.now.Add(time.Microsecond)
-		l.fail(limitKey(fmt.Sprintf("u%d@example.com", i), "192.0.2.1"))
+		clock.set(clock.Now().Add(time.Microsecond))
+		l.take(limitKey(fmt.Sprintf("u%d@example.com", i), "192.0.2.1"))
 	}
 	if n := l.size(); n != maxKeys {
 		t.Fatalf("%d keys remembered, want %d", n, maxKeys)
 	}
-	if !l.blocked(first) {
+	if l.take(first) {
 		t.Fatal("the oldest key was dropped before the limit was reached")
 	}
 	second := limitKey("u0@example.com", "192.0.2.1")
 	block(second)
-	l.fail(limitKey("one-more@example.com", "192.0.2.1"))
+	l.take(limitKey("one-more@example.com", "192.0.2.1"))
 	if n := l.size(); n != maxKeys {
 		t.Fatalf("%d keys remembered past the limit, want %d", n, maxKeys)
 	}
-	if l.blocked(first) {
-		t.Error("the oldest key was kept when a new one came")
-	}
-	if !l.blocked(second) {
+	// second first: taking first, now unknown, adds a key and drops another.
+	if l.take(second) {
 		t.Error("a newer key was dropped in place of the oldest")
+	}
+	if !l.take(first) {
+		t.Error("the oldest key was kept when a new one came")
 	}
 }
 

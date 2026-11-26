@@ -84,23 +84,27 @@ func Per(resource string) func(action string) []warp.RouteOption {
 }
 
 // signedIn returns the user of r's session cookie, or the 401 when there is
-// no cookie, it is not good, or its user is gone.
+// no cookie, it is not good, or its user is gone or was made at another
+// moment. Over HTTPS only __Host-session is read, over HTTP only session.
 func (m *module) signedIn(r *http.Request) (User, error) {
-	c, err := r.Cookie(cookieName)
+	c, err := r.Cookie(cookieFor(m.app.IsHTTPS(r)))
 	if err != nil {
 		return User{}, warp.Unauthorized(errNoSession)
 	}
-	id, ok := sessionID(m.secret, c.Value, time.Now())
+	s, ok := readSession(m.secret, c.Value, time.Now())
 	if !ok {
 		return User{}, warp.Unauthorized(errNoSession)
 	}
-	row, err := m.users.Get(r.Context(), id)
+	row, err := m.users.Get(r.Context(), s.id)
 	var e *warp.Error
 	if errors.As(err, &e) && e.Status == http.StatusNotFound {
 		return User{}, warp.Unauthorized(errNoSession)
 	}
 	if err != nil {
 		return User{}, err
+	}
+	if row.CreatedAt.UnixNano() != s.made { // another user with that id: the database was replaced
+		return User{}, warp.Unauthorized(errNoSession)
 	}
 	return row.user(), nil
 }

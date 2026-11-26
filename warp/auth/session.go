@@ -10,18 +10,28 @@ import (
 	"time"
 )
 
-// A session is the cookie named session: <user id>.<expiry unix>.<mac>, the
-// mac HMAC-SHA256 over <user id>.<expiry unix>, keyed by AUTH_SECRET, in
-// base64url without padding. Nothing about it is kept on the server.
+// A session is a cookie whose value is
+// <user id>.<created_at in Unix nanoseconds>.<expiry unix>.<mac>, the mac
+// HMAC-SHA256 over the first three parts, keyed by AUTH_SECRET, in base64url
+// without padding. The user's making binds it to that user: a database
+// replaced under the same secret has another user 1, made at another moment.
+// Nothing about a session is kept on the server.
 const (
-	cookieName = "session"
-	maxSession = 256 // bytes; a longer cookie is not read
+	cookieName       = "session"        // over HTTP
+	secureCookieName = "__Host-session" // over HTTPS: a browser takes it only with Secure, Path=/ and no Domain
+	maxSession       = 256              // bytes; a longer cookie is not read
 )
 
-// sessionValue is the cookie value of a session of the user id that ends at
-// expires.
-func sessionValue(secret []byte, id int64, expires time.Time) string {
-	signed := strconv.FormatInt(id, 10) + "." + strconv.FormatInt(expires.Unix(), 10)
+// session is what a good cookie names.
+type session struct {
+	id   int64
+	made int64 // the user's created_at, in Unix nanoseconds
+}
+
+// sessionValue is the cookie value of a session of the user id, made at made,
+// that ends at expires.
+func sessionValue(secret []byte, id int64, made, expires time.Time) string {
+	signed := strconv.FormatInt(id, 10) + "." + strconv.FormatInt(made.UnixNano(), 10) + "." + strconv.FormatInt(expires.Unix(), 10)
 	return signed + "." + base64.RawURLEncoding.EncodeToString(sign(secret, signed))
 }
 
@@ -31,46 +41,58 @@ func sign(secret []byte, signed string) []byte {
 	return mac.Sum(nil)
 }
 
-// sessionID returns the user id of the session value at now. A value over 256
-// bytes, one without exactly three parts, an id or expiry that is not a
-// whole number, is refused before anything is computed; then a mac that does
-// not match, or an expiry at or before now.
-func sessionID(secret []byte, value string, now time.Time) (int64, bool) {
+// readSession reads a session value at now. A value over 256 bytes, one
+// without exactly four parts, or an id, making or expiry that is not a whole
+// number, is refused before anything is computed; then a mac that does not
+// match, or an expiry at or before now.
+func readSession(secret []byte, value string, now time.Time) (session, bool) {
 	if len(value) > maxSession {
-		return 0, false
+		return session{}, false
 	}
 	parts := strings.Split(value, ".")
-	if len(parts) != 3 || !digits(parts[0]) || !digits(parts[1]) {
-		return 0, false
+	if len(parts) != 4 || !digits(parts[0]) || !digits(parts[1]) || !digits(parts[2]) {
+		return session{}, false
 	}
 	id, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil || id < 1 {
-		return 0, false
+		return session{}, false
 	}
-	expiry, err := strconv.ParseInt(parts[1], 10, 64)
+	made, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
-		return 0, false
+		return session{}, false
 	}
-	mac, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil || !hmac.Equal(mac, sign(secret, parts[0]+"."+parts[1])) {
-		return 0, false
+	expiry, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil {
+		return session{}, false
+	}
+	mac, err := base64.RawURLEncoding.DecodeString(parts[3])
+	if err != nil || !hmac.Equal(mac, sign(secret, parts[0]+"."+parts[1]+"."+parts[2])) {
+		return session{}, false
 	}
 	if now.Unix() >= expiry {
-		return 0, false
+		return session{}, false
 	}
-	return id, true
+	return session{id: id, made: made}, true
+}
+
+// cookieFor is the session cookie's name for a request over HTTPS or not.
+func cookieFor(https bool) string {
+	if https {
+		return secureCookieName
+	}
+	return cookieName
 }
 
 // cookie is the session cookie with value, lasting maxAge seconds; a
-// negative maxAge removes it. It is Secure when the request came over HTTPS.
-func cookie(value string, maxAge int, secure bool) *http.Cookie {
+// negative maxAge removes it. Over HTTPS it is __Host-session and Secure.
+func cookie(https bool, value string, maxAge int) *http.Cookie {
 	return &http.Cookie{
-		Name:     cookieName,
+		Name:     cookieFor(https),
 		Value:    value,
 		Path:     "/",
 		MaxAge:   maxAge,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   secure,
+		Secure:   https,
 	}
 }

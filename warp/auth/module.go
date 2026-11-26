@@ -17,8 +17,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"runtime"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/flakerimi/weft/warp"
@@ -48,13 +50,19 @@ func (r userRow) user() User { return User{Record: r.Record, Email: r.Email, Rol
 // it. Registering adds its routes under /api/auth and the users store, and
 // reads nothing; its Start reads the AUTH_ settings and, while no user exists,
 // logs the link that sets up the owner.
-func Module() warp.Module { return &module{} }
+func Module() warp.Module { return newModule(time.Now) }
 
 type module struct {
 	app   *warp.App
 	db    *data.DB
 	users *data.Store[userRow]
-	limit *limiter
+
+	perKey     *limiter      // tries per email and address
+	perAddress *limiter      // tries per address, across emails
+	slots      chan struct{} // one per password hash running
+	hashes     atomic.Int64  // hashes begun, for tests
+	// find is the user with an email, as stored; the users store's First.
+	find func(ctx context.Context, email string) (userRow, bool, error)
 
 	// Set by Start.
 	secret []byte
@@ -66,13 +74,24 @@ type module struct {
 	setupToken string // the token itself, for SetupToken alone
 }
 
+// newModule is a module whose limiters read the clock now.
+func newModule(now func() time.Time) *module {
+	return &module{
+		perKey:     newLimiter(now, maxKeys, maxTries),
+		perAddress: newLimiter(now, maxKeys, maxAddressTries),
+		slots:      make(chan struct{}, runtime.GOMAXPROCS(0)),
+	}
+}
+
 func (m *module) Name() string { return "auth" }
 
 func (m *module) Register(app *warp.App) error {
 	m.app = app
 	m.db = data.For(app)
 	m.users = data.NewStore[userRow](m.db, "users")
-	m.limit = newLimiter(time.Now, maxKeys)
+	m.find = func(ctx context.Context, email string) (userRow, bool, error) {
+		return m.users.First(ctx, "email", email)
+	}
 	warp.Provide(app, m)
 	app.Wrap(m.carry)
 	m.routes()
@@ -80,7 +99,9 @@ func (m *module) Register(app *warp.App) error {
 }
 
 // Start reads the AUTH_ settings and, when the users table is empty, makes a
-// setup token and logs the link that uses it.
+// setup token and logs the link that uses it. The token is in the link's
+// fragment, which a browser never sends, so it reaches no access log or
+// Referer.
 func (m *module) Start(ctx context.Context) error {
 	cfg := m.app.Config()
 	secret := cfg.Get("AUTH_SECRET")
@@ -118,7 +139,7 @@ func (m *module) Start(ctx context.Context) error {
 	m.mu.Lock()
 	m.setupHash, m.setupToken = sum[:], token
 	m.mu.Unlock()
-	log.Printf("Set up the owner at %s/setup?token=%s", cfg.URL, token)
+	log.Printf("Set up the owner at %s/setup#token=%s", cfg.URL, token)
 	return nil
 }
 
@@ -187,7 +208,7 @@ func AddUser(ctx context.Context, app *warp.App, email, password, role string) (
 	}{email, password, role}); err != nil {
 		return User{}, err
 	}
-	hash, err := hashPassword(password)
+	hash, err := m.hash(ctx, password)
 	if err != nil {
 		return User{}, err
 	}

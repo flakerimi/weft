@@ -19,7 +19,7 @@ func (m *module) setup(ctx context.Context, in SetupInput) (User, error) {
 	if !m.tokenIs(in.Token) {
 		return User{}, warp.Forbidden(errNotSetup)
 	}
-	hash, err := hashPassword(in.Password) // before the transaction, which holds the write lock
+	hash, err := m.hash(ctx, in.Password) // before the transaction, which holds the write lock
 	if err != nil {
 		return User{}, err
 	}
@@ -44,6 +44,6 @@ func (m *module) setup(ctx context.Context, in SetupInput) (User, error) {
 		return User{}, err
 	}
 	m.endSetup()
-	m.signIn(ctx, row.ID)
+	m.signIn(ctx, row)
 	return row.user(), nil
 }

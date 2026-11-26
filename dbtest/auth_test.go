@@ -3,8 +3,12 @@ package dbtest
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"maps"
 	"net/http"
@@ -12,6 +16,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -68,7 +73,7 @@ func startAuth(t *testing.T, vars map[string]string) (*warptest.Client, string) 
 	return c, logged.String()
 }
 
-var setupLine = regexp.MustCompile(`^Set up the owner at https://shop\.example\.com/setup\?token=([A-Za-z0-9_-]{43})\n$`)
+var setupLine = regexp.MustCompile(`^Set up the owner at https://shop\.example\.com/setup#token=([A-Za-z0-9_-]{43})\n$`)
 
 // request is a same-site request from the address remote, with a JSON body
 // when body is not nil.
@@ -100,7 +105,7 @@ func wantError(t *testing.T, res *warptest.Response, status int, code, message s
 	}
 }
 
-var sessionCookie = regexp.MustCompile(`^session=1\.(\d+)\.[A-Za-z0-9_-]{43}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax$`)
+var sessionCookie = regexp.MustCompile(`^session=1\.(\d+)\.(\d+)\.[A-Za-z0-9_-]{43}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax$`)
 
 func TestSetupThenLogin(t *testing.T) {
 	c, logged := startAuth(t, authEnv(t))
@@ -138,7 +143,10 @@ func TestSetupThenLogin(t *testing.T) {
 	if cm == nil {
 		t.Fatalf("Set-Cookie = %q", cookies[0])
 	}
-	expiry, _ := strconv.ParseInt(cm[1], 10, 64)
+	if cm[1] != strconv.FormatInt(owner.CreatedAt.UnixNano(), 10) {
+		t.Fatalf("the cookie names the making %s, want the owner's created_at, %d", cm[1], owner.CreatedAt.UnixNano())
+	}
+	expiry, _ := strconv.ParseInt(cm[2], 10, 64)
 	if d := time.Until(time.Unix(expiry, 0)); d < 30*24*time.Hour-time.Minute || d > 30*24*time.Hour+time.Minute {
 		t.Fatalf("the session ends in %v, want 30 days", d)
 	}
@@ -267,25 +275,31 @@ func TestLoginIsLimited(t *testing.T) {
 		return c.Fork().Do(request(http.MethodPost, "/api/auth/login", map[string]string{"email": email, "password": password}, remote))
 	}
 	const a, b = "192.0.2.1:1000", "192.0.2.2:1000"
-	for i := range 5 {
-		if res := try(ownerEmail, "wrong", a); res.Status != 401 {
-			t.Fatalf("failure %d answered %d", i+1, res.Status)
-		}
-	}
 	const tooMany = "Too many tries; wait a minute and try again."
+
+	// Guesses sent at once are counted at once: at most 5 are tried.
+	var wg sync.WaitGroup
+	statuses := make(chan int, 20)
+	for range 20 {
+		wg.Go(func() { statuses <- try(ownerEmail, "wrong", a).Status })
+	}
+	wg.Wait()
+	close(statuses)
+	answers := map[int]int{}
+	for s := range statuses {
+		answers[s]++
+	}
+	if answers[401] > 5 || answers[401]+answers[429] != 20 {
+		t.Fatalf("20 guesses at once answered %v, want at most 5 of 401 and the rest 429", answers)
+	}
+	// The limit was reached, so the right password waits for the minute too.
 	wantError(t, try(ownerEmail, authtest.Password, a), 429, "rate_limited", tooMany)
 	wantError(t, try(" Owner@Example.com", authtest.Password, "192.0.2.1:2000"), 429, "rate_limited", tooMany)
 	// Another email from that address, and that email from another, are not.
 	wantError(t, try("other@example.com", "wrong", a), 401, "unauthorized", "That email and password do not match.")
 	try(ownerEmail, authtest.Password, b).Want(200)
 
-	// A blocked try costs no hashing.
-	start := time.Now()
-	try(ownerEmail, "wrong", a).Want(429)
-	if took := time.Since(start); took > 30*time.Millisecond {
-		t.Errorf("a refused try took %v, as if it hashed", took)
-	}
-	// A success clears the count.
+	// A success clears the email's count.
 	for range 4 {
 		try(ownerEmail, "wrong", b).Want(401)
 	}
@@ -408,6 +422,9 @@ func TestCrossSiteLogoutRefused(t *testing.T) {
 	c.Get("/api/auth/me").Want(200)
 }
 
+// Under HTTPS the cookie is __Host-session, which a browser takes only with
+// Secure, Path=/ and no Domain, so a sibling subdomain cannot plant or shadow
+// it; over HTTP it is session. Each scheme reads only its own name.
 func TestSecureCookieBehindProxy(t *testing.T) {
 	for _, tc := range []struct {
 		proxy  string
@@ -423,26 +440,109 @@ func TestSecureCookieBehindProxy(t *testing.T) {
 		vars["TRUST_PROXY"] = tc.proxy
 		c, _ := startAuth(t, vars)
 		authtest.Owner(t, c)
-		r := request(http.MethodPost, "/api/auth/login", map[string]string{"email": ownerEmail, "password": authtest.Password}, "")
-		if tc.proto != "" {
-			r.Header.Set("X-Forwarded-Proto", tc.proto)
+		send := func(c *warptest.Client, method, path string, body any) *warptest.Response {
+			r := request(method, path, body, "")
+			if tc.proto != "" {
+				r.Header.Set("X-Forwarded-Proto", tc.proto)
+			}
+			return c.Do(r)
 		}
-		ending := "; HttpOnly; SameSite=Lax"
+		name, attrs := "session", "; HttpOnly; SameSite=Lax"
 		if tc.secure {
-			ending = "; HttpOnly; Secure; SameSite=Lax"
+			name, attrs = "__Host-session", "; HttpOnly; Secure; SameSite=Lax"
 		}
-		cookie := c.Fork().Do(r).Want(200).Header.Get("Set-Cookie")
-		if !strings.HasSuffix(cookie, ending) {
-			t.Errorf("TRUST_PROXY=%q, X-Forwarded-Proto %q: Set-Cookie %q, want it to end %q", tc.proxy, tc.proto, cookie, ending)
+		at := fmt.Sprintf("TRUST_PROXY=%q, X-Forwarded-Proto %q", tc.proxy, tc.proto)
+		u := c.Fork()
+		cookie := send(u, http.MethodPost, "/api/auth/login", map[string]string{"email": ownerEmail, "password": authtest.Password}).Want(200).Header.Get("Set-Cookie")
+		if !strings.HasPrefix(cookie, name+"=1.") || !strings.HasSuffix(cookie, "; Path=/; Max-Age=2592000"+attrs) || strings.Contains(cookie, "Domain") {
+			t.Errorf("%s: login's Set-Cookie %q, want %s=… ending %q", at, cookie, name, "; Path=/; Max-Age=2592000"+attrs)
 		}
-		r = request(http.MethodPost, "/api/auth/logout", nil, "")
-		if tc.proto != "" {
-			r.Header.Set("X-Forwarded-Proto", tc.proto)
+		send(u, http.MethodGet, "/api/auth/me", nil).Want(200)
+		cleared := send(u, http.MethodPost, "/api/auth/logout", nil).Want(204).Header.Get("Set-Cookie")
+		if want := name + "=; Path=/; Max-Age=0" + attrs; cleared != want {
+			t.Errorf("%s: logout's Set-Cookie %q, want %q", at, cleared, want)
 		}
-		cleared := c.Do(r).Want(204).Header.Get("Set-Cookie")
-		if want := "session=; Path=/; Max-Age=0" + ending; cleared != want {
-			t.Errorf("TRUST_PROXY=%q, X-Forwarded-Proto %q: logout's Set-Cookie %q, want %q", tc.proxy, tc.proto, cleared, want)
+		wantError(t, send(u, http.MethodGet, "/api/auth/me", nil), 401, "unauthorized", "Sign in to do that.")
+	}
+
+	// Each scheme reads only its own name.
+	vars := authEnv(t)
+	vars["TRUST_PROXY"] = "on"
+	c, _ := startAuth(t, vars)
+	authtest.Owner(t, c) // c holds session, made over HTTP
+	httpsMe := request(http.MethodGet, "/api/auth/me", nil, "")
+	httpsMe.Header.Set("X-Forwarded-Proto", "https")
+	wantError(t, c.Do(httpsMe), 401, "unauthorized", "Sign in to do that.")
+
+	h := c.Fork()
+	r := request(http.MethodPost, "/api/auth/login", map[string]string{"email": ownerEmail, "password": authtest.Password}, "")
+	r.Header.Set("X-Forwarded-Proto", "https")
+	h.Do(r).Want(200) // h holds __Host-session alone
+	wantError(t, h.Get("/api/auth/me"), 401, "unauthorized", "Sign in to do that.")
+	httpsMe = request(http.MethodGet, "/api/auth/me", nil, "")
+	httpsMe.Header.Set("X-Forwarded-Proto", "https")
+	h.Do(httpsMe).Want(200)
+}
+
+// A cookie names its user's id and the moment the user was made, so a cookie
+// of another database with the same secret, whose user 1 is someone else, is
+// no session; nor is the old form, which named only the id.
+func TestSessionIsBoundToItsUser(t *testing.T) {
+	first, _ := startAuth(t, authEnv(t))
+	authtest.Owner(t, first)
+	var held *http.Cookie
+	r := request(http.MethodGet, "/api/auth/me", nil, "")
+	first.Do(r).Want(200)
+	for _, ck := range r.Cookies() {
+		if ck.Name == "session" {
+			held = ck
 		}
+	}
+	if held == nil {
+		t.Fatal("the client sent no session cookie")
+	}
+
+	second, _ := startAuth(t, authEnv(t)) // another file, the same secret
+	owner := authtest.Owner(t, second)
+	if owner.ID != 1 {
+		t.Fatalf("the second database's owner has id %d, want 1 for the test to mean anything", owner.ID)
+	}
+	r = request(http.MethodGet, "/api/auth/me", nil, "")
+	r.AddCookie(held)
+	wantError(t, second.Fork().Do(r), 401, "unauthorized", "Sign in to do that.")
+
+	// The old form, <id>.<expiry>.<mac>, signed with the right secret.
+	signed := "1." + strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(signed))
+	r = request(http.MethodGet, "/api/auth/me", nil, "")
+	r.AddCookie(&http.Cookie{Name: "session", Value: signed + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))})
+	wantError(t, second.Fork().Do(r), 401, "unauthorized", "Sign in to do that.")
+}
+
+// Each limit on what login and setup read, at the limit and one past it.
+func TestRequestLimits(t *testing.T) {
+	c, _ := startAuth(t, authEnv(t))
+	token := auth.SetupToken(c.App)
+	email254 := strings.Repeat("a", 254-len("@example.com")) + "@example.com"
+	const notValid = "This setup link is not valid; restart the app to get a new one."
+	wantError(t, c.Fork().Post("/api/auth/setup", map[string]string{"token": strings.Repeat("t", 64), "password": authtest.Password}), 403, "forbidden", notValid)
+	wantField(t, c.Fork().Post("/api/auth/setup", map[string]string{"token": strings.Repeat("t", 65), "password": authtest.Password}), "token", "Use at most 64 characters.")
+	wantField(t, c.Fork().Post("/api/auth/setup", map[string]string{"token": token, "password": strings.Repeat("p", 201)}), "password", "Use at most 200 characters.")
+	c.Post("/api/auth/setup", map[string]string{"token": token, "password": strings.Repeat("p", 200)}).Want(201)
+
+	const noMatch = "That email and password do not match."
+	wantError(t, login(c.Fork(), email254, "a password"), 401, "unauthorized", noMatch)
+	wantField(t, login(c.Fork(), "a"+email254, "a password"), "email", "Use at most 254 characters.")
+	login(c.Fork(), ownerEmail, strings.Repeat("p", 200)).Want(200)
+	wantField(t, login(c.Fork(), ownerEmail, strings.Repeat("p", 201)), "password", "Use at most 200 characters.")
+}
+
+func wantField(t *testing.T, res *warptest.Response, field, message string) {
+	t.Helper()
+	e := res.Want(422).Error()
+	if len(e.Fields) != 1 || e.Fields[field] != message {
+		t.Fatalf("422 fields = %v, want %s: %q", e.Fields, field, message)
 	}
 }
 

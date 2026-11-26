@@ -2,8 +2,6 @@ package auth
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"net/http"
 	"time"
 
@@ -38,59 +36,52 @@ func (m *module) routes() {
 }
 
 // login signs a user in. A wrong email and a wrong password get one answer,
-// after one hash either way; after 5 failures of one email from one address
-// in a minute, the rest of that minute is a 429, answered before any hash.
+// after one hash either way.
 func (m *module) login(ctx context.Context, in LoginInput) (User, error) {
 	r := warp.Request(ctx)
-	email := normalEmail(in.Email)
-	key := limitKey(email, m.app.ClientIP(r))
-	if m.limit.blocked(key) {
-		return User{}, warp.TooMany(errTooMany)
-	}
-	row, found, err := m.byEmail(ctx, email)
+	row, err := m.attempt(ctx, in.Email, in.Password, m.app.ClientIP(r))
 	if err != nil {
 		return User{}, err
+	}
+	m.signIn(ctx, row)
+	return row.user(), nil
+}
+
+// attempt checks one login from the address ip. Before anything is looked up
+// or hashed it takes a try from the address's count and from the email's,
+// either of which, when spent, is the 429. A success clears the email's
+// count.
+func (m *module) attempt(ctx context.Context, email, password, ip string) (userRow, error) {
+	email = normalEmail(email)
+	key := limitKey(email, ip)
+	if !m.perAddress.take(ip) || !m.perKey.take(key) {
+		return userRow{}, warp.TooMany(errTooMany)
+	}
+	row, found, err := m.find(ctx, email)
+	if err != nil {
+		return userRow{}, err
 	}
 	stored := dummyHash
 	if found {
 		stored = row.PasswordHash
 	}
-	if !verifyPassword(stored, in.Password) || !found {
-		m.limit.fail(key)
-		return User{}, warp.Unauthorized(errNoMatch)
-	}
-	m.limit.clear(key)
-	m.signIn(ctx, row.ID)
-	return row.user(), nil
-}
-
-// byEmail finds the user with the email, as stored.
-func (m *module) byEmail(ctx context.Context, email string) (userRow, bool, error) {
-	conn := m.db.SQL()
-	if conn == nil {
-		return userRow{}, false, errors.New("auth: the users table was read before the app started")
-	}
-	var id int64
-	err := conn.QueryRowContext(ctx, `SELECT "id" FROM "users" WHERE "email" = ?`, email).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return userRow{}, false, nil
-	}
+	ok, err := m.verify(ctx, stored, password)
 	if err != nil {
-		return userRow{}, false, err
+		return userRow{}, err
 	}
-	row, err := m.users.Get(ctx, id)
-	var e *warp.Error
-	if errors.As(err, &e) && e.Status == http.StatusNotFound { // removed in between
-		return userRow{}, false, nil
+	if !ok || !found {
+		return userRow{}, warp.Unauthorized(errNoMatch)
 	}
-	return row, err == nil, err
+	m.perKey.clear(key)
+	return row, nil
 }
 
-// signIn sets the session cookie of the user id on the answer.
-func (m *module) signIn(ctx context.Context, id int64) {
+// signIn sets the session cookie of the user on the answer.
+func (m *module) signIn(ctx context.Context, row userRow) {
 	r := warp.Request(ctx)
-	value := sessionValue(m.secret, id, time.Now().Add(time.Duration(m.maxAge)*time.Second))
-	warp.ResponseHeader(ctx).Add("Set-Cookie", cookie(value, m.maxAge, m.app.IsHTTPS(r)).String())
+	https := m.app.IsHTTPS(r)
+	value := sessionValue(m.secret, row.ID, row.CreatedAt, time.Now().Add(time.Duration(m.maxAge)*time.Second))
+	warp.ResponseHeader(ctx).Add("Set-Cookie", cookie(https, value, m.maxAge).String())
 }
 
 // logout clears the session cookie. It needs a session. The cookie's value
@@ -100,7 +91,7 @@ func (m *module) logout(ctx context.Context, _ warp.None) (warp.None, error) {
 	if _, err := m.signedIn(r); err != nil {
 		return warp.None{}, err
 	}
-	warp.ResponseHeader(ctx).Add("Set-Cookie", cookie("", -1, m.app.IsHTTPS(r)).String())
+	warp.ResponseHeader(ctx).Add("Set-Cookie", cookie(m.app.IsHTTPS(r), "", -1).String())
 	return warp.None{}, nil
 }
 
