@@ -160,6 +160,8 @@ func TestCamelNames(t *testing.T) {
 		"delete_old-items":    "deleteOldItems",
 		"listAll":             "listAll",
 		"_x_":                 "x",
+		"variants_list":       "variantsList",
+		"order-items_remove":  "orderItemsRemove",
 	} {
 		if got := camel(in); got != want {
 			t.Errorf("camel(%q) = %q, want %q", in, got, want)
@@ -977,5 +979,20 @@ func TestBuildTypeChecks(t *testing.T) {
 	}
 	if exists(t, filepath.Join(app, "myapp")) {
 		t.Error("the binary was built")
+	}
+}
+
+// A second data.Resource in a module has its names prefixed with its last
+// segment; they generate as one camelCase name each, beside the first's.
+func TestGenerateSecondResource(t *testing.T) {
+	var routes []routeInfo
+	for _, name := range []string{"list", "show", "variants_list", "variants_show", "order-items_list"} {
+		routes = append(routes, route("products", name))
+	}
+	src := mustGenerate(t, description{Routes: routes, Types: []typeInfo{}})
+	for _, want := range []string{"async list(", "async show(", "async variantsList(", "async variantsShow(", "async orderItemsList("} {
+		if !strings.Contains(src, want) {
+			t.Errorf("api.ts has no %q", want)
+		}
 	}
 }

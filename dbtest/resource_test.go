@@ -477,14 +477,39 @@ func TestResourceMistakes(t *testing.T) {
 		t.Errorf("nil store: %q", got)
 	}
 
-	// Twice on one path: the core's own sentences, no panic, none of data's.
+	// Two resources in one module: the one whose last segment is the
+	// module's name keeps the five names; another's are prefixed with its
+	// last segment, which the generator writes as variantsList.
 	got, routes = mistakes(func(app *warp.App) {
-		s := data.NewStore[Product](data.For(app), "products")
-		data.Resource(app, "/products", s)
-		data.Resource(app, "/products", s)
+		data.Resource(app, "/variants", data.NewStore[Product](data.For(app), "variants"))
+		data.Resource(app, "/products", data.NewStore[Product](data.For(app), "products"))
+		data.Resource(app, "/shop/order-items", data.NewStore[Product](data.For(app), "order_items"))
 	})
-	if len(got) == 0 || len(routes) != 5 || slices.ContainsFunc(got, func(l string) bool { return strings.Contains(l, "data.") }) {
-		t.Errorf("twice: %q, %d routes", got, len(routes))
+	var names []string
+	for _, r := range routes {
+		names = append(names, r.Module+" "+r.Name)
+	}
+	wantNames := []string{
+		"products variants_list", "products variants_show", "products variants_create", "products variants_update", "products variants_remove",
+		"products list", "products show", "products create", "products update", "products remove",
+		"products order-items_list", "products order-items_show", "products order-items_create", "products order-items_update", "products order-items_remove",
+	}
+	if len(got) != 0 || !slices.Equal(names, wantNames) {
+		t.Errorf("two resources: %q, names %q", got, names)
+	}
+
+	// Twice on one last segment: one sentence of data's, and the first
+	// resource's routes alone.
+	for _, second := range []string{"/products", "/admin/products"} {
+		got, routes = mistakes(func(app *warp.App) {
+			s := data.NewStore[Product](data.For(app), "products")
+			data.Resource(app, "/products", s)
+			data.Resource(app, second, s)
+		})
+		want := []string{`warp: data.Resource was given ` + second + ` in module "products", which already has a route named "list" (GET /products); give it a path whose last segment differs, or a module of its own.`}
+		if !slices.Equal(got, want) || len(routes) != 5 {
+			t.Errorf("twice on %s: %q, %d routes; want %q", second, got, len(routes), want)
+		}
 	}
 
 	// A model the store refuses: the store's sentence alone, and no panic.

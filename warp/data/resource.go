@@ -59,8 +59,12 @@ type selfChecker interface {
 }
 
 // Resource registers the five routes of the records store keeps, under path,
-// which is written like /products, named list, show, create, update and
-// remove whatever the options say:
+// which is written like /products. They are named list, show, create, update
+// and remove, whatever the options say, when the path's last segment is the
+// name of the module registering them; otherwise each name has that segment
+// and _ in front (variants_list, order-items_show), which weft gen writes as
+// api.products.variantsList, so a module may hold more than one resource. Two
+// resources of one module whose paths end in the same segment are a mistake.
 //
 //   - list: GET path takes a Query and answers a List[T], as Store.List does.
 //   - show: GET path/{id} answers the record, or 404.
@@ -107,12 +111,28 @@ func Resource[T any](app *warp.App, path string, store *Store[T], opts ...Resour
 			opt(&cfg)
 		}
 	}
+	segment := path[strings.LastIndex(path, "/")+1:]
+	name := func(action string) string {
+		if segment == app.Module() {
+			return action
+		}
+		return segment + "_" + action
+	}
+	// Two resources on one last segment would have one set of names: one
+	// sentence of data's, not five of the core's, and no routes.
+	for _, r := range app.Routes() {
+		if r.Module == app.Module() && slices.ContainsFunc([]string{"list", "show", "create", "update", "remove"}, func(a string) bool { return r.Name == name(a) }) {
+			app.Mistake("data.Resource was given %s in module %q, which already has a route named %q (%s %s); give it a path whose last segment differs, or a module of its own.",
+				path, r.Module, r.Name, r.Method, strings.TrimPrefix(r.Path, "/api"))
+			return
+		}
+	}
 	options := func(action string) []warp.RouteOption {
 		out := slices.Clone(cfg.each)
 		for _, fn := range cfg.per {
 			out = append(out, fn(action)...)
 		}
-		return append(out, warp.Name(action))
+		return append(out, warp.Name(name(action)))
 	}
 	one := path + "/{id}"
 	warp.Get(app, path, func(ctx context.Context, q Query) (List[T], error) {
