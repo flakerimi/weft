@@ -1920,3 +1920,32 @@ func TestBodyNullForAValue(t *testing.T) {
 		t.Errorf("readonly and null: %d %q", w.Code, msg)
 	}
 }
+
+// A fixed-size array takes a list of exactly its size: a longer or shorter
+// one is refused on its field, never cut or padded.
+func TestBodyFixedArray(t *testing.T) {
+	type In struct {
+		RGB  [3]int    `json:"rgb"`
+		Grid [2][2]int `json:"grid"`
+		One  [1]string `json:"one"`
+	}
+	var got In
+	app := New(Config{})
+	Post(app, "/x", func(_ context.Context, in In) (None, error) { got = in; return None{}, nil })
+	h := mustRegister(t, app)
+	for body, fields := range map[string]map[string]string{
+		`{"rgb":[1,2,3,4,5]}`:  {"rgb": "Send a list of 3 values."},
+		`{"rgb":[1,2]}`:        {"rgb": "Send a list of 3 values."},
+		`{"rgb":[]}`:           {"rgb": "Send a list of 3 values."},
+		`{"grid":[[1,2],[3]]}`: {"grid": "Send a list of 2 values."},
+		`{"one":["a","b"]}`:    {"one": "Send a list of 1 value."},
+	} {
+		w := send(t, h, "POST", "/api/x", body)
+		if _, _, f := apiError(t, w); w.Code != 400 || !reflect.DeepEqual(f, fields) {
+			t.Errorf("%s: %d %v, want %v", body, w.Code, f, fields)
+		}
+	}
+	if w := send(t, h, "POST", "/api/x", `{"rgb":[1,2,3],"grid":[[1,2],[3,4]],"one":["a"]}`); w.Code != 204 || got.RGB != [3]int{1, 2, 3} || got.Grid[1][1] != 4 {
+		t.Fatalf("%d %s, %+v", w.Code, w.Body, got)
+	}
+}

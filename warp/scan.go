@@ -19,6 +19,7 @@ package warp
 // a readonly field is never set, whatever the scan said.
 
 import (
+	"fmt"
 	"maps"
 	"reflect"
 	"slices"
@@ -58,11 +59,13 @@ func (o *object) index() {
 
 // look is how to look inside a JSON value: as a struct's object, as a list
 // of values or as an object of values (a map), each value looked at so.
-// notNull is whether the value may not be null.
+// notNull is whether the value may not be null; size, for a fixed-size
+// array, how many elements its list must have, -1 for any other value.
 type look struct {
 	obj        *object
 	list, dict *look
 	notNull    bool
+	size       int
 }
 
 // objects makes the objects of the struct types a body reaches, each once,
@@ -77,7 +80,7 @@ func (m objects) lookFor(t reflect.Type) *look {
 	if t.Kind() == reflect.Pointer || t.Kind() == reflect.Interface {
 		return nil // nil is a value of its own
 	}
-	l := &look{notNull: !nullable}
+	l := &look{notNull: !nullable, size: -1}
 	switch {
 	case decodesItself(t):
 		// Not looked inside. One that reads its own JSON is described as
@@ -88,12 +91,15 @@ func (m objects) lookFor(t reflect.Type) *look {
 		}
 	case t.Kind() == reflect.Slice || t.Kind() == reflect.Array:
 		l.list = m.lookFor(t.Elem())
+		if t.Kind() == reflect.Array && !isBytes(t) {
+			l.size = t.Len()
+		}
 	case t.Kind() == reflect.Map:
 		l.dict = m.lookFor(t.Elem())
 	case t.Kind() == reflect.Struct && t != timeType:
 		l.obj = m.objectOf(t)
 	}
-	if !l.notNull && l.obj == nil && l.list == nil && l.dict == nil {
+	if !l.notNull && l.size < 0 && l.obj == nil && l.list == nil && l.dict == nil {
 		return nil
 	}
 	return l
@@ -157,7 +163,7 @@ func topObject(fields []topField) *object {
 	deep := map[*object]bool{}
 	var needed func(l *look) bool
 	needed = func(l *look) bool {
-		return l != nil && (l.notNull || l.obj != nil && deep[l.obj] || needed(l.list) || needed(l.dict))
+		return l != nil && (l.notNull || l.size >= 0 || l.obj != nil && deep[l.obj] || needed(l.list) || needed(l.dict))
 	}
 	for changed := true; changed; {
 		changed = false
@@ -454,12 +460,24 @@ func (s *bodyScan) value(i int, l *look) (int, error) {
 		return i + len("null"), nil
 	case l.obj != nil && c == '{':
 		return s.object(i, l.obj, false)
-	case l.list != nil && c == '[':
+	case (l.list != nil || l.size >= 0) && c == '[':
+		n := 0
+		defer func() {
+			if l.size >= 0 && n != l.size && err == nil {
+				s.wrong(fmt.Sprintf("Send a list of %d %s.", l.size, map[bool]string{true: "value", false: "values"}[l.size == 1]))
+			}
+		}()
 		if i = s.space(i + 1); s.data[i] == ']' {
 			return i + 1, nil
 		}
 		for {
-			if i, err = s.value(i, l.list); err != nil {
+			n++
+			if l.list != nil {
+				i, err = s.value(i, l.list)
+			} else {
+				i = s.skip(i)
+			}
+			if err != nil {
 				return 0, err
 			}
 			if i = s.space(i); s.data[i] == ']' {
@@ -498,7 +516,10 @@ func (s *bodyScan) values(i int, l *look) (int, error) {
 }
 
 // null records that the value at the scan's path was sent null and cannot be.
-func (s *bodyScan) null() {
+func (s *bodyScan) null() { s.wrong(notNull) }
+
+// wrong records says for the field at the scan's path.
+func (s *bodyScan) wrong(says string) {
 	n := s.depth
 	if s.mapAt >= 0 {
 		n = s.mapAt
@@ -506,7 +527,9 @@ func (s *bodyScan) null() {
 	if s.nulls == nil {
 		s.nulls = map[string]string{}
 	}
-	s.nulls[strings.Join(s.path[:n], ".")] = notNull
+	if key := strings.Join(s.path[:n], "."); s.nulls[key] == "" {
+		s.nulls[key] = says
+	}
 }
 
 // skip returns where the value at i ends.
