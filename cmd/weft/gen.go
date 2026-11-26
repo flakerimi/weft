@@ -656,6 +656,8 @@ export interface FieldRules {
   email?: boolean
   url?: boolean
   enum?: string[]
+  /** null is the field's empty value: a pointer in Go, so an emptied control sends null, which clears it. */
+  nullable?: boolean
 }
 `
 
@@ -1048,7 +1050,8 @@ func writeSchema(b *strings.Builder, d description) {
 }
 
 // fieldRules is a field's entry in schema: its kind, then the rules Form
-// checks, in the tag's order. unique, which only the database can check,
+// checks, in the tag's order, then nullable for a pointer, whose emptied
+// control a Form sends as null. unique, which only the database can check,
 // and a rule weft does not know are left out.
 func fieldRules(f fieldInfo) []string {
 	entries := []string{"kind: " + quote(kind(f.TS))}
@@ -1067,6 +1070,9 @@ func fieldRules(f fieldInfo) []string {
 			}
 			entries = append(entries, "enum: ["+strings.Join(values, ", ")+"]")
 		}
+	}
+	if strings.HasSuffix(f.TS, " | null") {
+		entries = append(entries, "nullable: true") // a pointer, which null clears
 	}
 	return entries
 }

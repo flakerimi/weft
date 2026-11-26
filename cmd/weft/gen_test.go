@@ -1223,3 +1223,20 @@ func TestFreePortNamesTheCommand(t *testing.T) {
 		t.Errorf("describeApp under weft build = %v", err)
 	}
 }
+
+// A field that is a pointer in Go, which the description types T | null, is
+// nullable in schema, so a Form sends null for it when it is emptied; any
+// other field is not.
+func TestSchemaSaysNullable(t *testing.T) {
+	src := mustGenerate(t, fixture(t))
+	for _, want := range []string{
+		"    times: { kind: 'number', min: 1, nullable: true },\n",
+		"    site: { kind: 'string', url: true, nullable: true },\n",
+		"    price: { kind: 'number', min: 0 },\n",
+		"  /** null is the field's empty value: a pointer in Go, so an emptied control sends null, which clears it. */\n  nullable?: boolean\n",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("api.ts has no %q", want)
+		}
+	}
+}

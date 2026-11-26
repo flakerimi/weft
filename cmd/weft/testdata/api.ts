@@ -288,6 +288,8 @@ export interface FieldRules {
   email?: boolean
   url?: boolean
   enum?: string[]
+  /** null is the field's empty value: a pointer in Go, so an emptied control sends null, which clears it. */
+  nullable?: boolean
 }
 
 /** The rules of each type a route takes as its body, by the type's name and then the field's, for a form to check before it sends. unique, and every rule of a nested type, are checked by the server only, and arrive as its field errors. */
@@ -298,7 +300,7 @@ export const schema: {
 } = {
   Greeting: {
     name: { kind: 'string', required: true },
-    times: { kind: 'number', min: 1 },
+    times: { kind: 'number', min: 1, nullable: true },
   },
   ProductInput: {
     name: { kind: 'string', required: true, max: 120 },
@@ -306,13 +308,13 @@ export const schema: {
     stock: { kind: 'number', min: 0, max: 10000 },
     status: { kind: 'string', required: true, enum: ['draft', 'live'] },
     live: { kind: 'boolean' },
-    site: { kind: 'string', url: true },
+    site: { kind: 'string', url: true, nullable: true },
     contact: { kind: 'string', email: true },
     tags: { kind: 'list', max: 5 },
     labels: { kind: 'record' },
     extra: { kind: 'unknown' },
     photo: { kind: 'string' },
-    maker: { kind: 'object' },
+    maker: { kind: 'object', nullable: true },
     parts: { kind: 'list' },
     summary: { kind: 'string' },
   },
