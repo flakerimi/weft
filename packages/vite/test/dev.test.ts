@@ -253,6 +253,21 @@ describe('devSite', { timeout: 30_000 }, () => {
     expect(text(other.body)).toContain('Nothing here')
   })
 
+  it('sends to /api what warp.Serve sends there, and refuses an escape net/http refuses', async () => {
+    const api = createHTTPServer((req, res) => res.end(`api got ${req.method} ${req.url}`))
+    await new Promise<void>((done) => api.listen(0, '127.0.0.1', done))
+    closers.push(() => new Promise((done) => api.close(done)))
+    const dev = await start(site('dev-site'), { api: `http://127.0.0.1:${(api.address() as AddressInfo).port}` })
+    // The path as decoded, before any cleaning, is under /api: the API gets it as sent.
+    for (const path of ['/api/../login', '/api/./auth/me', '/api/auth/../auth/me', '/%61pi/auth/me']) {
+      expect(await getRaw(dev.url, path), path).toEqual({ status: 200, body: `api got GET ${path}` })
+    }
+    // A % that starts no escape is net/http's 400, as built.
+    for (const path of ['/login%', '/a%2', '/%zz']) {
+      expect((await getRaw(dev.url, path)).status, path).toBe(400)
+    }
+  })
+
   it('a render error is a 500 that names the file, and the next request works', async () => {
     const root = site('dev-site')
     const dev = await start(root)

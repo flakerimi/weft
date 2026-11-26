@@ -7,7 +7,8 @@
 // build.
 import { realpathSync, statSync } from 'node:fs'
 import { stat } from 'node:fs/promises'
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import { request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http'
+import { request as httpsRequest } from 'node:https'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer, isCSSRequest, normalizePath, type Plugin, type ViteDevServer } from 'vite'
@@ -103,6 +104,9 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
     },
     configureServer(vite) {
       server = vite
+      // Before Vite's own middleware, its proxy included: what warp.Serve
+      // would send to the API, as sent, and the escape net/http refuses.
+      vite.middlewares.use((req, res, next) => (asServed(req, res, opts.api) ? undefined : next()))
       // After Vite's own middleware (its modules, public/ and the site's files): what is left is a page.
       return () => vite.middlewares.use((req, res, next) => void pages(req, res, next))
     },
@@ -268,6 +272,41 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
   }
   const url = server.resolvedUrls?.local[0] ?? `http://${opts.host ?? 'localhost'}:${server.config.server.port}/`
   return { url, close: () => server.close() }
+}
+
+/**
+ * Answers a request as warp.Serve's side of net/http would before any page,
+ * and says whether it did: a path with a % that starts no escape is 400, as
+ * net/http refuses it; a path whose decoded form, before any cleaning, is
+ * /api or under it goes to `api` as it was sent (`/api/../login`,
+ * `/%61pi/x`), where Vite's proxy would clean it or miss it. A WebSocket's
+ * upgrade still goes through Vite's proxy.
+ */
+function asServed(req: IncomingMessage, res: ServerResponse, api: string | undefined): boolean {
+  const raw = (req.url ?? '/').replace(/[?#][\s\S]*$/, '')
+  if (/%(?![0-9a-fA-F]{2})/.test(raw)) {
+    res.statusCode = 400
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+    res.end('400 Bad Request')
+    return true
+  }
+  const path = decodePath(raw)
+  if (!api || (path !== '/api' && !path.startsWith('/api/'))) return false
+  const target = new URL(api)
+  const send = target.protocol === 'https:' ? httpsRequest : httpRequest
+  const up = send(
+    { protocol: target.protocol, hostname: target.hostname, port: target.port, method: req.method, path: target.pathname.replace(/\/$/, '') + (req.url ?? '/'), headers: req.headers },
+    (answer) => {
+      res.writeHead(answer.statusCode ?? 502, answer.headers)
+      answer.pipe(res)
+    },
+  )
+  up.on('error', () => {
+    if (!res.headersSent) res.statusCode = 502
+    res.end()
+  })
+  req.pipe(up)
+  return true
 }
 
 const inside = (dir: string, file: string) => resolve(file).startsWith(dir.endsWith(sep) ? dir : dir + sep)
