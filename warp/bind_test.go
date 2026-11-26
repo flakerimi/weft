@@ -145,7 +145,7 @@ func TestQueryConversion(t *testing.T) {
 
 	w = send(t, h, "GET", "/api/items?small=300&count=-1&price=cheap&open=maybe&page=1.5&limit=x", "")
 	want := map[string]string{
-		"small": "Send a whole number.", "count": "Send a whole number.", "price": "Send a number.",
+		"small": "Send a whole number from -128 to 127.", "count": "Send a whole number.", "price": "Send a number.",
 		"open": "Send true or false.", "page": "Send a whole number.", "limit": "Send a whole number.",
 	}
 	if _, msg, fields := apiError(t, w); w.Code != 400 || msg != "6 fields have the wrong type." || !reflect.DeepEqual(fields, want) {
@@ -1974,13 +1974,25 @@ func TestBodyWrongValueSays(t *testing.T) {
 	type Stamp struct {
 		When time.Time `json:"when"`
 	}
+	type Line struct {
+		Qty int `json:"qty"`
+	}
 	type In struct {
-		N8     int8    `json:"n8"`
-		U8     uint8   `json:"u8"`
-		I      int     `json:"i"`
-		Code   shout   `json:"code"`
-		Nested Stamp   `json:"nested"`
-		List   []Stamp `json:"list"`
+		N8     int8            `json:"n8"`
+		U8     uint8           `json:"u8"`
+		I      int             `json:"i"`
+		Code   shout           `json:"code"`
+		Nested Stamp           `json:"nested"`
+		List   []Stamp         `json:"list"`
+		B      []byte          `json:"b"`
+		PB     *[]byte         `json:"pb"`
+		When   time.Time       `json:"when"`
+		PWhen  *time.Time      `json:"pwhen"`
+		PCode  *shout          `json:"pcode"`
+		Lines  []Line          `json:"lines"`
+		Grid   [][]Line        `json:"grid"`
+		Arr    [2]Line         `json:"arr"`
+		ByKey  map[string]Line `json:"by_key"`
 	}
 	app := New(Config{})
 	Post(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
@@ -1993,6 +2005,22 @@ func TestBodyWrongValueSays(t *testing.T) {
 		`{"code":"lower"}`:        {"code": "Send a value this field takes."},
 		`{"nested":{"when":"x"}}`: {"nested.when": "Send a time like 2026-11-25T10:00:00Z."},
 		`{"list":[{"when":"2026-11-25T10:00:00Z"},{"when":"x"}]}`: {"list.when": "Send a time like 2026-11-25T10:00:00Z."},
+		// A []byte takes base64 text, whatever else was sent.
+		`{"b":5}`: {"b": "Send base64 text."}, `{"b":{}}`: {"b": "Send base64 text."}, `{"pb":true}`: {"pb": "Send base64 text."},
+		`{"b":"!!"}`: {"b": "Send base64 text."}, `{"pb":"!!"}`: {"pb": "Send base64 text."},
+		// A whole number narrower than 64 bits says its range whatever was
+		// sent, so a body with another bad field keeps it too.
+		`{"n8":"x"}`: {"n8": "Send a whole number from -128 to 127."}, `{"u8":1.5}`: {"u8": "Send a whole number from 0 to 255."},
+		`{"n8":300,"i":"x"}`: {"n8": "Send a whole number from -128 to 127."}, `{"n8":"x","i":1.5}`: {"n8": "Send a whole number from -128 to 127."},
+		// A pointer says what its value takes.
+		`{"pwhen":"bad"}`: {"pwhen": "Send a time like 2026-11-25T10:00:00Z."}, `{"pwhen":5}`: {"pwhen": "Send a time like 2026-11-25T10:00:00Z."},
+		`{"when":"bad"}`: {"when": "Send a time like 2026-11-25T10:00:00Z."}, `{"pcode":5}`: {"pcode": "Send text."},
+		`{"pcode":"lower"}`: {"pcode": "Send a value this field takes."},
+		// A wrong type in a list's object is named by the object's field, a
+		// map's by the map's.
+		`{"lines":[{"qty":1},{"qty":"x"}]}`: {"lines.qty": "Send a whole number."}, `{"grid":[[{"qty":"x"}]]}`: {"grid.qty": "Send a whole number."},
+		`{"arr":[{},{"qty":"x"}]}`: {"arr.qty": "Send a whole number."}, `{"lines":["x"]}`: {"lines": "Send an object."},
+		`{"by_key":{"a.b":{"qty":"x"}}}`: {"by_key": "Send a whole number."},
 	} {
 		w := send(t, h, "POST", "/api/x", body)
 		if _, _, fields := apiError(t, w); w.Code != 400 || !reflect.DeepEqual(fields, want) {

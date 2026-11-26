@@ -3,12 +3,22 @@ package warp
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
 	"path"
 	"strings"
+	"sync/atomic"
 )
+
+// appsMade counts the Apps New has made in this process, for Serve's
+// description.
+var appsMade atomic.Int64
+
+// describeErr is where Serve says why it cannot describe the app; a test
+// puts another in its place.
+var describeErr io.Writer = os.Stderr
 
 const (
 	cacheImmutable = "public, max-age=31536000, immutable"
@@ -52,11 +62,18 @@ const (
 // build run an app, Serve writes the description of an App with no routes to
 // standard output and ends the process with status 0, so an app that serves
 // without a warp.App describes itself as having no typed routes and never
-// listens while weft waits. An App's own Serve and Run do not come here.
+// listens while weft waits. Once the process has made an App (New was
+// called), whose routes Serve cannot see, it says to call the App's own
+// Serve instead and ends the process with status 1, as a registration
+// mistake does. An App's own Serve and Run do not come here.
 func Serve(dist fs.FS, api http.Handler, opts ...ServeOption) http.Handler {
 	if os.Getenv("WARP_DESCRIBE") == "1" {
-		if err := New(Config{}).describeTo(describeOut); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+		if appsMade.Load() > 0 {
+			fmt.Fprintln(describeErr, "warp: Serve was called from the package and the app's routes are on an App; call the app's own Serve so they can be described.")
+			exit(1)
+		}
+		if err := newApp(Config{}).describeTo(describeOut); err != nil {
+			fmt.Fprintln(describeErr, err)
 			exit(1)
 		}
 		exit(0)

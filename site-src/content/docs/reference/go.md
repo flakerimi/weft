@@ -243,7 +243,7 @@ Returns the handler for a Weft app's pages and API. `App.Serve` and `App.Run` bu
 - When `dist` holds a page build (`routes.json` and the `manifest.json` that `weft-build-pages` writes), every file is read into memory once, here. Each request gets a page, a listed file, the app's `index.html` under its prefix, or the not-found page with status 404. Each answer is the stored brotli, gzip or plain variant the client accepts best, with an `ETag`; `If-None-Match` gets a 304. Hashed files are cached for a year, the rest revalidated. A page with linked files gets a `103 Early Hints` first.
 - Otherwise `dist` is a single-page app: its files are served as they are, and every other path gets its `index.html`. Files under `/assets/` are cached for a year; a missing one is a 404.
 
-Serve panics, in one sentence that starts `warp.Serve:` and names the file, when the build is incomplete, `dist` has no `index.html`, or `dist` is nil. It does that at start, not on a request. With `WARP_DESCRIBE=1` it prints the description of an app with no routes and exits 0, so an app that serves without a `warp.App` describes itself to `weft gen`.
+Serve panics, in one sentence that starts `warp.Serve:` and names the file, when the build is incomplete, `dist` has no `index.html`, or `dist` is nil. It does that at start, not on a request. With `WARP_DESCRIBE=1` it prints the description of an app with no routes and exits 0, so an app that serves without a `warp.App` describes itself to `weft gen`; once the process has made an App, whose routes it cannot see, it says `warp: Serve was called from the package and the app's routes are on an App; call the app's own Serve so they can be described.` and exits 1.
 
 ## ServeOption
 

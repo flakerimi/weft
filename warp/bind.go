@@ -652,7 +652,7 @@ func scalar(t reflect.Type) (setter, string, bool) {
 			}
 			v.SetInt(n)
 			return true
-		}, "Send a whole number.", true
+		}, wholeNumber(t), true
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		bits := t.Bits()
 		return func(v reflect.Value, s string) bool {
@@ -662,7 +662,7 @@ func scalar(t reflect.Type) (setter, string, bool) {
 			}
 			v.SetUint(n)
 			return true
-		}, "Send a whole number.", true
+		}, wholeNumber(t), true
 	case reflect.Float32, reflect.Float64:
 		bits := t.Bits()
 		return func(v reflect.Value, s string) bool {
@@ -911,7 +911,7 @@ func (p *plan) bodyError(data []byte, err error) error {
 			return p.refused(data)
 		}
 		if te.Field != "" {
-			return wrongType(map[string]string{fieldPath(p.view, te.Field): sendWhat(te.Type, te.Value)})
+			return wrongType(map[string]string{fieldPath(p.view, te.Field): sendWhat(te.Type)})
 		}
 		return BadRequest(notJSON)
 	}
@@ -1145,6 +1145,9 @@ func (r *refusal) text(raw []byte) []byte {
 
 // takes says what a type that reads itself takes, raw being what was sent.
 func takes(t reflect.Type, raw []byte) string {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem() // a pointer takes what its value takes
+	}
 	switch {
 	case t == timeType:
 		return "Send a time like 2026-11-25T10:00:00Z."
@@ -1160,14 +1163,15 @@ const cannotTake = "The body has a value its field cannot take."
 
 // fieldPath is the path of a type error's field, field as the decoder gives
 // it in a value of type t, keeping only the keys of struct fields: a list's
-// index is left out ("tags", not "tags.0"), as encoding/json v1 writes it and
-// jsonv2 does not, and the path ends at a map's field, since the key after it
-// may hold dots ("by_name", whatever the key and what is inside its value).
+// index is left out ("lines.qty", not "lines.1.qty"), as encoding/json v1
+// writes it and jsonv2 does not, and the path ends at a map's field, since
+// the key after it may hold dots ("by_name", whatever the key and what is
+// inside its value).
 func fieldPath(t reflect.Type, field string) string {
 	var kept []string
 	for seg := range strings.SplitSeq(field, ".") {
-		for t != nil && t.Kind() == reflect.Pointer {
-			t = t.Elem()
+		for t != nil && (t.Kind() == reflect.Pointer || !pathHasIndexes && (t.Kind() == reflect.Slice || t.Kind() == reflect.Array) && !isBytes(t)) {
+			t = t.Elem() // v1 writes no index: seg is a key of the list's values
 		}
 		switch {
 		case t == nil:
@@ -1232,11 +1236,11 @@ func wrongType(fields map[string]string) *Error {
 	return e
 }
 
-// sendWhat says what kind of value a field of type t takes, given the
-// decoder's word for what was sent ("number 300", "string"): a whole number's
-// range when a number fell outside it, text for a type that reads itself
-// from text.
-func sendWhat(t reflect.Type, sent string) string {
+// sendWhat says what kind of value a field of type t takes: a whole number's
+// range when it is narrower than 64 bits, base64 text for a []byte, text for a
+// type that reads itself from text. It does not depend on what was sent, so
+// a field says the same whichever problem of a body is reported.
+func sendWhat(t reflect.Type) string {
 	for t != nil && t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
@@ -1246,15 +1250,10 @@ func sendWhat(t reflect.Type, sent string) string {
 		return takes(t, nil)
 	case decodesItself(t) && !t.Implements(jsonUnmarshaler) && !reflect.PointerTo(t).Implements(jsonUnmarshaler):
 		return "Send text."
+	case isBytes(t):
+		return takes(t, nil) // base64 text, though encoding/json takes a list of numbers too
 	case isIntegerKind(t.Kind()):
-		number, isNumber := strings.CutPrefix(sent, "number ")
-		if !isNumber || strings.ContainsAny(number, ".eE") || t.Bits() == 64 {
-			return "Send a whole number."
-		}
-		if t.Kind() >= reflect.Uint {
-			return fmt.Sprintf("Send a whole number from 0 to %d.", uint64(1)<<t.Bits()-1)
-		}
-		return fmt.Sprintf("Send a whole number from %d to %d.", -(int64(1) << (t.Bits() - 1)), int64(1)<<(t.Bits()-1)-1)
+		return wholeNumber(t)
 	case t.Kind() == reflect.String:
 		return "Send text."
 	case isNumberKind(t.Kind()):
@@ -1267,6 +1266,18 @@ func sendWhat(t reflect.Type, sent string) string {
 		return "Send an object."
 	}
 	return "Send a different kind of value."
+}
+
+// wholeNumber says what a field of integer type t takes: its range when it
+// is narrower than 64 bits, where a range is worth saying.
+func wholeNumber(t reflect.Type) string {
+	switch {
+	case t.Bits() == 64:
+		return "Send a whole number."
+	case t.Kind() >= reflect.Uint:
+		return fmt.Sprintf("Send a whole number from 0 to %d.", uint64(1)<<t.Bits()-1)
+	}
+	return fmt.Sprintf("Send a whole number from %d to %d.", -(int64(1) << (t.Bits() - 1)), int64(1)<<(t.Bits()-1)-1)
 }
 
 // sizeOf writes a body limit in whole megabytes, or in bytes when it is not

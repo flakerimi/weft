@@ -1009,10 +1009,13 @@ func describedOn(t *testing.T, app string) {
 }
 
 // An app that starts its modules before it serves is described: Warp's
-// configuration takes the port the describing run is given.
+// configuration takes the port the describing run is given. One that serves
+// its App through the package-level warp.Serve, which cannot see the App's
+// routes, stops the build with Warp's sentence, not an empty client.
 func TestBuildDescribesAnAppThatStartsFirst(t *testing.T) {
 	app := genApp(t)
-	starts := "package main\n\nimport (\n\t\"context\"\n\t\"io/fs\"\n\t\"log\"\n\t\"net/http\"\n\t\"os\"\n\n\t\"github.com/flakerimi/weft/warp\"\n)\n\nvar dist fs.FS\n\nfunc main() {\n\tserver := warp.New(warp.FromEnv())\n\tif err := server.Start(context.Background()); err != nil {\n\t\tlog.Fatal(err)\n\t}\n\tos.WriteFile(\"describe-env.txt\", []byte(os.Getenv(\"PORT\")+\" \"+os.Getenv(\"HOST\")), 0o644)\n\tif dist == nil {\n\t\tdist = os.DirFS(\".\")\n\t}\n\tlog.Fatal(http.ListenAndServe(\"127.0.0.1:\"+os.Getenv(\"PORT\"), warp.Serve(dist, server.Handler())))\n}\n"
+	head := "package main\n\nimport (\n\t\"context\"\n\t\"io/fs\"\n\t\"log\"\n\t\"net/http\"\n\t\"os\"\n\n\t\"github.com/flakerimi/weft/warp\"\n\n\t\"myapp/app\"\n)\n\nvar dist fs.FS\n\nvar _ http.Handler\n\nfunc main() {\n\tserver := warp.New(warp.FromEnv())\n\tserver.Use(app.Modules()...)\n\tif err := server.Start(context.Background()); err != nil {\n\t\tlog.Fatal(err)\n\t}\n\tos.WriteFile(\"describe-env.txt\", []byte(os.Getenv(\"PORT\")+\" \"+os.Getenv(\"HOST\")), 0o644)\n"
+	starts := head + "\tif err := server.Serve(dist); err != nil {\n\t\tlog.Fatal(err)\n\t}\n}\n"
 	if err := os.WriteFile(filepath.Join(app, "main.go"), []byte(starts), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1021,6 +1024,18 @@ func TestBuildDescribesAnAppThatStartsFirst(t *testing.T) {
 		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errs)
 	}
 	describedOn(t, app)
+	if src, _ := os.ReadFile(filepath.Join(app, "web", ".weft-types", "api.ts")); !strings.Contains(string(src), "    async hello(): Promise<Message> {\n") {
+		t.Errorf("the app was not described:\n%s", src)
+	}
+	os.Remove(filepath.Join(app, "myapp"))
+
+	pkg := head + "\tif dist == nil {\n\t\tdist = os.DirFS(\".\")\n\t}\n\tlog.Fatal(http.ListenAndServe(\"127.0.0.1:\"+os.Getenv(\"PORT\"), warp.Serve(dist, server.Handler())))\n}\n"
+	os.WriteFile(filepath.Join(app, "main.go"), []byte(pkg), 0o644)
+	code, out, errs = build(t)
+	want := "warp: Serve was called from the package and the app's routes are on an App; call the app's own Serve so they can be described.\nweft build: the app did not describe itself; fix what its output above says and run weft build again.\n"
+	if code != 1 || !strings.HasSuffix(errs, want) {
+		t.Errorf("warp.Serve with an App: exit %d, stdout %q, stderr %q, want it to end %q", code, out, errs, want)
+	}
 }
 
 // weft build type-checks the pages against the client it has just written, so

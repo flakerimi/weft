@@ -156,7 +156,7 @@ func (a *App) Describe() (Description, error) {
 					t = t.Elem()
 				}
 				d.use(t, at, at+" answers", "give the route another output")
-				d.unaddressed(rt.Out, true, at+" answers", map[unaddressedKey]bool{})
+				d.unaddressed(rt.Out, true, nil, at+" answers", map[unaddressedKey]bool{})
 				info.Output = &OutputInfo{TS: d.ts(t, nil), List: list}
 			}
 		}
@@ -326,8 +326,8 @@ func (d *describer) use(t reflect.Type, route, where, fix string) {
 }
 
 type unaddressedKey struct {
-	t    reflect.Type
-	addr bool
+	t, held reflect.Type
+	addr    bool
 }
 
 // unaddressed reports a type of an answer whose MarshalJSON or MarshalText
@@ -336,12 +336,14 @@ type unaddressedKey struct {
 // description does not say. An answer is written through a pointer, so its
 // value, what pointers and lists hold, and the fields and array elements of
 // those are addressable; a map's values, and what they hold by value, are
-// not. addr is whether a value of type t is addressable there.
-func (d *describer) unaddressed(t reflect.Type, addr bool, where string, seen map[unaddressedKey]bool) {
-	if seen[unaddressedKey{t, addr}] {
+// not. addr is whether a value of type t is addressable there, and held,
+// when it is not, the type of the map's values t is or is inside: the type a
+// pointer in the map would make addressable.
+func (d *describer) unaddressed(t reflect.Type, addr bool, held reflect.Type, where string, seen map[unaddressedKey]bool) {
+	if seen[unaddressedKey{t, held, addr}] {
 		return
 	}
-	seen[unaddressedKey{t, addr}] = true
+	seen[unaddressedKey{t, held, addr}] = true
 	if t.Kind() != reflect.Pointer && t.Kind() != reflect.Interface && t != timeType {
 		pt := reflect.PointerTo(t)
 		for _, m := range []struct {
@@ -352,9 +354,14 @@ func (d *describer) unaddressed(t reflect.Type, addr bool, where string, seen ma
 				return // written by its own method wherever it is
 			}
 			if pt.Implements(m.iface) {
-				if !addr {
+				switch {
+				case addr:
+				case held == t:
 					d.fail("%s a map of %s, whose %s has a pointer receiver, so encoding/json writes the map's values without it; give %s a value receiver, or make the map hold *%s.",
 						where, typeName(t), m.name, m.name, typeName(t))
+				default:
+					d.fail("%s a map of %s, which holds %s, whose %s has a pointer receiver, so encoding/json writes it without that method inside the map's values; give %s a value receiver, or make the map hold *%s.",
+						where, typeName(held), typeName(t), m.name, m.name, typeName(held))
 				}
 				return
 			}
@@ -362,17 +369,17 @@ func (d *describer) unaddressed(t reflect.Type, addr bool, where string, seen ma
 	}
 	switch t.Kind() {
 	case reflect.Pointer, reflect.Slice:
-		d.unaddressed(t.Elem(), true, where, seen)
+		d.unaddressed(t.Elem(), true, nil, where, seen)
 	case reflect.Array:
-		d.unaddressed(t.Elem(), addr, where, seen)
+		d.unaddressed(t.Elem(), addr, held, where, seen)
 	case reflect.Map:
-		d.unaddressed(t.Elem(), false, where, seen)
+		d.unaddressed(t.Elem(), false, t.Elem(), where, seen)
 	case reflect.Struct:
 		if t == timeType {
 			return
 		}
 		for _, f := range jsonFields(t) {
-			d.unaddressed(f.typ, addr, where, seen)
+			d.unaddressed(f.typ, addr, held, where, seen)
 		}
 	}
 }

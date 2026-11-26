@@ -140,6 +140,13 @@ type App struct {
 // New returns an app configured by cfg, with no modules. A mistake in cfg is
 // reported by Err, and by Run.
 func New(cfg Config) *App {
+	appsMade.Add(1)
+	return newApp(cfg)
+}
+
+// newApp is New, uncounted, for the empty App the package-level Serve
+// describes.
+func newApp(cfg Config) *App {
 	xo, bad := cfg.xo, []string(nil)
 	if xo == nil || !slices.Equal(cfg.TrustedOrigins, cfg.xoFor) {
 		xo, bad = newOriginProtection(cfg.TrustedOrigins) // a Config made by hand, or changed since

@@ -1037,6 +1037,9 @@ func TestDescribeOmitemptyOnTwin(t *testing.T) {
 // exits 0 without serving; Run, which an App's Serve calls, never does that.
 func TestPackageServeDescribesNothing(t *testing.T) {
 	out := describeTo(t)
+	made := appsMade.Load()
+	appsMade.Store(0) // the Apps other tests made are not this process's
+	t.Cleanup(func() { appsMade.Store(made) })
 	code := -1
 	old := exit
 	exit = func(c int) { code = c; panic(exited{}) }
@@ -1079,6 +1082,39 @@ func TestPackageServeDescribesNothing(t *testing.T) {
 
 type exited struct{}
 
+// An App's routes cannot be seen by the package-level Serve, so when the
+// process has made an App and serves through warp.Serve, the describing run
+// fails with a sentence that says which Serve to call, and exits 1, as a
+// registration mistake does; nothing is printed where the description goes.
+func TestPackageServeWithAnApp(t *testing.T) {
+	out := describeTo(t)
+	var said bytes.Buffer
+	oldErr := describeErr
+	describeErr = &said
+	t.Cleanup(func() { describeErr = oldErr })
+	code := -1
+	old := exit
+	exit = func(c int) { code = c; panic(exited{}) }
+	t.Cleanup(func() { exit = old })
+	app := New(Config{})
+	Get(app, "/hello", func(context.Context, None) (Gadget, error) { return Gadget{}, nil })
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if _, ok := r.(exited); !ok {
+					panic(r)
+				}
+			}
+		}()
+		Serve(dist, app.Handler())
+		t.Fatal("Serve returned a handler under WARP_DESCRIBE=1")
+	}()
+	want := "warp: Serve was called from the package and the app's routes are on an App; call the app's own Serve so they can be described.\n"
+	if code != 1 || said.String() != want || out.Len() != 0 {
+		t.Fatalf("exit %d, said %q, printed %q; want exit 1 and %q", code, said.String(), out, want)
+	}
+}
+
 // The wire of an answer, checked against its description: what encoding/json
 // writes for an embedded pointer left nil, and for a type whose MarshalText
 // has a pointer receiver.
@@ -1111,6 +1147,18 @@ type WHolds struct {
 
 type WInMap struct {
 	By map[string]WPL `json:"by"`
+}
+
+// WHolder holds a WPL, so a map of it writes the WPL without its MarshalText.
+type WHolder struct {
+	Inner WPL `json:"inner"`
+}
+
+type WInMapDeep struct {
+	By  map[string]WHolder   `json:"by"`
+	Arr map[string][2]WPL    `json:"arr"`
+	Ok  map[string]*WHolder  `json:"ok"`
+	Not map[string][]WHolder `json:"not"`
 }
 
 // wireAgrees reports where the JSON value raw differs from what ts, a
@@ -1221,6 +1269,24 @@ func TestAnswersAreAsDescribed(t *testing.T) {
 	want := `warp: GET /inmap answers a map of WPL, whose MarshalText has a pointer receiver, so encoding/json writes the map's values without it; give MarshalText a value receiver, or make the map hold *WPL.`
 	if err == nil || err.Error() != want {
 		t.Errorf("Describe = %v\nwant %s", err, want)
+	}
+
+	// Held inside the map's values, the sentence names the type the map holds,
+	// which a pointer in the map makes addressable; a map of pointers, or of
+	// lists, is no mistake.
+	app = New(Config{})
+	Get(app, "/deep", func(context.Context, None) (WInMapDeep, error) { return WInMapDeep{}, nil })
+	_, err = app.Describe()
+	for _, want := range []string{
+		`warp: GET /deep answers a map of WHolder, which holds WPL, whose MarshalText has a pointer receiver, so encoding/json writes it without that method inside the map's values; give MarshalText a value receiver, or make the map hold *WHolder.`,
+		`warp: GET /deep answers a map of [2]warp.WPL, which holds WPL, whose MarshalText has a pointer receiver, so encoding/json writes it without that method inside the map's values; give MarshalText a value receiver, or make the map hold *[2]warp.WPL.`,
+	} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("Describe = %v\nwant it to hold %s", err, want)
+		}
+	}
+	if err != nil && strings.Count(err.Error(), "warp: GET /deep") != 2 {
+		t.Errorf("Describe = %v, want two mistakes", err)
 	}
 }
 
