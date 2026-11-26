@@ -27,8 +27,11 @@ kept: text typed or filled into a field, a box ticked, a radio or an option
 chosen. Just before the mount each such control is set back to what the
 server drew, so the hydration matches, and once mounted it gets the
 person's value again with an `input` and a `change` event, as the person's
-own change would, so `v-model` and a Form's state receive it. A control
-nobody touched keeps the value its model started with.
+own change would, so `v-model` and a Form's state receive it. A radio
+group counts as one value, whichever radio comes first. A control nobody
+touched keeps the value its model started with: untouched means as a form
+reset would leave it, so a select showing its first option because its
+model matches none is untouched.
 
 An island inside another island (a component that uses one, shown in an
 island) is not an island of its own: it draws its component in place, and

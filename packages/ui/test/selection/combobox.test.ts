@@ -72,6 +72,17 @@ describe('Combobox', () => {
     expect($<HTMLInputElement>('input[type="hidden"]').value).toBe('2')
   })
 
+  it('takes text that arrives while it has no focus as the search, without opening', async () => {
+    // As when the island runtime puts back what was typed before the page was live, after the person moved on.
+    const m = await cases()
+    type(field(), 'ap')
+    await settle()
+    const e = m.exposed as unknown as Exposed
+    expect(e.term).toBe('ap')
+    expect(e.open).toBe(false)
+    expect(field().getAttribute('aria-expanded')).toBe('false')
+  })
+
   it('opens with ArrowDown on the chosen option, leaves Home and End to the caret', async () => {
     await cases({ initial: 3 })
     expect(field().value).toBe('Banana')

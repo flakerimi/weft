@@ -4,7 +4,7 @@
 // and a submit hands it to the handler. A field nobody touched keeps the
 // value the app gave its model. (Hydration writes each control's model value
 // into the element, which alone would wipe what was typed.)
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Component } from 'vue'
 import { startIslands } from '../src/island-runtime.ts'
 import Forms from './fixtures/forms-island/components/Forms.vue'
@@ -14,6 +14,8 @@ import Selection from './fixtures/selection-island/components/Selection.vue'
 import { selectionIsland } from './fixtures/selection-island/markup.ts'
 import Dates from './fixtures/dates-island/components/Dates.vue'
 import { datesIsland } from './fixtures/dates-island/markup.ts'
+import Choices from './fixtures/choices-island/components/Choices.vue'
+import { choicesIsland } from './fixtures/choices-island/markup.ts'
 
 const settle = () => new Promise((r) => setTimeout(r, 0))
 
@@ -138,4 +140,67 @@ it('keeps a date typed into a DatePicker, and its model reads it', async () => {
   })
   expect(island.querySelector<HTMLInputElement>('input[placeholder="dd/mm/yyyy"]')!.value).toBe('15/03/2024')
   expect(island.querySelector('output')!.textContent).toContain('|2024-03-15|')
+})
+
+describe('radios and selects, whatever their order and defaults', () => {
+  const choices = (touch: (island: Element) => void) => hydrateOther(choicesIsland, 'Choices', Choices as Component, touch)
+  const radio = (island: Element, name: string, value: string) => island.querySelector<HTMLInputElement>(`input[name="${name}"][value="${value}"]`)!
+  const select = (island: Element, cls: string) => island.querySelector<HTMLSelectElement>(`select.${cls}`)!
+  const chosen = (s: HTMLSelectElement) => [...s.selectedOptions].map((o) => o.value)
+  const output = (island: Element) => island.querySelector('output')!.textContent
+
+  it('keeps a radio chosen after the group\'s default, before it, and in a group with no default', async () => {
+    const after = await choices((island) => {
+      radio(island, 'first', 'c').checked = true
+      radio(island, 'none', 'b').checked = true
+      island.querySelectorAll<HTMLInputElement>('.weft-radio__input')[2]!.checked = true
+    })
+    expect([radio(after, 'first', 'a').checked, radio(after, 'first', 'c').checked]).toEqual([false, true])
+    expect(radio(after, 'none', 'b').checked).toBe(true)
+    expect(after.querySelectorAll<HTMLInputElement>('.weft-radio__input')[2]!.checked).toBe(true)
+    expect(output(after)).toBe('c|b||b|y|team')
+    document.body.innerHTML = ''
+    const before = await choices((island) => {
+      radio(island, 'first', 'b').checked = true
+      radio(island, 'none', 'a').checked = true
+    })
+    expect(radio(before, 'first', 'b').checked).toBe(true)
+    expect(output(before)).toBe('b|a||b|y|free')
+  })
+
+  it('leaves a select nobody touched with its model, matching an option or none', async () => {
+    const island = await choices(() => {})
+    expect(output(island)).toBe('a|||b|y|free')
+    expect(chosen(select(island, 'pick'))).toEqual(['b'])
+    expect(chosen(select(island, 'many'))).toEqual(['y'])
+  })
+
+  it('hands over an option chosen before hydration, in a single and a multiple select', async () => {
+    const island = await choices((island) => {
+      select(island, 'blank').value = 'y'
+      select(island, 'pick').value = 'c'
+      for (const o of select(island, 'many').options) o.selected = o.value !== 'y'
+    })
+    expect([chosen(select(island, 'blank')), chosen(select(island, 'pick')), chosen(select(island, 'many'))]).toEqual([['y'], ['c'], ['x', 'z']])
+    expect(output(island)).toBe('a||y|c|x,z|free')
+  })
+
+  it('cannot tell the option the browser already showed from a choice of it, so the model keeps its value', async () => {
+    const island = await choices((island) => {
+      // The person chose x, the first option, which the browser was showing for the model '' already.
+      select(island, 'blank').value = 'x'
+    })
+    expect(output(island)).toBe('a|||b|y|free')
+  })
+})
+
+it('does not open a Combobox list the person typed into and then left', async () => {
+  const island = await hydrateOther(selectionIsland, 'Selection', Selection as Component, (island) => {
+    island.querySelector<HTMLInputElement>('[role="combobox"].weft-input__field')!.value = 'Ada'
+    island.querySelector<HTMLInputElement>('.weft-command-palette__input')!.focus()
+  })
+  const box = island.querySelector<HTMLInputElement>('[role="combobox"].weft-input__field')!
+  expect(box.value).toBe('Ada')
+  expect(box.getAttribute('aria-expanded')).toBe('false')
+  expect(document.activeElement).toBe(island.querySelector('.weft-command-palette__input'))
 })

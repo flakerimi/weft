@@ -48,7 +48,7 @@ component uses. Neither is counted in the rows below.
 | Chip | 1.55 | — | 1.08 | 2.63 |
 | CloseButton | 0.62 | — | 0.54 | 1.16 |
 | Collapsible | 1.33 | — | 0.48 | 1.81 |
-| Combobox | 22.09 | — | 2.67 | 24.76 |
+| Combobox | 22.07 | — | 2.67 | 24.75 |
 | CommandPalette | 11.55 | — | 1.90 | 13.45 |
 | ConfirmDialog | 6.55 | — | 1.96 | 8.51 |
 | Container | 0.77 | — | 0.14 | 0.91 |
@@ -109,7 +109,7 @@ component uses. Neither is counted in the rows below.
 | Tree | 3.95 | — | 0.74 | 4.69 |
 | WeftProvider | 0.97 | — | 0.27 | 1.25 |
 
-The five heaviest: DateRangePicker (28.18 KB), Combobox (24.76 KB), Select (22.47 KB), AppShell (22.29 KB), Header (20.35 KB).
+The five heaviest: DateRangePicker (28.18 KB), Combobox (24.75 KB), Select (22.47 KB), AppShell (22.29 KB), Header (20.35 KB).
 
 ## Tree-shaking
 

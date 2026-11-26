@@ -12,7 +12,10 @@ function decode(path: string): string {
   }
 }
 
-/** A run of escapes, one character at a time: the escapes its first byte says it takes, or that byte alone, kept. */
+/**
+ * A run of escapes, one character at a time: as many escapes as its first
+ * byte says the character takes, decoded together, or that byte alone, kept.
+ */
 function decodeRun(run: string): string {
   const bytes = run.match(/%../g)!
   let out = ''
@@ -30,7 +33,10 @@ function decodeRun(run: string): string {
   return out
 }
 
-/** The path's segments as Go's path.Clean leaves them: no empty or `.` segment, and a `..` taking the one before it back. */
+/**
+ * The path's segments as Go's path.Clean leaves them: no empty or `.`
+ * segment, and a `..` taking the one before it back.
+ */
 function clean(path: string): string[] {
   const out: string[] = []
   for (const s of path.split('/')) {
