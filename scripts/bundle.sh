@@ -15,8 +15,11 @@ fi
 root=$(cd "$(dirname "$0")/.." && pwd)
 # Resolve OUT against the caller's folder before anything changes directory;
 # C:/... and C:\... are absolute too, as Go on Windows passes them to Git Bash.
+# A path with backslashes is written with slashes, which tar takes as they
+# are (it reads a backslash in -C as an escape, \001 as a control character).
 case "$1" in
-/* | [A-Za-z]:[/\\]*) out="$1" ;;
+/*) out="$1" ;;
+[A-Za-z]:[/\\]*) out=$(printf '%s\n' "$1" | tr '\\' /) ;;
 *) out="$PWD/$1" ;;
 esac
 
