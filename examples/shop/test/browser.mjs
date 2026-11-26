@@ -26,6 +26,9 @@ const browser = spawn(browserPath, [
 ], { stdio: 'ignore' })
 const quit = () => browser.kill()
 process.on('exit', quit)
+// The test that runs this stops its process group on a timeout; the browser
+// is in the group too, and goes with it.
+process.on('SIGTERM', () => process.exit(1))
 
 let port
 for (let i = 0; i < 200 && !port; i++) {
@@ -45,6 +48,8 @@ const waiting = new Map()
 const logs = []
 const requests = []
 const held = []
+// Requests to answer as a server out of reach would: their URLs contain one of these.
+const unreachableUrls = new Set()
 ws.addEventListener('message', (ev) => {
   const m = JSON.parse(ev.data)
   if (m.id && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id) }
@@ -59,7 +64,9 @@ ws.addEventListener('message', (ev) => {
       requests.push({ url: m.params.request.url, method: m.params.request.method, type: m.params.type, body: m.params.request.postData ?? '' })
       break
     case 'Fetch.requestPaused':
-      held.push(m.params.requestId)
+      if ([...unreachableUrls].some((u) => m.params.request.url.includes(u))) {
+        ws.send(JSON.stringify({ id: ++seq, method: 'Fetch.failRequest', params: { requestId: m.params.requestId, errorReason: 'ConnectionRefused' } }))
+      } else held.push(m.params.requestId)
       break
   }
 })
@@ -130,6 +137,10 @@ await go(setupLink)
 await waitFor('the setup form, live', `__t.live('SetupForm') && __t.byLabel('Password')`)
 if (await evaluate(`location.hash !== '' || location.href.includes('token')`)) await fail('the setup token is still in the address')
 await shot('setup')
+// The link pasted again into the same tab changes only the fragment: it is
+// read again, and taken out of the address again.
+await evaluate(`(location.hash = new URL(${JSON.stringify(setupLink)}).hash, true)`)
+await waitFor('the token read again and gone from the address', `location.hash === '' && !location.href.includes('token') && !!__t.byLabel('Password')`)
 await type(`__t.byLabel('Password')`, password)
 await click(`__t.button('Set up the owner')`)
 await waitFor('/products after setup', `location.pathname === '/products' && __t.text().includes('No products')`)
@@ -211,6 +222,40 @@ await click(`__t.button('Delete')`)
 await waitFor('the confirmation', `__t.dialog() && __t.dialog().innerText.includes('Delete Lamp?')`)
 await click(`__t.button('Delete', __t.dialog())`)
 await waitFor('the empty table', `!__t.dialog() && __t.text().includes('No products')`)
+
+step('a session that ends while the list is open sends the visitor to sign in, and back')
+for (let i = 1; i <= 11; i++) {
+  const made = await evaluate(`fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'P${String(i).padStart(2, '0')}', price: ${i}, status: 'live' }) }).then((r) => r.status)`)
+  if (made !== 201) await fail(`making P${i} answered ${made}`)
+}
+await go(`${base}/products`)
+await waitFor('the first page', `__t.live('ProductsTable') && __t.text().includes('P10') && !__t.text().includes('P11')`)
+await send('Network.clearBrowserCookies')
+await click(`document.querySelector('.weft-table [aria-label="Page 2"]')`)
+await waitFor('sent to /login with next', `location.pathname === '/login' && location.search === '?next=%2Fproducts'`)
+await waitFor('the login form, live', `__t.live('LoginForm')`)
+await type(`__t.byLabel('Email')`, 'owner@example.com')
+await type(`__t.byLabel('Password')`, password)
+await click(`__t.button('Sign in')`)
+await waitFor('back on /products', `location.pathname === '/products' && __t.live('ProductsTable') && __t.text().includes('P10')`)
+
+step('delete the last row of the last page: the page before it shows')
+await click(`document.querySelector('.weft-table [aria-label="Page 2"]')`)
+await waitFor('the last page', `__t.text().includes('P11') && !__t.text().includes('P10')`)
+await click(`__t.button('Delete')`)
+await waitFor('the confirmation', `__t.dialog() && __t.dialog().innerText.includes('Delete P11?')`)
+await click(`__t.button('Delete', __t.dialog())`)
+await waitFor('the first page again', `!__t.dialog() && __t.text().includes('P01') && __t.text().includes('P10') && !__t.text().includes('P11') && !__t.text().includes('No products')`)
+await shot('last-row-deleted')
+
+step('signing out with the server out of reach says so, and stays signed in')
+unreachableUrls.add('/api/auth/logout')
+await send('Fetch.enable', { patterns: [{ urlPattern: '*/api/auth/logout*', requestStage: 'Request' }] })
+await click(`__t.button('Sign out')`)
+await waitFor('the sentence', `__t.text().includes('The server could not be reached; check the connection and try again.')`)
+if ((await evaluate('location.pathname')) !== '/products' || !(await evaluate(`__t.text().includes('owner@example.com')`))) await fail('signing out with no server left the page or the session')
+await send('Fetch.disable')
+unreachableUrls.clear()
 
 step('sign out')
 await click(`__t.button('Sign out')`)

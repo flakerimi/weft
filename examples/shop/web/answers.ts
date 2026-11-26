@@ -7,6 +7,9 @@ import { ApiError, type User } from './.weft-types/api.ts'
 /** What the shop says when the request never reached the server. */
 export const unreachable = 'The server could not be reached; check the connection and try again.'
 
+/** What the shop says when its own code failed, which is logged for whoever looks at the console. */
+export const pageFailed = 'Something went wrong on this page; reload it and try again.'
+
 /**
  * Where to go after signing in: `next` when it is a path on this site, such
  * as /products/4?x=1#y, and / for anything else. The string returned is the
@@ -34,11 +37,16 @@ export function nextPath(next: string | null | undefined, origin: string): strin
 /**
  * What a form shows for a failed call: an ApiError's field messages by the
  * field's name, or its message when it has none. A request that never reached
- * the server (code network) and anything that is not an ApiError get one
- * sentence of the shop's, not fetch's own words.
+ * the server (code network) gets one sentence of the shop's, not fetch's own
+ * words. Anything that is not an ApiError is a bug in the page's own code: it
+ * is logged with console.error, and the form says the page failed.
  */
 export function formProblem(e: unknown): { fields: Record<string, string>; message: string } {
-  if (!(e instanceof ApiError) || e.code === 'network') return { fields: {}, message: unreachable }
+  if (!(e instanceof ApiError)) {
+    console.error('The shop failed:', e)
+    return { fields: {}, message: pageFailed }
+  }
+  if (e.code === 'network') return { fields: {}, message: unreachable }
   return Object.keys(e.fields).length > 0 ? { fields: e.fields, message: '' } : { fields: {}, message: e.message }
 }
 

@@ -7,14 +7,14 @@ import { useSession } from '../session.ts'
 
 const { session, signOut } = useSession()
 const leaving = ref(false)
+// Why signing out did not happen, such as a server out of reach: the visitor
+// is still signed in, and is told so.
+const problem = ref('')
 
 async function leave() {
   leaving.value = true
-  try {
-    await signOut()
-  } finally {
-    leaving.value = false
-  }
+  problem.value = await signOut()
+  leaving.value = false
 }
 
 // On /login and /setup there is nothing to come back to, and a link from
@@ -29,6 +29,7 @@ const signIn = computed(() => {
   <Stack direction="row" :gap="3" align="center">
     <template v-if="session.user">
       <span>{{ session.user.email }}</span>
+      <span v-if="problem" role="alert">{{ problem }}</span>
       <Button label="Sign out" variant="ghost" size="sm" :loading="leaving" @click="leave" />
     </template>
     <Link v-else-if="!session.loading && !session.problem && signIn" :to="signIn">Sign in</Link>

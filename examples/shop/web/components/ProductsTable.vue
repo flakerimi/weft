@@ -5,9 +5,9 @@
 // product is deleted. Every call goes through the generated client.
 import { computed, onMounted, reactive, ref, useTemplateRef } from 'vue'
 import type { FormApi, TableColumn } from '@weft/ui'
-import { api, schema, type Product, type ProductInput } from '../.weft-types/api.ts'
+import { api, ApiError, schema, type Product, type ProductInput } from '../.weft-types/api.ts'
 import { formProblem } from '../answers.ts'
-import { requireUser, useSession } from '../session.ts'
+import { requireUser, signInAgain, useSession } from '../session.ts'
 
 // The table asks only once the visitor is known to be signed in.
 const ready = ref(false)
@@ -17,6 +17,14 @@ onMounted(async () => {
 })
 
 const table = useTemplateRef<{ refresh(): void }>('table')
+
+// The session can end while the list is open (signed out in another tab):
+// the next page, sort or search is a 401, which no Retry can cure, so the
+// visitor is sent to sign in and come back. Anything else keeps the table's
+// own row and its Retry.
+function listFailed(e: unknown) {
+  if (e instanceof ApiError && e.status === 401) signInAgain()
+}
 const search = ref('')
 const status = ref('')
 const filters = computed(() => ({ status: status.value }))
@@ -126,6 +134,7 @@ function removeFailed(e: unknown) {
       default-sort="name"
       caption="Products"
       hide-caption
+      @error="listFailed"
     >
       <template #name-cell="{ row }">
         <Link :to="`/products/${row.id}`">{{ row.name }}</Link>

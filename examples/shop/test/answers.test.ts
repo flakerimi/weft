@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { ApiError, type User } from '../web/.weft-types/api.ts'
-import { formProblem, nextPath, productId, sessionFrom, unreachable } from '../web/answers.ts'
+import { formProblem, nextPath, pageFailed, productId, sessionFrom, unreachable } from '../web/answers.ts'
 
 const origin = 'http://shop.test:8080'
 
@@ -65,7 +65,18 @@ test('formProblem: field errors, a message, and a server that cannot be reached'
     fields: {},
     message: unreachable,
   })
-  assert.deepEqual(formProblem(new Error('boom')), { fields: {}, message: unreachable })
+})
+
+test("formProblem: a bug in the page's own code is logged, and is not a server out of reach", (t) => {
+  const logged = t.mock.method(console, 'error', () => {})
+  const bug = new TypeError("Cannot read properties of undefined (reading 'id')")
+  assert.deepEqual(formProblem(bug), { fields: {}, message: pageFailed })
+  assert.equal(logged.mock.callCount(), 1)
+  assert.equal(logged.mock.calls[0]!.arguments.at(-1), bug)
+  // An ApiError is the server's answer, or none, and is not logged.
+  formProblem(new ApiError(0, 'network', 'Failed to fetch'))
+  formProblem(new ApiError(500, 'internal', 'Something went wrong on the server; its log has the details.'))
+  assert.equal(logged.mock.callCount(), 1)
 })
 
 const owner: User = { id: 1, created_at: '', updated_at: '', email: 'owner@example.com', role: 'owner' }
