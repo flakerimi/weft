@@ -363,7 +363,11 @@ func (a *App) route(method, path string, in, out reflect.Type, p *plan, status i
 	}
 	pattern := strings.TrimSpace(method + " /api" + path)
 	if err := register(a.mux, pattern, h); err != nil {
-		a.fail("route %q cannot be registered: %v", name, err)
+		if m := conflictWith.FindStringSubmatch(err.Error()); m != nil {
+			a.fail("route %q conflicts with %s, registered before it; give one of them another path.", name, strings.Replace(m[1], " /api/", " /", 1))
+		} else {
+			a.fail("route %q cannot be registered: %v", name, err)
+		}
 		return
 	}
 	a.mu.Lock()
@@ -408,6 +412,10 @@ var registeredAt = regexp.MustCompile(` \(registered at [^)]*\)`)
 
 // register adds pattern to mux, turning the mux's panic into an error of one
 // line.
+// conflictWith reads the other pattern from the mux's reason for refusing
+// one that answers some of the same requests.
+var conflictWith = regexp.MustCompile(`conflicts with pattern "([^"]+)"`)
+
 func register(mux *http.ServeMux, pattern string, h http.Handler) (err error) {
 	defer func() {
 		if v := recover(); v != nil {

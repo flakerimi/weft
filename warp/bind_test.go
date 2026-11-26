@@ -474,7 +474,7 @@ func TestTypedRouteKeepsRouteChecks(t *testing.T) {
 	Get(app, "/items", func(context.Context, None) (Item, error) { return Item{}, nil })
 	got := strings.Split(errText(app.Err()), "\n")
 	if len(got) != 3 || !strings.Contains(got[0], "does not start with /") || !strings.Contains(got[1], "already gets /api") ||
-		!strings.Contains(got[2], "cannot be registered") {
+		!strings.Contains(got[2], "conflicts with GET /items, registered before it") {
 		t.Fatalf("Err() = %q", got)
 	}
 	if routes := app.Routes(); len(routes) != 1 {

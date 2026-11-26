@@ -226,9 +226,14 @@ func TestRouteConflict(t *testing.T) {
 	app.Handle("GET /x", text("1"))
 	app.Handle("GET /x", text("2"))
 	err := errText(app.Err())
-	if !strings.HasPrefix(err, `warp: route "GET /x" cannot be registered: `) || !strings.Contains(err, "conflicts") ||
-		strings.Contains(err, "\n") || strings.Contains(err, "registered at") {
-		t.Fatalf("Err() = %q", err)
+	if want := `warp: route "GET /x" conflicts with GET /x, registered before it; give one of them another path.`; err != want {
+		t.Fatalf("Err() = %q, want %q", err, want)
+	}
+	other := New(Config{})
+	other.Handle("GET /a/{x}", text("1"))
+	other.Handle("GET /{y}/b", text("2"))
+	if want := `warp: route "GET /{y}/b" conflicts with GET /a/{x}, registered before it; give one of them another path.`; errText(other.Err()) != want {
+		t.Fatalf("Err() = %q, want %q", errText(other.Err()), want)
 	}
 	app.Handle("GET /{bad", text("3"))
 	if lines := strings.Split(errText(app.Err()), "\n"); len(lines) != 2 || !strings.HasPrefix(lines[1], `warp: route "GET /{bad" cannot be registered: `) {
@@ -450,7 +455,7 @@ func TestNameOverridesAndClashes(t *testing.T) {
 	}, "\n")
 	lines := strings.Split(errText(app.Err()), "\n")
 	if len(lines) != 4 || strings.Join(lines[:3], "\n") != want ||
-		!strings.HasPrefix(lines[3], `warp: route "GET /dup" cannot be registered: `) || !strings.Contains(lines[3], "conflicts") {
+		lines[3] != `warp: route "GET /dup" conflicts with GET /dup, registered before it; give one of them another path.` {
 		t.Fatalf("Err() =\n%s\nwant\n%s\nand the mux's conflict", errText(app.Err()), want)
 	}
 	var got []string
