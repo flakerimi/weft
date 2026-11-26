@@ -270,7 +270,8 @@ func TestBuildMakesBinary(t *testing.T) {
 	if !strings.HasSuffix(out, "Built myapp"+exeSuffix(runtime.GOOS)+"\n") {
 		t.Errorf("stdout ends %q", out[max(0, len(out)-80):])
 	}
-	if !strings.Contains(out, "weft: built 2 pages into web/dist") {
+	// The folder as weft build names it to the page build: web\dist on Windows.
+	if !strings.Contains(out, "weft: built 2 pages into "+filepath.Join("web", "dist")) {
 		t.Errorf("the page build's output was not passed through: %q", out)
 	}
 	assertServes(t, filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS)))
@@ -640,13 +641,13 @@ func TestBuildFromSubfolder(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s%s", code, out, errs)
 	}
-	if want := "Built " + filepath.Join("..", "..", "myapp") + "\n"; !strings.HasSuffix(out, want) {
+	if want := "Built " + filepath.Join("..", "..", "myapp"+exeSuffix(runtime.GOOS)) + "\n"; !strings.HasSuffix(out, want) {
 		t.Errorf("stdout ends %q, want %q", out[max(0, len(out)-80):], want)
 	}
-	if !exists(t, filepath.Join(app, "myapp")) || !exists(t, filepath.Join(app, "web", "dist")) {
+	if !exists(t, filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS))) || !exists(t, filepath.Join(app, "web", "dist")) {
 		t.Error("the app was not built")
 	}
-	if exists(t, "myapp") || exists(t, "web") {
+	if exists(t, "myapp"+exeSuffix(runtime.GOOS)) || exists(t, "web") {
 		t.Error("the build wrote into the subfolder")
 	}
 }

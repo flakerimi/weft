@@ -922,20 +922,20 @@ func TestBuildGoesOnWithoutDescription(t *testing.T) {
 	before, _ := os.ReadFile(file)
 	code, out, errs := build(t)
 	want := "weft build: the app did not describe itself within 3 s, so web/.weft-types/api.ts is as it was; make sure main.go calls Serve before doing other work.\n"
-	if code != 0 || !strings.Contains(errs, want) || !exists(t, filepath.Join(app, "myapp")) {
+	if code != 0 || !strings.Contains(errs, want) || !exists(t, filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS))) {
 		t.Fatalf("never describes: exit %d, stdout %q, stderr %q, want %q and a binary", code, out, errs, want)
 	}
 	describedOn(t, app)
 	if after, _ := os.ReadFile(file); !bytes.Equal(after, before) {
 		t.Error("api.ts changed")
 	}
-	os.Remove(filepath.Join(app, "myapp"))
+	os.Remove(filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS)))
 
 	text := "package main\n\nimport (\n\t\"fmt\"\n\t\"io/fs\"\n\n\t\"github.com/flakerimi/weft/warp\"\n)\n\nvar dist fs.FS\n\nfunc main() { _ = warp.New(warp.Config{}); fmt.Println(\"just text\") }\n"
 	os.WriteFile(main, []byte(text), 0o644)
 	code, out, errs = build(t)
 	want = "weft build: the app's standard output was not its description (it starts with \"just text\\n\"); make sure nothing else prints there when WARP_DESCRIBE is set.\nweft build: the app did not describe itself, so web/.weft-types/api.ts is as it was; fix what its output above says.\n"
-	if code != 0 || !strings.Contains(errs, want) || !exists(t, filepath.Join(app, "myapp")) {
+	if code != 0 || !strings.Contains(errs, want) || !exists(t, filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS))) {
 		t.Fatalf("prints text: exit %d, stdout %q, stderr %q, want %q and a binary", code, out, errs, want)
 	}
 }
@@ -974,7 +974,7 @@ func TestNoWarpAppIsNotDescribed(t *testing.T) {
 		t.Error("the client with routes was changed")
 	}
 	os.Remove(file)
-	os.Remove(filepath.Join(app, "myapp"))
+	os.Remove(filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS)))
 
 	start := time.Now()
 	code, out, errs = build(t)
@@ -994,7 +994,7 @@ func TestNoWarpAppIsNotDescribed(t *testing.T) {
 	if empty := mustGenerate(t, noRoutes); string(src) != empty {
 		t.Errorf("the client is not that of an app with no routes:\n%s", firstDifference(string(src), empty))
 	}
-	os.Remove(filepath.Join(app, "myapp"))
+	os.Remove(filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS)))
 
 	code, out, errs = runCmd("gen")
 	if want := "weft gen: the app has no warp.App, as no package it is built from calls warp.New, so there are no routes to write and web/.weft-types/api.ts is the client of an app with none.\n"; code != 0 || out != want || errs != "" {
@@ -1047,14 +1047,14 @@ func TestBuildDescribesAnAppThatStartsFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, errs := build(t)
-	if code != 0 || strings.Contains(errs, "PORT") || strings.Contains(errs, "describe") || !exists(t, filepath.Join(app, "myapp")) {
+	if code != 0 || strings.Contains(errs, "PORT") || strings.Contains(errs, "describe") || !exists(t, filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS))) {
 		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errs)
 	}
 	describedOn(t, app)
 	if src, _ := os.ReadFile(filepath.Join(app, "web", ".weft-types", "api.ts")); !strings.Contains(string(src), "    async hello(): Promise<Message> {\n") {
 		t.Errorf("the app was not described:\n%s", src)
 	}
-	os.Remove(filepath.Join(app, "myapp"))
+	os.Remove(filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS)))
 
 	// Started first, then served through warp.Serve: Start describes it.
 	tail := "\tif dist == nil {\n\t\tdist = os.DirFS(\".\")\n\t}\n\tlog.Fatal(http.ListenAndServe(\"127.0.0.1:\"+os.Getenv(\"PORT\"), warp.Serve(dist, server.Handler())))\n}\n"
@@ -1065,7 +1065,7 @@ func TestBuildDescribesAnAppThatStartsFirst(t *testing.T) {
 	if src, _ := os.ReadFile(filepath.Join(app, "web", ".weft-types", "api.ts")); !strings.Contains(string(src), "    async hello(): Promise<Message> {\n") {
 		t.Errorf("started, then warp.Serve: the app was not described:\n%s", src)
 	}
-	os.Remove(filepath.Join(app, "myapp"))
+	os.Remove(filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS)))
 
 	// Not started, served through warp.Serve: its routes cannot be seen.
 	pkg := strings.Replace(head, "\tif err := server.Start(context.Background()); err != nil {\n\t\tlog.Fatal(err)\n\t}\n", "\t_ = context.Background\n", 1) + tail
@@ -1088,7 +1088,7 @@ func TestBuildTypeChecks(t *testing.T) {
 	if code, out, errs := build(t); code != 0 {
 		t.Fatalf("exit %d: %s%s", code, out, errs)
 	}
-	os.Remove(filepath.Join(app, "myapp"))
+	os.Remove(filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS)))
 	routes := filepath.Join(app, "app", "hello", "routes.go")
 	goSrc, _ := os.ReadFile(routes)
 	os.WriteFile(routes, []byte(strings.Replace(string(goSrc), "`json:\"message\"`", "`json:\"text\"`", 1)), 0o644)
@@ -1097,7 +1097,7 @@ func TestBuildTypeChecks(t *testing.T) {
 	if code != 1 || !strings.HasSuffix(errs, want) || !strings.Contains(out+errs, "typed.vue") {
 		t.Errorf("exit %d, stdout %q, stderr %q, want it to end %q", code, out, errs, want)
 	}
-	if exists(t, filepath.Join(app, "myapp")) {
+	if exists(t, filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS))) {
 		t.Error("the binary was built")
 	}
 }
