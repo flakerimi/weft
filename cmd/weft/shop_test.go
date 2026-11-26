@@ -324,10 +324,31 @@ func send(t *testing.T, client *http.Client, method, url string, body any) (int,
 
 // A password form as the server draws it, before its island is live: a POST
 // form, and the page's inline guard that stops any submit of it.
-var (
-	postForm    = regexp.MustCompile(`<form class="weft-form"[^>]*\bmethod="post"`)
-	submitGuard = regexp.MustCompile(`<script data-weft-prepaint>[^<]*classList\.contains\("weft-form"\)\)e\.preventDefault\(\)`)
-)
+var postForm = regexp.MustCompile(`<form class="weft-form"[^>]*\bmethod="post"`)
+
+// guardsSubmit reports whether page has what keeps a password form from
+// being sent before its island is live: an inline script in <head>, before
+// any module script, that cancels a submit of a .weft-form. Its wording is
+// @weft/ui's to change.
+func guardsSubmit(page string) bool {
+	_, head, _ := strings.Cut(page, "<head>")
+	head, _, _ = strings.Cut(head, "</head>")
+	for {
+		_, rest, ok := strings.Cut(head, "<script")
+		if !ok {
+			return false
+		}
+		attrs, rest, _ := strings.Cut(rest, ">")
+		code, rest, _ := strings.Cut(rest, "</script>")
+		head = rest
+		if strings.Contains(attrs, "src=") || strings.Contains(attrs, `type="module"`) {
+			return false // a module script came first
+		}
+		if strings.Contains(code, `"submit"`) && strings.Contains(code, "weft-form") && strings.Contains(code, "preventDefault()") {
+			return true
+		}
+	}
+}
 
 // The shop builds with weft build (which writes its typed client), its own Go
 // and web tests pass, its pages type-check against the client, and the binary
@@ -370,7 +391,7 @@ func TestShop(t *testing.T) {
 		if code != 200 || !strings.Contains(body, want) {
 			t.Errorf("GET %s = %d, want 200 with %q: %s", path, code, want, body)
 		}
-		if (path == "/login" || path == "/setup") && (!postForm.MatchString(body) || !submitGuard.MatchString(body)) {
+		if (path == "/login" || path == "/setup") && (!postForm.MatchString(body) || !guardsSubmit(body)) {
 			t.Errorf("GET %s: the password form is not a POST form behind the inline submit guard: %s", path, body)
 		}
 	}
@@ -468,14 +489,71 @@ func TestShopInBrowser(t *testing.T) {
 	}
 	app := shopCopy(t)
 	url, token := startShop(t, app)
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
-	defer cancel()
 	out := t.TempDir()
-	cmd := exec.CommandContext(ctx, "node", "test/browser.mjs", browser, url, url+"/setup#token="+token, out)
+	cmd := exec.Command("node", "test/browser.mjs", browser, url, url+"/setup#token="+token, out)
 	cmd.Dir = app
-	got, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("the shop in %s: %v\n%s", browser, err, got)
+	var got lockedBuffer
+	cmd.Stdout, cmd.Stderr = &got, &got
+	// In a process group of its own, which the browser node starts joins: on
+	// every way out of this test, the time running out included, the group
+	// is stopped, so no browser it started is left running, and no other is
+	// touched.
+	if err := startGroup(cmd); err != nil {
+		t.Fatal(err)
 	}
-	t.Logf("drove the shop in %s:\n%s", browser, got)
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	var err error
+	select {
+	case err = <-done:
+		stopGroup(cmd) // what is left of it, such as a browser still closing
+	case <-time.After(browserWait):
+		stopGroup(cmd)
+		<-done
+		t.Fatalf("the shop in %s did not finish within %s, so its browser was stopped:\n%s", browser, browserWait, got.String())
+	}
+	if err != nil {
+		t.Fatalf("the shop in %s: %v\n%s", browser, err, got.String())
+	}
+	t.Logf("drove the shop in %s:\n%s", browser, got.String())
+}
+
+// browserWait is how long the shop's browser test may run.
+var browserWait = 4 * time.Minute
+
+// lockedBuffer is a bytes.Buffer two writers may share.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// guardsSubmit finds the guard in any wording, and only in <head> before a
+// module script.
+func TestGuardsSubmit(t *testing.T) {
+	guard := `<script data-weft-prepaint>window.addEventListener("submit",function(e){var t=e.target;if(t&&t.classList&&t.classList.contains("weft-form"))e.preventDefault()},true)</script>`
+	reworded := `<script>addEventListener( "submit", (ev) => { if (ev.target.matches?.('.weft-form')) ev.preventDefault() }, true )</script>`
+	module := `<script type="module" src="/assets/a.js"></script>`
+	for page, want := range map[string]bool{
+		"<html><head>" + guard + module + "</head><body></body></html>":      true,
+		"<html><head>" + reworded + module + "</head><body></body></html>":   true,
+		"<html><head>" + module + guard + "</head><body></body></html>":      false,
+		"<html><head>" + module + "</head><body>" + guard + "</body></html>": false,
+		"<html><head><script>console.log(1)</script></head></html>":          false,
+	} {
+		if got := guardsSubmit(page); got != want {
+			t.Errorf("guardsSubmit(%q) = %v, want %v", page, got, want)
+		}
+	}
 }
