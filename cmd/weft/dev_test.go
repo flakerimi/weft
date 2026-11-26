@@ -1067,3 +1067,58 @@ func TestDevGoServerIsLocalOnly(t *testing.T) {
 		t.Errorf("exit %d: %s", code, r.stderr)
 	}
 }
+
+// weft dev writes web/.weft-types/api.ts before it starts the Go server, and
+// again after each Go change that builds. One that does not describe itself
+// is said, leaves the file as it was, and does not stop weft dev.
+func TestDevRunsGenAfterGoChange(t *testing.T) {
+	app := devApp(t)
+	file := filepath.Join(app, "web", ".weft-types", "api.ts")
+	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
+	src, err := os.ReadFile(file)
+	if err != nil || !strings.Contains(string(src), "    hello(): Promise<Message> {\n") {
+		t.Fatalf("weft dev wrote no client before it started: %v\n%s", err, src)
+	}
+	waitFor := func(want string) {
+		t.Helper()
+		for deadline := time.Now().Add(15 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+			if b, _ := os.ReadFile(file); strings.Contains(string(b), want) {
+				return
+			}
+			if time.Now().After(deadline) {
+				b, _ := os.ReadFile(file)
+				t.Fatalf("api.ts has no %q within 15 s: %s\n%s", want, r.stderr, b)
+			}
+		}
+	}
+	routes := filepath.Join(app, "app", "hello", "routes.go")
+	goSrc, err := os.ReadFile(routes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withCount := strings.Replace(string(goSrc), "\tMessage string `json:\"message\"`\n", "\tMessage string `json:\"message\"`\n\tCount   int    `json:\"count\"`\n", 1)
+	if withCount == string(goSrc) {
+		t.Fatalf("app/hello/routes.go has no Message field: %s", goSrc)
+	}
+	os.WriteFile(routes, []byte(withCount), 0o644)
+	waitFor("  count: number\n")
+
+	// A registration mistake: the description fails, and so does the server.
+	before, _ := os.ReadFile(file)
+	os.WriteFile(routes, []byte(strings.Replace(withCount, `"/hello"`, `"hello"`, 1)), 0o644)
+	want := "weft dev: the app did not describe itself, so web/.weft-types/api.ts is as it was; fix what its output above says.\n"
+	for deadline := time.Now().Add(15 * time.Second); !strings.Contains(r.stderr.String(), want); time.Sleep(50 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("no %q within 15 s: %s", want, r.stderr)
+		}
+	}
+	if after, _ := os.ReadFile(file); !bytes.Equal(after, before) {
+		t.Error("api.ts changed after a failed description")
+	}
+	os.WriteFile(routes, goSrc, 0o644)
+	waitFor("export interface Message {\n  message: string\n}\n")
+	eventually(t, r.url+"/api/hello", "Hello from Go", 10*time.Second)
+	if code := r.stop(t); code != 0 {
+		t.Errorf("exit %d: %s", code, r.stderr)
+	}
+}

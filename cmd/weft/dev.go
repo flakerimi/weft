@@ -14,6 +14,8 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -127,14 +129,32 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return now, true
 	}
 
-	bin := filepath.Join(appDir, ".weft", "dev", "app")
+	bin := devBinary(appDir)
 	last, _ := files()
-	if !goBuild(ctx, appDir, bin, stderr) {
+	if !goBuild(ctx, "dev", appDir, bin, stderr) {
 		if ctx.Err() != nil {
 			return 0
 		}
 		fmt.Fprintln(stderr, "weft dev: go build failed; fix what its output above says and run weft dev again.")
 		return 1
+	}
+	// gen writes web/.weft-types/api.ts from the build just made. An app that
+	// does not describe itself is said, and weft dev goes on with the file as
+	// it was; the Go server has devReadyWithin to describe itself, as to
+	// answer.
+	gen := func() {
+		_, err := regenerate(ctx, appDir, bin, devReadyWithin, stderr)
+		switch {
+		case err == nil, ctx.Err() != nil:
+		case errors.Is(err, errNoDescription), errors.Is(err, errDescribeTimeout):
+			fmt.Fprintln(stderr, "weft dev: the app did not describe itself, so web/.weft-types/api.ts is as it was; fix what its output above says.")
+		default:
+			fail(stderr, "dev", err)
+		}
+	}
+	gen()
+	if ctx.Err() != nil {
+		return 0
 	}
 
 	goServer := func() (*child, error) {
@@ -271,11 +291,15 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			continue
 		}
 		last = now
-		if !goBuild(ctx, appDir, bin, stderr) {
+		if !goBuild(ctx, "dev", appDir, bin, stderr) {
 			if ctx.Err() == nil {
 				fmt.Fprintln(stderr, "weft dev: go build failed; fix what its output above says, and until you save the fix the last build keeps serving /api.")
 			}
 			continue
+		}
+		gen()
+		if ctx.Err() != nil {
+			return stopAsked()
 		}
 		if api != nil {
 			api.stop()
@@ -315,19 +339,27 @@ func (c *child) stop() {
 }
 
 // goBuild builds the app with the dev tag into bin, passing the compiler's
-// output through; it says whether the build succeeded.
-func goBuild(ctx context.Context, appDir, bin string, stderr io.Writer) bool {
+// output through; it says whether the build succeeded. command names the
+// weft command in its sentence.
+func goBuild(ctx context.Context, command, appDir, bin string, stderr io.Writer) bool {
 	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
-		fmt.Fprintf(stderr, "weft dev: cannot make %s (%v); make the app's folder writable.\n", filepath.Dir(bin), err)
+		fmt.Fprintf(stderr, "weft %s: cannot make %s (%v); make the app's folder writable.\n", command, filepath.Dir(bin), err)
 		return false
 	}
 	cmd := exec.CommandContext(ctx, "go", "build", "-tags", "dev", "-o", bin, ".")
-	cmd.Dir = appDir
+	cmd.Dir, cmd.Env = appDir, hostBuildEnv(os.Environ())
 	cmd.Stdout, cmd.Stderr = stderr, stderr
 	// Stopped as a Ctrl-C would, so go stops the compilers it started.
 	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
 	cmd.WaitDelay = 3 * time.Second
 	return cmd.Run() == nil
+}
+
+// hostBuildEnv is environ with GOOS and GOARCH set to this machine's, since
+// the dev build runs here even when the environment asks weft build for
+// another system.
+func hostBuildEnv(environ []string) []string {
+	return append(slices.Clone(environ), "GOOS="+runtime.GOOS, "GOARCH="+runtime.GOARCH)
 }
 
 // goFiles returns the modification time of every .go file in the app, and of

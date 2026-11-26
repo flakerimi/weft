@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -33,6 +34,10 @@ func buildCmd(args []string, stdout, stderr io.Writer) int {
 	cfg, err := ensure(appDir, stdout, stderr)
 	if err != nil {
 		return fail(stderr, "build", err)
+	}
+	// The typed client first, so the pages are built and checked against it.
+	if _, err := genTypes(context.Background(), "build", appDir, stderr); err != nil {
+		return genFailed(stderr, "build", err)
 	}
 
 	pages := []string{"exec", "weft-build-pages", "--root", "web", "--out", filepath.Join("web", "dist")}

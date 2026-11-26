@@ -177,6 +177,19 @@ func TestGoBuildEnv(t *testing.T) {
 	}
 }
 
+// The dev build runs on this machine, whatever system weft build is asked
+// to build for.
+func TestHostBuildEnv(t *testing.T) {
+	in := []string{"PATH=/bin", "GOOS=plan9", "GOARCH=mips"}
+	want := []string{"PATH=/bin", "GOOS=plan9", "GOARCH=mips", "GOOS=" + runtime.GOOS, "GOARCH=" + runtime.GOARCH}
+	if got := hostBuildEnv(in); !slices.Equal(got, want) {
+		t.Errorf("hostBuildEnv(%q) = %q, want %q", in, got, want)
+	}
+	if len(in) != 3 {
+		t.Error("hostBuildEnv changed its argument")
+	}
+}
+
 func TestBuildMakesBinary(t *testing.T) {
 	inTempDir(t, "work")
 	app := copyApp(t, ".")
