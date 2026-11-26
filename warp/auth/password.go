@@ -8,7 +8,6 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -81,13 +80,17 @@ func (m *module) slot(ctx context.Context) (release func(), err error) {
 	case <-timer.C:
 	case <-ctx.Done():
 	}
-	return nil, warp.Unavailable(errBusy)
+	return nil, errSlotBusy
 }
+
+// errSlotBusy is slot's giving up, one value for every request, which is
+// only ever read.
+var errSlotBusy = warp.Unavailable(errBusy)
 
 // isBusy reports whether err is slot's giving up.
 func isBusy(err error) bool {
 	var e *warp.Error
-	return errors.As(err, &e) && e.Status == http.StatusServiceUnavailable && e.Message == errBusy
+	return errors.As(err, &e) && e == errSlotBusy
 }
 
 // hash is hashPassword in one of the module's slots.

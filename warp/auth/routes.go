@@ -50,16 +50,28 @@ func (m *module) login(ctx context.Context, in LoginInput) (User, error) {
 // attempt checks one login from the client ip, as ClientKey names it (an
 // IPv6 client by its /64). Before anything is looked up or hashed it takes a
 // try from the address's count and from the email's, either of which, when
-// spent, is the 429. A success clears the email's count. A try that finds no
-// hashing slot in time gives both back: no hash ran and nothing was learned.
+// spent, is the 429; when the email's is spent, the address's try stays
+// taken, as it always was. A success clears the email's count. A try that
+// learned nothing, since its user could not be looked up or it found no
+// hashing slot in time, gives both back, to the counts it took them from.
 func (m *module) attempt(ctx context.Context, email, password, ip string) (userRow, error) {
 	email = normalEmail(email)
 	key := limitKey(email, ip)
-	if !m.perAddress.take(ip) || !m.perKey.take(key) {
+	byAddress := m.perAddress.take(ip)
+	if byAddress == nil {
 		return userRow{}, warp.TooMany(errTooMany)
+	}
+	byKey := m.perKey.take(key)
+	if byKey == nil {
+		return userRow{}, warp.TooMany(errTooMany)
+	}
+	giveBack := func() {
+		m.perAddress.give(byAddress)
+		m.perKey.give(byKey)
 	}
 	row, found, err := m.find(ctx, email)
 	if err != nil {
+		giveBack() // no hash ran
 		return userRow{}, err
 	}
 	stored := dummyHash
@@ -69,8 +81,7 @@ func (m *module) attempt(ctx context.Context, email, password, ip string) (userR
 	ok, err := m.verify(ctx, stored, password)
 	if err != nil {
 		if isBusy(err) {
-			m.perAddress.give(ip)
-			m.perKey.give(key)
+			giveBack()
 		}
 		return userRow{}, err
 	}

@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -213,26 +214,146 @@ func TestSlotWait(t *testing.T) {
 	}
 }
 
-// A give returns one try, and forgets a key with none left.
+// A give returns one try to the count it was taken from, forgets a key with
+// none left, and gives nothing to a later count of the same key.
 func TestLimitGive(t *testing.T) {
-	l := newLimiter((&testClock{now: testNow}).Now, maxKeys, 2)
-	l.take("k")
-	l.take("k")
-	if l.take("k") {
-		t.Fatal("a third try passed a limit of 2")
+	clock := &testClock{now: testNow}
+	l := newLimiter(clock.Now, maxKeys, 2)
+	a := l.take("k")
+	b := l.take("k")
+	if a != b || l.take("k") != nil {
+		t.Fatal("a third try passed a limit of 2, or two tries of one window were counted apart")
 	}
-	l.give("k")
-	if !l.take("k") || l.take("k") {
+	l.give(a)
+	if l.take("k") == nil || l.take("k") != nil {
 		t.Fatal("a given-back try was not one try")
 	}
-	l.give("k")
-	l.give("k")
-	l.give("k") // more than were taken: nothing below none
+	l.give(a)
+	l.give(a)
+	l.give(a) // more than were taken: nothing below none
 	if l.size() != 0 {
 		t.Fatalf("%d keys after every try was given back", l.size())
 	}
-	l.give("never")
-	if l.size() != 0 {
-		t.Fatal("giving back a key never taken remembered it")
+	l.give(nil)
+	// A try of an ended window, given back in the next, is not the next's.
+	old := l.take("k")
+	clock.set(testNow.Add(window))
+	next := l.take("k")
+	l.give(old)
+	if triesOf(l, "k") != 1 || next == old {
+		t.Fatalf("a try of the last window was given to this one: count %d", triesOf(l, "k"))
+	}
+}
+
+// fill takes every hashing slot and returns a function that frees them.
+func fill(m *module) func() {
+	for range cap(m.slots) {
+		m.slots <- struct{}{}
+	}
+	return func() {
+		for range cap(m.slots) {
+			<-m.slots
+		}
+	}
+}
+
+func waitFor(t *testing.T, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatal("the condition was not reached in 5 s")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// A try given back is given back to the window that counted it, never to
+// a later one: guesses that wait past their window's end and then give up
+// leave the next window's count alone, so no window runs more hashes for
+// one email than the limit.
+func TestGiveBackStaysInItsWindow(t *testing.T) {
+	const email, ip = "owner@example.com", "192.0.2.1"
+	key := limitKey(email, ip)
+	clock := &testClock{now: testNow}
+	m := fastModule(t, clock)
+	m.slotWait = time.Hour // only a cancel ends the wait
+	free := fill(m)
+
+	// Window 1: five guesses that wait for a slot.
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	var w1 sync.WaitGroup
+	for range maxTries {
+		w1.Go(func() { m.attempt(ctx1, email, "wrong", ip) })
+	}
+	waitFor(t, func() bool { return triesOf(m.perKey, key) == maxTries })
+
+	// Window 2 begins; five guesses take its tries and wait.
+	clock.set(testNow.Add(window + time.Second))
+	var w2 sync.WaitGroup
+	var hashed atomic.Int64
+	guess := func() {
+		w2.Go(func() {
+			if _, err := m.attempt(context.Background(), email, "wrong", ip); status(err) == 401 {
+				hashed.Add(1)
+			}
+		})
+	}
+	for range maxTries {
+		guess()
+	}
+	waitFor(t, func() bool { return triesOf(m.perKey, key) == maxTries && triesOf(m.perAddress, ip) == maxTries })
+	time.Sleep(20 * time.Millisecond) // window 2's guesses are waiting for a slot
+
+	// Window 1's guesses give up: window 2's count is not theirs.
+	cancel1()
+	w1.Wait()
+	if n := triesOf(m.perKey, key); n != maxTries {
+		t.Fatalf("after window 1's give-backs window 2's count is %d, want %d", n, maxTries)
+	}
+	// So five more in window 2 are refused, and no more than five hash.
+	for range maxTries {
+		guess()
+	}
+	time.Sleep(20 * time.Millisecond)
+	free()
+	w2.Wait()
+	if n := hashed.Load(); n > maxTries {
+		t.Fatalf("window 2 ran %d hashes for one email, more than the limit of %d", n, maxTries)
+	}
+}
+
+// A try whose user could not be looked up (a busy database) ran no hash and
+// learned nothing, so it is given back on both counts too.
+func TestFailedLookupCostsNoTry(t *testing.T) {
+	const email, ip = "owner@example.com", "192.0.2.1"
+	m := fastModule(t, &testClock{now: testNow})
+	m.find = func(context.Context, string) (userRow, bool, error) {
+		return userRow{}, false, warp.Unavailable("The database is busy; try again in a moment.")
+	}
+	for range maxTries + 2 {
+		if _, err := m.attempt(context.Background(), email, "wrong", ip); status(err) != 503 {
+			t.Fatalf("a lookup on a busy database: %v, want its 503", err)
+		}
+	}
+	if n, a := triesOf(m.perKey, limitKey(email, ip)), triesOf(m.perAddress, ip); n != 0 || a != 0 {
+		t.Fatalf("the counts are %d and %d, want 0 and 0", n, a)
+	}
+}
+
+// When the address has tries left and the email has none, the address's
+// try stays spent, as it was before tries could be given back: a refused
+// email does not loosen the per-address limit.
+func TestRefusedEmailSpendsTheAddress(t *testing.T) {
+	const ip = "192.0.2.1"
+	m := fastModule(t, &testClock{now: testNow})
+	for range maxTries {
+		m.attempt(context.Background(), "owner@example.com", "wrong", ip)
+	}
+	if _, err := m.attempt(context.Background(), "owner@example.com", "wrong", ip); status(err) != 429 {
+		t.Fatalf("a sixth guess: %v, want 429", err)
+	}
+	if a := triesOf(m.perAddress, ip); a != maxTries+1 {
+		t.Fatalf("the address's count is %d, want %d", a, maxTries+1)
 	}
 }

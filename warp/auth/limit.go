@@ -57,10 +57,11 @@ func newLimiter(now func() time.Time, maxKeys, maxTries int) *limiter {
 	return &limiter{now: now, maxKeys: maxKeys, maxTries: maxTries, keys: map[string]*list.Element{}, order: list.New()}
 }
 
-// take counts one try of key and reports true, or reports false, counting
-// nothing, when key already has maxTries in its window. It is one step under
-// the lock, so of tries at once only maxTries pass.
-func (l *limiter) take(key string) bool {
+// take counts one try of key and returns the count it counted it in, or
+// returns nil, counting nothing, when key already has maxTries in its
+// window. It is one step under the lock, so of tries at once only maxTries
+// pass.
+func (l *limiter) take(key string) *tries {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
@@ -68,10 +69,10 @@ func (l *limiter) take(key string) bool {
 		t := e.Value.(*tries)
 		if now.Before(t.start.Add(window)) {
 			if t.n >= l.maxTries {
-				return false
+				return nil
 			}
 			t.n++
-			return true
+			return t
 		}
 		l.order.Remove(e) // its window ended: a new one begins
 		delete(l.keys, key)
@@ -81,8 +82,9 @@ func (l *limiter) take(key string) bool {
 		l.order.Remove(oldest)
 		delete(l.keys, oldest.Value.(*tries).key)
 	}
-	l.keys[key] = l.order.PushBack(&tries{key: key, start: now, n: 1})
-	return true
+	t := &tries{key: key, start: now, n: 1}
+	l.keys[key] = l.order.PushBack(t)
+	return t
 }
 
 // clear forgets key's tries, after a success.
@@ -102,19 +104,23 @@ func (l *limiter) size() int {
 	return l.order.Len()
 }
 
-// give hands back one try of key, taken by a try that then never ran, such
-// as a login that found no hashing slot; a key left with none is forgotten.
-func (l *limiter) give(key string) {
+// give hands back one try to t, the count take counted it in, for a try
+// that then never ran, such as a login that found no hashing slot. It does
+// so only while t is still key's count: once t's window has ended, or t was
+// cleared or dropped, a later count is not t, and nothing is given back to
+// it. A count is never below none, and one left with none is forgotten.
+func (l *limiter) give(t *tries) {
+	if t == nil {
+		return
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	e := l.keys[key]
-	if e == nil {
+	e := l.keys[t.key]
+	if e == nil || e.Value.(*tries) != t || t.n < 1 {
 		return
 	}
-	if t := e.Value.(*tries); t.n > 1 {
-		t.n--
-		return
+	if t.n--; t.n == 0 {
+		l.order.Remove(e)
+		delete(l.keys, t.key)
 	}
-	l.order.Remove(e)
-	delete(l.keys, key)
 }

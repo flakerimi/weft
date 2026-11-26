@@ -31,18 +31,18 @@ func TestLimit(t *testing.T) {
 	key := limitKey("owner@example.com", "192.0.2.1")
 
 	for i := range maxTries {
-		if !l.take(key) {
+		if l.take(key) == nil {
 			t.Fatalf("try %d is refused, want the first %d to pass", i+1, maxTries)
 		}
 		clock.set(clock.Now().Add(time.Second))
 	}
-	if l.take(key) {
+	if l.take(key) != nil {
 		t.Fatalf("try %d passes after %d tries", maxTries+1, maxTries)
 	}
-	if !l.take(limitKey("owner@example.com", "192.0.2.2")) {
+	if l.take(limitKey("owner@example.com", "192.0.2.2")) == nil {
 		t.Error("another address is refused")
 	}
-	if !l.take(limitKey("other@example.com", "192.0.2.1")) {
+	if l.take(limitKey("other@example.com", "192.0.2.1")) == nil {
 		t.Error("another email is refused")
 	}
 	// The email is compared lower-cased and trimmed.
@@ -53,25 +53,25 @@ func TestLimit(t *testing.T) {
 	// Refused until the minute that began with the first try ends; a refused
 	// try is not counted, so it does not move the end.
 	clock.set(testNow.Add(window - time.Nanosecond))
-	if l.take(key) {
+	if l.take(key) != nil {
 		t.Error("refusing ended before the minute did")
 	}
 	clock.set(testNow.Add(window))
-	if !l.take(key) {
+	if l.take(key) == nil {
 		t.Error("still refused once the minute ended")
 	}
 	// The new minute began with that try, and counts afresh.
 	for range maxTries - 1 {
 		l.take(key)
 	}
-	if l.take(key) {
+	if l.take(key) != nil {
 		t.Errorf("%d tries in a new minute pass", maxTries+1)
 	}
 
 	// A success clears the count.
 	l.clear(key)
 	for i := range maxTries {
-		if !l.take(key) {
+		if l.take(key) == nil {
 			t.Fatalf("try %d after a success is refused", i+1)
 		}
 	}
@@ -86,7 +86,7 @@ func TestLimitIsAtomic(t *testing.T) {
 	passed := 0
 	for range 20 {
 		wg.Go(func() {
-			if l.take(key) {
+			if l.take(key) != nil {
 				mu.Lock()
 				passed++
 				mu.Unlock()
@@ -116,7 +116,7 @@ func TestLimitKeepsAtMostMaxKeys(t *testing.T) {
 	if n := l.size(); n != maxKeys {
 		t.Fatalf("%d keys remembered, want %d", n, maxKeys)
 	}
-	if l.take(first) {
+	if l.take(first) != nil {
 		t.Fatal("the oldest key was dropped before the limit was reached")
 	}
 	second := limitKey("u0@example.com", "192.0.2.1")
@@ -126,10 +126,10 @@ func TestLimitKeepsAtMostMaxKeys(t *testing.T) {
 		t.Fatalf("%d keys remembered past the limit, want %d", n, maxKeys)
 	}
 	// second first: taking first, now unknown, adds a key and drops another.
-	if l.take(second) {
+	if l.take(second) != nil {
 		t.Error("a newer key was dropped in place of the oldest")
 	}
-	if !l.take(first) {
+	if l.take(first) == nil {
 		t.Error("the oldest key was kept when a new one came")
 	}
 }

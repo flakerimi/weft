@@ -32,7 +32,14 @@ func (m *module) setup(ctx context.Context, in SetupInput) (User, error) {
 		if n > 0 {
 			return errSetupDone
 		}
-		return m.users.Create(ctx, &row)
+		if err := m.users.Create(ctx, &row); err != nil {
+			return err
+		}
+		// Signed in with the row as stored, whose created_at the session
+		// names: a database that keeps fewer digits than Go rounds it. Read
+		// here, in the transaction, so that a failure leaves no owner.
+		row, err = m.users.Get(ctx, row.ID)
+		return err
 	})
 	var e *warp.Error
 	switch {
@@ -44,12 +51,6 @@ func (m *module) setup(ctx context.Context, in SetupInput) (User, error) {
 		return User{}, err
 	}
 	m.endSetup()
-	// Signed in with the row as stored, whose created_at the session names:
-	// a database that keeps fewer digits than Go has rounded it.
-	stored, err := m.users.Get(ctx, row.ID)
-	if err != nil {
-		return User{}, err
-	}
-	m.signIn(ctx, stored)
-	return stored.user(), nil
+	m.signIn(ctx, row)
+	return row.user(), nil
 }

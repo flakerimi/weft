@@ -225,7 +225,9 @@ func AddUser(ctx context.Context, app *warp.App, email, password, role string) (
 // RemoveUser removes the user with the id, whose sessions end at once, since
 // every guarded request reads the user. A user no one has is a
 // warp.NotFound. It is for tools and tests, after the app has started, as
-// AddUser is.
+// AddUser is. It may remove the last user, the owner included: the running
+// app then has no setup link, and the next start, finding no user, logs a
+// new one.
 func RemoveUser(ctx context.Context, app *warp.App, id int64) error {
 	m := of(app)
 	if m == nil {
