@@ -78,9 +78,10 @@ type pzIn struct {
 }
 
 // The mirror of the model: each field a hit, which records that
-// encoding/json wrote it (called its decoder, null included), and when, or
-// for a readonly field an ro. mTop is pzBody whole, its readonly fields
-// included, as the scan knows it.
+// encoding/json wrote it (called its decoder, null included), and when, and
+// whether its value held null where its type cannot be null; or for a
+// readonly field an ro. mTop is pzBody whole, its readonly fields included,
+// as the scan knows it.
 type hit[T any] struct {
 	V   T
 	Set bool
@@ -96,7 +97,54 @@ func (h *hit[T]) UnmarshalJSON(b []byte) error {
 		hitSeq++
 		h.Set, h.At = true, hitSeq
 	}
+	if nullIn(reflect.TypeFor[T](), json.NewDecoder(bytes.NewReader(b))) {
+		nullSent = true
+	}
 	return decodeStrict(b, &h.V)
+}
+
+// nullSent is whether a hit of one decode was sent null where its type, or
+// an element or map value of it, cannot be null.
+var nullSent bool
+
+// nullIn reads one value from dec, for a field of type t of the mirror, and
+// reports whether it holds null where t cannot be null: t itself, or a list
+// element or map value of t, every one of them, however deep. Only a pointer,
+// an interface and json.RawMessage may be null. A struct of the mirror is
+// not looked inside: its hits look at their own values.
+func nullIn(t reflect.Type, dec *json.Decoder) bool {
+	tok, err := dec.Token()
+	if err != nil {
+		return false
+	}
+	if tok == nil {
+		return t.Kind() != reflect.Pointer && t.Kind() != reflect.Interface && t != reflect.TypeFor[json.RawMessage]()
+	}
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	d, ok := tok.(json.Delim)
+	if !ok {
+		return false
+	}
+	found := false
+	for dec.More() {
+		switch {
+		case d == '{' && t.Kind() == reflect.Map:
+			dec.Token() // the key
+			found = nullIn(t.Elem(), dec) || found
+		case d == '[' && (t.Kind() == reflect.Slice || t.Kind() == reflect.Array) && t != reflect.TypeFor[json.RawMessage]():
+			found = nullIn(t.Elem(), dec) || found
+		default: // a struct, or a value of the wrong type: skipped
+			if d == '{' {
+				dec.Token()
+			}
+			var skip json.RawMessage
+			dec.Decode(&skip)
+		}
+	}
+	dec.Token() // the closing delimiter
+	return found
 }
 
 func (h *hit[T]) written() (bool, int) { return h.Set, h.At }
@@ -216,15 +264,30 @@ var readonlyFolds = []string{"ID", "KEY", "MARK"}
 // It reports whether the mirror decoded the body, whether the scan refused
 // it, and what disagreed.
 func scanAgrees(p *plan, data []byte) (decoded, refused bool, problem string) {
-	hitSeq, roWritten = 0, false
+	hitSeq, roWritten, nullSent = 0, false, false
 	var m mTop
 	if err := decodeStrict(data, &m); err != nil {
 		return false, false, ""
 	}
 	sent, err := p.walk(data)
+	var e *Error
+	errors.As(err, &e)
+	nullErr := e != nil && strings.HasSuffix(e.Message, " the wrong type.")
 	switch {
 	case roWritten && err == nil:
 		return true, false, "encoding/json writes a readonly field and the scan takes the body"
+	case roWritten && nullErr:
+		return true, true, "encoding/json writes a readonly field and the scan refuses a null first"
+	case nullSent && err == nil:
+		return true, false, "a value that cannot be null was sent null and the scan takes the body"
+	case nullErr && !nullSent:
+		return true, true, fmt.Sprintf("the scan refuses a null (%v) that encoding/json was sent for no value that cannot be null", e.Fields)
+	case nullErr:
+		for field, says := range e.Fields {
+			if says != notNull || field == "" {
+				return true, true, fmt.Sprintf("the scan says %q: %q", field, says)
+			}
+		}
 	case err == nil:
 		view := reflect.New(p.view)
 		if verr := decodeStrict(data, view.Interface()); verr != nil {
@@ -240,8 +303,6 @@ func scanAgrees(p *plan, data []byte) (decoded, refused bool, problem string) {
 			return true, false, fmt.Sprintf("the readonly %s is set", name)
 		}
 	case !roWritten:
-		var e *Error
-		errors.As(err, &e)
 		key, _ := strings.CutPrefix(e.Message, "The body has the field ")
 		key, _ = strings.CutSuffix(key, ", which this route does not take.")
 		name, uerr := strconv.Unquote(key)

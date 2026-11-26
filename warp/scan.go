@@ -2,7 +2,9 @@ package warp
 
 // The scan of a typed route's body: one pass over bytes encoding/json has
 // already decoded into the plan's view, which finds the top-level keys the
-// body sent and refuses a readonly key at any depth.
+// body sent, refuses a readonly key at any depth, and finds every null sent
+// for a value that cannot be null (anything but a pointer, an interface or a
+// type that reads its own JSON), which encoding/json would leave as zero.
 //
 // It mirrors encoding/json v1's matching of a key to a field (decode.go,
 // object): the field whose key is the key itself, else the one whose key
@@ -17,10 +19,10 @@ package warp
 // a readonly field is never set, whatever the scan said.
 
 import (
-	"cmp"
 	"maps"
 	"reflect"
 	"slices"
+	"strings"
 	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -56,9 +58,11 @@ func (o *object) index() {
 
 // look is how to look inside a JSON value: as a struct's object, as a list
 // of values or as an object of values (a map), each value looked at so.
+// notNull is whether the value may not be null.
 type look struct {
 	obj        *object
 	list, dict *look
+	notNull    bool
 }
 
 // objects makes the objects of the struct types a body reaches, each once,
@@ -66,27 +70,33 @@ type look struct {
 type objects map[reflect.Type]*object
 
 func (m objects) lookFor(t reflect.Type) *look {
+	nullable := false
 	for t.Kind() == reflect.Pointer && !decodesItself(t) {
-		t = t.Elem()
+		t, nullable = t.Elem(), true
 	}
-	if decodesItself(t) {
+	if t.Kind() == reflect.Pointer || t.Kind() == reflect.Interface {
+		return nil // nil is a value of its own
+	}
+	l := &look{notNull: !nullable}
+	switch {
+	case decodesItself(t):
+		// Not looked inside. One that reads its own JSON is described as
+		// unknown, and is handed null; time.Time and one that reads itself
+		// as text are described as text, and encoding/json leaves them zero.
+		if t != timeType && (t.Implements(jsonUnmarshaler) || reflect.PointerTo(t).Implements(jsonUnmarshaler)) {
+			l.notNull = false
+		}
+	case t.Kind() == reflect.Slice || t.Kind() == reflect.Array:
+		l.list = m.lookFor(t.Elem())
+	case t.Kind() == reflect.Map:
+		l.dict = m.lookFor(t.Elem())
+	case t.Kind() == reflect.Struct && t != timeType:
+		l.obj = m.objectOf(t)
+	}
+	if !l.notNull && l.obj == nil && l.list == nil && l.dict == nil {
 		return nil
 	}
-	switch t.Kind() {
-	case reflect.Slice, reflect.Array:
-		if e := m.lookFor(t.Elem()); e != nil {
-			return &look{list: e}
-		}
-	case reflect.Map:
-		if e := m.lookFor(t.Elem()); e != nil {
-			return &look{dict: e}
-		}
-	case reflect.Struct:
-		if t != timeType {
-			return &look{obj: m.objectOf(t)}
-		}
-	}
-	return nil
+	return l
 }
 
 func (m objects) objectOf(t reflect.Type) *object {
@@ -123,9 +133,10 @@ type topField struct {
 }
 
 // topObject makes the object of a plan's body, whose fields' types may hold
-// readonly fields however deep, and keeps a look only where one does. Its
-// readonly keys are there to be refused, as they are one level down; the
-// view, which the body is decoded into, leaves them out.
+// readonly fields and values that cannot be null however deep, and keeps a
+// look only where one does. Its readonly keys are there to be refused, as
+// they are one level down; the view, which the body is decoded into, leaves
+// them out.
 func topObject(fields []topField) *object {
 	m := objects{}
 	top := &object{}
@@ -140,14 +151,13 @@ func topObject(fields []topField) *object {
 	}
 	top.index()
 	// An object is deep when it has a readonly field or a field whose value
-	// can hold a deep object. A type can hold itself, so this is found by
-	// marking until nothing changes.
+	// needs a look: one that may not be null, or that can hold a deep
+	// object. A type can hold itself, so this is found by marking until
+	// nothing changes.
 	deep := map[*object]bool{}
-	reaches := func(l *look) bool {
-		for l != nil && l.obj == nil {
-			l = cmp.Or(l.list, l.dict)
-		}
-		return l != nil && deep[l.obj]
+	var needed func(l *look) bool
+	needed = func(l *look) bool {
+		return l != nil && (l.notNull || l.obj != nil && deep[l.obj] || needed(l.list) || needed(l.dict))
 	}
 	for changed := true; changed; {
 		changed = false
@@ -156,18 +166,27 @@ func topObject(fields []topField) *object {
 				continue
 			}
 			for i := range o.names {
-				if o.readonly[i] || reaches(o.inner[i]) {
+				if o.readonly[i] || needed(o.inner[i]) {
 					deep[o], changed = true, true
 					break
 				}
 			}
 		}
 	}
+	var prune func(l *look) *look
+	prune = func(l *look) *look {
+		if !needed(l) {
+			return nil
+		}
+		if l.obj != nil && !deep[l.obj] {
+			l.obj = nil
+		}
+		l.list, l.dict = prune(l.list), prune(l.dict)
+		return l
+	}
 	for _, o := range append(slices.Collect(maps.Values(m)), top) {
 		for i, l := range o.inner {
-			if !reaches(l) {
-				o.inner[i] = nil
-			}
+			o.inner[i] = prune(l)
 		}
 	}
 	return top
@@ -320,15 +339,29 @@ func appendFolded(dst, name []byte) []byte {
 // refused its types), in one pass. It returns the top-level keys it sent, in
 // its order, each once and as the route names it, or nil when it sent none;
 // or, when it sends a readonly field anywhere inside it, the answer that the
-// route does not take it. It allocates the list it returns, and for a key
-// only what match says.
+// route does not take it; or, when it sends null for a value that cannot be
+// null, the answer naming each such field: Send a value, not null. It
+// allocates the list it returns, and for a key only what match says.
 func (p *plan) walk(data []byte) ([]string, error) {
-	s := bodyScan{data: data}
+	s := bodyScan{data: data, mapAt: -1}
 	if _, err := s.object(0, p.keys, true); err != nil {
 		return nil, err
 	}
+	if s.nulls != nil {
+		return nil, wrongType(s.nulls)
+	}
 	return s.sent, nil
 }
+
+// refusedKey is walk's answer when data sends a readonly field, else nil.
+func (p *plan) refusedKey(data []byte) error {
+	s := bodyScan{data: data, mapAt: -1}
+	_, err := s.object(0, p.keys, true)
+	return err
+}
+
+// notNull is what a field that was sent null and cannot be says.
+const notNull = "Send a value, not null."
 
 // bodyScan is one walk over a body.
 type bodyScan struct {
@@ -338,6 +371,15 @@ type bodyScan struct {
 	more []bool
 	// match's scratch, for a key unquoted and for it folded.
 	keyBuf, foldBuf [64]byte
+	// path[:depth] is the keys of the objects the scan is in, from the top,
+	// as the route names them; a list's index is not in it. mapAt is the
+	// depth where the scan entered a map's values, -1 outside one: a
+	// field's path ends at the map's field, as a type error's does, since a
+	// key may hold dots. nulls is each path sent null that cannot be.
+	path  [maxNesting]string
+	depth int // how much of path is in use
+	mapAt int
+	nulls map[string]string
 	// compares counts each look of a key among the fields, a map lookup or
 	// a comparison with one field, which TestScanWideStructCost and
 	// TestScanDeepBodyCost bound.
@@ -363,7 +405,10 @@ func (s *bodyScan) object(i int, o *object, top bool) (int, error) {
 		i = s.space(s.space(end) + 1) // past the colon
 		var err error
 		if k >= 0 && o.inner[k] != nil {
+			s.path[s.depth] = o.names[k]
+			s.depth++
 			i, err = s.value(i, o.inner[k])
+			s.depth--
 		} else {
 			i = s.skip(i)
 		}
@@ -402,6 +447,11 @@ func (s *bodyScan) record(o *object, k int) {
 func (s *bodyScan) value(i int, l *look) (int, error) {
 	var err error
 	switch c := s.data[i]; {
+	case c == 'n': // null
+		if l.notNull {
+			s.null()
+		}
+		return i + len("null"), nil
 	case l.obj != nil && c == '{':
 		return s.object(i, l.obj, false)
 	case l.list != nil && c == '[':
@@ -418,21 +468,45 @@ func (s *bodyScan) value(i int, l *look) (int, error) {
 			i = s.space(i + 1)
 		}
 	case l.dict != nil && c == '{':
-		if i = s.space(i + 1); s.data[i] == '}' {
-			return i + 1, nil
+		was := s.mapAt
+		if was < 0 {
+			s.mapAt = s.depth
 		}
-		for {
-			i = s.space(s.space(s.str(i)) + 1)
-			if i, err = s.value(i, l.dict); err != nil {
-				return 0, err
-			}
-			if i = s.space(i); s.data[i] == '}' {
-				return i + 1, nil
-			}
-			i = s.space(i + 1)
-		}
+		i, err = s.values(i, l.dict)
+		s.mapAt = was
+		return i, err
 	}
 	return s.skip(i), nil
+}
+
+// values reads the object at i as a map whose values l says how to read.
+func (s *bodyScan) values(i int, l *look) (int, error) {
+	var err error
+	if i = s.space(i + 1); s.data[i] == '}' {
+		return i + 1, nil
+	}
+	for {
+		i = s.space(s.space(s.str(i)) + 1)
+		if i, err = s.value(i, l); err != nil {
+			return 0, err
+		}
+		if i = s.space(i); s.data[i] == '}' {
+			return i + 1, nil
+		}
+		i = s.space(i + 1)
+	}
+}
+
+// null records that the value at the scan's path was sent null and cannot be.
+func (s *bodyScan) null() {
+	n := s.depth
+	if s.mapAt >= 0 {
+		n = s.mapAt
+	}
+	if s.nulls == nil {
+		s.nulls = map[string]string{}
+	}
+	s.nulls[strings.Join(s.path[:n], ".")] = notNull
 }
 
 // skip returns where the value at i ends.

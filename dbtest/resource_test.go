@@ -195,6 +195,19 @@ func TestResourcePatchWritesSentFields(t *testing.T) {
 	}
 	unchanged(lamp)
 
+	// null for a field that cannot be null (a cleared number field, or NaN
+	// as JSON.stringify writes it) is refused on that field, and nothing is
+	// written; POST refuses it too.
+	for _, body := range []string{`{"price": null}`, `{"name": "Lamp", "price": null}`} {
+		if e := c.Patch("/api/products/1", body).Want(400).Error(); !reflect.DeepEqual(e.Fields, map[string]string{"price": "Send a value, not null."}) {
+			t.Errorf("PATCH %s: %+v", body, e)
+		}
+	}
+	if e := c.Post("/api/products", `{"name": "Chair", "price": null, "status": "live"}`).Want(400).Error(); !reflect.DeepEqual(e.Fields, map[string]string{"price": "Send a value, not null."}) {
+		t.Errorf("POST price null: %+v", e)
+	}
+	unchanged(lamp)
+
 	// 3. What the store sets is never read.
 	for _, key := range []string{"id", "created_at", "updated_at"} {
 		body := map[string]any{key: 9, "price": 1}

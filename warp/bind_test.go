@@ -1813,3 +1813,110 @@ func TestTypeErrorUnderAMap(t *testing.T) {
 		}
 	}
 }
+
+// null for a field that cannot be null (anything but a pointer, an interface
+// or a type that reads its own JSON) is a field error, at any depth, on Post,
+// Put and Patch alike: never sent, never written. A pointer takes null as
+// before.
+func TestBodyNullForAValue(t *testing.T) {
+	type Geo struct {
+		Lat  float64  `json:"lat"`
+		Note *string  `json:"note"`
+		Pin  *float64 `json:"pin"`
+	}
+	type Line struct {
+		SKU string `json:"sku"`
+	}
+	type Body struct {
+		Name  string            `json:"name"`
+		Price float64           `json:"price"`
+		Live  bool              `json:"live"`
+		When  time.Time         `json:"when"`
+		Tags  []string          `json:"tags"`
+		Lines []Line            `json:"lines"`
+		Ptrs  []*Line           `json:"ptrs"`
+		By    map[string]Line   `json:"by"`
+		ByPtr map[string]*Line  `json:"by_ptr"`
+		Geo   Geo               `json:"geo"`
+		Opt   *Geo              `json:"opt"`
+		Any   any               `json:"any"`
+		Raw   json.RawMessage   `json:"raw"`
+		Bytes []byte            `json:"bytes"`
+		Nums  map[string]int    `json:"nums"`
+		Grid  [][]int           `json:"grid"`
+		Deep  map[string][]Line `json:"deep"`
+	}
+	var ran bool
+	var got Body
+	var sent []string
+	app := New(Config{})
+	handle := func(ctx context.Context, in struct {
+		ID   int  `path:"id"`
+		Body Body `body:"json"`
+	}) (None, error) {
+		ran, got, sent = true, in.Body, SentKeys(ctx)
+		return None{}, nil
+	}
+	Post(app, "/things/{id}", handle)
+	Put(app, "/things/{id}", handle)
+	Patch(app, "/things/{id}", handle)
+	h := mustRegister(t, app)
+	const notNull = "Send a value, not null."
+	for _, method := range []string{"POST", "PUT", "PATCH"} {
+		for _, c := range []struct {
+			body   string
+			fields map[string]string
+		}{
+			{`{"price":null}`, map[string]string{"price": notNull}},
+			{`{"name":null,"live":null}`, map[string]string{"name": notNull, "live": notNull}},
+			{`{"when":null}`, map[string]string{"when": notNull}},
+			{`{"tags":null}`, map[string]string{"tags": notNull}},
+			{`{"tags":["a",null]}`, map[string]string{"tags": notNull}},
+			{`{"lines":[{"sku":"a"},null]}`, map[string]string{"lines": notNull}},
+			{`{"lines":[{"sku":null}]}`, map[string]string{"lines.sku": notNull}},
+			{`{"by":{"a.b":null}}`, map[string]string{"by": notNull}},
+			{`{"by":{"x":{"sku":null}}}`, map[string]string{"by": notNull}},
+			{`{"geo":null}`, map[string]string{"geo": notNull}},
+			{`{"geo":{"lat":null}}`, map[string]string{"geo.lat": notNull}},
+			{`{"opt":{"lat":null}}`, map[string]string{"opt.lat": notNull}},
+			{`{"bytes":null}`, map[string]string{"bytes": notNull}},
+			{`{"nums":{"a":null}}`, map[string]string{"nums": notNull}},
+			{`{"grid":[[1,null]]}`, map[string]string{"grid": notNull}},
+			{`{"deep":{"k":[null]}}`, map[string]string{"deep": notNull}},
+			{`{"PRICE":null}`, map[string]string{"price": notNull}},
+			{`{"price":1,"price":null}`, map[string]string{"price": notNull}},
+		} {
+			ran = false
+			w := send(t, h, method, "/api/things/1", c.body)
+			_, msg, fields := apiError(t, w)
+			if w.Code != 400 || ran || !reflect.DeepEqual(fields, c.fields) || !strings.HasSuffix(msg, "the wrong type.") {
+				t.Errorf("%s %s: %d %q %v, ran %v; want 400 with %v", method, c.body, w.Code, msg, fields, ran, c.fields)
+			}
+		}
+		// What may be null takes it, and is sent.
+		ran = false
+		body := `{"opt":null,"ptrs":[null],"by_ptr":{"x":null},"any":null,"raw":null,"geo":{"lat":1,"note":null,"pin":null}}`
+		if w := send(t, h, method, "/api/things/1", body); w.Code >= 300 || !ran {
+			t.Fatalf("%s %s: %d %s", method, body, w.Code, w.Body.String())
+		}
+		if got.Opt != nil || got.Ptrs[0] != nil || got.ByPtr["x"] != nil || got.Any != nil || got.Geo.Note != nil || !slices.Equal(sent, []string{"opt", "ptrs", "by_ptr", "any", "raw", "geo"}) {
+			t.Errorf("%s: input %+v, sent %q", method, got, sent)
+		}
+	}
+	// A readonly key is still refused first.
+	type RO struct {
+		ID    int     `json:"id" warp:"readonly"`
+		Price float64 `json:"price"`
+	}
+	app = New(Config{})
+	Post(app, "/ro", func(ctx context.Context, in struct {
+		Body RO `body:"json"`
+	}) (None, error) {
+		return None{}, nil
+	})
+	h = mustRegister(t, app)
+	w := send(t, h, "POST", "/api/ro", `{"price":null,"id":1}`)
+	if _, msg, _ := apiError(t, w); w.Code != 400 || msg != `The body has the field "id", which this route does not take.` {
+		t.Errorf("readonly and null: %d %q", w.Code, msg)
+	}
+}

@@ -819,7 +819,7 @@ func (p *plan) decode(w http.ResponseWriter, r *http.Request, dst reflect.Value,
 	if err := decodeStrict(data, view.Interface()); err != nil {
 		// A readonly key is refused as one the route does not take, whatever
 		// the type of its value, before the decoder's complaint about it.
-		if _, readonly := p.walk(data); readonly != nil {
+		if readonly := p.refusedKey(data); readonly != nil {
 			return nil, readonly
 		}
 		return nil, p.bodyError(data, err)
