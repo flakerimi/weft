@@ -202,9 +202,13 @@ func (db *DB) open(ctx context.Context) error {
 		conn.Close()
 		return err
 	}
-	if err := migrate(ctx, conn, d, tables, url); err != nil {
+	dropped, err := migrate(ctx, conn, d, tables, url)
+	if err != nil {
 		conn.Close()
 		return err
+	}
+	for _, note := range dropped {
+		slog.Warn("data: " + note)
 	}
 	db.mu.Lock()
 	db.sql, db.dialect = conn, d

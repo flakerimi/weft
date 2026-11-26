@@ -2,9 +2,11 @@ package dbtest
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/flakerimi/weft/warp"
 	"github.com/flakerimi/weft/warp/data"
+	"github.com/flakerimi/weft/warp/warptest"
 )
 
 // columns returns the table's columns as name and declared type.
@@ -366,6 +369,19 @@ func TestStartWhileLocked(t *testing.T) {
 		}
 	})
 
+	// An existing database opens and reads while another process holds its
+	// write lock, and is named the same way when migrate cannot begin.
+	t.Run("existing database", func(t *testing.T) {
+		file := dbFile(t)
+		c, _ := shop[Product](t, file)
+		c.App.Stop(ctx)
+		lock(t, file)
+		url := "file:" + file
+		if err, _ := startLocked(t, url); err == nil || err.Error() != locked(url) {
+			t.Fatalf("Start = %v\nwant %s", err, locked(url))
+		}
+	})
+
 	// A DB_URL cannot lower the busy timeout, so the retries after a try
 	// that fails at once (a fresh file another process is switching to WAL)
 	// are tested with a fake driver, in warp/data's TestPingRetriesUntilItsDeadline.
@@ -377,4 +393,148 @@ func TestStartWhileLocked(t *testing.T) {
 			t.Fatalf("Start = %v, want it to wait for the lock", err)
 		}
 	})
+}
+
+// indexes lists the names of the table's indexes, sorted.
+func indexes(t *testing.T, db *sql.DB, table string) []string {
+	t.Helper()
+	rows, err := db.Query(`SELECT "name" FROM "sqlite_master" WHERE "type" = 'index' AND "tbl_name" = ? AND "sql" IS NOT NULL ORDER BY "name"`, table)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var name string
+		rows.Scan(&name)
+		out = append(out, name)
+	}
+	return out
+}
+
+// A unique field renamed, removed or no longer unique leaves no index of
+// Warp's enforcing on its old column: the index is dropped, with one warn
+// line naming it and the column, and the column and its values stay. An
+// index Warp did not make is never touched.
+func TestMigrateDropsItsOwnUniqueIndexes(t *testing.T) {
+	type V1 struct {
+		data.Record
+		Title string  `json:"title" warp:"unique"`
+		Price float64 `json:"price"`
+	}
+	type Renamed struct {
+		data.Record
+		Heading string  `json:"heading" warp:"unique"`
+		Price   float64 `json:"price"`
+	}
+	type Removed struct {
+		data.Record
+		Price float64 `json:"price"`
+	}
+	type NoRule struct {
+		data.Record
+		Title string  `json:"title"`
+		Price float64 `json:"price"`
+	}
+	const line = `data: table products no longer has a unique field on column title, so its index products_title_unique was dropped; the column and its values stay.`
+	for _, c := range []struct {
+		what  string
+		start func(t *testing.T, file string) (*warptest.Client, func(i int) error)
+	}{
+		{"renamed", func(t *testing.T, file string) (*warptest.Client, func(i int) error) {
+			c, s := shop[Renamed](t, file)
+			return c, func(i int) error { return s.Create(ctx, &Renamed{Heading: fmt.Sprint("h", i)}) }
+		}},
+		{"removed", func(t *testing.T, file string) (*warptest.Client, func(i int) error) {
+			c, s := shop[Removed](t, file)
+			return c, func(i int) error { return s.Create(ctx, &Removed{Price: 1}) }
+		}},
+		{"no longer unique", func(t *testing.T, file string) (*warptest.Client, func(i int) error) {
+			c, s := shop[NoRule](t, file)
+			return c, func(i int) error { return s.Create(ctx, &NoRule{Title: "Same"}) }
+		}},
+	} {
+		t.Run(c.what, func(t *testing.T) {
+			file := dbFile(t)
+			cl, s := shop[V1](t, file)
+			if err := s.Create(ctx, &V1{Title: "Lamp"}); err != nil {
+				t.Fatal(err)
+			}
+			db := data.For(cl.App).SQL()
+			for _, q := range []string{
+				`CREATE UNIQUE INDEX "mine_title" ON "products" ("title", "id")`,
+				`CREATE INDEX "products_price_unique" ON "products" ("title")`,
+			} {
+				if _, err := db.Exec(q); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cl.App.Stop(ctx)
+
+			_, warns := captureLevels(t)
+			cl, create := c.start(t, file)
+			if got := strings.Count(warns.String(), "msg=\""+strings.ReplaceAll(line, `"`, `\"`)+"\""); got != 1 {
+				t.Errorf("warn lines %q, want %q once", warns, line)
+			}
+			for i := range 3 {
+				if err := create(i); err != nil {
+					t.Fatalf("create %d: %v", i, err)
+				}
+			}
+			db = data.For(cl.App).SQL()
+			if got := indexes(t, db, "products"); !slices.Equal(got, []string{"mine_title", "products_price_unique"}) && !slices.Equal(got, []string{"mine_title", "products_heading_unique", "products_price_unique"}) {
+				t.Errorf("indexes %v", got)
+			}
+			var title string
+			if err := db.QueryRow(`SELECT "title" FROM "products" WHERE "id" = 1`).Scan(&title); err != nil || title != "Lamp" {
+				t.Errorf("the old column holds %q, %v", title, err)
+			}
+		})
+	}
+}
+
+// A column no field keeps that would refuse every new row stops the start;
+// a unique field added to a table whose rows would all hold its zero value
+// says that, not that the values repeat.
+func TestMigrateLeftoverAndNewUniqueColumns(t *testing.T) {
+	file := dbFile(t)
+	cl, _ := shop[struct {
+		data.Record
+		Name string `json:"name"`
+	}](t, file)
+	db := data.For(cl.App).SQL()
+	for _, q := range []string{
+		`CREATE TABLE "old" ("legacy" TEXT NOT NULL)`,
+		`INSERT INTO "products" ("name") VALUES ('a'), ('b')`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cl.App.Stop(ctx)
+
+	type Note struct {
+		data.Record
+		Body string `json:"body"`
+	}
+	app := warp.New(warp.ConfigFrom(env(file)))
+	app.Use(data.Module(), stores{"notes", func(db *data.DB) { data.NewStore[Note](db, "old") }})
+	err := app.Start(ctx)
+	want := `warp: module "data" could not migrate: table old has column legacy, which no field of Note keeps and which is NOT NULL with no default, so every new row would be refused; add the field back, or give the column a default or drop it yourself.`
+	if err == nil || err.Error() != want {
+		t.Fatalf("Start = %v\nwant %s", err, want)
+	}
+
+	type Product struct {
+		data.Record
+		Name string `json:"name"`
+		Code string `json:"code" warp:"unique"`
+	}
+	app = warp.New(warp.ConfigFrom(env(file)))
+	app.Use(data.Module(), stores{"products", func(db *data.DB) { data.NewStore[Product](db, "products") }})
+	err = app.Start(ctx)
+	want = `warp: module "data" could not migrate: table products has rows and gains column code, which they would all hold empty, so Product.Code cannot be unique; make the field a pointer so that rows without a value hold NULL, or add the column and fill it in yourself before starting.`
+	if err == nil || err.Error() != want {
+		t.Fatalf("Start = %v\nwant %s", err, want)
+	}
 }

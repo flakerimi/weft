@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"maps"
 	"math"
 	"reflect"
 	"regexp"
@@ -436,46 +437,81 @@ type querier interface {
 
 // migrate brings every table up to date, in one transaction. It checks every
 // table first: a column of another type, a pointer field over a NOT NULL
-// column, or an index with a unique index's name that is not that index stops
-// it before anything is changed. Then it makes the missing tables, columns and
-// unique indexes. Nothing is dropped or changed. url names the database in
-// its sentences.
-func migrate(ctx context.Context, db *sql.DB, d dialect, tables []*table, url string) error {
+// column, an index with a unique index's name that is not that index, or a
+// column no field keeps that would refuse every new row (NOT NULL with no
+// default) stops it before anything is changed. Then it drops the unique
+// indexes it made itself, recognised by their name, table_column_unique, on
+// that one column, whose column no field keeps unique any more, and makes the
+// missing tables, columns and unique indexes. No column, row or other index
+// is ever dropped or changed. It returns a note for each index it dropped.
+// url names the database in its sentences.
+func migrate(ctx context.Context, db *sql.DB, d dialect, tables []*table, url string) ([]string, error) {
 	raw := func(err error) error {
+		if d.busy(err) {
+			return fmt.Errorf("the database at %s is locked by another process; stop that process, or wait and start again.", url)
+		}
 		return fmt.Errorf("the database at %s could not be brought up to date (%v); look at the error in brackets and start again.", url, err)
 	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return raw(err)
+		return nil, raw(err)
 	}
 	defer tx.Rollback()
 
 	type step struct {
-		t   *table
-		sql string
+		t     *table
+		sql   string
+		added *column // the column this step adds to a table with rows
 	}
 	var steps []step
+	var notes []string
 	for _, t := range tables {
 		have, err := d.columns(ctx, tx, t.name)
 		if err != nil {
-			return raw(err)
+			return nil, raw(err)
 		}
 		if len(have) == 0 {
-			steps = append(steps, step{t, t.createSQL(d)})
+			steps = append(steps, step{t: t, sql: t.createSQL(d)})
 		}
 		for _, c := range t.cols {
 			info, ok := have[c.name]
 			switch {
 			case len(have) == 0:
 			case !ok:
-				steps = append(steps, step{t, t.addColumnSQL(d, c)})
+				steps = append(steps, step{t, t.addColumnSQL(d, c), c})
 			case !strings.EqualFold(info.typ, d.columnType(c.kind)):
-				return fmt.Errorf("table %s has column %s as %s, and %s needs %s; change the field back, or alter the column yourself, since Warp never changes or drops a column.",
+				return nil, fmt.Errorf("table %s has column %s as %s, and %s needs %s; change the field back, or alter the column yourself, since Warp never changes or drops a column.",
 					t.name, c.name, info.typ, c.field, d.columnType(c.kind))
 			case c.null && info.notNull:
-				return fmt.Errorf("table %s has column %s as NOT NULL, and %s may be empty (it is a pointer); make the field a plain value, or alter the column yourself.",
+				return nil, fmt.Errorf("table %s has column %s as NOT NULL, and %s may be empty (it is a pointer); make the field a plain value, or alter the column yourself.",
 					t.name, c.name, c.field)
 			}
+		}
+		// What the table has that the model no longer keeps.
+		for _, name := range slices.Sorted(maps.Keys(have)) {
+			if info := have[name]; t.col(name) == nil && info.notNull && !info.dflt && !info.pk {
+				return nil, fmt.Errorf("table %s has column %s, which no field of %s keeps and which is NOT NULL with no default, so every new row would be refused; add the field back, or give the column a default or drop it yourself.",
+					t.name, name, t.model)
+			}
+		}
+		made, err := d.madeIndexes(ctx, tx, t.name)
+		if err != nil {
+			return nil, raw(err)
+		}
+		for _, name := range made {
+			info, ok, err := d.index(ctx, tx, name)
+			if err != nil {
+				return nil, raw(err)
+			}
+			if !ok || !info.unique || info.partial || len(info.columns) != 1 || name != t.name+"_"+info.columns[0]+"_unique" {
+				continue // not one Warp made
+			}
+			col := info.columns[0]
+			if c := t.col(col); c != nil && c.unique {
+				continue
+			}
+			steps = append([]step{{t: t, sql: "DROP INDEX " + d.quote(name)}}, steps...)
+			notes = append(notes, fmt.Sprintf("table %s no longer has a unique field on column %s, so its index %s was dropped; the column and its values stay.", t.name, col, name))
 		}
 		for _, c := range t.cols {
 			if !c.unique {
@@ -485,26 +521,32 @@ func migrate(ctx context.Context, db *sql.DB, d dialect, tables []*table, url st
 			info, ok, err := d.index(ctx, tx, name)
 			switch {
 			case err != nil:
-				return raw(err)
+				return nil, raw(err)
 			case !ok:
-				steps = append(steps, step{t, t.uniqueIndexSQL(d, c)})
+				steps = append(steps, step{t: t, sql: t.uniqueIndexSQL(d, c)})
 			case info.table != t.name || !info.unique || info.partial || !slices.Equal(info.columns, []string{c.name}):
-				return fmt.Errorf("table %s has an index %s that does not cover column %s; rename or drop that index yourself, since Warp never changes one.", t.name, name, c.name)
+				return nil, fmt.Errorf("table %s has an index %s that does not cover column %s; rename or drop that index yourself, since Warp never changes one.", t.name, name, c.name)
 			}
 		}
 	}
+	added := map[*column]bool{}
 	for _, st := range steps {
+		if st.added != nil {
+			added[st.added] = true
+		}
 		if _, err := tx.ExecContext(ctx, st.sql); err != nil {
 			if name, ok := d.uniqueColumn(err, st.t.name); ok {
-				if c := st.t.col(name); c != nil {
-					return fmt.Errorf("table %s has the same %s twice or more, so %s cannot be unique; make the values differ, make the field a pointer so that rows without a value hold NULL, or remove the rule.", st.t.name, c.name, c.field)
+				if c := st.t.col(name); c != nil && added[c] {
+					return nil, fmt.Errorf("table %s has rows and gains column %s, which they would all hold empty, so %s cannot be unique; make the field a pointer so that rows without a value hold NULL, or add the column and fill it in yourself before starting.", st.t.name, c.name, c.field)
+				} else if c != nil {
+					return nil, fmt.Errorf("table %s has the same %s twice or more, so %s cannot be unique; make the values differ, make the field a pointer so that rows without a value hold NULL, or remove the rule.", st.t.name, c.name, c.field)
 				}
 			}
-			return raw(err)
+			return nil, raw(err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return raw(err)
+		return nil, raw(err)
 	}
-	return nil
+	return notes, nil
 }

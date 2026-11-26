@@ -37,6 +37,9 @@ type dialect interface {
 	// index reads the index named name, wherever it is; ok is false when
 	// there is none.
 	index(ctx context.Context, q querier, name string) (info indexInfo, ok bool, err error)
+	// madeIndexes lists the names of the indexes on table that were made by
+	// CREATE INDEX, not by a constraint of the table's own.
+	madeIndexes(ctx context.Context, q querier, table string) ([]string, error)
 	// uniqueColumn reports the column of table whose unique index err
 	// violates.
 	uniqueColumn(err error, table string) (string, bool)
@@ -68,6 +71,8 @@ type dialect interface {
 type columnInfo struct {
 	typ     string // the declared type
 	notNull bool
+	dflt    bool // it has a default
+	pk      bool // it is part of the primary key
 }
 
 // indexInfo is what the database says of one index.
@@ -136,7 +141,7 @@ func (sqlite) scanTime(src any) (time.Time, error) {
 }
 
 func (sqlite) columns(ctx context.Context, q querier, table string) (map[string]columnInfo, error) {
-	rows, err := q.QueryContext(ctx, `SELECT "name", "type", "notnull" FROM pragma_table_info(?)`, table)
+	rows, err := q.QueryContext(ctx, `SELECT "name", "type", "notnull", "dflt_value" IS NOT NULL, "pk" > 0 FROM pragma_table_info(?)`, table)
 	if err != nil {
 		return nil, err
 	}
@@ -145,12 +150,29 @@ func (sqlite) columns(ctx context.Context, q querier, table string) (map[string]
 	for rows.Next() {
 		var name string
 		var info columnInfo
-		if err := rows.Scan(&name, &info.typ, &info.notNull); err != nil {
+		if err := rows.Scan(&name, &info.typ, &info.notNull, &info.dflt, &info.pk); err != nil {
 			return nil, err
 		}
 		cols[name] = info
 	}
 	return cols, rows.Err()
+}
+
+func (sqlite) madeIndexes(ctx context.Context, q querier, table string) ([]string, error) {
+	rows, err := q.QueryContext(ctx, `SELECT "name" FROM pragma_index_list(?) WHERE "origin" = 'c' ORDER BY "name"`, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	return names, rows.Err()
 }
 
 func (sqlite) index(ctx context.Context, q querier, name string) (indexInfo, bool, error) {
