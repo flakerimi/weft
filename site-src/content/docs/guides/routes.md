@@ -149,7 +149,7 @@ The handler is not called, and the answer is in the [error shape](#errors):
 | A body that is JSON but not an object | 400 `bad_request` | `The body must be a JSON object.` |
 | A body field the input does not have, or a `readonly` one | 400 `bad_request` | `The body has the field "nme", which this route does not take.` |
 | A body field of the wrong type, at any depth | 400 `bad_request` | `1 field has the wrong type.`, with `price: Send a number.` (or `Send text.`, `Send true or false.`, `Send a list.`, `Send an object.`, `Send a whole number from 0 to 255.`) |
-| `null` for a field that is not a pointer, an `any` or a type that reads its own JSON, in a list or map too | 400 `bad_request` | the same, with `price: Send a value, not null.` |
+| `null` for a field that is not a pointer, an `any` or a type with its own `UnmarshalJSON` other than `time.Time`, in a list or map too | 400 `bad_request` | the same, with `price: Send a value, not null.` |
 | A list of another length for a fixed-size array | 400 `bad_request` | the same, with `rgb: Send a list of 3 values.` |
 | A value its field's own decoder refuses (`"tomorrow"` for a `time.Time`) | 400 `bad_request` | the same, with `when: Send a time like 2026-11-25T10:00:00Z.` (or `Send base64 text.`, `Send a value this field takes.`); `The body has a value its field cannot take.` when no one field can be found |
 | A query value that does not convert | 400 `bad_request` | `1 field has the wrong type.`, with `page: Send a whole number.` (or `Send a number.`, `Send true or false.`) |

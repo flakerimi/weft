@@ -67,7 +67,7 @@ Text and times are `string`, numbers `number`, a pointer `T | null`, a list `T[]
 
 - A 64-bit integer is `number`, which is exact only up to 2^53: an id above 9007199254740991 is read as another.
 - A fixed-size array, `[3]int`, is `number[]`; the server takes a list of exactly 3.
-- `null` is sent only for a pointer, an `any` or a type that reads its own JSON; for anything else the server refuses it on the field with `Send a value, not null.`
+- `null` is sent only for a pointer, an `any` or a type with its own `UnmarshalJSON` other than `time.Time`; for anything else the server refuses it on the field with `Send a value, not null.`
 - A type whose `MarshalJSON` or `MarshalText` has a pointer receiver is written by it, since an answer is written through a pointer; held as a map's values, where nothing can point to it, it is a mistake `weft gen` names.
 - A generic type is named with its arguments: `List[Product]` is `ListProduct`, and `Page[*Address]` is `PageAddressOrNull`.
 

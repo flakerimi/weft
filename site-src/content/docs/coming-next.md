@@ -57,7 +57,7 @@ Phase W5, with the blocks the Weft design had in its phase 5:
 
 ## The browser's rules and Go's
 
-`Form` and Go's validation differ on a few values: a `0` with `required` or `min`, and some email addresses (see [Types from Go](guides/types-from-go.md#where-the-browser-and-go-differ)). The server's answer lands on the field. The designs give this no phase.
+`Form` and Go's validation differ on a few values, such as a `0` with `required` or `min` (see [Types from Go](guides/types-from-go.md#where-the-browser-and-go-differ)). The server's answer lands on the field. The designs give this no phase.
 
 ## Attachments and live data
 
@@ -74,7 +74,7 @@ Phase W7: `jobs`, for work on a schedule; `i18n`, for translated fields; `middle
 ## Errors
 
 - When a JSON body has both a field of the wrong type and, inside a nested object, a field the route does not take, the unknown field is reported only when it comes before the wrong-typed value; otherwise the answer names the wrong type.
-- A wrong-typed value inside a list or map is reported under the list's or map's own key: `{"lines":[{"qty":1},{"qty":"x"}]}` gives `lines: Send a number.`, where validation would say `lines.1.qty`.
+- A wrong-typed value inside a list or map is reported under the list's or map's own key: `{"lines":[{"qty":1},{"qty":"x"}]}` gives `lines: Send a whole number.`, where validation would say `lines.1.qty`; a `null` there is named `lines.qty`.
 - A taken port is named as taken (`warp: port 8080 is taken; …`) on macOS and Linux only; elsewhere it is the general `cannot listen` sentence.
 
 The Warp design gives these no phase.
