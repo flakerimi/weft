@@ -169,6 +169,14 @@ describe('InputNumber', () => {
     expect(m.exposed.qty).toBeNull()
   })
 
+  it('reads typed text on change too, as when the field was left before the page was live', () => {
+    const m = cases({ case: 'number' })
+    const input = field(m.el, '.qty')
+    type(input, '7')
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    expect(m.exposed.qty).toBe(7)
+  })
+
   it('steps with its buttons, which disable at the bounds and keep focus where it was', async () => {
     const m = cases({ case: 'number' })
     const [down, up] = m.el.querySelectorAll<HTMLButtonElement>('.qty button')

@@ -32,7 +32,8 @@
 //   be the browser's own submit. A pre-paint script (usePrePaint, one per
 //   page) stops every submit of a `.weft-form` from the first moment, and
 //   leaves the fields usable, so a person can type and a password manager
-//   fill while the script loads; with scripts off, `method="post"` keeps the
+//   fill while the script loads (the island runtime keeps what they hold
+//   through the hydration); with scripts off, `method="post"` keeps the
 //   values out of the address.
 // The native form keeps `novalidate`: Weft shows the errors, not the browser.
 import { computed, isProxy, nextTick, ref, toRaw, useTemplateRef, watch } from 'vue'
@@ -200,7 +201,8 @@ async function onSubmit(event: Event) {
   }
 }
 
-// Typed for apps as FormApi (form-state.ts); test/fixtures/forms/FormRef.vue checks the two agree.
+// Typed for apps as FormApi (form-state.ts);
+// test/fixtures/forms/FormRef.vue checks the two agree.
 defineExpose({
   /** Show these errors (a server's answer), in place of the ones shown now; `{}` clears them. */
   setErrors(next: Record<string, string>) {

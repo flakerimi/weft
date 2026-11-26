@@ -22,6 +22,14 @@ same on the server (render order) and in the browser (document order). So an
 island inside a `<Teleport>`, whose markup lands elsewhere in the document,
 is not supported: its position, and so its ids, would differ.
 
+What a person does to the island's form controls before it hydrates is
+kept: text typed or filled into a field, a box ticked, a radio or an option
+chosen. Just before the mount each such control is set back to what the
+server drew, so the hydration matches, and once mounted it gets the
+person's value again with an `input` and a `change` event, as the person's
+own change would, so `v-model` and a Form's state receive it. A control
+nobody touched keeps the value its model started with.
+
 An island inside another island (a component that uses one, shown in an
 island) is not an island of its own: it draws its component in place, and
 the outer island hydrates it with the rest of itself.

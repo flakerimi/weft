@@ -2,8 +2,9 @@
 // A number, typed or stepped: the WAI-ARIA spinbutton pattern on a text input
 // (inputmode decimal), between a decrease and an increase button. Up and Down
 // step by `step`, Page Up and Page Down by ten steps, Home and End go to min
-// and max. Typed text is read when it is committed (Enter or leaving the
-// field) and kept within min and max; text that is not a number goes back to
+// and max. Typed text is read when it is committed (Enter, leaving the
+// field, or a change event, as when it was left before the page was live)
+// and kept within min and max; text that is not a number goes back to
 // the value. The mouse wheel changes it only with `wheel`, and only while it
 // has focus. The steppers stay out of the tab order (the keys do their work)
 // and keep focus where it is; on touch they are --weft-hit-min (44 px) wide.
@@ -183,6 +184,7 @@ defineExpose({
       :aria-invalid="f.aria.value['aria-invalid']"
       :aria-required="f.aria.value['aria-required']"
       @input="text = ($event.target as HTMLInputElement).value"
+      @change="commit()"
       @keydown="onKeydown"
       @wheel="onWheel"
       @blur="onBlur"

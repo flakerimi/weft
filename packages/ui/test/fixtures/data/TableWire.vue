@@ -1,7 +1,10 @@
 <script setup vapor lang="ts">
-// A list function typed as `weft gen` writes one (cmd/weft/testdata/api.ts,
-// `products.list`), handed to a Table's `fetch` as it is, with no adapter:
-// vue-tsc checks that it fits the prop, and table.test.ts what it is asked.
+// A list function typed as `weft gen` writes one, handed to a Table's
+// `fetch` as it is, with no adapter: vue-tsc checks that it fits the prop,
+// and table.test.ts what it is asked. ListQuery and ListProduct are copied
+// by hand from the generator's golden output, cmd/weft/testdata/api.ts
+// (`products.list` at line 219, and `ListProduct`): when that output
+// changes, change them here too.
 import { Table, type TableColumn } from '../../../src/index.ts'
 
 export interface ListQuery {

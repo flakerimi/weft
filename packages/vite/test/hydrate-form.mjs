@@ -18,6 +18,12 @@ for (const key of Object.getOwnPropertyNames(window)) {
 }
 globalThis.window = window
 globalThis.document = window.document
+// Node has an Event of its own, which the window's elements refuse; a browser module means the window's.
+globalThis.Event = window.Event
+
+// An island that did not start says so with console.warn.
+const warned = []
+console.warn = (...args) => warned.push(args.join(' '))
 
 // The <head>'s inline pre-paint script runs before the body is parsed.
 const head = html.slice(0, html.indexOf('</head>'))
@@ -28,7 +34,9 @@ const island = document.querySelector('weft-island')
 const form = island.querySelector('form')
 const password = form.querySelector('input[type="password"]')
 const button = form.querySelector('button[type="submit"]')
+const email = form.querySelector('input[type="email"]')
 const output = form.querySelector('output')
+const got = form.querySelector('output.got')
 
 /** A submit as a press on the button makes it, and whether it was stopped (as a later page listener sees it). */
 const submit = () => {
@@ -41,7 +49,8 @@ const submit = () => {
   return { prevented: event.defaultPrevented, seen }
 }
 
-// A password manager fills the field while the script loads.
+// A person types, and a password manager fills, while the script loads.
+email.value = 'ada@weft.dev'
 password.value = 'hunter2'
 const before = {
   method: form.getAttribute('method'),
@@ -61,12 +70,19 @@ await import(pathToFileURL(join(dist, entry)).href)
 await settle(() => !island.querySelector('script'))
 const hydrated = !island.querySelector('script')
 
+// What was typed is still there once it is live.
+const kept = { email: email.value, password: password.value }
 const after = submit()
 await settle(() => output.textContent !== '0')
 // Long enough for a second run of the handler to show.
 await new Promise((r) => setTimeout(r, 50))
 
 process.stdout.write(
-  JSON.stringify({ before, hydrated, after: { ...after, sent: output.textContent, sameForm: island.querySelector('form') === form } }) + '\n',
+  JSON.stringify({
+    before,
+    hydrated,
+    warned,
+    after: { ...after, kept, sent: output.textContent, got: got.textContent, sameForm: island.querySelector('form') === form },
+  }) + '\n',
 )
 await window.happyDOM.close()

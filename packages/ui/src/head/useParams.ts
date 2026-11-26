@@ -45,13 +45,14 @@ function clean(path: string): string[] {
  * run time (one that exports `runtime = true`, such as `pages/products/[id].vue`).
  * The build writes the page's pattern on `<html>` as `data-weft-route`
  * (`/products/:id`); this reads `location.pathname` against it and gives the
- * params (`{ id: '42' }`). The path is split as warp.Serve splits it: decoded
- * first (an escape that is not UTF-8, such as `%FF`, kept as it is), then cleaned as
- * path.Clean cleans it, so an encoded slash (`%2F`) divides segments and is
- * never inside one param. A catch-all (`[...rest]`) gets the rest of the path
- * without its leading slash, or `''` when there is none. It is `{}` on any other page, on an
- * address the pattern does not match, and on the server, which renders the
- * page once with every param empty. It is not reactive: the page loads once
+ * params (`{ id: '42' }`). The path is split as warp.Serve splits it:
+ * decoded first (an escape that is not UTF-8, such as `%FF`, kept as it
+ * is), then cleaned as path.Clean cleans it, so an encoded slash (`%2F`)
+ * divides segments and is never inside one param. A catch-all
+ * (`[...rest]`) gets the rest of the path without its leading slash, or
+ * `''` when there is none. It is `{}` on any other page, on an address the
+ * pattern does not match, and on the server, which renders the page once
+ * with every param empty. It is not reactive: the page loads once
  * per address.
  */
 export function useParams(): Record<string, string> {

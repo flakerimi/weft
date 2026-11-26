@@ -1,11 +1,13 @@
 <script setup vapor lang="ts">
 // Every form component in one island: server-rendered, then hydrated in
-// place (forms-island.test.ts) and checked for mismatches.
+// place (forms-island.test.ts) and checked for mismatches. Its submit
+// handler records the values (keep-typed.test.ts).
 import { reactive } from 'vue'
 import {
   Button, Checkbox, CheckboxGroup, FieldGroup, Form, FormField, Input, InputNumber,
   PinInput, RadioGroup, Slider, Switch, Textarea, type FieldSchema,
 } from '@weft/ui'
+import { sent } from '../sent.ts'
 
 const state = reactive({
   email: '',
@@ -23,7 +25,7 @@ const schema: FieldSchema<keyof typeof state> = { email: { required: true, email
 </script>
 
 <template>
-  <Form :state="state" :schema="schema">
+  <Form :state="state" :schema="schema" @submit="(values) => sent.push(values)">
     <FormField label="Email" name="email" hint="Work address."><Input v-model="state.email" type="email" /></FormField>
     <FormField label="Bio" name="bio"><Textarea v-model="state.bio" autoresize /></FormField>
     <FormField label="Seats" name="seats"><InputNumber v-model="state.seats" :min="1" /></FormField>

@@ -3,11 +3,12 @@
  *
  * A Table's rows: from `rows()`, sorted (stably) and sliced to the page on
  * the client; or from `fetch()`, asked for the page in the wire format
- * (`{ page, per_page, sort, q, filter }`, each of the last three absent when none) whenever one of those
- * values changes while `active()` (the Table passes "mounted", so the
- * server and the first render draw a busy table and agree). Only the
- * answer to the latest question is kept; a rejection is kept in `failed`
- * and passed to `onError`. `load()` asks again.
+ * (`{ page, per_page, sort, q, filter }`, each of the last three absent
+ * when none) whenever one of those values changes while `active()` (the
+ * Table passes "mounted", so the server and the first render draw a busy
+ * table and agree). Only the answer to the latest question is kept; a
+ * rejection is kept in `failed` and passed to `onError`. `load()` asks
+ * again.
  *
  * Each row comes with its key: `rowKey()` (a property name or a function),
  * else its `id`, else its place (in `rows`, or `<page>:<index>` for a

@@ -64,13 +64,13 @@ component uses. Neither is counted in the rows below.
 | FieldGroup | 2.47 | — | 1.63 | 4.09 |
 | FileUpload | 6.32 | — | 2.23 | 8.55 |
 | Footer | 1.29 | — | 0.55 | 1.84 |
-| Form | 6.61 | — | 2.13 | 8.74 |
+| Form | 6.62 | — | 2.13 | 8.74 |
 | FormField | 2.64 | — | 1.13 | 3.77 |
 | Grid | 0.86 | — | 0.41 | 1.26 |
 | Header | 16.98 | — | 3.38 | 20.35 |
 | Icon | 0.67 | — | 0.33 | 1.00 |
 | Input | 2.43 | — | 0.97 | 3.40 |
-| InputNumber | 2.82 | — | 1.00 | 3.82 |
+| InputNumber | 2.83 | — | 1.00 | 3.83 |
 | InputTags | 4.39 | — | 1.24 | 5.63 |
 | InputTime | 6.10 | — | 0.95 | 7.06 |
 | Island | 0.78 | — | 0.25 | 1.03 |

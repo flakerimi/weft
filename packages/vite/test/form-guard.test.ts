@@ -51,12 +51,14 @@ describe('a Form', () => {
     expect(page('login')).toMatch(/<form class="weft-form" method="post" novalidate>/)
   })
 
-  it('sends nothing before the island hydrates, keeps its fields usable, and submits once when live', async () => {
+  it('sends nothing before the island hydrates, keeps what was typed through it, and submits it once when live', async () => {
     const { stdout } = await run(process.execPath, [here('./hydrate-form.mjs'), out, 'pages/login/index.html'])
     expect(JSON.parse(stdout)).toEqual({
       before: { method: 'post', prevented: true, seen: true, disabled: false, password: 'hunter2' },
       hydrated: true,
-      after: { prevented: true, seen: true, sent: '1', sameForm: true },
+      warned: [],
+      // What was typed before it was live survives the hydration and reaches the handler.
+      after: { prevented: true, seen: true, kept: { email: 'ada@weft.dev', password: 'hunter2' }, sent: '1', got: 'ada@weft.dev|hunter2', sameForm: true },
     })
   })
 

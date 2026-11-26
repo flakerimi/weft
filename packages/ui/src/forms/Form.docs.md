@@ -39,13 +39,13 @@ taken.' })` shows errors from elsewhere. Leaving such a field keeps its error
 again. `validate()` checks without submitting, and `clear()` clears every
 error.
 
+A server error on a field the schema has no rule for clears the first time
+that field changes: there is nothing to check it against.
+
 **Its template ref.** `FormApi` is the ref's type:
 `useTemplateRef<FormApi>('form')` gives `setErrors(errors)`, `validate()`,
 `clear()`, `submit()` (as the submit button would), and `errors` and
 `loading` read as values.
-
-A server error on a field the schema has no rule for clears the first time
-that field changes: there is nothing to check it against.
 
 **Disabled.** The content sits in a `<fieldset>` with no frame, so
 `disabled` disables every control in the form at once - Weft's and native
@@ -67,10 +67,26 @@ back when the form is done. (`@submit` is a handler prop, as in Nuxt UI, so
 the form can wait for it.) The native form has `novalidate`: Weft shows the
 errors, not the browser.
 
-**Before it is live.** A form sends nothing until its island is live: a
-small inline script at the top of the page's `<head>` stops every submit of
-a Weft form from the first moment, while its fields stay usable, and the
-form is `method="post"`, so with scripts off a submit puts nothing in the
-address. A site with a Content-Security-Policy must allow that inline
-script, `<script data-weft-prepaint>`; without it a submit before the
-island is live is a POST to the page.
+**Before it is live.** A Form sends only through its `@submit` handler,
+so it belongs in an island: one drawn by the page, with no island around
+it, is never live and does nothing on submit. Until its island is live it
+sends nothing: a small inline script at the top of the page's `<head>`
+stops every submit of a Weft form from the first moment, and the form is
+`method="post"`, so with scripts off its own submit puts nothing in the
+address (a submit button the app gives `formmethod="get"` still does).
+Its fields stay usable meanwhile: what a person types, or a password
+manager fills, before the island is live is kept when it hydrates and
+reaches the model. An app's own `form.submit()` fires no submit event, by
+the platform's design, so it bypasses the script and sends a POST to the
+page.
+
+A site with a Content-Security-Policy must allow the page's inline
+pre-paint script, `<script data-weft-prepaint>`, by its hash or with
+`'unsafe-inline'` (a nonce needs a server that writes one into each answer,
+which a built page does not have). The Form's part of it is exactly
+
+    window.addEventListener("submit",function(e){var t=e.target;if(t&&t.classList&&t.classList.contains("weft-form"))e.preventDefault()},true)
+
+and a page whose other components register pre-paint code too (AppShell
+with `persist`, a closable Banner with an `id`) has it joined into the same
+script, one snippet a line, so the hash depends on the page's components.

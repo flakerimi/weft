@@ -11,10 +11,10 @@
 // skeleton rows until it has rows; with no rows it shows the `empty` slot.
 // `perPage` pages the rows on the client with a Pagination; `fetch(query)`
 // asks a server for each page instead, in the wire format's `page`,
-// `per_page`, `sort`, `q` and `filter`. Past 200 rows on one page it renders only the rows
-// in view, each a fixed height. When its own box is narrow, each row is a
-// card (a list item of label–value pairs) from the same columns, with the
-// same selection and sorting. With `keyboard` it is an APG grid
+// `per_page`, `sort`, `q` and `filter`. Past 200 rows on one page it
+// renders only the rows in view, each a fixed height. When its own box is
+// narrow, each row is a card (a list item of label–value pairs) from the
+// same columns, with the same selection and sorting. With `keyboard` it is an APG grid
 // (useTableGrid): one tab stop, arrows between cells over every row, windowed
 // or not, the focused cell scrolled into view and its row kept drawn; the
 // controls in cells leave the tab order until Enter or F2 moves in.

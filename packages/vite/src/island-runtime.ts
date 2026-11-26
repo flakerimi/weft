@@ -1,5 +1,6 @@
 import { createVaporSSRApp, type Component } from 'vue'
 import { scheduleIslands, type IslandOptions } from './island-schedule.ts'
+import { takeTouched } from './touched.ts'
 
 export type { IslandOptions } from './island-schedule.ts'
 
@@ -55,10 +56,13 @@ export async function hydrateIsland(el: HTMLElement, index: number, load: (() =>
       if (mounting) failed ??= err
       else console.error(err)
     }
+    // What a person typed or chose while the chunk loaded survives the mount.
+    const putBack = takeTouched(el)
     try {
       app.mount(el)
     } finally {
       mounting = false
+      putBack()
     }
     if (failed) throw failed
   } catch (e) {
