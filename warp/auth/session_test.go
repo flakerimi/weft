@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -8,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/flakerimi/weft/warp"
 )
 
 var (
@@ -108,5 +111,16 @@ func TestCookieName(t *testing.T) {
 	}
 	if c := cookie(false, "v", 60); c.Name != "session" || c.Secure || c.Path != "/" {
 		t.Errorf("the HTTP cookie is %+v, want session, not Secure, Path=/", c)
+	}
+}
+
+// A route guarded by Can in an app with no auth module is a registration
+// mistake, not a 500 on every request.
+func TestCanWithoutTheModule(t *testing.T) {
+	app := warp.New(warp.Config{})
+	warp.Get(app, "/x", func(context.Context, warp.None) (warp.None, error) { return warp.None{}, nil }, Can("x:read"))
+	want := `warp: route "GET /x" needs the "auth" module; list auth.Module() in app/modules.go.`
+	if err := app.Err(); err == nil || err.Error() != want {
+		t.Fatalf("Err = %v, want %s", err, want)
 	}
 }

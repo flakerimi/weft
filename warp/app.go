@@ -60,6 +60,20 @@ type routeConfig struct {
 	nameSet    bool // Name was given
 	permission string
 	wraps      []func(http.Handler) http.Handler
+	requires   []required
+}
+
+// required is a module a route needs, and what makes it, for the sentence.
+type required struct{ module, constructor string }
+
+// Requires records that the route needs the module named module, made by
+// constructor (as "auth.Module()"), for an option that guards a route with a
+// module's help, such as auth.Can, which is made before any app exists. An
+// app that lists no module of that name, when Err is asked, has a mistake:
+// route "GET /x" needs the "auth" module; list auth.Module() in
+// app/modules.go.
+func Requires(module, constructor string) RouteOption {
+	return func(c *routeConfig) { c.requires = append(c.requires, required{module, constructor}) }
 }
 
 // Name names the route within its module, in place of the name made from its
@@ -112,6 +126,7 @@ type App struct {
 	names      map[string]bool
 	current    string               // the module whose Register is running
 	routeNames map[string]routeName // a module's name and a route's name to the route
+	needs      []routeNeed          // the modules routes need, by Requires
 	routes     []Route
 	plans      []*plan // each route's binding plan, beside routes; nil for Handle
 	wraps      []func(http.Handler) http.Handler
@@ -170,6 +185,24 @@ func (a *App) Use(modules ...Module) {
 			a.fail("module %q could not register: %w", name, err)
 		}
 	}
+}
+
+// routeNeed is a module a route needs.
+type routeNeed struct {
+	route string
+	required
+}
+
+// needsMissing returns a mistake for each module a route needs that the app
+// does not list. a.mu is held.
+func (a *App) needsMissing() []error {
+	var errs []error
+	for _, n := range a.needs {
+		if !a.names[n.module] {
+			errs = append(errs, fmt.Errorf("warp: route %q needs the %q module; list %s in app/modules.go.", n.route, n.module, n.constructor))
+		}
+	}
+	return errs
 }
 
 // routeName is the route a module's route name was given to, and whether it
@@ -337,6 +370,9 @@ func (a *App) route(method, path string, in, out reflect.Type, p *plan, status i
 	if module != "" {
 		a.routeNames[key] = routeName{name, rc.nameSet}
 	}
+	for _, req := range rc.requires {
+		a.needs = append(a.needs, routeNeed{name, req})
+	}
 	a.routes = append(a.routes, Route{
 		Module: module, Name: rc.name, Method: method, Path: "/api" + path,
 		In: in, Out: out, Status: rc.status, Permission: rc.permission,
@@ -421,7 +457,7 @@ func (a *App) Err() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	all := append([]error{a.cfg.Err()}, a.badConfig...)
-	return errors.Join(append(all, a.mistakes...)...)
+	return errors.Join(append(append(all, a.mistakes...), a.needsMissing()...)...)
 }
 
 // registrationErr returns the registration mistakes alone, joined, leaving
@@ -429,7 +465,7 @@ func (a *App) Err() error {
 func (a *App) registrationErr() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return errors.Join(a.mistakes...)
+	return errors.Join(append(slices.Clone(a.mistakes), a.needsMissing()...)...)
 }
 
 // Routes returns every route, in the order registered.

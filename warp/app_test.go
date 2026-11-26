@@ -616,3 +616,22 @@ func TestMistake(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A route option may say the route needs a module, as auth.Can does: an app
+// that lists none of that name has a registration mistake, which weft gen's
+// description reports too.
+func TestRequiresAModule(t *testing.T) {
+	app := New(Config{})
+	Get(app, "/x", func(context.Context, None) (Item, error) { return Item{}, nil }, Requires("auth", "auth.Module()"))
+	want := `warp: route "GET /x" needs the "auth" module; list auth.Module() in app/modules.go.`
+	if errText(app.Err()) != want || errText(app.registrationErr()) != want {
+		t.Fatalf("Err = %q, registrationErr = %q, want %q", errText(app.Err()), errText(app.registrationErr()), want)
+	}
+	app = New(Config{})
+	var log []string
+	app.Use(mod("auth", &log))
+	Get(app, "/x", func(context.Context, None) (Item, error) { return Item{}, nil }, Requires("auth", "auth.Module()"))
+	if err := app.Err(); err != nil {
+		t.Fatalf("with the module: %v", err)
+	}
+}
