@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -153,6 +155,35 @@ func TestUnpackFailedRenameRestores(t *testing.T) {
 	}
 	if left := runTemps(t, dir); len(left) != 0 {
 		t.Errorf("the failed run left %v", left)
+	}
+}
+
+// A rename or a removal Windows refuses while another process has a file
+// in the folder open (another weft command reading .weft/VERSION, a virus
+// scanner) is tried again until it goes through, for up to busyWait; any
+// other error, and one still busy after busyWait, is returned.
+func TestRetryBusy(t *testing.T) {
+	errBusy := errors.New("busy")
+	was, wait := busy, busyWait
+	busy, busyWait = func(err error) bool { return errors.Is(err, errBusy) }, 300*time.Millisecond
+	t.Cleanup(func() { busy, busyWait = was, wait })
+
+	tries := 0
+	if err := retryBusy(func() error {
+		if tries++; tries < 3 {
+			return errBusy
+		}
+		return nil
+	}); err != nil || tries != 3 {
+		t.Errorf("busy twice: %v after %d tries, want nil after 3", err, tries)
+	}
+	tries = 0
+	if err := retryBusy(func() error { tries++; return os.ErrPermission }); !errors.Is(err, os.ErrPermission) || tries != 1 {
+		t.Errorf("another error: %v after %d tries, want it after 1", err, tries)
+	}
+	start := time.Now()
+	if err := retryBusy(func() error { return errBusy }); !errors.Is(err, errBusy) || time.Since(start) < busyWait {
+		t.Errorf("always busy: %v after %v, want it after %v", err, time.Since(start), busyWait)
 	}
 }
 
@@ -501,8 +532,7 @@ func TestRefreshNamesAnUnreadableBundle(t *testing.T) {
 	}
 	app := t.TempDir()
 	bundle := folderBundle(t, map[string]string{"weft/a": "one"})
-	os.Chmod(filepath.Join(bundle, "weft", "a"), 0)
-	t.Cleanup(func() { os.Chmod(filepath.Join(bundle, "weft", "a"), 0o644) })
+	makeUnreadable(t, filepath.Join(bundle, "weft", "a"))
 	_, err := refreshWeft(app, devVersion)
 	if err == nil || !strings.HasPrefix(err.Error(), "cannot read the bundle in "+bundle+" (") || !strings.HasSuffix(err.Error(), "); make its files readable, or point WEFT_BUNDLE at a folder made by scripts/bundle.sh") {
 		t.Errorf("refresh = %v", err)
@@ -603,7 +633,13 @@ func TestLockLeftBehind(t *testing.T) {
 		if took := time.Since(start); err != nil || took > 500*time.Millisecond {
 			t.Fatalf("%s: %v after %v", c.name, err, took)
 		}
-		if b, _ := os.ReadFile(lock); string(b) != fmt.Sprintf("%d\n", os.Getpid()) {
+		if runtime.GOOS == "windows" {
+			// The lock is the file, opened with no sharing: while it is held
+			// nobody else opens it, so what it says cannot be read.
+			if b, err := os.ReadFile(lock); err == nil {
+				t.Errorf("%s: the lock could be opened while held, and holds %q", c.name, b)
+			}
+		} else if b, _ := os.ReadFile(lock); string(b) != fmt.Sprintf("%d\n", os.Getpid()) {
 			t.Errorf("%s: the lock holds %q", c.name, b)
 		}
 		unlock()

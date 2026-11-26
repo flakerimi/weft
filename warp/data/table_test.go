@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -431,9 +432,36 @@ type errString string
 
 func (e errString) Error() string { return string(e) }
 
+// A URI's path is the file's, but for a drive on Windows, where SQLite reads
+// /C:/srv/app.db as C:/srv/app.db.
+func TestURIFile(t *testing.T) {
+	for _, c := range []struct {
+		path    string
+		windows bool
+		want    string
+	}{
+		{"/C:/srv/app.db", true, "C:/srv/app.db"},
+		{"/c:/app.db", true, "c:/app.db"},
+		{"/C:", true, "C:"},
+		{"/srv/app.db", true, "/srv/app.db"},
+		{"/C:x/app.db", true, "/C:x/app.db"},
+		{"/1:/app.db", true, "/1:/app.db"},
+		{"data/app.db", true, "data/app.db"},
+		{"/C:/srv/app.db", false, "/C:/srv/app.db"},
+	} {
+		if got := uriFile(c.path, c.windows); got != c.want {
+			t.Errorf("uriFile(%q, %v) = %q, want %q", c.path, c.windows, got, c.want)
+		}
+	}
+}
+
 func TestDSN(t *testing.T) {
 	var d sqlite
 	settings := "_busy_timeout=5000&_foreign_keys=1&_journal_mode=WAL&_txlock=immediate"
+	drive := "/C:/srv"
+	if runtime.GOOS == "windows" {
+		drive = "C:/srv"
+	}
 	cases := []struct {
 		url, dsn, dir string
 		memory        bool
@@ -442,6 +470,8 @@ func TestDSN(t *testing.T) {
 		{"file:data/app.db", "file:data/app.db?" + settings, "data", false, 0},
 		{"file:data/app.db?cache=shared", "file:data/app.db?cache=shared&" + settings, "data", false, 0},
 		{"file:///srv/app.db", "file:///srv/app.db?" + settings, "/srv", false, 0},
+		// SQLite reads /C: in a URI's path as the drive on Windows alone.
+		{"file:///C:/srv/app.db", "file:///C:/srv/app.db?" + settings, drive, false, 0},
 		{"app.db", "app.db?" + settings, ".", false, 0},
 		{":memory:", ":memory:?" + settings, "", true, 0},
 		{"file::memory:?cache=shared", "file::memory:?cache=shared&" + settings, "", true, 0},
@@ -479,8 +509,9 @@ func TestDSN(t *testing.T) {
 		if file != "" {
 			dir = filepath.Dir(file)
 		}
-		if dsn != c.dsn || dir != c.dir || memory != c.memory || len(notes) != c.notes {
-			t.Errorf("dsn(%q) = %q, %q, %v, %q; want %q, %q, %v and %d notes", c.url, dsn, dir, memory, notes, c.dsn, c.dir, c.memory, c.notes)
+		// The folder is the system's: \srv on Windows for /srv.
+		if dsn != c.dsn || dir != filepath.FromSlash(c.dir) || memory != c.memory || len(notes) != c.notes {
+			t.Errorf("dsn(%q) = %q, %q, %v, %q; want %q, %q, %v and %d notes", c.url, dsn, dir, memory, notes, c.dsn, filepath.FromSlash(c.dir), c.memory, c.notes)
 		}
 	}
 	_, _, _, notes := d.dsn("file:app.db?_busy_timeout=0&_txlock=deferred&_timeout=99999999999&_pragma=busy_timeout(1)")

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"net"
@@ -63,10 +64,47 @@ func copyApp(t *testing.T, dir string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out, err := exec.Command("cp", "-a", src, dir).CombinedOutput(); err != nil {
-		t.Fatalf("cp: %v: %s", err, out)
+	if runtime.GOOS != "windows" {
+		if out, err := exec.Command("cp", "-a", src, dir).CombinedOutput(); err != nil {
+			t.Fatalf("cp: %v: %s", err, out)
+		}
+		return filepath.Join(dir, "myapp")
 	}
-	return filepath.Join(dir, "myapp")
+	// On Windows pnpm links node_modules with junctions, which Git Bash's cp
+	// copies as folders (so Node finds @weft/vite's TypeScript under
+	// node_modules and will not strip its types) and whose targets are
+	// absolute, naming the installed app. The copy is made without any
+	// node_modules, and pnpm links the copy's own from its store, offline.
+	dst := filepath.Join(dir, "myapp")
+	err = filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(src, path)
+		target := filepath.Join(dst, rel)
+		switch {
+		case d.IsDir() && d.Name() == "node_modules":
+			return filepath.SkipDir
+		case d.IsDir():
+			return os.MkdirAll(target, 0o755)
+		case !d.Type().IsRegular():
+			return fmt.Errorf("%s is neither a file nor a folder", path)
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, b, 0o644)
+	})
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	install := exec.Command("pnpm", "install", "--offline", "--frozen-lockfile")
+	install.Dir = dst
+	if out, err := install.CombinedOutput(); err != nil {
+		t.Fatalf("pnpm install --offline in the copy: %v: %s", err, out)
+	}
+	return dst
 }
 
 // A binary for Windows is named .exe, as weft build's default and the dev
@@ -232,7 +270,8 @@ func TestBuildMakesBinary(t *testing.T) {
 	if !strings.HasSuffix(out, "Built myapp"+exeSuffix(runtime.GOOS)+"\n") {
 		t.Errorf("stdout ends %q", out[max(0, len(out)-80):])
 	}
-	if !strings.Contains(out, "weft: built 2 pages into web/dist") {
+	// The folder as weft build names it to the page build: web\dist on Windows.
+	if !strings.Contains(out, "weft: built 2 pages into "+filepath.Join("web", "dist")) {
 		t.Errorf("the page build's output was not passed through: %q", out)
 	}
 	assertServes(t, filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS)))
@@ -602,13 +641,13 @@ func TestBuildFromSubfolder(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s%s", code, out, errs)
 	}
-	if want := "Built " + filepath.Join("..", "..", "myapp") + "\n"; !strings.HasSuffix(out, want) {
+	if want := "Built " + filepath.Join("..", "..", "myapp"+exeSuffix(runtime.GOOS)) + "\n"; !strings.HasSuffix(out, want) {
 		t.Errorf("stdout ends %q, want %q", out[max(0, len(out)-80):], want)
 	}
-	if !exists(t, filepath.Join(app, "myapp")) || !exists(t, filepath.Join(app, "web", "dist")) {
+	if !exists(t, filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS))) || !exists(t, filepath.Join(app, "web", "dist")) {
 		t.Error("the app was not built")
 	}
-	if exists(t, "myapp") || exists(t, "web") {
+	if exists(t, "myapp"+exeSuffix(runtime.GOOS)) || exists(t, "web") {
 		t.Error("the build wrote into the subfolder")
 	}
 }
