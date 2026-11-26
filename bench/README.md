@@ -135,9 +135,10 @@ The numbers in the prose below are from the run in the table (2026-11-26).
   memory with brotli stored at build, the four other frameworks' pages do 117,173 to 123,546 requests per second.
   Weft's own binary does 119,964 [116,204–122,437]: inside that range, above Astro's Vue page (117,173) and Next.js
   (118,752), below SvelteKit (121,082), Nuxt (121,885) and Astro with no framework (123,546), and the ranges
-  overlap. On 2026-11-25 it was below all of them, because of the 103 Early Hints it sent before every page (see
-  [Where Weft loses](#where-weft-loses)). What `warp.Serve` gives is that serving in the binary, with nothing to set
-  up. It does not make pages faster to send than a pre-compressed static site behind an equally careful server.
+  overlap. On 2026-11-25 it was below all of them, 92 to 99 percent of the gap because of the 103 Early Hints it
+  sent before every page (see [Where Weft loses](#where-weft-loses)). What `warp.Serve` gives is that serving in the
+  binary, with nothing to set up. It does not make pages faster to send than a pre-compressed static site behind an
+  equally careful server.
 - **Each framework behind the server it ships with** is where the gap is: Weft 119,964; Nuxt's Node server 45,747;
   SvelteKit's 34,284; `astro preview` 17,915 (Vue island) and 19,784 (no framework); `next start` 9,389. Weft's
   server is held to one core and the Node servers are not. Nuxt's server sent the page and its scripts with no
@@ -146,7 +147,7 @@ The numbers in the prose below are from the run in the table (2026-11-26).
 - **A plain file server that gzips on the fly is the slowest way to serve any of them**: 7,513 to 12,568 requests
   per second, below every framework's own server but Next's.
 - **JavaScript is the result about frameworks.** Weft's page loads 21.4 KB of script files; Astro with a Vue island
-  26.5 KB plus 5.2 KB inline; SvelteKit 34.9 KB; Nuxt 62.3 KB; Next.js 112.5 KB plus 9.3 KB inline. Astro with no
+  26.5 KB plus 5.1 KB inline; SvelteKit 34.9 KB; Nuxt 62.3 KB; Next.js 112.5 KB plus 9.0 KB inline. Astro with no
   framework island loads none, only 237 B inline. Two confounds: the sites do not run the same framework runtime
   (Weft ships Vue 3.6.0-rc.16 with Vapor; Astro and Nuxt run Vue 3.5.46 with the virtual DOM; Next runs React;
   SvelteKit runs Svelte), and Nuxt and SvelteKit hydrate the whole page where Weft, Astro and Next hydrate only the
@@ -176,7 +177,7 @@ In the run of 2026-11-26:
 | Measure | Weft | Who is ahead | Why, as best we can tell | Next step |
 |---|--:|---|---|---|
 | Requests per second | 119,964 [116,204–122,437] | Three of the five sites behind the pre-compressed Go server: SvelteKit 121,082, Nuxt 121,885, Astro with no framework 123,546. Astro's Vue page (117,173) and Next.js (118,752) are behind Weft. | Within the noise: the ranges of three rounds overlap, and the differences are 1 to 3 percent. The 103 Early Hints that made the gap of 2026-11-25 is no longer sent to this client (below). | More rounds, interleaved, before reading a difference this small: the investigation below used five. |
-| TTFB | 0.20 ms | The pre-compressed Go server, 0.11 to 0.13 ms, and SvelteKit's Node server, 0.16 ms | Not the 103: this client got none, and the 0.20 ms is what it was with one. The investigation, timing five interleaved series of 50 per server, found every server, Weft included, at 0.09 ms with Early Hints on or off, so the gap of 2026-11-25 did not reproduce there. `tools/measure.mjs` takes one series per target, in turn, Weft's first, straight after the Lighthouse runs and its bytes fetch. Hypothesis, not tested: the column reports that order, not the server. | Time several TTFB series per target, interleaved, in `tools/measure.mjs`. |
+| TTFB | 0.20 ms | The pre-compressed Go server, 0.11 to 0.13 ms, and SvelteKit's Node server, 0.16 ms | Not the 103: this client got none. Most likely the measurement's order, not `warp.Serve`. `tools/measure.mjs` times Weft first, once, straight after the Lighthouse runs and its bytes fetch, and does not interleave the TTFB series. The investigation, timing five interleaved series of 50 per server, found every server, Weft included, at 0.09 ms with Early Hints on or off. A review's experiment after this run (the same page bytes, the order rotated) measured Weft and the pre-compressed server both at 0.078 ms, and found that right after a headless Chrome run whichever server is timed first is slower (about 0.18 ms against 0.155 ms). The full Lighthouse sequence was not reproduced. | Interleave the TTFB series in `tools/measure.mjs` as the other measures are, and run again. |
 | HTML and CSS | 3.1 KB br | Astro with no framework (1.7 KB), Nuxt (1.9 KB), SvelteKit (2.0 KB) | Weft inlines its theme and the stylesheets of the components the page renders; the others carry one hand-written stylesheet. See the HTML and CSS row below. | As below. |
 | JavaScript, total transfer, requests, LCP | 21.4 KB, 83.0 KB, 5, 1276 ms | Astro with no framework island: 237 B inline, 60.2 KB, 2, 750 ms | Astro's default island ships no framework. See the table below. | As below. |
 
