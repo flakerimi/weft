@@ -43,6 +43,7 @@ type column struct {
 type table struct {
 	name     string
 	model    string // the Go type's name
+	pkg      string // its package's path
 	singular string // the name of one record, for sentences
 	cols     []*column
 	record   []int // the path to the embedded Record
@@ -91,7 +92,7 @@ func tableOf(rt reflect.Type, name string) (*table, []string) {
 	if model == "" {
 		model = rt.String()
 	}
-	t := &table{name: name, model: model, singular: singular(name)}
+	t := &table{name: name, model: model, pkg: rt.PkgPath(), singular: singular(name)}
 	if rt.Kind() != reflect.Struct {
 		return t, []string{fmt.Sprintf("%s: %s does not embed data.Record; embed it, since a store needs an id and two times.", name, model)}
 	}

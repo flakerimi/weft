@@ -171,13 +171,37 @@ func (db *DB) add(t *table) bool {
 	case started:
 		db.app.Mistake("the %s store was made after the app started; make it in a module's Register.", t.name)
 	case taken:
-		db.app.Mistake("two stores keep the table %s; make one and share it.", t.name)
+		// The login's table is warp/auth's, which no app can share.
+		if other := db.keeper(t.name); other != nil && (other.pkg == authPkg) != (t.pkg == authPkg) {
+			mine := t
+			if t.pkg == authPkg {
+				mine = other
+			}
+			db.app.Mistake("the table %s is the login's, which warp/auth keeps its users in; give the store of %s another table.", t.name, mine.model)
+		} else {
+			db.app.Mistake("two stores keep the table %s; make one and share it.", t.name)
+		}
 	default:
 		for _, m := range clashes {
 			db.app.Mistake("%s", m)
 		}
 	}
 	return ok
+}
+
+// authPkg is the login's package, whose store keeps the table users.
+const authPkg = "github.com/flakerimi/weft/warp/auth"
+
+// keeper is the table of the store that keeps name, or nil.
+func (db *DB) keeper(name string) *table {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	for _, t := range db.tables {
+		if t.name == name {
+			return t
+		}
+	}
+	return nil
 }
 
 // indexOwner is the store whose unique index has a name.

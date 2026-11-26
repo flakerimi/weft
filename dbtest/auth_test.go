@@ -716,3 +716,18 @@ func TestSetupSignsInWithTheStoredRow(t *testing.T) {
 	}
 	c.Get("/api/auth/me").Want(200)
 }
+
+// The login keeps the table users: an app's own store on it is told that
+// the table is the login's and to name another.
+func TestTheLoginsTableIsReserved(t *testing.T) {
+	type Note struct {
+		data.Record
+		Body string `json:"body"`
+	}
+	app := warp.New(warp.Config{})
+	app.Use(data.Module(), auth.Module(), stores{"notes", func(db *data.DB) { data.NewStore[Note](db, "users") }})
+	want := `warp: the table users is the login's, which warp/auth keeps its users in; give the store of Note another table.`
+	if err := app.Err(); err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("Err = %v\nwant %s", err, want)
+	}
+}

@@ -129,8 +129,8 @@ func TestListDefaults(t *testing.T) {
 		t.Fatalf("per_page=100: %d, %d items", got.PerPage, len(got.Items))
 	}
 	for query, field := range map[string]string{
-		"per_page=101":                  "per_page",
-		"page=-1":                       "page",
+		"per_page=101": "per_page",
+		"page=-1":      "page",
 	} {
 		e := c.Get("/api/products?" + query).Want(422).Error()
 		if _, ok := e.Fields[field]; !ok || len(e.Fields) != 1 {
