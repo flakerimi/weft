@@ -156,6 +156,7 @@ func (a *App) Describe() (Description, error) {
 					t = t.Elem()
 				}
 				d.use(t, at, at+" answers", "give the route another output")
+				d.unaddressed(rt.Out, true, at+" answers", map[unaddressedKey]bool{})
 				info.Output = &OutputInfo{TS: d.ts(t, nil), List: list}
 			}
 		}
@@ -311,6 +312,58 @@ func (d *describer) use(t reflect.Type, route, where, fix string) {
 	case t.Kind() == reflect.Chan || t.Kind() == reflect.Func || t.Kind() == reflect.UnsafePointer ||
 		t.Kind() == reflect.Complex64 || t.Kind() == reflect.Complex128:
 		d.fail("%s a %s, which JSON cannot carry; %s.", where, t, fix)
+	}
+}
+
+type unaddressedKey struct {
+	t    reflect.Type
+	addr bool
+}
+
+// unaddressed reports a type of an answer whose MarshalJSON or MarshalText
+// has a pointer receiver where encoding/json meets it unaddressable, in a
+// map's values, so cannot call it and writes the underlying value, which the
+// description does not say. An answer is written through a pointer, so its
+// value, what pointers and lists hold, and the fields and array elements of
+// those are addressable; a map's values, and what they hold by value, are
+// not. addr is whether a value of type t is addressable there.
+func (d *describer) unaddressed(t reflect.Type, addr bool, where string, seen map[unaddressedKey]bool) {
+	if seen[unaddressedKey{t, addr}] {
+		return
+	}
+	seen[unaddressedKey{t, addr}] = true
+	if t.Kind() != reflect.Pointer && t.Kind() != reflect.Interface && t != timeType {
+		pt := reflect.PointerTo(t)
+		for _, m := range []struct {
+			iface reflect.Type
+			name  string
+		}{{jsonMarshaler, "MarshalJSON"}, {textMarshaler, "MarshalText"}} {
+			if t.Implements(m.iface) {
+				return // written by its own method wherever it is
+			}
+			if pt.Implements(m.iface) {
+				if !addr {
+					d.fail("%s a map of %s, whose %s has a pointer receiver, so encoding/json writes the map's values without it; give %s a value receiver, or make the map hold *%s.",
+						where, typeName(t), m.name, m.name, typeName(t))
+				}
+				return
+			}
+		}
+	}
+	switch t.Kind() {
+	case reflect.Pointer, reflect.Slice:
+		d.unaddressed(t.Elem(), true, where, seen)
+	case reflect.Array:
+		d.unaddressed(t.Elem(), addr, where, seen)
+	case reflect.Map:
+		d.unaddressed(t.Elem(), false, where, seen)
+	case reflect.Struct:
+		if t == timeType {
+			return
+		}
+		for _, f := range jsonFields(t) {
+			d.unaddressed(f.typ, addr, where, seen)
+		}
 	}
 }
 
@@ -575,8 +628,10 @@ func jsonFields(t reflect.Type) []descField {
 	}
 	var all []candidate
 	inside := map[reflect.Type]bool{} // the embedded types being walked, so a type that embeds itself ends
-	var walk func(t reflect.Type, prefix []int, depth int)
-	walk = func(t reflect.Type, prefix []int, depth int) {
+	// viaPointer is whether t is reached through an embedded pointer, which
+	// may be nil, when encoding/json writes none of its fields.
+	var walk func(t reflect.Type, prefix []int, depth int, viaPointer bool)
+	walk = func(t reflect.Type, prefix []int, depth int, viaPointer bool) {
 		inside[t] = true
 		defer delete(inside, t)
 		for i := range t.NumField() {
@@ -601,7 +656,7 @@ func jsonFields(t reflect.Type) []descField {
 			}
 			if embedsStruct && key == "" {
 				if !inside[ft] {
-					walk(ft, index, depth+1)
+					walk(ft, index, depth+1, viaPointer || f.Type.Kind() == reflect.Pointer)
 				}
 				continue
 			}
@@ -614,11 +669,11 @@ func jsonFields(t reflect.Type) []descField {
 			}
 			all = append(all, candidate{descField{
 				key: key, goName: f.Name, typ: f.Type, index: index, readonly: isReadonly(f),
-				omits: hasJSONOption(opts, "omitempty") || hasJSONOption(opts, "omitzero"), quoted: hasJSONOption(opts, "string"),
+				omits: viaPointer || hasJSONOption(opts, "omitempty") || hasJSONOption(opts, "omitzero"), quoted: hasJSONOption(opts, "string"),
 			}, depth, tagged})
 		}
 	}
-	walk(t, nil, 0)
+	walk(t, nil, 0, false)
 
 	keep := make([]bool, len(all))
 	byKey := map[string][]int{}

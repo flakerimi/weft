@@ -394,7 +394,10 @@ func TestAnswerWithoutPlanCostsNothingExtra(t *testing.T) {
 	app := New(Config{})
 	Get(app, "/typed", func(context.Context, None) (flatOut, error) { return flat, nil })
 	Get(app, "/typed-none", func(context.Context, None) (None, error) { return None{}, nil })
-	app.Handle("GET /plain", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { WriteJSON(w, 200, flat) }))
+	// A typed route writes its answer through a pointer to its own copy, so
+	// a pointer receiver's MarshalJSON is called; the plain handler does the
+	// same, so what is compared is the fix-up alone.
+	app.Handle("GET /plain", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { out := flat; WriteJSON(w, 200, &out) }))
 	app.Handle("GET /plain-none", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }))
 	h := mustRegister(t, app)
 	cost := func(path string) float64 {

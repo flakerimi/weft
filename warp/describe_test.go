@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net"
 	"net/url"
@@ -1075,3 +1076,183 @@ func TestPackageServeDescribesNothing(t *testing.T) {
 }
 
 type exited struct{}
+
+// The wire of an answer, checked against its description: what encoding/json
+// writes for an embedded pointer left nil, and for a type whose MarshalText
+// has a pointer receiver.
+type wInner struct {
+	Deep string `json:"deep"`
+}
+
+type WEmbedsPtr struct {
+	*wInner
+	Name string `json:"name"`
+}
+
+type WPL struct {
+	L int `json:"l"`
+}
+
+func (p *WPL) MarshalText() ([]byte, error) { return []byte("L" + strconv.Itoa(p.L)), nil }
+func (p *WPL) UnmarshalText(b []byte) error {
+	n, err := strconv.Atoi(strings.TrimPrefix(string(b), "L"))
+	p.L = n
+	return err
+}
+
+type WHolds struct {
+	One  WPL    `json:"one"`
+	List []WPL  `json:"list"`
+	Ptr  *WPL   `json:"ptr"`
+	Arr  [1]WPL `json:"arr"`
+}
+
+type WInMap struct {
+	By map[string]WPL `json:"by"`
+}
+
+// wireAgrees reports where the JSON value raw differs from what ts, a
+// TypeScript type of d, promises: a field that is not optional is there, and
+// every value has its type's kind.
+func wireAgrees(d Description, ts string, raw any) string {
+	types := map[string]TypeInfo{}
+	for _, ty := range d.Types {
+		types[ty.Name] = ty
+	}
+	var check func(ts string, v any, at string) string
+	check = func(ts string, v any, at string) string {
+		if before, ok := strings.CutSuffix(ts, " | null"); ok {
+			if v == nil {
+				return ""
+			}
+			ts = before
+		}
+		if elem, ok := strings.CutSuffix(ts, "[]"); ok {
+			list, ok := v.([]any)
+			if !ok {
+				return fmt.Sprintf("%s is %v, not a list", at, v)
+			}
+			for _, e := range list {
+				if p := check(strings.Trim(elem, "()"), e, at+"[]"); p != "" {
+					return p
+				}
+			}
+			return ""
+		}
+		switch ts {
+		case "string":
+			if _, ok := v.(string); !ok {
+				return fmt.Sprintf("%s is %v, not text", at, v)
+			}
+		case "number":
+			if _, ok := v.(float64); !ok {
+				return fmt.Sprintf("%s is %v, not a number", at, v)
+			}
+		case "boolean":
+			if _, ok := v.(bool); !ok {
+				return fmt.Sprintf("%s is %v, not true or false", at, v)
+			}
+		case "unknown":
+		default:
+			ty, ok := types[ts]
+			obj, isObj := v.(map[string]any)
+			if !ok || !isObj {
+				return fmt.Sprintf("%s is %v, not a %s", at, v, ts)
+			}
+			for _, f := range ty.Fields {
+				fv, there := obj[f.Name]
+				if !there {
+					if !f.Optional {
+						return fmt.Sprintf("%s.%s is described as always there, and is not", at, f.Name)
+					}
+					continue
+				}
+				if p := check(f.TS, fv, at+"."+f.Name); p != "" {
+					return p
+				}
+			}
+		}
+		return ""
+	}
+	return check(ts, raw, "the answer")
+}
+
+func TestAnswersAreAsDescribed(t *testing.T) {
+	app := New(Config{})
+	Get(app, "/embeds", func(context.Context, None) (WEmbedsPtr, error) { return WEmbedsPtr{Name: "n"}, nil })
+	Get(app, "/embeds-set", func(context.Context, None) (WEmbedsPtr, error) {
+		return WEmbedsPtr{wInner: &wInner{Deep: "d"}, Name: "n"}, nil
+	})
+	Get(app, "/pl", func(context.Context, None) (WPL, error) { return WPL{L: 3}, nil })
+	Get(app, "/holds", func(context.Context, None) (WHolds, error) {
+		return WHolds{One: WPL{3}, List: []WPL{{4}}, Ptr: &WPL{5}, Arr: [1]WPL{{6}}}, nil
+	})
+	Get(app, "/holds-list", func(context.Context, None) ([]WHolds, error) { return []WHolds{{One: WPL{7}}}, nil })
+	h := mustRegister(t, app)
+	d, err := app.Describe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range d.Routes {
+		w := serve(t, h, "GET", r.Path)
+		var v any
+		if err := json.Unmarshal(w.Body.Bytes(), &v); w.Code != 200 || err != nil {
+			t.Fatalf("%s: %d %s", r.Path, w.Code, w.Body)
+		}
+		ts := r.Output.TS
+		if r.Output.List {
+			ts += "[]"
+		}
+		if p := wireAgrees(d, ts, v); p != "" {
+			t.Errorf("%s answers %s: %s", r.Path, w.Body, p)
+		}
+	}
+	if w := serve(t, h, "GET", "/api/holds"); w.Body.String() != `{"one":"L3","list":["L4"],"ptr":"L5","arr":["L6"]}`+"\n" {
+		t.Errorf("/holds answers %s", w.Body)
+	}
+
+	// A map's values are not addressable, so encoding/json cannot call a
+	// pointer receiver's MarshalText on them: the description cannot be true.
+	app = New(Config{})
+	Get(app, "/inmap", func(context.Context, None) (WInMap, error) { return WInMap{}, nil })
+	_, err = app.Describe()
+	want := `warp: GET /inmap answers a map of WPL, whose MarshalText has a pointer receiver, so encoding/json writes the map's values without it; give MarshalText a value receiver, or make the map hold *WPL.`
+	if err == nil || err.Error() != want {
+		t.Errorf("Describe = %v\nwant %s", err, want)
+	}
+}
+
+// A typed route with an answer cannot answer 204 or 304, which carry no
+// body: it answers 500, and says why once in the log, without running the
+// handler.
+func TestStatusWithoutABody(t *testing.T) {
+	var logs bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(old) })
+	ran := false
+	app := New(Config{})
+	Get(app, "/x", func(context.Context, None) (Gadget, error) { ran = true; return Gadget{}, nil }, Status(204))
+	Get(app, "/y", func(context.Context, None) (Gadget, error) { ran = true; return Gadget{}, nil }, Status(304))
+	Get(app, "/z", func(context.Context, None) (Gadget, error) { return Gadget{}, nil }, Status(202))
+	h := mustRegister(t, app)
+	for range 2 {
+		for _, path := range []string{"/api/x", "/api/y"} {
+			w := serve(t, h, "GET", path)
+			if code, _, _ := apiError(t, w); w.Code != 500 || code != "internal" || ran {
+				t.Errorf("%s: %d %s, ran %v", path, w.Code, w.Body, ran)
+			}
+		}
+	}
+	for _, s := range []string{
+		`warp: GET /api/x set the status 204 and has an answer to write; use warp.None as its output.`,
+		`warp: GET /api/y set the status 304 and has an answer to write; use warp.None as its output.`,
+	} {
+		if n := strings.Count(logs.String(), strconv.Quote(s)); n != 1 {
+			t.Errorf("the log has %q %d times:\n%s", s, n, &logs)
+		}
+	}
+	if w := serve(t, h, "GET", "/api/z"); w.Code != 202 || !strings.HasPrefix(w.Body.String(), "{") {
+		t.Errorf("/z: %d %s", w.Code, w.Body)
+	}
+}

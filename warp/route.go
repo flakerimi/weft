@@ -4,10 +4,13 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"maps"
 	"net/http"
 	"reflect"
 	"slices"
+	"sync"
 )
 
 // None is an input or output with nothing in it. As In, nothing is read from
@@ -152,6 +155,9 @@ func typed[In, Out any](app *App, method, path string, status int, fn func(conte
 	mistakes = append(mistakes, outMistakes...)
 	limit := app.cfg.MaxBodyBytes
 	app.route(method, path, in, out, p, status, func(status int) http.Handler {
+		if (status == http.StatusNoContent || status == http.StatusNotModified) && out != noneType {
+			return cannotAnswer(method, path, status)
+		}
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var input In
 			rv := reflect.ValueOf(&input).Elem()
@@ -175,9 +181,25 @@ func typed[In, Out any](app *App, method, path string, status int, fn func(conte
 			if empty != nil && status != http.StatusNoContent {
 				output = emptied(empty, output)
 			}
-			WriteJSON(w, status, output)
+			// Through a pointer, so a MarshalJSON or MarshalText with a
+			// pointer receiver is called on the answer, as the description
+			// says it is.
+			WriteJSON(w, status, &output)
 		})
 	}, opts, mistakes)
+}
+
+// cannotAnswer is the handler of a typed route with an answer whose status,
+// 204 or 304, carries no body: it never runs the route's function, answers
+// 500, and logs why once.
+func cannotAnswer(method, path string, status int) http.Handler {
+	var once sync.Once
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		once.Do(func() {
+			slog.Error(fmt.Sprintf("warp: %s /api%s set the status %d and has an answer to write; use warp.None as its output.", method, path, status))
+		})
+		WriteJSON(w, http.StatusInternalServerError, errorBody{internal()})
+	})
 }
 
 // check validates the filled input rv: its tag rules, all of them or, on
