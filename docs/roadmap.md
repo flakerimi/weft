@@ -1,0 +1,151 @@
+# The road to Weft 1.0.0
+
+Written 2026-11-27, at 0.0.10. It orders the work the two designs plan
+(`docs/superpowers/specs/2026-11-20-weft-design.md`, Weft; and
+`2026-11-23-warp-design.md`, Warp, which replaces Weft's phases 4b and 5) into
+releases, and says what 1.0.0 promises. What is not built yet is listed, with
+its phase, in `site-src/content/docs/coming-next.md`; this file says in which
+release it lands. The order is a proposal by Claude (Fable), to be corrected by
+the owner; each milestone gets its own design or plan before it is built.
+
+## Where 0.0.10 stands
+
+- **Built:** `@weft/ui` (76 Vapor components, adaptive, with a gallery and a
+  catalogue), the page build with islands, Markdown content and run-time pages,
+  `warp.Serve` from memory, the `weft` command (`create`, `dev`, `build`, `gen`,
+  `routes`, `unpack`, `upgrade`, `catalog`, `update`), and Warp's first slice:
+  `warp.App` and modules, typed routes, validation, `Describe` and the typed
+  client, `warp/data` on SQLite, `warp/auth` with one owner, `warptest`, and an
+  example shop that uses all of it.
+- **Runs on:** macOS and Linux (the full suite passes on both on GitHub's
+  runners). Windows builds, and its tests are being made to pass.
+- **Distributed:** from weft.base.al (installer, releases with checksums,
+  `weft update`); the repository is public since 2026-11-26.
+- **Not stable:** every 0.0.x may change any name. Vue is pinned to
+  `3.6.0-rc.16` because Vapor is in 3.6, which is not yet a stable release.
+
+## What 1.0.0 promises
+
+1.0.0 is the release after which an app made with Weft keeps working:
+
+1. **Semantic versioning.** Within 1.x no exported Go name, component prop,
+   event, slot, CLI command, flag, environment variable, error code or
+   sentence a test may match changes incompatibly; what goes is deprecated for
+   at least one minor release first, with the deprecation said at build time.
+2. **`weft upgrade` from any 1.x to any later 1.x** works on the example apps
+   and the template, tested in CI.
+3. **Three platforms**, each on amd64 and arm64: macOS, Linux and Windows, with
+   the whole suite passing on every push.
+4. **On stable dependencies only:** Vue 3.6 stable (or later), Go's current
+   stable release, Node's active LTS.
+5. **Reviewed:** a security review of `warp`, `warp/auth`, `warp/data` and the
+   page server by someone who did not build them; an accessibility audit of
+   every component (keyboard and screen reader, both input modes).
+6. **Documented:** every exported Go name, every component, every command and
+   every error a user can meet, with a guide per module; the docs describe the
+   code as it is, checked by tests.
+
+## Milestones
+
+Each milestone ends with a release from `main`, the suite green on all
+platforms it claims, and the docs saying what it brought.
+
+### 0.1.0: the first public release
+
+What a newcomer meets first works, on every platform.
+
+- **Windows supported:** the release workflow's Windows tests pass; `weft dev`
+  stops its process trees with a Job Object; the installer has a PowerShell
+  form; the docs say Windows is supported. The suite runs on all three
+  platforms on every push (free now that the repository is public).
+- **The Go module from GitHub:** with the repository public, an app's `go.mod`
+  can require `github.com/flakerimi/weft` at the release's tag instead of
+  replacing it with `./.weft/go`; tag each release (`vX.Y.Z`) and attach the
+  six archives to a public GitHub Release made from the same build the site
+  serves (the release workflow already builds them).
+- **W2 finished:** an `enum` typed as its values, `useParams()` typed from the
+  routes.
+- **W5, scaffolding and app blocks:** `weft scaffold`, `DataTable` (server
+  paging, sorting, filtering over the list shape) and `EntityDialog`; the app
+  template becomes the shop's shape (data, the login, one resource).
+- **Landing blocks** (Weft phase 7): `Hero`, `FeatureGrid`, `Pricing`,
+  `Testimonials`, `Faq`, `Cta`.
+- **The benchmark** run on a quiet machine with every series interleaved, and
+  Weft not behind on requests a second and time to first byte (Weft phase 7's
+  "beats Astro on every row" stays the aim for the rows Weft can win: bytes
+  and LCP are a choice of what an island ships, said plainly where it loses).
+- **A changelog**, `CHANGELOG.md`, from 0.1.0 on, and branch protection on
+  `main`.
+
+### 0.2.0: accounts (W4, with the middleware it needs)
+
+- Registration, invitations and password reset, with the `mail` module (log
+  and SMTP drivers).
+- Roles and permissions beyond the owner; a session table on the server, so a
+  user can sign out everywhere and one session can be ended.
+- `useSession()`, a login page in the template, `perm` on `Button` and row
+  actions, and a route guard in Vue.
+- From W7, brought forward because accounts need them: the `middleware` module's
+  security headers, request logging, a rate limit and API keys; body-read and
+  idle timeouts on the server.
+- The login's open limits closed: a per-account count across addresses.
+
+### 0.3.0: data beyond SQLite (W3)
+
+- PostgreSQL, then MySQL, behind the same `Store`, each tested in CI against a
+  real server.
+- Relations (`belongs_to`, `has_many`, `many_to_many`) and soft delete.
+- `weft db`: how the database differs from the app's records.
+- Migrations that can rename and drop, written out and reviewed, beside the
+  additive ones Warp makes itself.
+
+### 0.4.0: files and live data (W6)
+
+- The `storage` module: attachments on a record's `image` and `file` fields,
+  served under `/api/files/`, with `FileUpload` bound to the field.
+- `events` and `live`: server-sent events at `/api/live`, read with `useLive`
+  and `useLiveSeries`; shutdown that ends open streams at once.
+- Charts that take live data: `LineChart`, `AreaChart`, `BarChart`,
+  `DonutChart`, `Sparkline`.
+
+### 0.5.0: app routes and the agent kit
+
+- App routes (Weft phase 4c): a client-side router and `layouts/`, for an app
+  whose pages switch without loading a document.
+- The agent kit (Weft phase 6): `@weft/eslint-plugin`, `weft check` and
+  `weft mcp`, so an agent is told when it writes markup Weft has a component for.
+
+### 0.6.0: the rest of the modules (W7) and site features (6b)
+
+- `jobs` (work on a schedule), `i18n` (translated fields), `docs` (an OpenAPI
+  document at `/api/openapi.json`).
+- `<Image>`, actions, environment values, a development overlay and
+  `weft deploy`.
+
+### 0.9.x: the freeze
+
+No new features; only what 1.0.0 promises.
+
+- Every exported name, prop and command reviewed once more and renamed now if
+  it is wrong, since after 1.0.0 it cannot be.
+- The security review and the accessibility audit, and their findings fixed.
+- Vue 3.6 stable adopted (if it has not shipped by then, 1.0.0 waits for it).
+- `weft upgrade` tested from 0.9.0 and across the 0.9.x releases.
+- Release candidates (`1.0.0-rc.N`) used to build the example apps and the
+  site, and one outside app, before 1.0.0 is tagged.
+
+### 1.0.0
+
+Tagged when everything under "What 1.0.0 promises" holds, from a release
+candidate that changed nothing but its version.
+
+## How the work is shared
+
+Work is coordinated in `coord.md` at the repository's root (not in git):
+who works where, entries addressed by name, and a table of who holds what.
+Each milestone is split into pieces that touch different folders, so two
+agents can build at once in their own worktrees, each piece reviewed by an
+agent that did not build it, by running the code. The owner's standing
+orders hold for everyone: finished work whose review and suite pass is
+merged, pushed and published to weft.base.al without asking; nothing is
+deleted without the owner's yes; no `Co-Authored-By` lines.
