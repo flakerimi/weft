@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"embed"
 	"encoding/binary"
@@ -13,7 +12,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -115,10 +113,33 @@ func refreshWeft(appDir, version string) (bool, error) {
 		return false, err
 	}
 	defer unlock()
-	if have, haveHash := unpackedRecord(appDir); have == version && (version != devVersion || haveHash == hash) {
+	current := func() bool {
+		have, haveHash := unpackedRecord(appDir)
+		return have == version && (version != devVersion || haveHash == hash)
+	}
+	if current() {
 		return false, nil // another weft command unpacked it while this one waited
 	}
-	return true, unpackHashed(bundle, appDir, version, hash)
+	if err := unpackHashed(bundle, appDir, version, hash); err != nil {
+		if current() {
+			return false, nil // another process finished the same unpack meanwhile
+		}
+		return false, unpackFailed(appDir, err)
+	}
+	return true, nil
+}
+
+// unpackFailed is the sentence for an unpack that failed with the system's
+// words alone, as a rename or a write does; a sentence of weft's own is
+// returned as it is.
+func unpackFailed(appDir string, err error) error {
+	var pe *fs.PathError
+	var le *os.LinkError
+	var se *os.SyscallError
+	if errors.As(err, &pe) || errors.As(err, &le) || errors.As(err, &se) {
+		return fmt.Errorf("cannot unpack weft's packages into %s (%v); make the app folder writable, and run the command again", filepath.Join(appDir, ".weft"), err)
+	}
+	return err
 }
 
 // unreadableBundle is the sentence for a bundle a file of which cannot be
@@ -138,37 +159,29 @@ var lockSays = struct {
 }{"", io.Discard}
 
 // lockWait is how long a weft command waits for another one unpacking in
-// the same app, and how old a lock may be before it is taken as left behind:
-// longer than any unpack takes.
+// the same app: longer than any unpack takes.
 var lockWait = 2 * time.Minute
 
-// lockWeft makes appDir/.weft.lock, holding this process's id, and returns
-// the function that removes it. A lock left by a weft command that did not
-// finish is taken over at once: one naming a process that is gone, one with
-// no process a second after it was made, or one older than lockWait. While
-// a running command holds it, lockWeft waits, up to lockWait, and says so
-// once.
+// errLockHeld is a lock a running process holds.
+var errLockHeld = errors.New("the lock is held")
+
+// lockWeft takes appDir/.weft.lock, writing this process's id in it, and
+// returns the function that lets go of it and removes it. The lock is the
+// operating system's, held by the open file (tryLock), so it ends with the
+// process that holds it however that ends: a file a killed weft command left
+// behind is taken over at once, whatever it says. While a running command
+// holds it, lockWeft waits, up to lockWait, and says so once.
 func lockWeft(appDir string) (unlock func(), err error) {
 	lock := filepath.Join(appDir, ".weft.lock")
 	began := time.Now()
 	said := false
 	for {
-		f, err := os.OpenFile(lock, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		unlock, err := tryLock(lock)
 		if err == nil {
-			fmt.Fprintf(f, "%d\n", os.Getpid())
-			f.Close()
-			return func() { os.Remove(lock) }, nil
+			return unlock, nil
 		}
-		if !errors.Is(err, fs.ErrExist) {
+		if !errors.Is(err, errLockHeld) {
 			return nil, fmt.Errorf("cannot make %s (%v); make the app folder writable", lock, err)
-		}
-		if held, ok := leftBehind(lock); ok {
-			// Removed only if it still holds what was read, so a lock another
-			// command has just made in its place stays.
-			if now, err := os.ReadFile(lock); err == nil && bytes.Equal(now, held) {
-				os.Remove(lock)
-			}
-			continue
 		}
 		if time.Since(began) > lockWait {
 			return nil, fmt.Errorf("another weft command has been unpacking .weft in %s for %s (it holds %s); let it finish, and run the command again", appDir, lockWait, lock)
@@ -179,30 +192,6 @@ func lockWeft(appDir string) (unlock func(), err error) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-}
-
-// leftBehind reads the lock and says whether the command that made it is
-// gone: the process it names is not running, it names none a second after it
-// was made (its maker stopped before writing its id), or it is older than
-// lockWait.
-func leftBehind(lock string) (held []byte, gone bool) {
-	fi, err := os.Stat(lock)
-	if err != nil {
-		return nil, false // removed meanwhile: try again
-	}
-	held, err = os.ReadFile(lock)
-	if err != nil {
-		return nil, false
-	}
-	age := time.Since(fi.ModTime())
-	if age > lockWait {
-		return held, true
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(held)))
-	if err != nil || pid <= 0 {
-		return held, age > time.Second
-	}
-	return held, !running(pid)
 }
 
 // unpack replaces appDir/.weft with the bundle's weft/ folder and records
@@ -223,7 +212,10 @@ func unpack(bundle fs.FS, appDir, version string) error {
 		return err
 	}
 	defer unlock()
-	return unpackHashed(bundle, appDir, version, "")
+	if err := unpackHashed(bundle, appDir, version, ""); err != nil {
+		return unpackFailed(appDir, err)
+	}
+	return nil
 }
 
 // unpackHashed is unpack, under the app's lock, with the bundle's hash when

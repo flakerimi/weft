@@ -53,10 +53,3 @@ func groupGone(pgid int, within time.Duration) bool {
 		}
 	}
 }
-
-// running says whether a process with this id is running: signal 0 reaches
-// it, or it is another user's.
-func running(pid int) bool {
-	err := syscall.Kill(pid, 0)
-	return err == nil || errors.Is(err, syscall.EPERM)
-}

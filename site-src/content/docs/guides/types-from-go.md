@@ -135,4 +135,4 @@ try {
 
 ## A renamed field
 
-Rename `json:"price"` to `json:"cost"` in the shop's `Product`, save, and `weft dev` writes the file again; `pnpm typecheck` then fails in each `.vue` file that reads `price`, and so does `weft build`, before it builds anything: `weft build: the pages do not type-check; fix what vue-tsc says above and run weft build again.` A `Table` column's `key` and a `FormField`'s `name` are plain strings, which no type check catches. The full `go test ./cmd/weft` does the same to a copy of the shop, with `weft gen` and the type check (`-short` skips it).
+Rename `json:"price"` to `json:"cost"` in the shop's `Product`, save, and `weft dev` writes the file again; `pnpm typecheck` then fails in each `.vue` file that reads `price`, and so does `weft build`, before it builds anything: `weft build: the app's TypeScript does not type-check; fix what vue-tsc says above and run weft build again.` A `Table` column's `key` and a `FormField`'s `name` are plain strings, which no type check catches. The full `go test ./cmd/weft` does the same to a copy of the shop, with `weft gen` and the type check (`-short` skips it).

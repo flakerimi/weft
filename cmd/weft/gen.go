@@ -7,7 +7,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -66,7 +70,7 @@ var (
 	// says why.
 	errNoDescription = errors.New("the app did not describe itself")
 	// errDescribeTimeout is an app still running after describeWithin, as
-	// one whose main.go serves without a warp.App does.
+	// one whose main.go does other work before it reaches its App's Serve.
 	errDescribeTimeout = errors.New("the app did not describe itself in time")
 	// errBuildFailed is an app whose Go does not build; go build's output
 	// says why.
@@ -158,6 +162,10 @@ func gen(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return code
 	}
 	wrote, err := genTypes(ctx, "gen", appDir, stderr)
+	if errors.Is(err, errNoWarpApp) {
+		fmt.Fprintf(stdout, "weft gen: %s, as none of its Go files calls warp.New, so there are no routes to write and %s is the client of an app with none.\n", errNoWarpApp, filepath.ToSlash(apiTypes))
+		return 0
+	}
 	if err != nil {
 		return genFailed(stderr, "gen", err)
 	}
@@ -226,17 +234,37 @@ func genFailed(stderr io.Writer, command string, err error) int {
 func devBinary(appDir string) string { return filepath.Join(appDir, ".weft", "dev", "app") }
 
 // genTypes builds the app with the dev tag, as weft dev does, and writes its
-// typed client; it says whether the file changed.
+// typed client; it says whether the file changed. An app that makes no
+// warp.App is neither built nor run: it gets the client of an app with no
+// routes, and errNoWarpApp, which only weft gen says.
 func genTypes(ctx context.Context, command, appDir string, stderr io.Writer) (bool, error) {
 	d, err := buildAndDescribe(ctx, command, appDir, stderr)
+	if errors.Is(err, errNoWarpApp) {
+		if _, err := writeAPI(appDir, d); err != nil {
+			return false, err
+		}
+		return false, errNoWarpApp
+	}
 	if err != nil {
 		return false, err
 	}
 	return writeAPI(appDir, d)
 }
 
-// buildAndDescribe builds the app with the dev tag and returns its description.
+// errNoWarpApp is an app none of whose Go files calls warp.New: it has no
+// routes to describe, and its description is that of an App with none.
+var errNoWarpApp = errors.New("the app has no warp.App")
+
+// noRoutes is the description of an app with no routes.
+var noRoutes = description{Routes: []routeInfo{}, Types: []typeInfo{}}
+
+// buildAndDescribe builds the app with the dev tag and returns its
+// description; for an app that makes no warp.App, noRoutes and errNoWarpApp,
+// with nothing built or run.
 func buildAndDescribe(ctx context.Context, command, appDir string, stderr io.Writer) (description, error) {
+	if !makesApp(appDir) {
+		return noRoutes, errNoWarpApp
+	}
 	bin := devBinary(appDir)
 	if !goBuild(ctx, command, appDir, bin, stderr) {
 		if ctx.Err() != nil {
@@ -244,13 +272,99 @@ func buildAndDescribe(ctx context.Context, command, appDir string, stderr io.Wri
 		}
 		return description{}, errBuildFailed
 	}
-	return describeApp(ctx, appDir, bin, describeWithin, stderr)
+	return describeApp(ctx, command, appDir, bin, describeWithin, stderr)
+}
+
+// warpPackage is the import path of Warp, whose New makes the App an app
+// describes itself through.
+const warpPackage = "github.com/flakerimi/weft/warp"
+
+// makesApp says whether any Go file of the app's own module, tests left out,
+// calls or takes warp.New, under the name the file imports Warp by: only an
+// app that makes a warp.App can describe itself, and one that does not, as
+// an app made by Weft 0.0.7, would keep weft waiting for describeWithin. The
+// files are parsed, not searched, so a comment or a string that says
+// warp.New does not count; one that does not parse counts, so the build says
+// what is wrong with it. Folders the go command leaves out (., _, testdata),
+// vendor, node_modules and another module inside the app are not looked in.
+func makesApp(appDir string) bool {
+	found := false
+	fset := token.NewFileSet()
+	filepath.WalkDir(appDir, func(p string, d fs.DirEntry, err error) error {
+		switch {
+		case found:
+			return filepath.SkipAll
+		case err != nil && p == appDir:
+			found = true // the build says what is wrong
+			return filepath.SkipAll
+		case err != nil:
+			return nil // a folder it may not read holds none of the app's Go
+		}
+		name := d.Name()
+		if d.IsDir() {
+			if p == appDir {
+				return nil
+			}
+			if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "testdata" || name == "vendor" || name == "node_modules" || isFile(filepath.Join(p, "go.mod")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			return nil
+		}
+		f, err := parser.ParseFile(fset, p, nil, parser.SkipObjectResolution)
+		if err != nil {
+			found = true // the build says what is wrong
+			return nil
+		}
+		found = callsNew(f)
+		return nil
+	})
+	return found
+}
+
+// callsNew says whether f names Warp's New: warp.New under the name f imports
+// Warp by, or New itself when f imports Warp's names bare.
+func callsNew(f *ast.File) bool {
+	local := ""
+	for _, imp := range f.Imports {
+		if path, err := strconv.Unquote(imp.Path.Value); err != nil || path != warpPackage {
+			continue
+		}
+		local = "warp"
+		if imp.Name != nil {
+			local = imp.Name.Name
+		}
+	}
+	if local == "" || local == "_" {
+		return false
+	}
+	found := false
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.SelectorExpr:
+			if x, ok := n.X.(*ast.Ident); ok && local != "." && x.Name == local && n.Sel.Name == "New" {
+				found = true
+			}
+		case *ast.Ident:
+			if local == "." && n.Name == "New" {
+				found = true
+			}
+		}
+		return !found
+	})
+	return found
 }
 
 // regenerate describes the app built at bin and writes its typed client, for
-// weft dev, which has just built it.
+// weft dev, which has just built it. An app that makes no warp.App is not
+// run: it gets the client of an app with no routes.
 func regenerate(ctx context.Context, appDir, bin string, within time.Duration, stderr io.Writer) (bool, error) {
-	d, err := describeApp(ctx, appDir, bin, within, stderr)
+	if !makesApp(appDir) {
+		return writeAPI(appDir, noRoutes)
+	}
+	d, err := describeApp(ctx, "dev", appDir, bin, within, stderr)
 	if err != nil {
 		return false, err
 	}
@@ -266,8 +380,9 @@ func regenerate(ctx context.Context, appDir, bin string, within time.Duration, s
 // it serves has a port Warp's configuration takes. Its standard error
 // passes through; of a standard output that is not a description, the first
 // shownMax bytes do too, so the app's own words come before weft's sentence.
-func describeApp(ctx context.Context, appDir, bin string, within time.Duration, stderr io.Writer) (description, error) {
-	port, err := freePort()
+// command names the weft command running, for freePort's sentence.
+func describeApp(ctx context.Context, command, appDir, bin string, within time.Duration, stderr io.Writer) (description, error) {
+	port, err := freePort(command)
 	if err != nil {
 		return description{}, err
 	}

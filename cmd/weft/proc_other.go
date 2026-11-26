@@ -20,9 +20,3 @@ func startGroup(cmd *exec.Cmd) error {
 func stopGroup(cmd *exec.Cmd) {
 	cmd.Process.Kill()
 }
-
-// running says a process is running, whatever its id: outside Unix a lock
-// is taken over only once it is older than lockWait.
-func running(pid int) bool {
-	return true
-}

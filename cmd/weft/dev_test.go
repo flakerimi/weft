@@ -1084,9 +1084,12 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/flakerimi/weft/warp"
 )
 
 func main() {
+	_ = warp.New(warp.Config{})
 	if os.Getenv("WARP_DESCRIBE") != "" {
 		time.Sleep(time.Minute)
 	}
@@ -1105,6 +1108,41 @@ func main() {
 		t.Errorf("stderr %q, want it to hold %q", r.stderr, want)
 	}
 	if code := r.stop(t); code != 0 {
+		t.Errorf("exit %d: %s", code, r.stderr)
+	}
+}
+
+// An app that makes no warp.App, as Weft 0.0.7 made them, is not run to
+// describe itself under weft dev: it gets the client of an app with no
+// routes, and nothing is said.
+func TestDevAppWithoutWarpApp(t *testing.T) {
+	app := devApp(t)
+	main := `package main
+
+import (
+	"net/http"
+	"os"
+)
+
+func main() {
+	if os.Getenv("WARP_DESCRIBE") != "" {
+		os.WriteFile("described.txt", nil, 0o644)
+	}
+	http.ListenAndServe(os.Getenv("HOST")+":"+os.Getenv("PORT"), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("up")) }))
+}
+`
+	if err := os.WriteFile(filepath.Join(app, "main.go"), []byte(main), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
+	src, err := os.ReadFile(filepath.Join(app, "web", ".weft-types", "api.ts"))
+	if err != nil || string(src) != mustGenerate(t, noRoutes) {
+		t.Errorf("api.ts is not the client of an app with no routes: %v\n%s", err, src)
+	}
+	if exists(t, filepath.Join(app, "described.txt")) {
+		t.Error("the app was run to describe itself")
+	}
+	if code := r.stop(t); code != 0 || strings.Contains(r.stderr.String(), "describe") {
 		t.Errorf("exit %d: %s", code, r.stderr)
 	}
 }

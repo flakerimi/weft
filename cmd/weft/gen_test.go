@@ -332,7 +332,7 @@ func TestDescribeAppOutput(t *testing.T) {
 		t.Helper()
 		t.Setenv("MODE", mode)
 		var stderr bytes.Buffer
-		d, err := describeApp(context.Background(), filepath.Dir(bin), bin, 30*time.Second, &stderr)
+		d, err := describeApp(context.Background(), "gen", filepath.Dir(bin), bin, 30*time.Second, &stderr)
 		return d, err, stderr.String()
 	}
 	if d, err, errs := describe("json"); err != nil || d.Routes == nil || errs != "" {
@@ -827,9 +827,9 @@ func TestGenInApp(t *testing.T) {
 	}
 }
 
-// An app that does not describe itself, whether it fails to compile, makes a
-// registration mistake or never builds a warp.App, gets its own output and
-// then one sentence, and the file is left as it was.
+// An app with a warp.App that does not describe itself, whether it fails to
+// compile, makes a registration mistake, prints something else or nothing,
+// gets its own output and then one sentence, and the file is left as it was.
 func TestGenReportsAppMistake(t *testing.T) {
 	app := genApp(t)
 	file := filepath.Join(app, "web", ".weft-types", "api.ts")
@@ -847,9 +847,9 @@ func TestGenReportsAppMistake(t *testing.T) {
 	}{
 		{"a registration mistake", routes, strings.Replace(string(goSrc), `"/hello"`, `"hello"`, 1), `has a path that does not start with /`, sentence},
 		{"a compile error", routes, string(goSrc) + "\nfunc broken( {\n", "routes.go:", "weft gen: go build failed; fix what its output above says and run weft gen again.\n"},
-		{"no warp.App", main, "package main\n\nimport \"fmt\"\n\nfunc main() { fmt.Println(\"just text\") }\n", "just text\n",
+		{"text printed", main, "package main\n\nimport (\n\t\"fmt\"\n\n\t\"github.com/flakerimi/weft/warp\"\n)\n\nfunc main() { _ = warp.New(warp.Config{}); fmt.Println(\"just text\") }\n", "just text\n",
 			"weft gen: the app's standard output was not its description (it starts with \"just text\\n\"); make sure nothing else prints there when WARP_DESCRIBE is set.\n"},
-		{"nothing printed", main, "package main\n\nfunc main() {}\n", "", sentence},
+		{"nothing printed", main, "package main\n\nimport \"github.com/flakerimi/weft/warp\"\n\nfunc main() { _ = warp.New(warp.Config{}) }\n", "", sentence},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			os.WriteFile(c.file, []byte(c.src), 0o644)
@@ -874,7 +874,8 @@ func TestGenReportsAppMistake(t *testing.T) {
 }
 
 // weft build writes the client before the page build, and a build of an app
-// that does not describe itself fails before any page is built.
+// with a warp.App that exits with an error when asked to describe itself
+// fails before any page is built.
 func TestBuildRunsGen(t *testing.T) {
 	app := genApp(t)
 	file := filepath.Join(app, "web", ".weft-types", "api.ts")
@@ -891,7 +892,7 @@ func TestBuildRunsGen(t *testing.T) {
 	}
 
 	app = genApp(t)
-	main := "package main\n\nimport \"os\"\n\nfunc main() { os.Stderr.WriteString(\"no app here\\n\"); os.Exit(3) }\n"
+	main := "package main\n\nimport (\n\t\"os\"\n\n\t\"github.com/flakerimi/weft/warp\"\n)\n\nfunc main() { _ = warp.New(warp.Config{}); os.Stderr.WriteString(\"no app here\\n\"); os.Exit(3) }\n"
 	os.WriteFile(filepath.Join(app, "main.go"), []byte(main), 0o644)
 	code, out, errs = build(t)
 	want := "weft build: the app did not describe itself; fix what its output above says and run weft build again.\n"
@@ -903,11 +904,10 @@ func TestBuildRunsGen(t *testing.T) {
 	}
 }
 
-// An app that does not describe itself does not stop weft build: one that
-// serves without a warp.App through warp.Serve, as Weft 0.0.7 made them,
-// describes itself as having no routes at once; one that never describes is
-// given PORT=0 and HOST=127.0.0.1, stopped when its time is up, and the build
-// goes on; one that prints something else is said and the build goes on.
+// An app that makes a warp.App and does not describe itself does not stop
+// weft build: one that never describes is given a free PORT and
+// HOST=127.0.0.1, stopped when its time is up, and the build goes on; one
+// that prints something else is said and the build goes on.
 func TestBuildGoesOnWithoutDescription(t *testing.T) {
 	app := genApp(t)
 	file := filepath.Join(app, "web", ".weft-types", "api.ts")
@@ -916,26 +916,10 @@ func TestBuildGoesOnWithoutDescription(t *testing.T) {
 	describeWithin = 3 * time.Second
 	t.Cleanup(func() { describeWithin = was })
 
-	serves := "package main\n\nimport (\n\t\"io/fs\"\n\t\"log\"\n\t\"net/http\"\n\t\"os\"\n\n\t\"github.com/flakerimi/weft/warp\"\n)\n\nvar dist fs.FS\n\nfunc main() {\n\tif dist == nil {\n\t\tdist = os.DirFS(\".\")\n\t}\n\tlog.Fatal(http.ListenAndServe(\"127.0.0.1:\"+os.Getenv(\"PORT\"), warp.Serve(dist, http.NotFoundHandler())))\n}\n"
-	os.WriteFile(main, []byte(serves), 0o644)
-	start := time.Now()
-	code, out, errs := build(t)
-	if code != 0 || strings.Contains(errs, "describe") {
-		t.Fatalf("warp.Serve without an App: exit %d: %s%s", code, out, errs)
-	}
-	if took := time.Since(start); took > time.Minute {
-		t.Errorf("the build took %v", took)
-	}
-	src, err := os.ReadFile(file)
-	if err != nil || strings.Contains(string(src), "hello") || !strings.Contains(string(src), "export const schema = {}") {
-		t.Fatalf("weft build wrote no empty client: %v\n%s", err, src)
-	}
-	os.Remove(filepath.Join(app, "myapp"))
-
-	never := "package main\n\nimport (\n\t\"io/fs\"\n\t\"log\"\n\t\"net\"\n\t\"net/http\"\n\t\"os\"\n)\n\nvar dist fs.FS\n\nfunc main() {\n\tos.WriteFile(\"describe-env.txt\", []byte(os.Getenv(\"PORT\")+\" \"+os.Getenv(\"HOST\")), 0o644)\n\tln, err := net.Listen(\"tcp\", net.JoinHostPort(os.Getenv(\"HOST\"), os.Getenv(\"PORT\")))\n\tif err != nil {\n\t\tlog.Fatal(err)\n\t}\n\tlog.Fatal(http.Serve(ln, nil))\n}\n"
+	never := "package main\n\nimport (\n\t\"io/fs\"\n\t\"log\"\n\t\"net\"\n\t\"net/http\"\n\t\"os\"\n\n\t\"github.com/flakerimi/weft/warp\"\n)\n\nvar dist fs.FS\n\nfunc main() {\n\t_ = warp.New(warp.FromEnv())\n\tos.WriteFile(\"describe-env.txt\", []byte(os.Getenv(\"PORT\")+\" \"+os.Getenv(\"HOST\")), 0o644)\n\tln, err := net.Listen(\"tcp\", net.JoinHostPort(os.Getenv(\"HOST\"), os.Getenv(\"PORT\")))\n\tif err != nil {\n\t\tlog.Fatal(err)\n\t}\n\tlog.Fatal(http.Serve(ln, nil))\n}\n"
 	os.WriteFile(main, []byte(never), 0o644)
 	before, _ := os.ReadFile(file)
-	code, out, errs = build(t)
+	code, out, errs := build(t)
 	want := "weft build: the app did not describe itself within 3 s, so web/.weft-types/api.ts is as it was; make sure main.go calls Serve before doing other work.\n"
 	if code != 0 || !strings.Contains(errs, want) || !exists(t, filepath.Join(app, "myapp")) {
 		t.Fatalf("never describes: exit %d, stdout %q, stderr %q, want %q and a binary", code, out, errs, want)
@@ -946,12 +930,69 @@ func TestBuildGoesOnWithoutDescription(t *testing.T) {
 	}
 	os.Remove(filepath.Join(app, "myapp"))
 
-	text := "package main\n\nimport (\n\t\"fmt\"\n\t\"io/fs\"\n)\n\nvar dist fs.FS\n\nfunc main() { fmt.Println(\"just text\") }\n"
+	text := "package main\n\nimport (\n\t\"fmt\"\n\t\"io/fs\"\n\n\t\"github.com/flakerimi/weft/warp\"\n)\n\nvar dist fs.FS\n\nfunc main() { _ = warp.New(warp.Config{}); fmt.Println(\"just text\") }\n"
 	os.WriteFile(main, []byte(text), 0o644)
 	code, out, errs = build(t)
 	want = "weft build: the app's standard output was not its description (it starts with \"just text\\n\"); make sure nothing else prints there when WARP_DESCRIBE is set.\nweft build: the app did not describe itself, so web/.weft-types/api.ts is as it was; fix what its output above says.\n"
 	if code != 0 || !strings.Contains(errs, want) || !exists(t, filepath.Join(app, "myapp")) {
 		t.Fatalf("prints text: exit %d, stdout %q, stderr %q, want %q and a binary", code, out, errs, want)
+	}
+}
+
+// An app that makes no warp.App, as Weft 0.0.7 made them (main.go listens
+// itself, and under the dev tag never reaches warp.Serve), is not run to
+// describe itself: weft build writes the client of an app with no routes and
+// says nothing, with no wait; weft gen and weft routes say why there are no
+// routes. An app whose warp.New is in a package under app/ still describes.
+func TestNoWarpAppIsNotDescribed(t *testing.T) {
+	app := genApp(t)
+	file := filepath.Join(app, "web", ".weft-types", "api.ts")
+	old := "package main\n\nimport (\n\t\"io/fs\"\n\t\"log\"\n\t\"net/http\"\n\t\"os\"\n\n\t\"github.com/flakerimi/weft/warp\"\n)\n\nvar dist fs.FS\n\nfunc handler() http.Handler {\n\tif dist != nil {\n\t\treturn warp.Serve(dist, http.NotFoundHandler())\n\t}\n\treturn http.NotFoundHandler()\n}\n\nfunc main() {\n\tif os.Getenv(\"WARP_DESCRIBE\") != \"\" {\n\t\tos.WriteFile(\"described.txt\", nil, 0o644)\n\t}\n\tlog.Fatal(http.ListenAndServe(\"127.0.0.1:\"+os.Getenv(\"PORT\"), handler()))\n}\n"
+	if err := os.WriteFile(filepath.Join(app, "main.go"), []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	code, out, errs := build(t)
+	if code != 0 || errs != "" {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errs)
+	}
+	if took := time.Since(start); took > describeWithin*2/3 {
+		t.Errorf("the build took %v", took)
+	}
+	if exists(t, filepath.Join(app, "described.txt")) {
+		t.Error("the app was run to describe itself")
+	}
+	src, err := os.ReadFile(file)
+	if err != nil || strings.Contains(string(src), "hello") || !strings.Contains(string(src), "export const schema = {}") || !strings.Contains(string(src), "export const api = {") {
+		t.Fatalf("weft build wrote no empty client: %v\n%s", err, src)
+	}
+	if empty := mustGenerate(t, noRoutes); string(src) != empty {
+		t.Errorf("the client is not that of an app with no routes:\n%s", firstDifference(string(src), empty))
+	}
+	os.Remove(filepath.Join(app, "myapp"))
+
+	code, out, errs = runCmd("gen")
+	if want := "weft gen: the app has no warp.App, as none of its Go files calls warp.New, so there are no routes to write and web/.weft-types/api.ts is the client of an app with none.\n"; code != 0 || out != want || errs != "" {
+		t.Errorf("weft gen: exit %d, stdout %q, stderr %q, want %q", code, out, errs, want)
+	}
+	code, out, errs = runCmd("routes")
+	if want := "weft routes: the app has no warp.App, as none of its Go files calls warp.New, so there are no routes to print.\n"; code != 0 || out != want || errs != "" {
+		t.Errorf("weft routes: exit %d, stdout %q, stderr %q, want %q", code, out, errs, want)
+	}
+	if exists(t, filepath.Join(app, "described.txt")) {
+		t.Error("the app was run to describe itself")
+	}
+
+	// warp.New in a package under app/, which main.go imports.
+	server := "package app\n\nimport \"github.com/flakerimi/weft/warp\"\n\n// Server is the app's warp.App with its modules.\nfunc Server() *warp.App {\n\ts := warp.New(warp.FromEnv())\n\ts.Use(Modules()...)\n\treturn s\n}\n"
+	main := "package main\n\nimport (\n\t\"io/fs\"\n\t\"log\"\n\n\t\"myapp/app\"\n)\n\nvar dist fs.FS\n\nfunc main() {\n\tif err := app.Server().Serve(dist); err != nil {\n\t\tlog.Fatal(err)\n\t}\n}\n"
+	os.WriteFile(filepath.Join(app, "app", "server.go"), []byte(server), 0o644)
+	os.WriteFile(filepath.Join(app, "main.go"), []byte(main), 0o644)
+	if code, out, errs := build(t); code != 0 {
+		t.Fatalf("an App under app/: exit %d: %s%s", code, out, errs)
+	}
+	if src, _ := os.ReadFile(file); !strings.Contains(string(src), "    async hello(): Promise<Message> {\n") {
+		t.Errorf("an App under app/ was not described:\n%s", src)
 	}
 }
 
@@ -998,7 +1039,7 @@ func TestBuildTypeChecks(t *testing.T) {
 	goSrc, _ := os.ReadFile(routes)
 	os.WriteFile(routes, []byte(strings.Replace(string(goSrc), "`json:\"message\"`", "`json:\"text\"`", 1)), 0o644)
 	code, out, errs := build(t)
-	want := "weft build: the pages do not type-check; fix what vue-tsc says above and run weft build again.\n"
+	want := "weft build: the app's TypeScript does not type-check; fix what vue-tsc says above and run weft build again.\n"
 	if code != 1 || !strings.HasSuffix(errs, want) || !strings.Contains(out+errs, "typed.vue") {
 		t.Errorf("exit %d, stdout %q, stderr %q, want it to end %q", code, out, errs, want)
 	}
@@ -1019,5 +1060,69 @@ func TestGenerateSecondResource(t *testing.T) {
 		if !strings.Contains(src, want) {
 			t.Errorf("api.ts has no %q", want)
 		}
+	}
+}
+
+// makesApp finds a call of warp.New in the app's own Go, under the name the
+// file imports Warp by, in any package of the app; not in a test, a comment,
+// a string, .weft, node_modules or another module.
+func TestMakesApp(t *testing.T) {
+	const old = "package main\n\nimport (\n\t\"net/http\"\n\n\t\"github.com/flakerimi/weft/warp\"\n)\n\nfunc main() { http.ListenAndServe(\":8080\", warp.Serve(nil, nil)) }\n"
+	for _, c := range []struct {
+		name  string
+		files map[string]string
+		want  bool
+	}{
+		{"an app made by Weft 0.0.7", map[string]string{"main.go": old, "api/api.go": "package api\n\nfunc Handler() {}\n"}, false},
+		{"an App in main.go", map[string]string{"main.go": "package main\n\nimport \"github.com/flakerimi/weft/warp\"\n\nfunc main() { warp.New(warp.FromEnv()).Serve(nil) }\n"}, true},
+		{"an App made under app/", map[string]string{"main.go": old, "app/server/server.go": "package server\n\nimport \"github.com/flakerimi/weft/warp\"\n\nvar App = warp.New(warp.Config{})\n"}, true},
+		{"Warp under another name", map[string]string{"main.go": "package main\n\nimport w \"github.com/flakerimi/weft/warp\"\n\nfunc main() { w.New(w.Config{}) }\n"}, true},
+		{"Warp's names imported bare", map[string]string{"main.go": "package main\n\nimport . \"github.com/flakerimi/weft/warp\"\n\nfunc main() { New(Config{}) }\n"}, true},
+		{"New taken as a value", map[string]string{"main.go": "package main\n\nimport \"github.com/flakerimi/weft/warp\"\n\nvar make = warp.New\n\nfunc main() {}\n"}, true},
+		{"a file that does not parse", map[string]string{"main.go": "package main\n\nfunc main() {\n"}, true},
+		{"only a test", map[string]string{"main.go": old, "main_test.go": "package main\n\nimport \"github.com/flakerimi/weft/warp\"\n\nvar _ = warp.New(warp.Config{})\n"}, false},
+		{"a comment and a string", map[string]string{"main.go": "package main\n\n// warp.New(\nvar s = \"warp.New(\"\n\nfunc main() {}\n"}, false},
+		{"another package's New", map[string]string{"main.go": "package main\n\nimport warp \"example.com/other\"\n\nfunc main() { warp.New() }\n"}, false},
+		{"Warp's New in what is not the app's", map[string]string{
+			"main.go":                   old,
+			".weft/go/warp/app.go":      "package warp\n\nfunc x() { warp.New() }\n",
+			"node_modules/x/x.go":       "package x\n\nimport \"github.com/flakerimi/weft/warp\"\n\nvar _ = warp.New\n",
+			"tools/go.mod":              "module tools\n",
+			"tools/main.go":             "package main\n\nimport \"github.com/flakerimi/weft/warp\"\n\nvar _ = warp.New\n",
+			"web/node_modules/y/y.go":   "package y\n\nimport \"github.com/flakerimi/weft/warp\"\n\nvar _ = warp.New\n",
+			"internal/testdata/t.go":    "package t\n\nimport \"github.com/flakerimi/weft/warp\"\n\nvar _ = warp.New\n",
+			"vendor/example.com/v/v.go": "package v\n\nimport \"github.com/flakerimi/weft/warp\"\n\nvar _ = warp.New\n",
+		}, false},
+	} {
+		app := t.TempDir()
+		os.WriteFile(filepath.Join(app, "go.mod"), []byte("module myapp\n"), 0o644)
+		for p, src := range c.files {
+			os.MkdirAll(filepath.Dir(filepath.Join(app, p)), 0o755)
+			if err := os.WriteFile(filepath.Join(app, p), []byte(src), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got := makesApp(app); got != c.want {
+			t.Errorf("%s: makesApp = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// With no port free, the sentence names the command that is running, which
+// may be weft build, gen or routes as well as weft dev, and so does the
+// describing run's.
+func TestFreePortNamesTheCommand(t *testing.T) {
+	was := portFreeAt
+	portFreeAt = func(int) bool { return false }
+	t.Cleanup(func() { portFreeAt = was })
+	for _, command := range []string{"dev", "build", "gen", "routes"} {
+		want := "found no free port on localhost; stop some servers and run weft " + command + " again"
+		if _, err := freePort(command); err == nil || err.Error() != want {
+			t.Errorf("freePort(%q) = %v, want %q", command, err, want)
+		}
+	}
+	var stderr bytes.Buffer
+	if _, err := describeApp(context.Background(), "build", t.TempDir(), "none", time.Second, &stderr); err == nil || !strings.HasSuffix(err.Error(), "run weft build again") {
+		t.Errorf("describeApp under weft build = %v", err)
 	}
 }

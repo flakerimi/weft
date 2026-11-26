@@ -97,7 +97,7 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	// The page port is checked first, before pnpm install or any child, so
 	// a port in use is one sentence and nothing is left running.
 	if *port == 0 {
-		if *port, err = freePort(); err != nil {
+		if *port, err = freePort("dev"); err != nil {
 			return fail(stderr, "dev", err)
 		}
 	} else if !portFree(*port) {
@@ -111,7 +111,7 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		}
 		return fail(stderr, "dev", err)
 	}
-	goPort, err := freePort()
+	goPort, err := freePort("dev")
 	if err != nil {
 		return fail(stderr, "dev", err)
 	}
@@ -467,8 +467,12 @@ func portFree(port int) bool {
 	return true
 }
 
-// freePort returns a port that is free at localhost.
-func freePort() (int, error) {
+// portFreeAt is portFree; a test puts another in its place.
+var portFreeAt = portFree
+
+// freePort returns a port that is free at localhost; command names the weft
+// command in the sentence when there is none.
+func freePort(command string) (int, error) {
 	for range 20 {
 		l, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
@@ -476,11 +480,11 @@ func freePort() (int, error) {
 		}
 		port := l.Addr().(*net.TCPAddr).Port
 		l.Close()
-		if portFree(port) {
+		if portFreeAt(port) {
 			return port, nil
 		}
 	}
-	return 0, errors.New("found no free port on localhost; stop some servers and run weft dev again")
+	return 0, fmt.Errorf("found no free port on localhost; stop some servers and run weft %s again", command)
 }
 
 var probe = &http.Client{Timeout: time.Second}

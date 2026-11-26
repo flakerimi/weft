@@ -570,9 +570,11 @@ func TestTwoUnpacksAtOnce(t *testing.T) {
 	}
 }
 
-// A lock left by a weft command that is gone is taken over at once, and one
-// older than an unpack can take; one a running command holds is waited for,
-// which is said once.
+// A lock no running weft command holds is taken over at once, whatever it
+// says: one naming a process that is gone, one naming none, and one naming a
+// running process that is not a weft command (this test's parent), as a
+// pid reused after a weft command was killed would. One a running command
+// holds is waited for, which is said once.
 func TestLockLeftBehind(t *testing.T) {
 	app := t.TempDir()
 	lock := filepath.Join(app, ".weft.lock")
@@ -588,36 +590,37 @@ func TestLockLeftBehind(t *testing.T) {
 	for _, c := range []struct {
 		name string
 		text string
-		age  time.Duration
 	}{
-		{"a gone process", fmt.Sprintf("%d\n", gone.Process.Pid), 0},
-		{"no process", "", 2 * time.Second},
-		{"older than an unpack takes", fmt.Sprintf("%d\n", os.Getpid()), lockWait + time.Minute},
+		{"a gone process", fmt.Sprintf("%d\n", gone.Process.Pid)},
+		{"no process", ""},
+		{"garbage", "hello world"},
+		{"a running process that is not weft", fmt.Sprintf("%d\n", os.Getppid())},
+		{"this very process", fmt.Sprintf("%d\n", os.Getpid())},
 	} {
 		os.WriteFile(lock, []byte(c.text), 0o644)
-		when := time.Now().Add(-c.age)
-		os.Chtimes(lock, when, when)
 		start := time.Now()
 		unlock, err := lockWeft(app)
-		if took := time.Since(start); err != nil || took > time.Second {
+		if took := time.Since(start); err != nil || took > 500*time.Millisecond {
 			t.Fatalf("%s: %v after %v", c.name, err, took)
 		}
 		if b, _ := os.ReadFile(lock); string(b) != fmt.Sprintf("%d\n", os.Getpid()) {
 			t.Errorf("%s: the lock holds %q", c.name, b)
 		}
 		unlock()
+		if exists(t, lock) {
+			t.Errorf("%s: the lock is left after unlock", c.name)
+		}
 	}
 	if said.Len() != 0 {
 		t.Errorf("taking over said %q", said.String())
 	}
 
-	live := exec.Command("sleep", "30")
-	if err := live.Start(); err != nil {
+	// A holder that is running: another lockWeft, which lets go after 300 ms.
+	held, err := lockWeft(app)
+	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { live.Process.Kill(); live.Wait() })
-	os.WriteFile(lock, []byte(fmt.Sprintf("%d\n", live.Process.Pid)), 0o644)
-	time.AfterFunc(300*time.Millisecond, func() { os.Remove(lock) }) // the holder finishes
+	time.AfterFunc(300*time.Millisecond, held)
 	start := time.Now()
 	unlock, err := lockWeft(app)
 	if took := time.Since(start); err != nil || took < 250*time.Millisecond {
@@ -626,5 +629,116 @@ func TestLockLeftBehind(t *testing.T) {
 	unlock()
 	if want := "weft routes: another weft command is unpacking in this app; waiting for it.\n"; said.String() != want {
 		t.Errorf("waiting said %q, want %q once", said.String(), want)
+	}
+
+	// One that does not let go is waited for lockWait, then said.
+	lockWait = 300 * time.Millisecond
+	held, err = lockWeft(app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held()
+	if _, err := lockWeft(app); err == nil || !strings.HasPrefix(err.Error(), "another weft command has been unpacking .weft in "+app) {
+		t.Errorf("a holder that does not let go: %v", err)
+	}
+}
+
+// Eight weft commands started at once on a lock left behind by a killed
+// one, fifty rounds over: every one exits 0, one unpacks, and .weft is whole,
+// with nothing of theirs left beside it.
+func TestEightCommandsOnALeftLock(t *testing.T) {
+	if os.Getenv("WEFT_LOCK_HELPER") != "" {
+		return
+	}
+	app := t.TempDir()
+	bundle := folderBundle(t, map[string]string{"weft/a": "zero", "weft/sub/b": "b"})
+	rounds := 50
+	if testing.Short() {
+		rounds = 10
+	}
+	for i := range rounds {
+		os.WriteFile(filepath.Join(bundle, "weft", "a"), []byte(strconv.Itoa(i)), 0o644)
+		os.WriteFile(filepath.Join(app, ".weft.lock"), []byte(fmt.Sprintf("%d\n", os.Getppid())), 0o644)
+		var cmds []*exec.Cmd
+		var outs []*bytes.Buffer
+		for range 8 {
+			cmd := exec.Command(os.Args[0], "-test.run=^TestLockHelperProcess$", "-test.short")
+			cmd.Env = append(os.Environ(), "WEFT_LOCK_HELPER="+app)
+			out := &bytes.Buffer{}
+			cmd.Stdout, cmd.Stderr = out, out
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+			cmds, outs = append(cmds, cmd), append(outs, out)
+		}
+		for j, cmd := range cmds {
+			if err := cmd.Wait(); err != nil {
+				t.Fatalf("round %d, command %d: %v\n%s", i, j, err, outs[j])
+			}
+		}
+		if got, _ := os.ReadFile(filepath.Join(app, ".weft", "a")); string(got) != strconv.Itoa(i) || !exists(t, filepath.Join(app, ".weft", "sub", "b")) {
+			t.Fatalf("round %d: .weft/a = %q", i, got)
+		}
+		if entries, _ := os.ReadDir(app); len(entries) != 1 {
+			var names []string
+			for _, e := range entries {
+				names = append(names, e.Name())
+			}
+			t.Fatalf("round %d: the app folder holds %q", i, names)
+		}
+	}
+}
+
+// TestLockHelperProcess is one weft command of TestEightCommandsOnALeftLock:
+// it refreshes the .weft of the app WEFT_LOCK_HELPER names.
+func TestLockHelperProcess(t *testing.T) {
+	app := os.Getenv("WEFT_LOCK_HELPER")
+	if app == "" {
+		t.Skip("run by TestEightCommandsOnALeftLock")
+	}
+	if _, err := refreshWeft(app, devVersion); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+// A rename whose folder is gone because another command finished the same
+// unpack meanwhile is no error when .weft is then current; any other failure
+// of the unpack is a sentence, not the system's words alone.
+func TestUnpackWhoseFolderWentMeanwhile(t *testing.T) {
+	app := t.TempDir()
+	folderBundle(t, map[string]string{"weft/a": "one"})
+	if _, err := refreshWeft(app, devVersion); err != nil {
+		t.Fatal(err)
+	}
+	bundle := folderBundle(t, map[string]string{"weft/a": "two"})
+	b, err := openBundle()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = bundle
+	hash, err := bundleHash(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := renameDir
+	t.Cleanup(func() { renameDir = old })
+	renameDir = func(from, to string) error {
+		// Another command finished: .weft is current, and what this one was
+		// about to move is gone.
+		os.WriteFile(filepath.Join(app, ".weft", "VERSION"), []byte(devVersion+"\n"+hash+"\n"), 0o644)
+		return &os.LinkError{Op: "rename", Old: from, New: to, Err: fs.ErrNotExist}
+	}
+	if _, err := refreshWeft(app, devVersion); err != nil {
+		t.Errorf("another command finished the unpack: %v", err)
+	}
+
+	folderBundle(t, map[string]string{"weft/a": "three"})
+	renameDir = func(from, to string) error {
+		return &os.LinkError{Op: "rename", Old: from, New: to, Err: fs.ErrNotExist}
+	}
+	_, err = refreshWeft(app, devVersion)
+	if err == nil || strings.HasPrefix(err.Error(), "rename ") || !strings.HasSuffix(err.Error(), "run the command again") {
+		t.Errorf("a rename that failed: %v, want a sentence", err)
 	}
 }

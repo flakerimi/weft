@@ -327,28 +327,80 @@ func send(t *testing.T, client *http.Client, method, url string, body any) (int,
 var postForm = regexp.MustCompile(`<form class="weft-form"[^>]*\bmethod="post"`)
 
 // guardsSubmit reports whether page has what keeps a password form from
-// being sent before its island is live: an inline script in <head>, before
-// any module script, that cancels a submit of a .weft-form. Its wording is
-// @weft/ui's to change.
-func guardsSubmit(page string) bool {
+// being sent before its island is live: inline scripts in <head>, before any
+// module script, that, run in order as the head runs them, cancel a submit
+// of a .weft-form and of no other form. It judges the guard by what it does,
+// in node, so its wording is @weft/ui's to change.
+func guardsSubmit(t *testing.T, page string) bool {
+	t.Helper()
 	_, head, _ := strings.Cut(page, "<head>")
 	head, _, _ = strings.Cut(head, "</head>")
+	var scripts []string
 	for {
 		_, rest, ok := strings.Cut(head, "<script")
 		if !ok {
-			return false
+			break
 		}
 		attrs, rest, _ := strings.Cut(rest, ">")
 		code, rest, _ := strings.Cut(rest, "</script>")
 		head = rest
-		if strings.Contains(attrs, "src=") || strings.Contains(attrs, `type="module"`) {
-			return false // a module script came first
+		if strings.Contains(attrs, "src=") || strings.Contains(attrs, "module") {
+			break // what comes after a module script runs too late
 		}
-		if strings.Contains(code, `"submit"`) && strings.Contains(code, "weft-form") && strings.Contains(code, "preventDefault()") {
-			return true
-		}
+		scripts = append(scripts, code)
 	}
+	if len(scripts) == 0 {
+		return false
+	}
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("no node to run the page's guard in")
+	}
+	in, _ := json.Marshal(scripts)
+	cmd := exec.Command(node, "--input-type=module", "-e", submitHarness)
+	cmd.Stdin = bytes.NewReader(in)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("running the page's head scripts in node: %v\n%s", err, out)
+	}
+	return strings.TrimSpace(string(out)) == "guards"
 }
+
+// submitHarness runs the scripts on its standard input, a JSON list, in one
+// context with a window and a document that keep their listeners, as a
+// page's head runs them (a script that throws, as one reading what the stub
+// lacks, adds what it added before); then it sends a submit from a .weft-form and one
+// from another form to each submit listener, and prints "guards" when the
+// first was cancelled and the second was not.
+const submitHarness = `
+import vm from 'node:vm'
+let text = ''
+for await (const chunk of process.stdin) text += chunk
+const listeners = []
+const target = { addEventListener(type, fn) { if (type === 'submit') listeners.push(fn) } }
+const quiet = new Proxy(function () {}, { get: (_, k) => k === Symbol.toPrimitive ? () => '' : quiet, apply: () => quiet, set: () => true })
+const document = { ...target, documentElement: quiet, head: quiet, body: quiet }
+const window = { ...target, document, localStorage: { getItem: () => null, setItem() {} }, matchMedia: () => ({ matches: false, addEventListener() {} }), console }
+window.window = window.self = window
+const context = vm.createContext(window)
+for (const code of JSON.parse(text)) {
+  try { vm.runInContext(code, context, { timeout: 1000 }) } catch {}
+}
+function form(cls) {
+  const f = { tagName: 'FORM', nodeName: 'FORM', className: cls, classList: { contains: c => c === cls } }
+  f.matches = sel => sel.split(',').some(s => (s = s.trim()) === 'form' || s === '.' + cls || s === 'form.' + cls)
+  f.closest = sel => f.matches(sel) ? f : null
+  return f
+}
+function submit(cls) {
+  const e = { type: 'submit', target: form(cls), currentTarget: window, defaultPrevented: false, preventDefault() { this.defaultPrevented = true }, stopPropagation() {}, stopImmediatePropagation() {} }
+  for (const fn of listeners) {
+    try { typeof fn === 'function' ? fn.call(window, e) : fn.handleEvent(e) } catch {}
+  }
+  return e.defaultPrevented
+}
+console.log(submit('weft-form') && !submit('other') ? 'guards' : 'no')
+`
 
 // The shop builds with weft build (which writes its typed client), its own Go
 // and web tests pass, its pages type-check against the client, and the binary
@@ -391,7 +443,7 @@ func TestShop(t *testing.T) {
 		if code != 200 || !strings.Contains(body, want) {
 			t.Errorf("GET %s = %d, want 200 with %q: %s", path, code, want, body)
 		}
-		if (path == "/login" || path == "/setup") && (!postForm.MatchString(body) || !guardsSubmit(body)) {
+		if (path == "/login" || path == "/setup") && (!postForm.MatchString(body) || !guardsSubmit(t, body)) {
 			t.Errorf("GET %s: the password form is not a POST form behind the inline submit guard: %s", path, body)
 		}
 	}
@@ -498,6 +550,8 @@ func TestShopInBrowser(t *testing.T) {
 	// every way out of this test, the time running out included, the group
 	// is stopped, so no browser it started is left running, and no other is
 	// touched.
+	deadline, set := t.Deadline()
+	wait := browserWaitFor(time.Now(), deadline, set)
 	if err := startGroup(cmd); err != nil {
 		t.Fatal(err)
 	}
@@ -507,10 +561,10 @@ func TestShopInBrowser(t *testing.T) {
 	select {
 	case err = <-done:
 		stopGroup(cmd) // what is left of it, such as a browser still closing
-	case <-time.After(browserWait):
+	case <-time.After(wait):
 		stopGroup(cmd)
 		<-done
-		t.Fatalf("the shop in %s did not finish within %s, so its browser was stopped:\n%s", browser, browserWait, got.String())
+		t.Fatalf("the shop in %s did not finish within %s, so its browser was stopped:\n%s", browser, wait, got.String())
 	}
 	if err != nil {
 		t.Fatalf("the shop in %s: %v\n%s", browser, err, got.String())
@@ -518,8 +572,20 @@ func TestShopInBrowser(t *testing.T) {
 	t.Logf("drove the shop in %s:\n%s", browser, got.String())
 }
 
-// browserWait is how long the shop's browser test may run.
-var browserWait = 4 * time.Minute
+// browserWait is how long the shop's browser test may run, and browserMargin
+// how long before go test's own time is up it is stopped, so the test stops
+// the browser it started before the runner ends the process.
+var browserWait, browserMargin = 4 * time.Minute, 30 * time.Second
+
+// browserWaitFor is how long the browser test waits, started at now in a test
+// whose time ends at deadline when set: browserWait, or less, so it ends
+// browserMargin before the deadline; at least a second.
+func browserWaitFor(now, deadline time.Time, set bool) time.Duration {
+	if !set {
+		return browserWait
+	}
+	return max(min(browserWait, deadline.Sub(now)-browserMargin), time.Second)
+}
 
 // lockedBuffer is a bytes.Buffer two writers may share.
 type lockedBuffer struct {
@@ -539,21 +605,51 @@ func (b *lockedBuffer) String() string {
 	return b.buf.String()
 }
 
-// guardsSubmit finds the guard in any wording, and only in <head> before a
-// module script.
+// guardsSubmit finds the guard by what it does, in any wording: run as the
+// page's head runs it, it cancels a submit of a .weft-form and of no other
+// form; and only in <head> before a module script.
 func TestGuardsSubmit(t *testing.T) {
 	guard := `<script data-weft-prepaint>window.addEventListener("submit",function(e){var t=e.target;if(t&&t.classList&&t.classList.contains("weft-form"))e.preventDefault()},true)</script>`
-	reworded := `<script>addEventListener( "submit", (ev) => { if (ev.target.matches?.('.weft-form')) ev.preventDefault() }, true )</script>`
+	reworded := `<script>addEventListener( 'submit', (ev) => { if (ev.target.matches?.('.weft-form')) { ev.preventDefault ( ) } }, true )</script>`
+	byHandle := `<script>document.addEventListener("submit", { handleEvent(e) { if (e.target.closest('form.weft-form')) e.preventDefault() } }, { capture: true })</script>`
+	theme := `<script>document.documentElement.dataset.theme = localStorage.getItem('theme') || 'light'</script>`
 	module := `<script type="module" src="/assets/a.js"></script>`
 	for page, want := range map[string]bool{
-		"<html><head>" + guard + module + "</head><body></body></html>":      true,
-		"<html><head>" + reworded + module + "</head><body></body></html>":   true,
-		"<html><head>" + module + guard + "</head><body></body></html>":      false,
-		"<html><head>" + module + "</head><body>" + guard + "</body></html>": false,
-		"<html><head><script>console.log(1)</script></head></html>":          false,
+		"<html><head>" + guard + module + "</head><body></body></html>":            true,
+		"<html><head>" + reworded + module + "</head><body></body></html>":         true,
+		"<html><head>" + theme + byHandle + module + "</head><body></body></html>": true,
+		"<html><head>" + module + guard + "</head><body></body></html>":            false,
+		"<html><head>" + module + "</head><body>" + guard + "</body></html>":       false,
+		"<html><head><script>console.log(1)</script></head></html>":                false,
+		// It names a submit, weft-form and preventDefault(), and stops nothing.
+		`<html><head><script>// "submit" .weft-form preventDefault()` + "\n" + `</script></head></html>`: false,
+		// It stops every form's submit, not the password form's alone.
+		`<html><head><script>addEventListener("submit", e => e.preventDefault(), true)</script></head></html>`: false,
 	} {
-		if got := guardsSubmit(page); got != want {
+		if got := guardsSubmit(t, page); got != want {
 			t.Errorf("guardsSubmit(%q) = %v, want %v", page, got, want)
+		}
+	}
+}
+
+// The browser test stops what it started before go test's own time is up:
+// its wait is browserWait, or what is left of the test's time less a margin
+// for stopping the browser.
+func TestBrowserWaitEndsBeforeTheTest(t *testing.T) {
+	now := time.Now()
+	for _, c := range []struct {
+		deadline time.Time
+		set      bool
+		want     time.Duration
+	}{
+		{time.Time{}, false, browserWait},
+		{now.Add(time.Hour), true, browserWait},
+		{now.Add(2 * time.Minute), true, 2*time.Minute - browserMargin},
+		{now.Add(10 * time.Second), true, time.Second},
+	} {
+		got := browserWaitFor(now, c.deadline, c.set)
+		if got != c.want {
+			t.Errorf("deadline %v (set %v): wait %v, want %v", c.deadline.Sub(now), c.set, got, c.want)
 		}
 	}
 }

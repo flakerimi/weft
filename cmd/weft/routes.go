@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os/signal"
 	"strings"
@@ -15,6 +17,10 @@ func routesCmd(args []string, stdout, stderr io.Writer) int {
 		return code
 	}
 	d, err := buildAndDescribe(ctx, "routes", appDir, stderr)
+	if errors.Is(err, errNoWarpApp) {
+		fmt.Fprintf(stdout, "weft routes: %s, as none of its Go files calls warp.New, so there are no routes to print.\n", errNoWarpApp)
+		return 0
+	}
 	if err != nil {
 		return genFailed(stderr, "routes", err)
 	}
