@@ -44,7 +44,7 @@ const (
 // dist's index.html so the Vue router can handle it. Files under /assets/ are
 // content-hashed by Vite, so they are cached for a year; everything else is
 // revalidated. A missing file under /assets/ is a 404, never index.html.
-// Serve panics if dist has no index.html.
+// Serve panics if dist has no index.html, or is nil.
 //
 // Options add to what is served: WithFiles serves a folder on disk beside dist.
 //
@@ -66,6 +66,9 @@ func Serve(dist fs.FS, api http.Handler, opts ...ServeOption) http.Handler {
 
 // serveBuild is Serve without its WARP_DESCRIBE check, for Run.
 func serveBuild(dist fs.FS, api http.Handler, opts ...ServeOption) http.Handler {
+	if dist == nil {
+		panic("warp.Serve: dist is nil; pass the page build, or serve the API alone with app.Handler().")
+	}
 	if api == nil {
 		api = http.HandlerFunc(noAPI)
 	}
