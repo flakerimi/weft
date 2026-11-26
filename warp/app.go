@@ -110,7 +110,7 @@ type App struct {
 	mu         sync.Mutex
 	modules    []Module
 	names      map[string]bool
-	current    string            // the module whose Register is running
+	current    string               // the module whose Register is running
 	routeNames map[string]routeName // a module's name and a route's name to the route
 	routes     []Route
 	plans      []*plan // each route's binding plan, beside routes; nil for Handle
