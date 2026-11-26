@@ -386,10 +386,19 @@ type bodyScan struct {
 	depth int // how much of path is in use
 	mapAt int
 	nulls map[string]string
+	// pushes counts the keys put in path, and setAt[d] is the count when
+	// path[d] was last set, so recorded can tell which of the path's keys
+	// changed since the last field recorded; it is made at the first.
+	pushes   int
+	setAt    [maxNesting]int
+	recorded *recordedPaths
 	// compares counts each look of a key among the fields, a map lookup or
 	// a comparison with one field, which TestScanWideStructCost and
 	// TestScanDeepBodyCost bound.
 	compares int
+	// joins counts the paths joined for wrong, which TestScanNullsCost
+	// bounds.
+	joins int
 }
 
 // object reads the object at i as o's and returns where it ends. With top it
@@ -412,6 +421,8 @@ func (s *bodyScan) object(i int, o *object, top bool) (int, error) {
 		var err error
 		if k >= 0 && o.inner[k] != nil {
 			s.path[s.depth] = o.names[k]
+			s.pushes++
+			s.setAt[s.depth] = s.pushes
 			s.depth++
 			i, err = s.value(i, o.inner[k])
 			s.depth--
@@ -518,18 +529,77 @@ func (s *bodyScan) values(i int, l *look) (int, error) {
 // null records that the value at the scan's path was sent null and cannot be.
 func (s *bodyScan) null() { s.wrong(notNull) }
 
-// wrong records says for the field at the scan's path.
+// wrong records says for the field at the scan's path, unless a field was
+// recorded there already: the path is joined only for the first.
 func (s *bodyScan) wrong(says string) {
 	n := s.depth
 	if s.mapAt >= 0 {
 		n = s.mapAt
 	}
+	if s.recorded == nil {
+		s.recorded = &recordedPaths{}
+	}
+	at := s.recorded.find(s, n)
+	if at.done {
+		return
+	}
+	at.done = true
 	if s.nulls == nil {
 		s.nulls = map[string]string{}
 	}
+	s.joins++
 	if key := strings.Join(s.path[:n], "."); s.nulls[key] == "" {
 		s.nulls[key] = says
 	}
+}
+
+// recordedPaths is a tree of the paths of the fields wrong recorded, a node a
+// key, and the nodes of the path it was last asked about: a key set before
+// that, and so the same now, is not looked up again. A body of nulls at one
+// path, or alternating between a few, costs a look or two each, and an
+// allocation only for a path not seen before.
+type recordedPaths struct {
+	root   pathNode
+	at     [maxNesting]*pathNode // at[d] is the node of path[:d+1], for d < n
+	n      int
+	pushes int // the scan's pushes when at was brought up to date
+	looks  int // the keys looked up, which TestScanNullsCost bounds
+}
+
+type pathNode struct {
+	next map[string]*pathNode
+	done bool
+}
+
+// find is the node of the scan's path[:n].
+func (r *recordedPaths) find(s *bodyScan, n int) *pathNode {
+	// The keys set since at was made are the deepest ones, since a key is set
+	// after the keys of the objects it is in.
+	d := min(n, r.n)
+	for d > 0 && s.setAt[d-1] > r.pushes {
+		d--
+	}
+	for ; d < n; d++ {
+		parent := &r.root
+		if d > 0 {
+			parent = r.at[d-1]
+		}
+		r.looks++
+		node := parent.next[s.path[d]]
+		if node == nil {
+			if parent.next == nil {
+				parent.next = map[string]*pathNode{}
+			}
+			node = &pathNode{}
+			parent.next[s.path[d]] = node
+		}
+		r.at[d] = node
+	}
+	r.n, r.pushes = n, s.pushes
+	if n == 0 {
+		return &r.root
+	}
+	return r.at[n-1]
 }
 
 // skip returns where the value at i ends.

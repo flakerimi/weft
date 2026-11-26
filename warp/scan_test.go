@@ -771,3 +771,61 @@ func TestScanDeepBodyCost(t *testing.T) {
 		t.Fatalf("a body %d deep took %d looks, want at most %d", depth, s.compares, 2*depth)
 	}
 }
+
+// nullNode holds itself, with a list of numbers and a list of objects whose
+// fields cannot be null.
+type nullNode struct {
+	N *nullNode `json:"n"`
+	V []int     `json:"v"`
+	L []struct {
+		A int `json:"a"`
+		B struct {
+			C int `json:"c"`
+		} `json:"b"`
+	} `json:"l"`
+}
+
+// A field sent null is recorded once: its path is joined for the first null
+// at it, so a body of nulls costs the same few allocations whether it holds
+// ten or ten thousand, deep or wide, and however its nulls alternate.
+func TestScanNullsCost(t *testing.T) {
+	p, mistakes := planFor(reflect.TypeFor[struct {
+		Body nullNode `body:"json"`
+	}](), "POST", "/x")
+	if mistakes != nil {
+		t.Fatal(mistakes)
+	}
+	deep := strings.Repeat(`{"n":`, 61)
+	for _, c := range []struct {
+		name  string
+		body  func(n int) []byte
+		paths map[string]string
+	}{
+		{"deep", func(n int) []byte {
+			return []byte(deep + `{"v":[` + strings.Repeat("null,", n) + "null]}" + strings.Repeat("}", 61))
+		}, map[string]string{strings.Repeat("n.", 61) + "v": notNull}},
+		{"wide", func(n int) []byte {
+			return []byte(`{"v":[` + strings.Repeat("null,", n) + "null]}")
+		}, map[string]string{"v": notNull}},
+		{"alternating", func(n int) []byte {
+			return []byte(deep + `{"l":[` + strings.Repeat(`{"a":null,"b":{"c":null}},`, n) + `{"a":null}]}` + strings.Repeat("}", 61))
+		}, map[string]string{strings.Repeat("n.", 61) + "l.a": notNull, strings.Repeat("n.", 61) + "l.b.c": notNull}},
+	} {
+		big, small := c.body(10_000), c.body(10)
+		var e *Error
+		if _, err := p.walk(big); !errors.As(err, &e) || !reflect.DeepEqual(e.Fields, c.paths) {
+			t.Fatalf("%s: %v, want %v", c.name, err, c.paths)
+		}
+		s := bodyScan{data: big, mapAt: -1}
+		s.object(0, p.keys, true)
+		nulls := bytes.Count(big, []byte("null"))
+		if s.joins != len(c.paths) || s.recorded.looks > 2*nulls+maxNesting {
+			t.Errorf("%s: the path was joined %d times and %d keys looked up for %d nulls, want %d and at most %d", c.name, s.joins, s.recorded.looks, nulls, len(c.paths), 2*nulls+maxNesting)
+		}
+		bigAllocs := testing.AllocsPerRun(3, func() { p.walk(big) })
+		smallAllocs := testing.AllocsPerRun(3, func() { p.walk(small) })
+		if bigAllocs > smallAllocs {
+			t.Errorf("%s: 10 000 nulls cost %.0f allocations, 10 cost %.0f; want the same", c.name, bigAllocs, smallAllocs)
+		}
+	}
+}
