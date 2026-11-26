@@ -111,7 +111,7 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		}
 		return fail(stderr, "dev", err)
 	}
-	goPort, err := freePort("dev")
+	goPort, err := freePort("dev", *port)
 	if err != nil {
 		return fail(stderr, "dev", err)
 	}
@@ -474,7 +474,7 @@ var portFreeAt = portFree
 
 // freePort returns a port that is free at localhost; command names the weft
 // command in the sentence when there is none.
-func freePort(command string) (int, error) {
+func freePort(command string, avoid ...int) (int, error) {
 	for range 20 {
 		l, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
@@ -482,6 +482,12 @@ func freePort(command string) (int, error) {
 		}
 		port := l.Addr().(*net.TCPAddr).Port
 		l.Close()
+		// A port weft has already chosen but not yet bound, such as the
+		// page server's while the Go server starts first, is free to the
+		// system and may be handed out again.
+		if slices.Contains(avoid, port) {
+			continue
+		}
 		if portFreeAt(port) {
 			return port, nil
 		}
