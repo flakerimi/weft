@@ -39,7 +39,34 @@ func (m *dataModule) Register(app *warp.App) error {
 
 func (m *dataModule) Migrate(ctx context.Context) error { return m.db.open(ctx) }
 
-func (m *dataModule) Stop(ctx context.Context) error { return m.db.close() }
+// Stop waits for the transactions in flight to end, up to ctx's deadline,
+// refusing new ones from the moment it begins, then closes the database.
+// When the deadline passes first it closes the database all the same, and
+// says in one warn line how many were still running.
+func (m *dataModule) Stop(ctx context.Context) error {
+	db := m.db
+	db.mu.Lock()
+	db.stopping = true
+	db.mu.Unlock()
+	ended := make(chan struct{})
+	go func() {
+		db.txs.Wait()
+		close(ended)
+	}()
+	select {
+	case <-ended:
+	case <-ctx.Done():
+		db.mu.Lock()
+		n := db.running
+		db.mu.Unlock()
+		if n == 1 {
+			slog.Warn("data: 1 transaction was still running when the app had to stop, so the database was closed under it.")
+		} else if n > 1 {
+			slog.Warn(fmt.Sprintf("data: %d transactions were still running when the app had to stop, so the database was closed under them.", n))
+		}
+	}
+	return db.close()
+}
 
 // For returns the app's database, which data.Module provides. Without that
 // module it returns nil, and the app reports the mistake.
@@ -57,6 +84,11 @@ type DB struct {
 	indexes map[string]*indexOwner // the unique indexes they need, by name
 	started bool                   // Migrate ran: no store may be made now
 	clock   func() time.Time
+	// stopping is set once Stop begins: no Tx begins after it. txs counts
+	// the Tx calls running, running how many, for Stop to wait for.
+	stopping bool
+	txs      sync.WaitGroup
+	running  int
 }
 
 // SQL returns the database's pool, for queries of the app's own that need it
@@ -394,7 +426,15 @@ func (db *DB) q(ctx context.Context, conn *sql.DB) (querier, error) {
 // cannot begin or commit, is a warp.Unavailable, a 503. When the commit
 // fails, the transaction is rolled back on its connection before the
 // connection goes back to the pool, so the pool never holds one left inside
-// a transaction.
+// a transaction. Once the app has begun to stop, Tx refuses to begin one,
+// with a 503.
+//
+// The transaction holds the database's write lock from its BEGIN until it
+// ends. A request that ends while BEGIN waits for that lock stops the wait,
+// and Tx returns the context's error. Once it has begun, a request that ends
+// interrupts only the statement running at that moment, and the
+// transaction is rolled back when fn returns; a fn that ignores its context
+// keeps the write lock, and every other writer waiting, until it returns.
 //
 // A Tx inside another one joins it: it runs fn in the outer transaction and
 // returns fn's error, and only the outer Tx commits or rolls back. So when an
@@ -407,6 +447,20 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context) error) error 
 		}
 		return fn(ctx)
 	}
+	db.mu.Lock()
+	if db.stopping {
+		db.mu.Unlock()
+		return warp.Unavailable("warp/data: the app is stopping.")
+	}
+	db.txs.Add(1)
+	db.running++
+	db.mu.Unlock()
+	defer func() {
+		db.mu.Lock()
+		db.running--
+		db.mu.Unlock()
+		db.txs.Done()
+	}()
 	pool, d := db.handle()
 	if pool == nil {
 		return errBeforeStart
@@ -428,7 +482,21 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context) error) error 
 	// statement in it still runs with the request's context, so a request
 	// that ends interrupts the statement running.
 	bg := context.WithoutCancel(ctx)
-	tx, err := conn.BeginTx(bg, nil)
+	// BEGIN alone may be stopped by the request's end, which interrupts the
+	// driver's wait for the write lock: its context is cancelled only while
+	// BEGIN runs. Cancelled after, it would let database/sql roll back
+	// behind Tx's back; so when the request ends just as BEGIN returns,
+	// that transaction is rolled back here and Tx returns too.
+	beginCtx, endBegin := context.WithCancel(bg)
+	defer endBegin() // after the transaction has ended: the defers run last first
+	stopBegin := context.AfterFunc(ctx, endBegin)
+	tx, err := conn.BeginTx(beginCtx, nil)
+	if !stopBegin() {
+		if err == nil {
+			tx.Rollback() // or database/sql's own; Close waits for it
+		}
+		return ctx.Err()
+	}
 	if err != nil {
 		if err := unavailable(ctx, d, err); isUnavailable(err) {
 			return err
