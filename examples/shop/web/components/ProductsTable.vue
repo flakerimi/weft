@@ -37,23 +37,26 @@ const statuses = [
 const columns: TableColumn<Product>[] = [
   { key: 'name', label: 'Name', sortable: true, rowHeader: true },
   { key: 'price', label: 'Price', sortable: true, align: 'end', format: (v) => (v as number).toFixed(2) },
+  { key: 'sale', label: 'Sale', align: 'end', format: (v) => (v == null ? '' : (v as number).toFixed(2)) },
   { key: 'status', label: 'Status' },
   { key: 'actions', label: 'Actions', align: 'end' },
 ]
 
-// The dialog that makes a product, or changes the one in `editing`. A price
-// left empty is not in the values the Form submits, so the server reads it
-// as not sent: 0 for a new product, unchanged for one being edited.
+// The dialog that makes a product, or changes the one in `editing`. The sale
+// is a pointer in Go, nullable in the schema, so emptying it sends null,
+// which clears it. The price is not: an emptied price cannot be sent, so the
+// form asks for one (0 is a price), rather than keep the old one unsaid.
 const open = ref(false)
 const editing = ref<Product | null>(null)
-const draft = reactive<ProductInput>({ name: '', price: 0, status: 'draft' })
+const draft = reactive<ProductInput>({ name: '', price: 0, sale: null, status: 'draft' })
+const rules = { ...schema.ProductInput, price: { ...schema.ProductInput.price, required: true } }
 const problem = ref('')
 const formKey = ref(0)
 const form = useTemplateRef<FormApi>('form')
 
 function edit(product: Product | null) {
   editing.value = product
-  Object.assign(draft, product ? { name: product.name, price: product.price, status: product.status } : { name: '', price: 0, status: 'draft' })
+  Object.assign(draft, product ? { name: product.name, price: product.price, sale: product.sale ?? null, status: product.status } : { name: '', price: 0, sale: null, status: 'draft' })
   problem.value = ''
   formKey.value++ // a fresh form, with no errors from the last time
   open.value = true
@@ -63,7 +66,8 @@ function edit(product: Product | null) {
 function changes(values: ProductInput, was: Product): Partial<ProductInput> {
   const out: Partial<ProductInput> = {}
   if (values.name !== was.name) out.name = values.name
-  if ('price' in values && values.price !== was.price) out.price = values.price
+  if (values.price !== was.price) out.price = values.price
+  if ('sale' in values && values.sale !== (was.sale ?? null)) out.sale = values.sale
   if (values.status !== was.status) out.status = values.status
   return out
 }
@@ -157,7 +161,7 @@ function removeFailed(e: unknown) {
 
   <Dialog v-model:open="open" :title="editing ? `Edit ${editing.name}` : 'New product'">
     <template #body>
-      <Form :key="formKey" ref="form" :state="draft" :schema="schema.ProductInput" @submit="save">
+      <Form :key="formKey" ref="form" :state="draft" :schema="rules" @submit="save">
         <Stack :gap="4">
           <Alert v-if="problem" tone="danger" :title="problem" />
           <FormField label="Name" name="name">
@@ -165,6 +169,9 @@ function removeFailed(e: unknown) {
           </FormField>
           <FormField label="Price" name="price">
             <InputNumber v-model="draft.price" :min="0" :step="0.01" />
+          </FormField>
+          <FormField label="Sale" name="sale" hint="Empty when it is not on sale.">
+            <InputNumber v-model="draft.sale" :min="0" :step="0.01" />
           </FormField>
           <FormField label="Status" name="status">
             <RadioGroup v-model="draft.status" :items="statuses.slice(1)" orientation="horizontal" />
