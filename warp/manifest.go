@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path"
+	"reflect"
 	"strconv"
 	"strings"
 )
@@ -131,7 +132,7 @@ func pageManifest(dist fs.FS) ([]byte, bool) {
 func loadSite(dist fs.FS, raw []byte) *site {
 	var m buildManifest
 	if err := json.Unmarshal(raw, &m); err != nil {
-		panic(fmt.Sprintf("warp.Serve: dist/manifest.json is not a Weft build manifest (%v).", err))
+		panic(fmt.Sprintf("warp.Serve: dist/manifest.json is not a Weft build manifest (%v).", jsonProblem(err, reflect.TypeFor[buildManifest]())))
 	}
 	rawRoutes, err := fs.ReadFile(dist, "routes.json")
 	if err != nil {
@@ -139,7 +140,7 @@ func loadSite(dist fs.FS, raw []byte) *site {
 	}
 	var routes buildRoutes
 	if err := json.Unmarshal(rawRoutes, &routes); err != nil {
-		panic(fmt.Sprintf("warp.Serve: dist/routes.json is not a Weft route map (%v).", err))
+		panic(fmt.Sprintf("warp.Serve: dist/routes.json is not a Weft route map (%v).", jsonProblem(err, reflect.TypeOf(routes))))
 	}
 
 	s := &site{pages: map[string]*resource{}, files: map[string]*resource{}}
@@ -414,4 +415,15 @@ func etagMatch(ifNoneMatch []string, etag string) bool {
 		}
 	}
 	return false
+}
+
+// jsonProblem is err as encoding/json v1 writes it, a type error's field
+// path included, whichever encoding/json the app is built with
+// (GOEXPERIMENT=jsonv2 writes the path otherwise).
+func jsonProblem(err error, t reflect.Type) string {
+	var te *json.UnmarshalTypeError
+	if !errors.As(err, &te) || te.Struct == "" || te.Field == "" || te.Type == nil {
+		return err.Error()
+	}
+	return "json: cannot unmarshal " + te.Value + " into Go struct field " + te.Struct + "." + fieldPath(t, te.Field) + " of type " + te.Type.String()
 }

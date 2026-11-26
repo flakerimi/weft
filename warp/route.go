@@ -50,7 +50,9 @@ func Get[In, Out any](app *App, path string, fn func(context.Context, In) (Out, 
 // fields keyed as the input's own (name, not body.name), as an embedded
 // struct's are. An input with a body field has no json fields of its own. A
 // field with the rule readonly, at any depth, is answered and never read:
-// a body that sends it is a 400, and it is never validated.
+// a body that sends it, by its key or by a key that differs from it only in
+// case, is a 400, and it is never validated. Whatever the decoder does, the
+// handler gets every readonly field of the body as zero.
 //
 // A body that is not empty must be sent as application/json (or a type
 // ending in +json), else the answer is 415. A cross-site form or fetch can
@@ -143,7 +145,8 @@ func SentKeys(ctx context.Context) []string {
 func typed[In, Out any](app *App, method, path string, status int, fn func(context.Context, In) (Out, error), opts []RouteOption) {
 	in, out := reflect.TypeFor[In](), reflect.TypeFor[Out]()
 	p, mistakes := planFor(in, method, path)
-	empty := emptyPlanFor(out) // nil when nothing in Out is ever a null list
+	empty, outMistakes := emptyPlanFor(out) // nil when nothing in Out is ever a null list
+	mistakes = append(mistakes, outMistakes...)
 	limit := app.cfg.MaxBodyBytes
 	app.route(method, path, in, out, p, status, func(status int) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

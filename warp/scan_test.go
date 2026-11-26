@@ -2,7 +2,9 @@ package warp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"reflect"
@@ -10,29 +12,50 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 )
 
 // The model of TestScanMatchesEncodingJSON: keys that differ only in case
-// ("name" and "NAME", the readonly "id" and the writable "ID"), keys with an
-// s or a k, which fold with ſ and the Kelvin sign, readonly fields at every
-// depth, through pointers, lists and map values, and a type that holds
-// itself.
+// ("name" and "NAME"), a writable and a readonly key that fold onto each
+// other at the top ("id" and "ID") and one level down, where one of them is
+// in an embedded struct ("id" beside the embedded "Id"; the embedded
+// readonly "key" beside "KEY"); embedded structs exported and not; a Go name
+// shadowed by an embedded struct's (SKU, as "sku" and as "code"); keys with
+// an s or a k, which fold with ſ and the Kelvin sign; readonly fields at
+// every depth, through pointers, lists, map values and embedded structs; and
+// a type that holds itself. A body type cannot embed a pointer (registration
+// refuses it), so no embedded pointer is here.
 type pzGeo struct {
 	Lat float64 `json:"lat"`
 	Key string  `json:"key" warp:"readonly"`
 }
 
+// PzStamp is embedded, exported: a readonly key and a writable one.
+type PzStamp struct {
+	Key  string `json:"key" warp:"readonly"`
+	Note string `json:"note"`
+}
+
+// pzLabel is embedded, unexported: a writable key that folds onto the
+// outer type's readonly "id", and a field whose Go name the outer type has.
+type pzLabel struct {
+	Ident int    `json:"Id"`
+	SKU   string `json:"code"`
+	Mark  string `json:"mark" warp:"readonly"`
+}
+
 type pzLine struct {
-	ID  int64  `json:"id" warp:"readonly"`
-	Idx int    `json:"ID"`
-	SKU string `json:"sku"`
-	Qty *int   `json:"qty"`
-	Geo *pzGeo `json:"geo"`
+	pzLabel
+	PzStamp
+	ID   int64  `json:"id" warp:"readonly"`
+	SKU  string `json:"sku"`
+	Shut string `json:"KEY"`
+	Qty  *int   `json:"qty"`
+	Geo  *pzGeo `json:"geo"`
 }
 
 type pzBody struct {
 	ID     int64             `json:"id" warp:"readonly"`
+	Ident  int64             `json:"ID"`
 	Name   string            `json:"name"`
 	Shout  string            `json:"NAME"`
 	Kind   string            `json:"kind"`
@@ -46,6 +69,7 @@ type pzBody struct {
 	Next   *pzBody           `json:"next"`
 	Any    any               `json:"any"`
 	Raw    json.RawMessage   `json:"raw"`
+	PzStamp
 }
 
 type pzIn struct {
@@ -54,8 +78,8 @@ type pzIn struct {
 
 // The mirror of the model: each field a hit, which records that
 // encoding/json wrote it (called its decoder, null included), and when, or
-// for a readonly field an ro. mTop is pzBody as the plan's view has it,
-// without its readonly id.
+// for a readonly field an ro. mTop is pzBody whole, its readonly fields
+// included, as the scan knows it.
 type hit[T any] struct {
 	V   T
 	Set bool
@@ -96,16 +120,30 @@ type mGeo struct {
 	Key ro[string]   `json:"key"`
 }
 
+type MStamp struct {
+	Key  ro[string]  `json:"key"`
+	Note hit[string] `json:"note"`
+}
+
+type mLabel struct {
+	Ident hit[int]    `json:"Id"`
+	SKU   hit[string] `json:"code"`
+	Mark  ro[string]  `json:"mark"`
+}
+
 type mLine struct {
-	ID  ro[int64]   `json:"id"`
-	Idx hit[int]    `json:"ID"`
-	SKU hit[string] `json:"sku"`
-	Qty hit[*int]   `json:"qty"`
-	Geo hit[*mGeo]  `json:"geo"`
+	mLabel
+	MStamp
+	ID   ro[int64]   `json:"id"`
+	SKU  hit[string] `json:"sku"`
+	Shut hit[string] `json:"KEY"`
+	Qty  hit[*int]   `json:"qty"`
+	Geo  hit[*mGeo]  `json:"geo"`
 }
 
 type mBody struct {
 	ID     ro[int64]             `json:"id"`
+	Ident  hit[int64]            `json:"ID"`
 	Name   hit[string]           `json:"name"`
 	Shout  hit[string]           `json:"NAME"`
 	Kind   hit[string]           `json:"kind"`
@@ -119,39 +157,36 @@ type mBody struct {
 	Next   hit[*mBody]           `json:"next"`
 	Any    hit[any]              `json:"any"`
 	Raw    hit[json.RawMessage]  `json:"raw"`
+	MStamp
 }
 
-type mTop struct {
-	Name   hit[string]           `json:"name"`
-	Shout  hit[string]           `json:"NAME"`
-	Kind   hit[string]           `json:"kind"`
-	Status hit[string]           `json:"status"`
-	Price  hit[float64]          `json:"price"`
-	Live   hit[bool]             `json:"live"`
-	Tags   hit[[]string]         `json:"tags"`
-	Lines  hit[[]mLine]          `json:"lines"`
-	ByKey  hit[map[string]mLine] `json:"by_key"`
-	Geo    hit[mGeo]             `json:"geo"`
-	Next   hit[*mBody]           `json:"next"`
-	Any    hit[any]              `json:"any"`
-	Raw    hit[json.RawMessage]  `json:"raw"`
-}
+type mTop = mBody
 
-// topWritten is the top-level keys encoding/json wrote, in the order it met
-// them.
+// topWritten is the top-level keys, readonly ones aside, that encoding/json
+// wrote, in the order it met them, those of embedded structs included.
 func topWritten(m *mTop) []string {
 	type key struct {
 		name string
 		at   int
 	}
 	var keys []key
-	v := reflect.ValueOf(m).Elem()
-	for i := range v.NumField() {
-		if set, at := v.Field(i).Addr().Interface().(hitter).written(); set {
-			name, _, _ := jsonTagOf(v.Type().Field(i))
-			keys = append(keys, key{name, at})
+	var walk func(v reflect.Value)
+	walk = func(v reflect.Value) {
+		for i := range v.NumField() {
+			f := v.Type().Field(i)
+			if f.Anonymous {
+				walk(v.Field(i))
+				continue
+			}
+			if h, ok := v.Field(i).Addr().Interface().(hitter); ok {
+				if set, at := h.written(); set {
+					name, _, _ := jsonTagOf(f)
+					keys = append(keys, key{name, at})
+				}
+			}
 		}
 	}
+	walk(reflect.ValueOf(m).Elem())
 	slices.SortFunc(keys, func(a, b key) int { return a.at - b.at })
 	var names []string
 	for _, k := range keys {
@@ -160,30 +195,95 @@ func topWritten(m *mTop) []string {
 	return names
 }
 
-// scanAgrees checks the scan against encoding/json on one body: when
-// encoding/json decodes it into the plan's view, the scan refuses it exactly
-// when encoding/json writes a readonly field at some depth, and otherwise
-// says the body sent exactly the top-level keys encoding/json wrote, in its
-// order. It reports whether the body decoded, and what disagreed.
-func scanAgrees(p *plan, data []byte) (decoded bool, problem string) {
-	realErr := decodeStrict(data, reflect.New(p.view).Interface())
+// readonlyFolds are the model's readonly keys, folded: a key the scan
+// refuses though encoding/json wrote no readonly field must fold onto one
+// of these, since the scan refuses a key when any field it may set is
+// readonly, whichever the decoder chooses.
+var readonlyFolds = []string{"ID", "KEY", "MARK"}
+
+// scanAgrees checks the scan against encoding/json on one body, which the
+// mirror (the whole model, readonly fields included) decodes:
+//   - when encoding/json writes a readonly field at some depth, the scan
+//     refuses the body;
+//   - when the scan takes the body, the plan's view decodes it too, the
+//     scan says it sent exactly the top-level keys encoding/json wrote, in
+//     its order, and the decoded input has no readonly field set;
+//   - when the scan refuses a body encoding/json would have taken whole, the
+//     key it names folds onto a readonly key of the model.
+//
+// It reports whether the mirror decoded the body, whether the scan refused
+// it, and what disagreed.
+func scanAgrees(p *plan, data []byte) (decoded, refused bool, problem string) {
 	hitSeq, roWritten = 0, false
 	var m mTop
-	mirrorErr := decodeStrict(data, &m)
-	if (realErr == nil) != (mirrorErr == nil) {
-		return false, fmt.Sprintf("the input decodes with %v and the mirror with %v", realErr, mirrorErr)
-	}
-	if realErr != nil {
-		return false, ""
+	if err := decodeStrict(data, &m); err != nil {
+		return false, false, ""
 	}
 	sent, err := p.walk(data)
-	if want := roWritten; (err != nil) != want {
-		return true, fmt.Sprintf("encoding/json writes a readonly field: %v; the scan answers %v", want, err)
+	switch {
+	case roWritten && err == nil:
+		return true, false, "encoding/json writes a readonly field and the scan takes the body"
+	case err == nil:
+		view := reflect.New(p.view)
+		if verr := decodeStrict(data, view.Interface()); verr != nil {
+			return true, false, fmt.Sprintf("the scan takes the body and the view refuses it: %v", verr)
+		}
+		if !slices.Equal(sent, topWritten(&m)) {
+			return true, false, fmt.Sprintf("the scan says %q was sent; encoding/json wrote %q", sent, topWritten(&m))
+		}
+		if p.readonly != nil {
+			p.readonly.zero(view.Elem())
+		}
+		if name, set := readonlySet(view.Elem()); set {
+			return true, false, fmt.Sprintf("the readonly %s is set", name)
+		}
+	case !roWritten:
+		var e *Error
+		errors.As(err, &e)
+		key, _ := strings.CutPrefix(e.Message, "The body has the field ")
+		key, _ = strings.CutSuffix(key, ", which this route does not take.")
+		name, uerr := strconv.Unquote(key)
+		if uerr != nil || !slices.Contains(readonlyFolds, string(appendFolded(nil, []byte(name)))) {
+			return true, true, fmt.Sprintf("the scan refuses %v, which folds onto no readonly key", err)
+		}
 	}
-	if err == nil && !slices.Equal(sent, topWritten(&m)) {
-		return true, fmt.Sprintf("the scan says %q was sent; encoding/json wrote %q", sent, topWritten(&m))
+	return true, err != nil, ""
+}
+
+// readonlySet reports the first readonly field of v, a decoded value of the
+// model, that is not zero.
+func readonlySet(v reflect.Value) (string, bool) {
+	switch v.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if !v.IsNil() {
+			return readonlySet(v.Elem())
+		}
+	case reflect.Slice, reflect.Array:
+		for i := range v.Len() {
+			if name, set := readonlySet(v.Index(i)); set {
+				return name, true
+			}
+		}
+	case reflect.Map:
+		for _, e := range v.Seq2() {
+			if name, set := readonlySet(e); set {
+				return name, true
+			}
+		}
+	case reflect.Struct:
+		for i := range v.NumField() {
+			f := v.Type().Field(i)
+			if isReadonly(f) && !v.Field(i).IsZero() {
+				return v.Type().Name() + "." + f.Name, true
+			}
+			if f.IsExported() || f.Anonymous {
+				if name, set := readonlySet(v.Field(i)); set {
+					return name, true
+				}
+			}
+		}
 	}
-	return true, ""
+	return "", false
 }
 
 func scanPlan(t testing.TB) *plan {
@@ -191,15 +291,6 @@ func scanPlan(t testing.TB) *plan {
 	p, mistakes := planFor(reflect.TypeFor[pzIn](), "POST", "/x")
 	if mistakes != nil {
 		t.Fatal(mistakes)
-	}
-	// The mirror's top is the view: the same keys in the same order.
-	var keys []string
-	for f := range reflect.TypeFor[mTop]().Fields() {
-		name, _, _ := jsonTagOf(f)
-		keys = append(keys, name)
-	}
-	if !slices.Equal(keys, p.keys.names) {
-		t.Fatalf("the mirror has %q, the view %q", keys, p.keys.names)
 	}
 	return p
 }
@@ -219,12 +310,15 @@ type genField struct {
 
 var genObjects = map[string][]genField{
 	"body": {
-		{"id", "num"}, {"name", "str"}, {"NAME", "str"}, {"kind", "str"}, {"status", "str"}, {"price", "num"},
+		{"id", "num"}, {"ID", "num"}, {"name", "str"}, {"NAME", "str"}, {"kind", "str"}, {"status", "str"}, {"price", "num"},
 		{"live", "bool"}, {"tags", "list:str"}, {"lines", "list:obj:line"}, {"by_key", "map:obj:line"},
-		{"geo", "obj:geo"}, {"next", "obj:body"}, {"any", "any"}, {"raw", "any"},
+		{"geo", "obj:geo"}, {"next", "obj:body"}, {"any", "any"}, {"raw", "any"}, {"key", "str"}, {"note", "str"},
 	},
-	"line": {{"id", "num"}, {"ID", "num"}, {"sku", "str"}, {"qty", "num"}, {"geo", "obj:geo"}},
-	"geo":  {{"lat", "num"}, {"key", "str"}},
+	"line": {
+		{"id", "num"}, {"Id", "num"}, {"sku", "str"}, {"code", "str"}, {"qty", "num"}, {"geo", "obj:geo"},
+		{"key", "str"}, {"KEY", "str"}, {"note", "str"}, {"mark", "str"},
+	},
+	"geo": {{"lat", "num"}, {"key", "str"}},
 }
 
 var oddKeys = []string{"zz", "nam", "name ", "naмe", `n\u0000ame`, `\ud83d\ude00`, `\ud800`, "", "ſ", "K"}
@@ -352,25 +446,29 @@ const (
 func TestScanMatchesEncodingJSON(t *testing.T) {
 	p := scanPlan(t)
 	g := &bodyGen{r: rand.New(rand.NewPCG(scanSeed, 0))}
-	decoded, refused := 0, 0
+	decoded, refused, stricter := 0, 0, 0
 	for range scanCases {
 		data := g.body()
-		ok, problem := scanAgrees(p, data)
+		hitSeq, roWritten = 0, false
+		ok, no, problem := scanAgrees(p, data)
 		if problem != "" {
 			t.Fatalf("%s\nbody %s", problem, data)
 		}
 		if ok {
 			decoded++
-			if _, err := p.walk(data); err != nil {
-				refused++
+		}
+		if no {
+			refused++
+			if !roWritten {
+				stricter++
 			}
 		}
 	}
 	// The bodies reach both sides of the scan.
 	if decoded < scanCases/4 || refused < decoded/20 || refused > decoded*9/10 {
-		t.Fatalf("of %d bodies %d decoded and %d of those sent a readonly field; change the generator so more do each", scanCases, decoded, refused)
+		t.Fatalf("of %d bodies %d decoded and %d of those were refused; change the generator so more do each", scanCases, decoded, refused)
 	}
-	t.Logf("%d bodies, %d decoded, %d of those refused", scanCases, decoded, refused)
+	t.Logf("%d bodies, %d decoded, %d of those refused (%d where encoding/json chose a writable field)", scanCases, decoded, refused, stricter)
 }
 
 func FuzzScan(f *testing.F) {
@@ -378,15 +476,16 @@ func FuzzScan(f *testing.F) {
 	for range 50 {
 		f.Add(g.body())
 	}
-	f.Add([]byte(`{"next":{"ID":1}}`))
-	f.Add([]byte(`{"lines":[{"Id":1}]}`))
+	f.Add([]byte(`{"next":{"Id":1}}`))
+	f.Add([]byte(`{"lines":[{"ID":1}]}`))
+	f.Add([]byte(`{"lines":[{"Key":"x"}]}`))
 	p := scanPlan(f)
 	f.Fuzz(func(t *testing.T, data []byte) {
 		data = bytes.Trim(data, " \t\r\n")
 		if !json.Valid(data) || len(data) == 0 || data[0] != '{' || tooDeep(data, maxNesting) {
 			return
 		}
-		if _, problem := scanAgrees(p, data); problem != "" {
+		if _, _, problem := scanAgrees(p, data); problem != "" {
 			t.Fatalf("%s\nbody %s", problem, data)
 		}
 	})
@@ -406,31 +505,31 @@ func wideInput(n int) reflect.Type {
 
 // Matching a key costs the same however many fields the object has: an
 // exact map and a folded one, made at registration. A 1 MiB body of keys
-// that match the last of 100 fields only by case is scanned about as fast as
-// one that matches the only field of one.
+// that match the last of 100 fields only by case takes two looks a key, as
+// one that matches the only field of one does, and no allocation for each.
 func TestScanWideStructCost(t *testing.T) {
-	timeOf := func(n int, key string) time.Duration {
-		p, mistakes := planFor(wideInput(n), "POST", "/x")
+	for _, c := range []struct {
+		n   int
+		key string
+	}{{100, "F099"}, {1, "F000"}, {100, "f050"}} {
+		p, mistakes := planFor(wideInput(c.n), "POST", "/x")
 		if mistakes != nil {
 			t.Fatal(mistakes)
 		}
-		pair := `"` + key + `":1,`
-		body := []byte("{" + strings.Repeat(pair, (1<<20)/len(pair)) + `"f000":1}`)
-		if keys, err := p.walk(body); err != nil {
-			t.Fatalf("keys %q, err %v", keys, err)
+		pair := `"` + c.key + `":1,`
+		keys := (1 << 20) / len(pair)
+		body := []byte("{" + strings.Repeat(pair, keys) + `"f000":1}`)
+		s := bodyScan{data: body}
+		if _, err := s.object(0, p.keys, true); err != nil {
+			t.Fatal(err)
 		}
-		best := time.Hour
-		for range 5 {
-			start := time.Now()
-			p.walk(body)
-			best = min(best, time.Since(start))
+		if s.compares > 2*(keys+1) {
+			t.Errorf("%d keys against %d fields took %d looks, want at most 2 a key", keys+1, c.n, s.compares)
 		}
-		return best
-	}
-	wide, narrow := timeOf(100, "F099"), timeOf(1, "F000")
-	t.Logf("1 MiB against 100 fields: %v; against 1 field: %v", wide, narrow)
-	if wide > 4*narrow+2*time.Millisecond {
-		t.Fatalf("a 1 MiB body took %v against 100 fields and %v against 1; matching grows with the fields", wide, narrow)
+		// The list of keys sent, and the record of those past the 64th.
+		if allocs := testing.AllocsPerRun(3, func() { p.walk(body) }); allocs > 2 {
+			t.Errorf("%d keys against %d fields cost %.0f allocations, want at most 2", keys+1, c.n, allocs)
+		}
 	}
 }
 
@@ -454,5 +553,117 @@ func TestScanEscapedKeysCost(t *testing.T) {
 	t.Logf("%.0f allocations", allocs)
 	if allocs > 1 {
 		t.Fatalf("4000 escaped keys cost %.0f allocations, want at most 1 (the list of keys sent)", allocs)
+	}
+}
+
+// Whatever the scan says, a readonly field is never set: every one the
+// decoder set, through each path a body can take, is put back to zero. The
+// scan is left out here, as if it had missed every key.
+func TestReadonlyIsZeroedWhateverTheScanSays(t *testing.T) {
+	p := scanPlan(t)
+	for _, body := range []string{
+		`{"lines":[{"sku":"a"},{"id":5}]}`,            // a list
+		`{"by_key":{"a":{"id":5}}}`,                   // a map value
+		`{"geo":{"key":"x"}}`,                         // a struct
+		`{"next":{"next":{"geo":{"key":"x"}}}}`,       // through pointers, a type holding itself
+		`{"lines":[{"key":"x"}]}`,                     // an exported embedded struct
+		`{"lines":[{"mark":"x"}]}`,                    // an unexported embedded struct
+		`{"by_key":{"a":{"geo":{"key":"x"}}}}`,        // a pointer inside a map value
+		`{"next":{"key":"x","lines":[{"MARK":"y"}]}}`, // folded, deep
+	} {
+		view := reflect.New(p.view)
+		if err := decodeStrict([]byte(body), view.Interface()); err != nil {
+			t.Fatalf("%s: %v", body, err)
+		}
+		if _, set := readonlySet(view.Elem()); !set {
+			t.Fatalf("%s: the decoder set no readonly field, so this row tests nothing", body)
+		}
+		p.readonly.zero(view.Elem())
+		if name, set := readonlySet(view.Elem()); set {
+			t.Errorf("%s: %s is still set", body, name)
+		}
+	}
+	// A body type with no readonly field has no plan, and one with them
+	// costs nothing to put right when there are no maps to look into.
+	if readonlyPlanFor(reflect.TypeFor[struct {
+		A []Item          `json:"a"`
+		B map[string]Item `json:"b"`
+		C *bodyFields     `json:"c"`
+	}]()) != nil {
+		t.Error("a type with no readonly field has a plan")
+	}
+	view := reflect.New(p.view)
+	decodeStrict([]byte(`{"lines":[{"id":5},{"key":"x"}],"next":{"geo":{"key":"x"}}}`), view.Interface())
+	if allocs := testing.AllocsPerRun(20, func() { p.readonly.zero(view.Elem()) }); allocs != 0 {
+		t.Errorf("putting readonly fields back cost %v allocations, want 0", allocs)
+	}
+}
+
+type sWBase struct {
+	Ident int `json:"Id"`
+}
+
+// sShallowRO has a writable key in an embedded struct that comes first and
+// the outer type's own readonly key, which folds onto it: encoding/json v1
+// sets the first for "ID", and jsonv2 the shallower, the readonly one.
+type sShallowRO struct {
+	sWBase
+	ID int `json:"id" warp:"readonly"`
+}
+
+// A key that folds onto a readonly field is refused, whichever field the
+// decoder would choose, and the readonly field is never set.
+func TestReadonlyFoldedBesideAnEmbeddedKey(t *testing.T) {
+	type In struct {
+		Body struct {
+			In sShallowRO `json:"in"`
+		} `body:"json"`
+	}
+	got, ran := -1, false
+	app := New(Config{})
+	Post(app, "/x", func(_ context.Context, in In) (None, error) { got, ran = in.Body.In.ID, true; return None{}, nil })
+	h := mustRegister(t, app)
+	for _, body := range []string{`{"in":{"ID":5}}`, `{"in":{"iD":5}}`, `{"in":{"id":5}}`} {
+		w := send(t, h, "POST", "/api/x", body)
+		if code, _, _ := apiError(t, w); w.Code != 400 || code != "bad_request" || ran {
+			t.Errorf("%s: status %d, ran %v (saw ID %d)", body, w.Code, ran, got)
+		}
+	}
+	if w := send(t, h, "POST", "/api/x", `{"in":{"Id":5}}`); w.Code != 204 || got != 0 {
+		t.Errorf(`{"in":{"Id":5}}: status %d, ID %d`, w.Code, got)
+	}
+}
+
+// The top level refuses as the levels below do: a key that folds onto a
+// readonly field is refused there too, though the view, which leaves the
+// readonly field out, would set its writable sibling.
+func TestReadonlyFoldedAtTheTop(t *testing.T) {
+	type Top struct {
+		ID    int `json:"id" warp:"readonly"`
+		Ident int `json:"ID"`
+	}
+	top, mistakes := planFor(reflect.TypeFor[struct {
+		Body Top `body:"json"`
+	}](), "POST", "/x")
+	if mistakes != nil {
+		t.Fatal(mistakes)
+	}
+	nested, mistakes := planFor(reflect.TypeFor[struct {
+		Body struct {
+			In Top `json:"in"`
+		} `body:"json"`
+	}](), "POST", "/x")
+	if mistakes != nil {
+		t.Fatal(mistakes)
+	}
+	for _, c := range []struct {
+		key   string
+		taken bool
+	}{{"id", false}, {"Id", false}, {"iD", false}, {"ID", true}} {
+		_, errTop := top.walk([]byte(`{"` + c.key + `":5}`))
+		_, errNested := nested.walk([]byte(`{"in":{"` + c.key + `":5}}`))
+		if (errTop == nil) != c.taken || (errNested == nil) != c.taken {
+			t.Errorf("%q: at the top %v, one level down %v; want taken %v at both", c.key, errTop, errNested, c.taken)
+		}
 	}
 }

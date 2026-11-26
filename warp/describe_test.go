@@ -934,8 +934,14 @@ func TestDescriptionListsWhatBinderTakes(t *testing.T) {
 			for _, f := range s[rt.Body].Fields {
 				got = append(got, f.Name)
 			}
-			if !reflect.DeepEqual(got, p.keys.names) {
-				t.Errorf("%s %s: body described %v, the binder takes %v", rt.Method, rt.Path, got, p.keys.names)
+			var takes []string // the scan also knows the readonly keys, to refuse them
+			for k, n := range p.keys.names {
+				if !p.keys.readonly[k] {
+					takes = append(takes, n)
+				}
+			}
+			if !reflect.DeepEqual(got, takes) {
+				t.Errorf("%s %s: body described %v, the binder takes %v", rt.Method, rt.Path, got, takes)
 			}
 			for j, f := range s[rt.Body].Fields {
 				if inner := typeOf(f.TS); inner != "" && j < p.view.NumField() {

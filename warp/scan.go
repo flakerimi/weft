@@ -2,9 +2,17 @@ package warp
 
 // The scan of a typed route's body: one pass over bytes encoding/json has
 // already decoded into the plan's view, which finds the top-level keys the
-// body sent and refuses a readonly key at any depth. It matches keys as
-// encoding/json does, so that what it says was sent is what was set;
-// TestScanMatchesEncodingJSON and FuzzScan hold it to that.
+// body sent and refuses a readonly key at any depth.
+//
+// It mirrors encoding/json v1's matching of a key to a field (decode.go,
+// object): the field whose key is the key itself, else the first whose key
+// folds the same (foldName), the key unquoted as unquoteBytes does. Where
+// another decoder could choose another of the folded fields (jsonv2 prefers
+// the shallowest), the scan takes all of them into account, so its refusal
+// does not depend on the choice. TestScanMatchesEncodingJSON and FuzzScan
+// hold it to encoding/json. Should the two part all the same, what holds is
+// plan.readonly: every readonly field is put back to zero after decoding, so
+// a readonly field is never set, whatever the scan said.
 
 import (
 	"cmp"
@@ -18,29 +26,29 @@ import (
 
 // object is what may be sent where a struct is: the json keys of its
 // fields in field order, which of them are readonly, and how to look inside
-// each one's value, nil where nothing inside it can be readonly. exact and
-// folded find a key's field as encoding/json does, by the key itself, else
-// by its folded form, the first field in order having it.
+// each one's value, nil where nothing inside it can be readonly. exact finds
+// the field of a key as sent; folded the fields whose keys are the same once
+// folded, in field order, all of them.
 type object struct {
 	names    []string
 	readonly []bool
 	inner    []*look
 	exact    map[string]int
-	folded   map[string]int
-	longest  int // the length of the longest folded name, in bytes
+	folded   map[string][]int
+	single   []int // 0, 1, 2, …: single[k:k+1] is the one field k, without allocating
+	longest  int   // the length of the longest folded name, in bytes
 }
 
-// index makes o's exact and folded maps from its names, as encoding/json
-// makes its own for a struct's fields.
+// index makes o's exact and folded maps from its names.
 func (o *object) index() {
 	o.exact = make(map[string]int, len(o.names))
-	o.folded = make(map[string]int, len(o.names))
+	o.folded = make(map[string][]int, len(o.names))
+	o.single = make([]int, len(o.names))
 	for i, name := range o.names {
 		o.exact[name] = i
+		o.single[i] = i
 		f := string(appendFolded(nil, []byte(name)))
-		if _, taken := o.folded[f]; !taken {
-			o.folded[f] = i
-		}
+		o.folded[f] = append(o.folded[f], i)
 		o.longest = max(o.longest, len(f))
 	}
 }
@@ -105,16 +113,29 @@ func (m objects) objectOf(t reflect.Type) *object {
 	return o
 }
 
-// topObject makes the object of a plan's view, whose fields' types may hold
-// readonly fields however deep, and keeps a look only where one does.
-func topObject(view []reflect.StructField) *object {
+// topField is a key of a plan's body, with the type of its field and
+// whether it is readonly.
+type topField struct {
+	key      string
+	typ      reflect.Type
+	readonly bool
+}
+
+// topObject makes the object of a plan's body, whose fields' types may hold
+// readonly fields however deep, and keeps a look only where one does. Its
+// readonly keys are there to be refused, as they are one level down; the
+// view, which the body is decoded into, leaves them out.
+func topObject(fields []topField) *object {
 	m := objects{}
 	top := &object{}
-	for _, f := range view {
-		key, _, _ := jsonTagOf(f)
-		top.names = append(top.names, key)
-		top.readonly = append(top.readonly, false)
-		top.inner = append(top.inner, m.lookFor(f.Type))
+	for _, f := range fields {
+		top.names = append(top.names, f.key)
+		top.readonly = append(top.readonly, f.readonly)
+		var inner *look
+		if !f.readonly {
+			inner = m.lookFor(f.typ)
+		}
+		top.inner = append(top.inner, inner)
 	}
 	top.index()
 	// An object is deep when it has a readonly field or a field whose value
@@ -151,29 +172,34 @@ func topObject(view []reflect.StructField) *object {
 	return top
 }
 
-// match returns the index of o's field that a JSON object's key, written
-// as sent, sets, as encoding/json chooses it: the field of the key itself,
-// else the first whose key is the same once folded; and the key as text. It
-// is -1 when there is none. A key is unquoted and folded in the scan's own
-// buffers, so it allocates nothing unless the key's text is longer than 64
-// bytes and has an escape, or is longer than 64 bytes and could still match
-// a field once folded.
-func (s *bodyScan) match(o *object, quoted []byte) (int, []byte) {
+// match returns the fields of o that a JSON object's key, written as sent,
+// may set: the field of the key itself, else every field whose key is the
+// same once folded, in field order; and the key as text. It is nil when
+// there is none. encoding/json (v1) sets the exact field, else the first of
+// the folded ones; another decoder may choose another of them (jsonv2 takes
+// the shallowest), so the scan refuses a key when any of them is readonly
+// and looks inside its value as each of them. A key is unquoted and folded
+// in the scan's own buffers, so it allocates nothing unless the key's text
+// is longer than 64 bytes and has an escape, or is longer than 64 bytes and
+// could still match a field once folded.
+func (s *bodyScan) match(o *object, quoted []byte) ([]int, []byte) {
 	name := quoted[1 : len(quoted)-1]
 	if needsUnquote(name) {
 		name = appendUnquoted(s.keyBuf[:0], name)
 	}
+	s.compares++
 	if k, ok := o.exact[string(name)]; ok {
-		return k, name
+		return o.single[k : k+1], name
 	}
 	// A rune of up to 4 bytes folds to one of at least 1, so a key longer
 	// than 4 times every folded name cannot be one of them.
 	if len(name) <= 4*o.longest {
-		if k, ok := o.folded[string(appendFolded(s.foldBuf[:0], name))]; ok {
-			return k, name
+		s.compares++
+		if ks, ok := o.folded[string(appendFolded(s.foldBuf[:0], name))]; ok {
+			return ks, name
 		}
 	}
-	return -1, name
+	return nil, name
 }
 
 // needsUnquote reports whether the text of a JSON string, without its
@@ -315,6 +341,9 @@ type bodyScan struct {
 	more []bool
 	// match's scratch, for a key unquoted and for it folded.
 	keyBuf, foldBuf [64]byte
+	// compares counts each look of a key among the fields, a map lookup or
+	// a comparison with one field, which TestScanWideStructCost bounds.
+	compares int
 }
 
 // object reads the object at i as o's and returns where it ends. With top it
@@ -326,23 +355,31 @@ func (s *bodyScan) object(i int, o *object, top bool) (int, error) {
 	}
 	for {
 		end := s.str(i)
-		k, name := s.match(o, s.data[i:end])
-		if k >= 0 && o.readonly[k] {
-			return 0, unknown(string(name))
+		ks, name := s.match(o, s.data[i:end])
+		for _, k := range ks {
+			if o.readonly[k] {
+				return 0, unknown(string(name))
+			}
 		}
-		if top && k >= 0 {
-			s.record(o, k)
+		if top && len(ks) > 0 {
+			s.record(o, ks[0]) // the field encoding/json sets
 		}
 		i = s.space(s.space(end) + 1) // past the colon
-		var err error
-		if k >= 0 && o.inner[k] != nil {
-			i, err = s.value(i, o.inner[k])
-		} else {
-			i = s.skip(i)
+		next, looked := 0, false
+		for _, k := range ks {
+			if o.inner[k] == nil {
+				continue
+			}
+			var err error
+			if next, err = s.value(i, o.inner[k]); err != nil {
+				return 0, err
+			}
+			looked = true
 		}
-		if err != nil {
-			return 0, err
+		if !looked {
+			next = s.skip(i)
 		}
+		i = next
 		if i = s.space(i); s.data[i] == '}' {
 			return i + 1, nil
 		}

@@ -2,6 +2,7 @@ package warp
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -165,7 +166,7 @@ func TestEmptyPlanCostsNothingWhenNotNeeded(t *testing.T) {
 		}](),
 		reflect.TypeFor[None](), reflect.TypeFor[int](),
 	} {
-		if p := emptyPlanFor(typ); p != nil {
+		if p, _ := emptyPlanFor(typ); p != nil {
 			t.Errorf("%s has a plan", typ)
 		}
 	}
@@ -177,28 +178,210 @@ func TestEmptyPlanCostsNothingWhenNotNeeded(t *testing.T) {
 		NNBase: NNBase{Labels: []string{}}, Leaf: full, Ptr: &full, List: []nnLeaf{full}, Dict: map[string]nnLeaf{"a": full},
 		Arr: [1]nnLeaf{full}, Children: []nnNode{}, Omit: nil,
 	}
-	p := emptyPlanFor(reflect.TypeFor[nnNode]())
+	p, _ := emptyPlanFor(reflect.TypeFor[nnNode]())
 	rv := reflect.ValueOf(&node).Elem()
-	if allocs := testing.AllocsPerRun(20, func() { p.apply(rv, true, 0) }); allocs != 1 {
+	look := func() { p.apply(rv, true, &emptyWalk{}) }
+	if allocs := testing.AllocsPerRun(20, look); allocs != 1 {
 		t.Errorf("a full answer cost %v allocations to look at, want 1 (for its one map)", allocs)
 	}
 	node.Dict = map[string]nnLeaf{}
-	if allocs := testing.AllocsPerRun(20, func() { p.apply(rv, true, 0) }); allocs != 1 {
-		t.Errorf("a full answer with an empty map cost %v allocations to look at, want 1", allocs)
+	if allocs := testing.AllocsPerRun(20, look); allocs != 0 {
+		t.Errorf("a full answer with an empty map cost %v allocations to look at, want 0", allocs)
 	}
-	node.Dict = nil
 	node.Dict = map[string]nnLeaf{"a": full}
 	node.List = nil
-	if v, changed := p.apply(rv, true, 0); !changed || v.Interface().(nnNode).List == nil {
+	if v, changed := p.apply(rv, true, &emptyWalk{}); !changed || v.Interface().(nnNode).List == nil {
 		t.Errorf("the nil list was not made empty")
 	}
-	// One that has nil lists costs one allocation for each it makes empty,
-	// and a copy of each shared thing that holds one.
-	leaf := emptyPlanFor(reflect.TypeFor[nnLeaf]())
+	// Nil lists in the answer's own value cost nothing: the empty values
+	// written are the plan's own.
+	leaf, _ := emptyPlanFor(reflect.TypeFor[nnLeaf]())
 	var nilLeaf nnLeaf
 	lv := reflect.ValueOf(&nilLeaf).Elem()
-	if allocs := testing.AllocsPerRun(20, func() { nilLeaf = nnLeaf{}; leaf.apply(lv, true, 0) }); allocs > 3 {
-		t.Errorf("three nil fields cost %v allocations, want at most 3", allocs)
+	if allocs := testing.AllocsPerRun(20, func() { nilLeaf = nnLeaf{}; leaf.apply(lv, true, &emptyWalk{}) }); allocs != 0 {
+		t.Errorf("three nil fields cost %v allocations, want 0", allocs)
+	}
+}
+
+// pRow is a row of a long answer, its lists nil.
+type pRow struct {
+	ID   int64             `json:"id"`
+	Name string            `json:"name"`
+	Tags []string          `json:"tags"`
+	Meta map[string]string `json:"meta"`
+}
+
+// A long list of rows with nil lists costs a copy of the list and of the
+// first row that changes, not some for each row: once the list is copied,
+// its rows are the fix-up's own and change in place.
+func TestEmptyPlanCostPerRow(t *testing.T) {
+	rows := make([]pRow, 10_000)
+	p, _ := emptyPlanFor(reflect.TypeFor[[]pRow]())
+	allocs := testing.AllocsPerRun(5, func() { emptied(p, rows) })
+	t.Logf("10 000 rows with nil lists: %.0f allocations", allocs)
+	if allocs > 5 {
+		t.Fatalf("10 000 rows cost %.0f allocations, want at most 5", allocs)
+	}
+	if rows[0].Tags != nil || rows[9999].Meta != nil {
+		t.Fatal("the handler's rows were changed")
+	}
+	out := emptied(p, rows)
+	if out[0].Tags == nil || out[9999].Meta == nil {
+		t.Fatal("the rows were not fixed")
+	}
+}
+
+// The fix-up never changes whether encoding/json leaves a field out: a zero
+// struct or array tagged omitzero stays zero, so it is still left out, and
+// an omitempty list stays empty.
+type pOmit struct {
+	Inner  nnLeaf      `json:"inner,omitzero"`
+	Arr    [1]nnLeaf   `json:"arr,omitzero"`
+	Ptr    *nnLeaf     `json:"ptr,omitzero"`
+	When   zeroWhen    `json:"when,omitzero"`
+	Empty  []string    `json:"empty,omitempty"`
+	Set    nnLeaf      `json:"set,omitzero"`
+	Lists  [][]string  `json:"lists,omitempty"`
+	Name   string      `json:"name"`
+	Nested nnLeafOmits `json:"nested"`
+}
+
+type nnLeafOmits struct {
+	Tags []string `json:"tags,omitzero"`
+	Meta map[string]int
+}
+
+// zeroWhen says it is zero when its list is empty, which reflect would not.
+type zeroWhen struct {
+	Days []int `json:"days"`
+}
+
+func (z zeroWhen) IsZero() bool { return len(z.Days) == 0 }
+
+func TestAnswerKeepsOmitzero(t *testing.T) {
+	v := pOmit{Set: nnLeaf{Tags: []string{"x"}}, When: zeroWhen{Days: []int{}}, Lists: [][]string{}}
+	want, _ := json.Marshal(v)
+	app := New(Config{})
+	Get(app, "/x", func(context.Context, None) (pOmit, error) { return v, nil })
+	got := send(t, mustRegister(t, app), "GET", "/api/x", "").Body.String()
+	// encoding/json writes set's nil lists, and nested's, as null; the route
+	// writes them empty, and leaves out exactly what encoding/json leaves out.
+	wantFixed := `{"set":{"tags":["x"],"raw":"","meta":{}},"name":"","nested":{"Meta":{}}}` + "\n"
+	if got != wantFixed {
+		t.Fatalf("body %s, want %s (encoding/json: %s)", got, wantFixed, want)
+	}
+}
+
+// base is embedded unexported: encoding/json writes its fields as the
+// outer type's, Describe types them so, and the fix-up fills them too.
+type base struct {
+	Labels []string `json:"labels"`
+	inner
+}
+
+type inner struct {
+	Codes map[string]int `json:"codes"`
+}
+
+type withBase struct {
+	base
+	Name string `json:"name"`
+}
+
+func TestAnswerFillsUnexportedEmbedded(t *testing.T) {
+	shared := &withBase{}
+	app := New(Config{})
+	Get(app, "/x", func(context.Context, None) (withBase, error) { return withBase{}, nil })
+	Get(app, "/list", func(context.Context, None) ([]withBase, error) { return []withBase{{}, {Name: "b"}}, nil })
+	Get(app, "/ptr", func(context.Context, None) (*withBase, error) { return shared, nil })
+	h := mustRegister(t, app)
+	for path, want := range map[string]string{
+		"/api/x":    `{"labels":[],"codes":{},"name":""}`,
+		"/api/list": `[{"labels":[],"codes":{},"name":""},{"labels":[],"codes":{},"name":"b"}]`,
+		"/api/ptr":  `{"labels":[],"codes":{},"name":""}`,
+	} {
+		if got := strings.TrimSpace(send(t, h, "GET", path, "").Body.String()); got != want {
+			t.Errorf("%s: %s, want %s", path, got, want)
+		}
+	}
+	if shared.Labels != nil || shared.Codes != nil {
+		t.Fatal("the shared value was changed")
+	}
+	d, err := app.Describe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ty := range d.Types {
+		if ty.Name == "withBase" {
+			for _, f := range ty.Fields {
+				if f.Name != "name" && (strings.Contains(f.TS, "null") || f.Optional) {
+					t.Errorf("Describe says %s is %s, optional %v", f.Name, f.TS, f.Optional)
+				}
+			}
+		}
+	}
+}
+
+// pBase is embedded through an unexported pointer: its lists cannot be
+// replaced by copies, so such an answer is a registration mistake.
+type pBase struct {
+	Labels []string `json:"labels"`
+}
+
+type withPtrBase struct {
+	*pBase
+	Name string `json:"name"`
+}
+
+func TestAnswerRefusesUnexportedEmbeddedPointer(t *testing.T) {
+	app := New(Config{})
+	Get(app, "/x", func(context.Context, None) (withPtrBase, error) { return withPtrBase{}, nil })
+	want := `warp: GET /x: withPtrBase embeds *pBase, a pointer to an unexported struct with lists in it, which Warp cannot write as [] when they are nil; embed pBase by value.`
+	if errText(app.Err()) != want {
+		t.Fatalf("Err() = %q\nwant %q", errText(app.Err()), want)
+	}
+}
+
+// pTwo holds itself through two pointers.
+type pTwo struct {
+	Tags []string `json:"tags"`
+	L    *pTwo    `json:"l"`
+	R    *pTwo    `json:"r"`
+}
+
+// A value that holds itself through two pointers ends at once, as
+// encoding/json's own cycle error; a deep value that does not hold itself
+// is filled in whole, however deep.
+func TestAnswerCyclesEndAndDeepValuesAreFilled(t *testing.T) {
+	logs := captureLog(t)
+	for _, tags := range [][]string{nil, {}} {
+		loop := &pTwo{Tags: tags}
+		loop.L, loop.R = loop, loop
+		app := New(Config{})
+		Get(app, "/x", func(context.Context, None) (*pTwo, error) { return loop, nil })
+		h := mustRegister(t, app)
+		done := make(chan int, 1)
+		began := time.Now()
+		go func() { done <- send(t, h, "GET", "/api/x", "").Code }()
+		select {
+		case code := <-done:
+			if code != http.StatusInternalServerError || !strings.Contains(logs.String(), "cycle") {
+				t.Fatalf("a two-pointer cycle answered %d, log %q", code, logs)
+			}
+			t.Logf("a two-pointer cycle ended in %v", time.Since(began))
+		case <-time.After(10 * time.Second):
+			t.Fatal("a two-pointer cycle had not ended after 10 s")
+		}
+	}
+	var head *pTwo
+	for range 1500 {
+		head = &pTwo{L: head}
+	}
+	app := New(Config{})
+	Get(app, "/deep", func(context.Context, None) (*pTwo, error) { return head, nil })
+	body := send(t, mustRegister(t, app), "GET", "/api/deep", "").Body.String()
+	if n := strings.Count(body, `"tags":[]`); n != 1500 || strings.Contains(body, `"tags":null`) {
+		t.Fatalf("%d of 1500 lists filled in", n)
 	}
 }
 

@@ -31,11 +31,14 @@ type plan struct {
 	// find an unknown field the decoder met after a wrong type.
 	view, raw reflect.Type
 	body      [][]int // where view's field i sits in the input
-	// keys are view's keys, to find which ones the body sent and, inside
-	// their values, a readonly key the view's types would take.
-	keys  *object
-	query []param
-	path  []param
+	// keys are the body's keys, readonly ones included, to find which ones
+	// the body sent and to refuse a readonly key at any depth.
+	keys *object
+	// readonly puts back to zero every readonly field the view's values
+	// hold, at any depth, once the body is decoded; nil when they hold none.
+	readonly *zeroPlan
+	query    []param
+	path     []param
 	// checkSelf says the input has Validate(ctx); checkBody is where its
 	// body field is when the body's type has it.
 	checkSelf bool
@@ -107,7 +110,9 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 		return true
 	}
 	var view, raw []reflect.StructField
+	var top []topField // the body's keys for the scan, readonly ones included
 	addView := func(key, opts string, ft reflect.Type, index []int) {
+		top = append(top, topField{key, ft, false})
 		view = append(view, reflect.StructField{
 			Name: "F" + strconv.Itoa(len(view)),
 			Type: ft,
@@ -176,7 +181,11 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 				inner, _ := inputFields(f.Type, f.index)
 				for _, bf := range inner {
 					key, opts, ok := jsonTagOf(bf.StructField)
-					if ok && validJSONName(key) && !isReadonly(bf.StructField) {
+					switch {
+					case !ok || !validJSONName(key):
+					case isReadonly(bf.StructField):
+						top = append(top, topField{key, bf.Type, true})
+					default:
 						addView(key, opts, bf.Type, bf.index)
 					}
 				}
@@ -200,6 +209,9 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 				ok = false
 			}
 			if readonly {
+				if ok {
+					top = append(top, topField{jsonKey, f.Type, true})
+				}
 				continue // never read, so what is inside it is not the body's
 			}
 			mistakes = append(mistakes, bodyMistakes(f.Type, visited)...)
@@ -256,7 +268,8 @@ func planFor(t reflect.Type, method, path string) (*plan, []string) {
 	}
 	if p.readBody {
 		p.view, p.raw = reflect.StructOf(view), reflect.StructOf(raw)
-		p.keys = topObject(view)
+		p.keys = topObject(top)
+		p.readonly = readonlyPlanFor(p.view)
 		if len(jsonFields) > 0 {
 			p.bodyType = t
 		}
@@ -733,6 +746,13 @@ func (p *plan) decode(w http.ResponseWriter, r *http.Request, dst reflect.Value,
 	if err != nil {
 		return nil, err
 	}
+	// The scan refuses a readonly key, matching keys as encoding/json does.
+	// Should a decoder ever match one the scan did not (another version of
+	// encoding/json, GOEXPERIMENT=jsonv2), the field is still never set:
+	// every readonly field is put back to zero here.
+	if p.readonly != nil {
+		p.readonly.zero(view.Elem())
+	}
 	for i, index := range p.body {
 		dst.FieldByIndex(index).Set(view.Elem().Field(i))
 	}
@@ -801,8 +821,14 @@ func (p *plan) bodyError(data []byte, err error) error {
 		if name, ok := unknownField(decodeStrict(data, reflect.New(p.raw).Interface())); ok {
 			return unknown(name)
 		}
+		// Under GOEXPERIMENT=jsonv2 a field's own decoder refusing a value
+		// (base64 for bytes) is a type error that wraps its cause; encoding/json
+		// v1 returns the cause itself.
+		if errors.Unwrap(te) != nil {
+			return BadRequest(cannotTake)
+		}
 		if te.Field != "" {
-			return wrongType(map[string]string{te.Field: sendWhat(te.Type)})
+			return wrongType(map[string]string{fieldPath(p.view, te.Field): sendWhat(te.Type)})
 		}
 		return BadRequest(notJSON)
 	}
@@ -812,7 +838,47 @@ func (p *plan) bodyError(data []byte, err error) error {
 	if se := (*json.SyntaxError)(nil); errors.As(err, &se) {
 		return BadRequest(notJSON)
 	}
-	return BadRequest("The body has a value its field cannot take.")
+	return BadRequest(cannotTake)
+}
+
+const cannotTake = "The body has a value its field cannot take."
+
+// fieldPath is the path of a type error's field, field as the decoder gives
+// it in a value of type t, keeping only the keys of struct fields: a list's
+// index and a map's key are left out ("tags", not "tags.0"), as encoding/json
+// v1 writes it and jsonv2 does not.
+func fieldPath(t reflect.Type, field string) string {
+	var kept []string
+	for seg := range strings.SplitSeq(field, ".") {
+		for t != nil && t.Kind() == reflect.Pointer {
+			t = t.Elem()
+		}
+		switch {
+		case t == nil:
+			kept = append(kept, seg)
+		case t.Kind() == reflect.Slice || t.Kind() == reflect.Array || t.Kind() == reflect.Map:
+			t = t.Elem() // seg is an index or a key
+		case t.Kind() == reflect.Struct:
+			kept = append(kept, seg)
+			t = fieldByJSONKey(t, seg)
+		default:
+			kept = append(kept, seg)
+			t = nil
+		}
+	}
+	return strings.Join(kept, ".")
+}
+
+// fieldByJSONKey is the type of t's field whose json key is key, embedded
+// structs' included, or nil.
+func fieldByJSONKey(t reflect.Type, key string) reflect.Type {
+	fields, _ := inputFields(t, nil)
+	for _, f := range fields {
+		if k, _, ok := jsonTagOf(f.StructField); ok && (k == key || strings.EqualFold(k, key)) {
+			return f.Type
+		}
+	}
+	return nil
 }
 
 // unknownField reads the field's name from the decoder's error. encoding/json
