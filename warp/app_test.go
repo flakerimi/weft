@@ -444,7 +444,7 @@ func TestNameOverridesAndClashes(t *testing.T) {
 	app.Handle("GET /a", text("a"))
 	app.Handle("GET /a/{id}", text("a"))
 	want := strings.Join([]string{
-		`warp: module "products" has two routes named "list" (GET /products and GET /products/all); give one a warp.Name.`,
+		`warp: module "products" has two routes named "list" (GET /products and GET /products/all); give them different names.`,
 		`warp: module "products" has two routes named "products" (GET /products/{id} and GET /products/{id}/{$}); give one a warp.Name.`,
 		`warp: Name("") is empty; give the route a name.`,
 	}, "\n")

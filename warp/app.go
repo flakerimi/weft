@@ -111,7 +111,7 @@ type App struct {
 	modules    []Module
 	names      map[string]bool
 	current    string            // the module whose Register is running
-	routeNames map[string]string // a module's name and a route's name to the route
+	routeNames map[string]routeName // a module's name and a route's name to the route
 	routes     []Route
 	plans      []*plan // each route's binding plan, beside routes; nil for Handle
 	wraps      []func(http.Handler) http.Handler
@@ -134,7 +134,7 @@ func New(cfg Config) *App {
 		mux:        http.NewServeMux(),
 		xo:         xo,
 		names:      map[string]bool{},
-		routeNames: map[string]string{},
+		routeNames: map[string]routeName{},
 		provided:   map[reflect.Type]any{},
 	}
 	for _, o := range bad {
@@ -170,6 +170,22 @@ func (a *App) Use(modules ...Module) {
 			a.fail("module %q could not register: %w", name, err)
 		}
 	}
+}
+
+// routeName is the route a module's route name was given to, and whether it
+// was given with Name.
+type routeName struct {
+	route string
+	named bool
+}
+
+// Module returns the name of the module whose Register is running, or "" when
+// none is: the module a route added now belongs to. A package that registers
+// routes for a module, as data.Resource does, reads it to name them.
+func (a *App) Module() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.current
 }
 
 // register runs m's Register with m as the current module.
@@ -297,8 +313,12 @@ func (a *App) route(method, path string, in, out reflect.Type, p *plan, status i
 	key := module + "\x00" + rc.name
 	other, clash := a.routeNames[key]
 	a.mu.Unlock()
-	if module != "" && clash && other != name {
-		a.fail("module %q has two routes named %q (%s and %s); give one a warp.Name.", module, rc.name, other, name)
+	if module != "" && clash && other.route != name {
+		if other.named && rc.nameSet {
+			a.fail("module %q has two routes named %q (%s and %s); give them different names.", module, rc.name, other.route, name)
+		} else {
+			a.fail("module %q has two routes named %q (%s and %s); give one a warp.Name.", module, rc.name, other.route, name)
+		}
 		return
 	}
 	if out == noneType {
@@ -315,7 +335,7 @@ func (a *App) route(method, path string, in, out reflect.Type, p *plan, status i
 	}
 	a.mu.Lock()
 	if module != "" {
-		a.routeNames[key] = name
+		a.routeNames[key] = routeName{name, rc.nameSet}
 	}
 	a.routes = append(a.routes, Route{
 		Module: module, Name: rc.name, Method: method, Path: "/api" + path,
