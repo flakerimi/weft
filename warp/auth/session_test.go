@@ -124,3 +124,17 @@ func TestCanWithoutTheModule(t *testing.T) {
 		t.Fatalf("Err = %v, want %s", err, want)
 	}
 }
+
+// A key shorter than the 32 bytes Start requires, an empty one above all,
+// signs nothing that readSession takes, however Start was skipped.
+func TestShortKeyReadsNoSession(t *testing.T) {
+	for _, secret := range [][]byte{nil, {}, []byte("short"), testSecret[:31]} {
+		value := sessionValue(secret, 1, testNow.Add(-time.Hour), testNow.Add(time.Hour))
+		if _, ok := readSession(secret, value, testNow); ok {
+			t.Errorf("a key of %d bytes read its own session", len(secret))
+		}
+	}
+	if _, ok := readSession(testSecret, sessionValue(testSecret, 1, testNow.Add(-time.Hour), testNow.Add(time.Hour)), testNow); !ok {
+		t.Error("a key of 32 bytes read no session")
+	}
+}

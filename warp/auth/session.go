@@ -41,12 +41,17 @@ func sign(secret []byte, signed string) []byte {
 	return mac.Sum(nil)
 }
 
-// readSession reads a session value at now. A value over 256 bytes, one
-// without exactly four parts, or an id, making or expiry that is not a whole
-// number, is refused before anything is computed; then a mac that does not
-// match, or an expiry at or before now.
+// minSecret is the shortest AUTH_SECRET, in bytes, that Start takes.
+const minSecret = 32
+
+// readSession reads a session value at now. A key shorter than minSecret,
+// as one served without Start or after a Start that failed has, reads no
+// session at all. A value over 256 bytes, one without exactly four parts, or
+// an id, making or expiry that is not a whole number, is refused before
+// anything is computed; then a mac that does not match, or an expiry at or
+// before now.
 func readSession(secret []byte, value string, now time.Time) (session, bool) {
-	if len(value) > maxSession {
+	if len(secret) < minSecret || len(value) > maxSession {
 		return session{}, false
 	}
 	parts := strings.Split(value, ".")

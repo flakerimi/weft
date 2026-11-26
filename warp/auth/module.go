@@ -107,7 +107,7 @@ func (m *module) Register(app *warp.App) error {
 func (m *module) Start(ctx context.Context) error {
 	cfg := m.app.Config()
 	secret := cfg.Get("AUTH_SECRET")
-	if len(secret) < 32 {
+	if len(secret) < minSecret {
 		return fmt.Errorf("AUTH_SECRET is %d bytes; set it to 32 or more random ones in .env, for example from openssl rand -base64 48.", len(secret))
 	}
 	days := 30
