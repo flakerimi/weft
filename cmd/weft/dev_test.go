@@ -1258,3 +1258,38 @@ func TestDevRunsGenAfterGoChange(t *testing.T) {
 		t.Errorf("exit %d: %s", code, r.stderr)
 	}
 }
+
+// weft dev picks the Go server's port after the page server's and before the
+// page server binds it, so the Go server's must never be the page server's:
+// on a CI runner the system handed the same port out twice and the page
+// server then found its own port in use.
+func TestFreePortAvoidsWhatItIsTold(t *testing.T) {
+	for range 200 {
+		page, err := freePort("dev")
+		if err != nil {
+			t.Fatal(err)
+		}
+		goPort, err := freePort("dev", page)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if goPort == page {
+			t.Fatalf("freePort gave %d, the port it was told to avoid", page)
+		}
+	}
+	// The check itself: a port the system hands out is skipped when it is to be avoided.
+	saved := portFreeAt
+	t.Cleanup(func() { portFreeAt = saved })
+	var offered []int
+	portFreeAt = func(port int) bool { offered = append(offered, port); return true }
+	first, err := freePort("dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 50 {
+		offered = offered[:0]
+		if p, err := freePort("dev", first); err != nil || p == first || slices.Contains(offered, first) {
+			t.Fatalf("freePort(\"dev\", %d) = %d, %v, having offered %v", first, p, err, offered)
+		}
+	}
+}
