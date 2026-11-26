@@ -8,7 +8,7 @@ counter. The text is one file, [`content.json`](content.json), that every site i
 
 | Folder | What it is |
 |---|---|
-| [`weft/`](weft) | The Weft site: `pages/index.vue` with `@weft/ui`, the counter as a Vapor island, built by `weft-build-pages` and embedded in a Go binary that serves it with `warp.Serve` (like `site-src`). Part of the pnpm workspace. The results below, from 2026-11-25, label its server `weft binary (weft.Serve)`, as their results file recorded it before `weft.Serve` became `warp.Serve`; later runs label it `weft binary (warp.Serve)`. |
+| [`weft/`](weft) | The Weft site: `pages/index.vue` with `@weft/ui`, the counter as a Vapor island, built by `weft-build-pages` and embedded in a Go binary that serves it with `warp.Serve` (like `site-src`). Part of the pnpm workspace. The results below label its server `weft binary (warp.Serve)`; the results files of 2026-11-20 and 2026-11-25, from before `weft.Serve` became `warp.Serve`, label it `weft binary (weft.Serve)`. |
 | [`astro/`](astro) | The Astro site: `/` with the counter as a Vue island (`@astrojs/vue`, `client:idle`), and `/no-framework/` with the counter as a plain `<script>` in an `.astro` component. |
 | [`nuxt/`](nuxt) | The Nuxt site: `app/pages/index.vue`, the counter a Vue component. Built twice: `nuxt generate` (static) and `nuxt build` (its Node server, Nitro, with the page prerendered). |
 | [`next/`](next) | The Next.js site: the App Router, the page a server component and the counter its one client component. Built twice: a static export and the build `next start` serves, the page prerendered in both. |
@@ -63,10 +63,12 @@ to `<file>` and leaves `results/` and this page alone.
   Nothing pins any server to a core either: macOS has no CPU affinity.
 - **Load.** `load/` runs in its own process with all cores: 64 keep-alive connections, `Accept-Encoding: br, gzip`,
   2 s warm-up, 10 s measured, the landing's HTML only. Every request that starts and ends inside the 10 s counts.
-  Three rounds per target, the targets interleaved; the median and its range.
+  Three rounds per target, the targets interleaved; the median and its range. Its requests are Go's HTTP/1.1 client
+  asking each server directly, with no `Sec-Fetch-Mode` and no proxy header: not a browser's navigation, so since
+  2026-11-26 `warp.Serve` sends them no 103 Early Hints (see [Where Weft loses](#where-weft-loses)).
 - **TTFB.** 50 requests one after another, each on a new connection, after 5 untimed ones, timed to the final
-  response's headers (past Weft's 103 Early Hints; the first byte of the 103 is in the JSON as
-  `first_byte_median_ms`).
+  response's headers, past any 103 Early Hints (the first byte of anything, a 103 included, is in the JSON as
+  `first_byte_median_ms`). Like the load, these requests get no 103 from Weft since 2026-11-26.
 - **Lighthouse.** Lighthouse 13.6.0, the default mobile preset (simulated throttling), headless Chrome, a fresh
   profile each run, five runs per target interleaved so drift hits all targets alike. Median and range.
 - **Bytes.** The resources a Lighthouse run loaded (status 200), each fetched again. Text is counted as brotli
@@ -78,28 +80,28 @@ to `<file>` and leaves `results/` and this page alone.
 ## Results
 
 <!-- results:start -->
-Run of 2026-11-25 ([`results/2026-11-25.json`](results/2026-11-25.json)).
+Run of 2026-11-26 ([`results/2026-11-26.json`](results/2026-11-26.json)).
 
-Machine: Apple M4, 10 cores (4 performance), 32 GB, macOS 27.2.1 (26B131). Node v26.13.1, go1.26.2, Chrome 158.0.8127.88 headless. Weft at `857f786` with Vue 3.6.0-rc.16; Astro 7.4.13, @astrojs/vue 7.1.6, Vue 3.5.46; Nuxt 4.7.0, Vue 3.5.46; Next.js 16.4.6, React 19.3.1; SvelteKit 3.4.0, Svelte 5.59.2; Lighthouse 13.6.0.
+Machine: Apple M4, 10 cores (4 performance), 32 GB, macOS 27.2.1 (26B131). Node v26.13.1, go1.26.2, Chrome 158.0.8127.88 headless. Weft at `6c8cb2d` with Vue 3.6.0-rc.16; Astro 7.4.13, @astrojs/vue 7.1.6, Vue 3.5.46; Nuxt 4.7.0, Vue 3.5.46; Next.js 16.4.6, React 19.3.1; SvelteKit 3.4.0, Svelte 5.59.2; Lighthouse 13.6.0.
 
 | Site | Server | HTML+CSS (br) | JS files (br) | Inline JS (raw) | Total (br) | Requests | TTFB, ms | Lighthouse | LCP, ms | Req/s (Go servers at GOMAXPROCS=1) | p50 / p99, ms |
 |---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
-| Weft | weft binary (weft.Serve), GOMAXPROCS=1 | 3.1 KB | 20.8 KB | 0 B | 82.4 KB | 5 | 0.20 [0.18–0.25] | 100 [100–100] | 1276 [1276–1276] | 111,249 [108,824–123,643] | 0.57 / 1.13 |
-| Astro, Vue island | astro preview | 3.5 KB | 26.5 KB | 5238 B | 88.5 KB | 5 | 0.31 [0.28–0.34] | 100 [100–100] | 1356 [1354–1357] | 19,354 [18,635–20,943] | 3.20 / 4.66 |
-| Astro, Vue island | Go static + gzip, GOMAXPROCS=1 | 3.5 KB | 26.5 KB | 5238 B | 88.5 KB | 5 | 0.28 [0.25–0.30] | 100 [100–100] | 1353 [1351–1354] | 7,964 [7,924–7,988] | 8.19 / 13.49 |
-| Astro, Vue island | Go, pre-compressed in memory, GOMAXPROCS=1 | 3.5 KB | 26.5 KB | 5238 B | 88.5 KB | 5 | 0.12 [0.11–0.14] | 100 [100–100] | 1351 [1350–1500] | 126,285 [122,218–136,192] | 0.48 / 1.19 |
-| Astro, no framework island | astro preview | 1.7 KB | 0 B | 237 B | 60.2 KB | 2 | 0.26 [0.24–0.28] | 100 [100–100] | 752 [752–753] | 21,304 [21,258–22,036] | 2.89 / 4.25 |
-| Astro, no framework island | Go static + gzip, GOMAXPROCS=1 | 1.7 KB | 0 B | 237 B | 60.2 KB | 2 | 0.21 [0.20–0.22] | 100 [100–100] | 751 [750–751] | 11,131 [11,090–11,271] | 5.86 / 9.13 |
-| Astro, no framework island | Go, pre-compressed in memory, GOMAXPROCS=1 | 1.7 KB | 0 B | 237 B | 60.2 KB | 2 | 0.12 [0.11–0.14] | 100 [100–100] | 750 [750–750] | 129,955 [129,382–132,615] | 0.47 / 1.10 |
-| Nuxt | its Node server (Nitro) | 1.9 KB | 62.3 KB | 153 B | 122.9 KB | 8 | 0.21 [0.19–0.23] | 99 [99–99] | 2252 [2251–2274] | 50,085 [49,515–51,533] | 1.23 / 2.18 |
-| Nuxt | Go static + gzip, GOMAXPROCS=1 | 1.9 KB | 62.3 KB | 153 B | 122.8 KB | 7 | 0.20 [0.19–0.23] | 100 [100–100] | 1651 [1651–1653] | 13,061 [13,040–13,156] | 4.92 / 8.19 |
-| Nuxt | Go, pre-compressed in memory, GOMAXPROCS=1 | 1.9 KB | 62.3 KB | 153 B | 122.8 KB | 7 | 0.12 [0.11–0.13] | 100 [100–100] | 1575 [1575–1576] | 129,176 [128,765–132,404] | 0.47 / 1.10 |
-| Next.js | next start | 3.4 KB | 112.5 KB | 9255 B | 174.4 KB | 9 | 0.48 [0.46–0.52] | 99 [99–99] | 2014 [2009–2022] | 10,053 [9,976–10,233] | 6.20 / 9.17 |
-| Next.js | Go static + gzip, GOMAXPROCS=1 | 3.4 KB | 112.6 KB | 9255 B | 174.5 KB | 9 | 0.27 [0.24–0.30] | 99 [99–99] | 2009 [1953–2151] | 7,797 [7,770–7,830] | 8.29 / 13.32 |
-| Next.js | Go, pre-compressed in memory, GOMAXPROCS=1 | 3.4 KB | 112.6 KB | 9255 B | 174.5 KB | 9 | 0.12 [0.11–0.15] | 100 [99–100] | 1934 [1932–1935] | 131,974 [130,131–132,155] | 0.46 / 1.08 |
-| SvelteKit | its Node server (adapter-node) | 2.0 KB | 34.9 KB | 530 B | 95.3 KB | 13 | 0.17 [0.15–0.20] | 100 [100–100] | 1505 [1503–1656] | 38,099 [37,977–38,630] | 1.45 / 3.77 |
-| SvelteKit | Go static + gzip, GOMAXPROCS=1 | 2.0 KB | 34.9 KB | 532 B | 95.3 KB | 13 | 0.21 [0.20–0.22] | 100 [100–100] | 1504 [1502–1655] | 12,681 [12,593–12,758] | 5.04 / 8.70 |
-| SvelteKit | Go, pre-compressed in memory, GOMAXPROCS=1 | 2.0 KB | 34.9 KB | 532 B | 95.3 KB | 13 | 0.12 [0.11–0.14] | 100 [100–100] | 1501 [1501–1501] | 129,418 [126,812–130,162] | 0.47 / 1.10 |
+| Weft | weft binary (warp.Serve), GOMAXPROCS=1 | 3.1 KB | 21.4 KB | 0 B | 83.0 KB | 5 | 0.20 [0.17–0.24] | 100 [100–100] | 1276 [1276–1501] | 119,964 [116,204–122,437] | 0.51 / 1.36 |
+| Astro, Vue island | astro preview | 3.5 KB | 26.5 KB | 5238 B | 88.5 KB | 5 | 0.32 [0.29–0.36] | 100 [100–100] | 1357 [1357–1358] | 17,915 [17,112–19,077] | 3.42 / 5.62 |
+| Astro, Vue island | Go static + gzip, GOMAXPROCS=1 | 3.5 KB | 26.5 KB | 5238 B | 88.5 KB | 5 | 0.26 [0.24–0.28] | 100 [100–100] | 1355 [1351–1503] | 7,513 [7,296–8,082] | 8.53 / 17.98 |
+| Astro, Vue island | Go, pre-compressed in memory, GOMAXPROCS=1 | 3.5 KB | 26.5 KB | 5238 B | 88.5 KB | 5 | 0.12 [0.11–0.13] | 100 [100–100] | 1351 [1351–1500] | 117,173 [98,956–124,313] | 0.51 / 1.37 |
+| Astro, no framework island | astro preview | 1.7 KB | 0 B | 237 B | 60.2 KB | 2 | 0.26 [0.25–0.30] | 100 [100–100] | 752 [751–754] | 19,784 [19,712–20,833] | 3.06 / 5.01 |
+| Astro, no framework island | Go static + gzip, GOMAXPROCS=1 | 1.7 KB | 0 B | 237 B | 60.2 KB | 2 | 0.23 [0.21–0.25] | 100 [100–100] | 751 [751–751] | 10,762 [10,592–11,036] | 6.00 / 9.65 |
+| Astro, no framework island | Go, pre-compressed in memory, GOMAXPROCS=1 | 1.7 KB | 0 B | 237 B | 60.2 KB | 2 | 0.13 [0.12–0.14] | 100 [100–100] | 750 [750–750] | 123,546 [117,226–124,319] | 0.49 / 1.22 |
+| Nuxt | its Node server (Nitro) | 1.9 KB | 62.3 KB | 153 B | 122.9 KB | 8 | 0.20 [0.19–0.22] | 99 [98–99] | 2255 [2252–2275] | 45,747 [44,603–46,352] | 1.32 / 2.89 |
+| Nuxt | Go static + gzip, GOMAXPROCS=1 | 1.9 KB | 62.3 KB | 153 B | 122.8 KB | 7 | 0.22 [0.20–0.24] | 100 [100–100] | 1654 [1652–1656] | 12,568 [12,525–12,806] | 5.09 / 9.01 |
+| Nuxt | Go, pre-compressed in memory, GOMAXPROCS=1 | 1.9 KB | 62.3 KB | 153 B | 122.8 KB | 7 | 0.13 [0.12–0.15] | 100 [100–100] | 1576 [1575–1576] | 121,885 [118,184–124,380] | 0.50 / 1.25 |
+| Next.js | next start | 3.4 KB | 112.5 KB | 9255 B | 174.4 KB | 9 | 0.53 [0.48–0.65] | 99 [99–99] | 2016 [2015–2022] | 9,389 [9,312–9,728] | 6.59 / 10.32 |
+| Next.js | Go static + gzip, GOMAXPROCS=1 | 3.4 KB | 112.6 KB | 9255 B | 174.5 KB | 9 | 0.26 [0.24–0.27] | 99 [99–99] | 2011 [2005–2014] | 7,523 [7,494–7,611] | 8.57 / 15.06 |
+| Next.js | Go, pre-compressed in memory, GOMAXPROCS=1 | 3.4 KB | 112.6 KB | 9255 B | 174.5 KB | 9 | 0.12 [0.11–0.13] | 100 [99–100] | 1933 [1933–1936] | 118,752 [112,045–118,844] | 0.51 / 1.30 |
+| SvelteKit | its Node server (adapter-node) | 2.0 KB | 34.9 KB | 530 B | 95.3 KB | 13 | 0.16 [0.15–0.19] | 100 [100–100] | 1506 [1504–1510] | 34,284 [31,516–34,561] | 1.58 / 4.46 |
+| SvelteKit | Go static + gzip, GOMAXPROCS=1 | 2.0 KB | 34.9 KB | 530 B | 95.3 KB | 13 | 0.20 [0.19–0.24] | 100 [100–100] | 1656 [1506–1663] | 12,458 [11,696–12,550] | 5.15 / 9.18 |
+| SvelteKit | Go, pre-compressed in memory, GOMAXPROCS=1 | 2.0 KB | 34.9 KB | 530 B | 95.3 KB | 13 | 0.11 [0.11–0.13] | 100 [100–100] | 1501 [1501–1501] | 121,082 [120,763–121,297] | 0.50 / 1.26 |
 
 Bytes: KB is 1024 B. Text is counted as brotli quality 11 (what the Weft build stores), whatever the server sends; the image as it is. TTFB: median of 50 requests on new connections, [p25–p75]. Lighthouse and LCP: median of 5 mobile runs, [min–max]. Load: 64 connections, 2s warm-up, 10s measured, median of 3 rounds [min–max]; p50 and p99 are the medians of the rounds' own. No errors unless noted. The Go servers (Weft, Go static, Go pre-compressed) run at GOMAXPROCS=1; the frameworks' own servers are Node and are not held to one core.
 
@@ -107,7 +109,7 @@ What each server really sent (Accept-Encoding: br, gzip):
 
 | Site | Server | Page encoding | JS on the wire | Total on the wire | LCP element |
 |---|---|---|--:|--:|---|
-| Weft | weft binary (weft.Serve), GOMAXPROCS=1 | br | 20.8 KB | 82.4 KB | `div.bench > main.weft-page > div.weft-page__body > img.bench-image` |
+| Weft | weft binary (warp.Serve), GOMAXPROCS=1 | br | 21.4 KB | 83.0 KB | `div.bench > main.weft-page > div.weft-page__body > img.bench-image` |
 | Astro, Vue island | astro preview | gzip | 29.4 KB | 92.1 KB | `body > main.page > img.image` |
 | Astro, Vue island | Go static + gzip, GOMAXPROCS=1 | gzip | 29.2 KB | 91.8 KB | `body > main.page > img.image` |
 | Astro, Vue island | Go, pre-compressed in memory, GOMAXPROCS=1 | br | 26.5 KB | 88.5 KB | `body > main.page > img.image` |
@@ -127,51 +129,80 @@ What each server really sent (Accept-Encoding: br, gzip):
 
 ## Reading the results
 
-The numbers in the prose below are from the run in the table (2026-11-25).
+The numbers in the prose below are from the run in the table (2026-11-26).
 
 - **Requests per second is a result about servers, not frameworks.** Behind the same Go server, answering from
-  memory with brotli stored at build, the four other frameworks' pages do 126,285 to 131,974 requests per second.
-  Weft's own binary does 111,249 [108,824–123,643]: the same order, and in this run below all of them. What
-  `warp.Serve` gives is that serving in the binary, with nothing to set up. It does not make pages faster to send
-  than a pre-compressed static site behind an equally careful server.
-- **Each framework behind the server it ships with** is where the gap is: Weft 111,249; Nuxt's Node server 50,085;
-  SvelteKit's 38,099; `astro preview` 19,354 (Vue island) and 21,304 (no framework); `next start` 10,053. Weft's
+  memory with brotli stored at build, the four other frameworks' pages do 117,173 to 123,546 requests per second.
+  Weft's own binary does 119,964 [116,204–122,437]: inside that range, above Astro's Vue page (117,173) and Next.js
+  (118,752), below SvelteKit (121,082), Nuxt (121,885) and Astro with no framework (123,546), and the ranges
+  overlap. On 2026-11-25 it was below all of them, because of the 103 Early Hints it sent before every page (see
+  [Where Weft loses](#where-weft-loses)). What `warp.Serve` gives is that serving in the binary, with nothing to set
+  up. It does not make pages faster to send than a pre-compressed static site behind an equally careful server.
+- **Each framework behind the server it ships with** is where the gap is: Weft 119,964; Nuxt's Node server 45,747;
+  SvelteKit's 34,284; `astro preview` 17,915 (Vue island) and 19,784 (no framework); `next start` 9,389. Weft's
   server is held to one core and the Node servers are not. Nuxt's server sent the page and its scripts with no
   compression at all (252.2 KB on the wire against 122.8 KB as brotli), which is part of why it is the fastest of
   the Node servers; SvelteKit's sent brotli stored at build; `next start` and `astro preview` gzip each response.
-- **A plain file server that gzips on the fly is the slowest way to serve any of them**: 7,797 to 13,061 requests
+- **A plain file server that gzips on the fly is the slowest way to serve any of them**: 7,513 to 12,568 requests
   per second, below every framework's own server but Next's.
-- **JavaScript is the result about frameworks.** Weft's page loads 20.8 KB of script files; Astro with a Vue island
+- **JavaScript is the result about frameworks.** Weft's page loads 21.4 KB of script files; Astro with a Vue island
   26.5 KB plus 5.2 KB inline; SvelteKit 34.9 KB; Nuxt 62.3 KB; Next.js 112.5 KB plus 9.3 KB inline. Astro with no
   framework island loads none, only 237 B inline. Two confounds: the sites do not run the same framework runtime
   (Weft ships Vue 3.6.0-rc.16 with Vapor; Astro and Nuxt run Vue 3.5.46 with the virtual DOM; Next runs React;
   SvelteKit runs Svelte), and Nuxt and SvelteKit hydrate the whole page where Weft, Astro and Next hydrate only the
   counter, because that is each one's default.
 - **Total transfer** follows the JavaScript, since the image is the same 59,862 B everywhere: 60.2 KB (Astro, no
-  framework), 82.4 KB (Weft), 88.5 KB (Astro, Vue island), 95.3 KB (SvelteKit), 122.8 KB (Nuxt), 174.5 KB (Next.js).
-- **Lighthouse scores 99 or 100 for all of them.** The score does not separate these pages; LCP does: 750 ms
-  (Astro, no framework), 1276 ms (Weft), 1351–1356 ms (Astro, Vue island), 1501–1505 ms (SvelteKit), 1575–2252 ms
-  (Nuxt, slowest behind its own uncompressed server), 1934–2014 ms (Next.js). The LCP column is Lighthouse's
+  framework), 83.0 KB (Weft), 88.5 KB (Astro, Vue island), 95.3 KB (SvelteKit), 122.8 KB (Nuxt), 174.5 KB (Next.js).
+- **Lighthouse's median score is 99 or 100 for all of them.** The score does not separate these pages; LCP does:
+  750–752 ms (Astro, no framework), 1276 ms (Weft), 1351–1357 ms (Astro, Vue island), 1501–1656 ms (SvelteKit),
+  1576–2255 ms (Nuxt, slowest behind its own uncompressed server), 1933–2016 ms (Next.js). The LCP column is Lighthouse's
   simulation (Lantern), not a load on a throttled device; see the side experiment.
 - **TTFB** is a fraction of a millisecond everywhere on loopback. The pre-compressed Go server is fastest at
-  0.12 ms; Weft's binary is at 0.20 ms, level with the Node servers of Nuxt (0.21) and SvelteKit (0.17). Too small
-  to matter on a real network.
+  0.11 to 0.13 ms; Weft's binary is at 0.20 ms, level with Nuxt's Node server (0.20) and behind SvelteKit's (0.16).
+  It sent this client no 103, so the 103 is not why (see [Where Weft loses](#where-weft-loses)). Too small to
+  matter on a real network.
 - **Weft's page changed since the run of 2026-11-20**: it now loads a third script, `boot-*.js` (553 B as brotli),
-  so it makes five requests where it made four, and its simulated LCP is 1276 ms where it was 1200 ms.
+  so it makes five requests where it made four, and its simulated LCP is 1276 ms where it was 1200 ms. Its script
+  files are 21.4 KB (21,900 B) where they were 20.8 KB (21,301 B) on 2026-11-25, after the changes to Weft between
+  the two runs (`857f786` to `6c8cb2d`); that difference is not broken down here.
+- **Every pre-compressed Go server answered fewer requests a second than on 2026-11-25** (117,173 to 123,546
+  against 126,285 to 131,974). More was running beside this run (an iOS Simulator among it; the 1-minute load
+  average was 5.0 when it started), so compare servers within one run, not across runs.
 
 ## Where Weft loses
 
-In the run of 2026-11-25:
+In the run of 2026-11-26:
 
 | Measure | Weft | Who is ahead | Why, as best we can tell | Next step |
 |---|--:|---|---|---|
-| Requests per second | 111,249 | Every other site behind the pre-compressed Go server: 126,285 to 131,974 | Not measured. That server does less per request than `warp.Serve`: it sends no 103 Early Hints, no ETag and does no `If-None-Match` check. Hypothesis: the 103 before each page, an extra write, is most of the difference. | Run `load` against Weft with Early Hints off, and profile `warp.Serve` under load, before changing anything. |
-| TTFB | 0.20 ms | The pre-compressed Go server, 0.12 ms, and SvelteKit's Node server, 0.17 ms | The same hypothesis: the timer runs to the final response's headers, past the 103. | As above. |
+| Requests per second | 119,964 [116,204–122,437] | Three of the five sites behind the pre-compressed Go server: SvelteKit 121,082, Nuxt 121,885, Astro with no framework 123,546. Astro's Vue page (117,173) and Next.js (118,752) are behind Weft. | Within the noise: the ranges of three rounds overlap, and the differences are 1 to 3 percent. The 103 Early Hints that made the gap of 2026-11-25 is no longer sent to this client (below). | More rounds, interleaved, before reading a difference this small: the investigation below used five. |
+| TTFB | 0.20 ms | The pre-compressed Go server, 0.11 to 0.13 ms, and SvelteKit's Node server, 0.16 ms | Not the 103: this client got none, and the 0.20 ms is what it was with one. The investigation, timing five interleaved series of 50 per server, found every server, Weft included, at 0.09 ms with Early Hints on or off, so the gap of 2026-11-25 did not reproduce there. `tools/measure.mjs` takes one series per target, in turn, Weft's first, straight after the Lighthouse runs and its bytes fetch. Hypothesis, not tested: the column reports that order, not the server. | Time several TTFB series per target, interleaved, in `tools/measure.mjs`. |
 | HTML and CSS | 3.1 KB br | Astro with no framework (1.7 KB), Nuxt (1.9 KB), SvelteKit (2.0 KB) | Weft inlines its theme and the stylesheets of the components the page renders; the others carry one hand-written stylesheet. See the HTML and CSS row below. | As below. |
-| JavaScript, total transfer, requests, LCP | 20.8 KB, 82.4 KB, 5, 1276 ms | Astro with no framework island: 237 B inline, 60.2 KB, 2, 750 ms | Astro's default island ships no framework. See the table below. | As below. |
+| JavaScript, total transfer, requests, LCP | 21.4 KB, 83.0 KB, 5, 1276 ms | Astro with no framework island: 237 B inline, 60.2 KB, 2, 750 ms | Astro's default island ships no framework. See the table below. | As below. |
 
-Weft does not lose to Astro with a Vue island, Nuxt, Next.js or SvelteKit in JavaScript, total transfer or LCP, and
-to Nuxt and SvelteKit only in HTML and CSS.
+Weft does not lose to Astro with a Vue island, Nuxt, Next.js or SvelteKit in JavaScript, total transfer or LCP.
+Beyond the requests a second and TTFB above, it loses to Nuxt and SvelteKit only in HTML and CSS.
+
+**Requests per second, from 2026-11-25 to 2026-11-26.** In the run of 2026-11-25 Weft's binary answered 111,249
+[108,824–123,643] requests a second against 126,285 to 131,974 for the other sites behind the pre-compressed Go
+server, and its TTFB was 0.20 ms against 0.12. That server sends no 103 Early Hints, no ETag and does no
+`If-None-Match` check, so the hypothesis was the 103. An investigation then measured it (five interleaved rounds,
+server CPU per request, a profile and handler benchmarks):
+
+- The 103 that `warp.Serve` sent before every page was 92 to 99 percent of the gap. It costs a second socket write
+  per page request, about 1.1 to 1.4 µs of server CPU. The other differences (the header values copied per request,
+  `path.Clean`, the ETag check, `Cache-Control`) were each 3 to 75 ns, too small to show under load. With Early
+  Hints off, the Weft binary matched the pre-compressed server serving the same bytes.
+- Chrome ignores a 103 over HTTP/1.1, plain or over TLS, as Chrome documents, and acts on one over HTTP/2,
+  including behind a proxy that ends TLS and forwards the Weft binary's 103.
+
+So `warp.Serve` now sends the 103 only to a browser's navigation (`Sec-Fetch-Mode: navigate`) that arrives over
+HTTP/2 or later, or through a proxy (a `Forwarded`, `X-Forwarded-For` or `Via` header); otherwise the `Link`
+headers go on the 200 alone, as they always did. The benchmark's load client is not a navigation and speaks HTTP/1.1
+to the binary directly, so it now gets no 103 at all: the 119,964 of 2026-11-26 is Weft without the 103, not a
+cheaper 103. A navigation through a proxy still pays the 1.1 to 1.4 µs for its 103, and the benchmark does not
+measure that. Lighthouse's Chrome, navigating to the binary over HTTP/1.1 with no proxy, gets none either; it
+ignored it before.
 
 The analysis below is from the run of 2026-11-20 and was not repeated: its Weft figures are that run's (20.5 KB of
 JavaScript in two files, four requests, 1200 ms), from before the page loaded `boot-*.js`. Every row but the last is
@@ -186,6 +217,17 @@ Weft loses to Astro with a Vue island, in the side experiment.
 | Total transfer | 81.8 KB br | 60.2 KB br | The JavaScript above; the image is the same 59,862 B in both. | As for JavaScript. |
 | Requests | 4 | 2 | The client chunk and the island's chunk. | As for JavaScript. |
 | LCP against **Astro, Vue island** (side experiment, DevTools throttling, both behind `static/`) | 1633 ms [1616–1637] | 1582 ms [1565–1598] | Hypothesis: on a really throttled network the JavaScript shares bandwidth with the hero image. Lighthouse's LCP breakdown puts the difference in the image's load duration (median 970 ms for Weft against 931 ms for Astro's Vue page and 896–899 ms with no JS; the other subparts are within about 20 ms). Weft's module script is fetched at once, at high priority; Astro fetches its Vue runtime later, from its idle loader. Weft's idle-import variant was slower still (1679 ms), so later loading alone does not explain it. | The same tests as the LCP row above, read under DevTools throttling: a high-priority image first, then a smaller client chunk. |
+
+## What the benchmark does not measure
+
+- **A browser's use of Early Hints.** Every client here reaches its server directly over HTTP/1.1, where Chrome
+  ignores a 103, so a 103 could only cost here, never help. Behind an HTTP/2 proxy Chrome acts on one. In the
+  investigation of 2026-11-26, Chrome 158 loaded the Weft page five times through a local proxy that ends TLS and
+  speaks HTTP/2 (Go's `httputil.ReverseProxy`, which forwards a 103), with Early Hints and five times without: on
+  loopback, the page's first script was requested a median 3.2 ms after the page with the 103, against 9.6 ms
+  without it. That is a single measurement, not a benchmark result, and not on a real network or device.
+- **What a 103 costs the server for a navigation that gets one**, about 1.1 to 1.4 µs of CPU per page, since the
+  load client no longer gets one.
 
 ## Side experiment: where the island script loads, and LCP
 
