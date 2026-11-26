@@ -329,11 +329,11 @@ func (res *resource) serve(w http.ResponseWriter, r *http.Request, status int) {
 // earlyHints reports whether a 103 Early Hints can help the client of r: r is
 // a browser's navigation (Sec-Fetch-Mode: navigate), and it arrived over
 // HTTP/2 or later or through a proxy (Forwarded, X-Forwarded-For or Via),
-// which may speak HTTP/2 to the browser. A browser acts on a 103 over HTTP/2
-// or later, and Chrome ignores one over HTTP/1.1, so one sent straight to an
-// HTTP/1.1 client is a wasted write. It is a hint about an optional response, not a trust decision, so
-// TRUST_PROXY does not change it; and never a 1xx to an HTTP/1.0 client
-// (RFC 9110 §15.2).
+// which may speak HTTP/2 to the browser. Chrome acts on a 103 over HTTP/2 or
+// later and ignores one over HTTP/1.1, so one sent straight to an HTTP/1.1
+// client is a wasted write. It is a hint about an optional response, not a
+// trust decision, so TRUST_PROXY does not change it; and never a 1xx to an
+// HTTP/1.0 client (RFC 9110 §15.2).
 func earlyHints(r *http.Request) bool {
 	if mode := r.Header["Sec-Fetch-Mode"]; len(mode) == 0 || mode[0] != "navigate" {
 		return false
