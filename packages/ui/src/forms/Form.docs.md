@@ -29,7 +29,10 @@ only spaces as empty; every other rule skips only a missing or empty value
 fires with them, each FormField with a matching `name` shows its error, and
 focus moves to the first invalid control; without, the `@submit` handler
 runs with a deep copy of the values (lists and objects too), typed as
-`state` is. After the first submit, a field is checked again when it is
+`state` is. A number field left empty (an InputNumber's `null`) is left out
+of that copy, so the server reads it as not sent, as Go refuses `null` for a
+number that is not a pointer; a `required` one is stopped by the rule first.
+After the first submit, a field is checked again when it is
 left, and a field showing an error is checked as it changes, so the error
 goes the moment it is fixed - but no new error appears while typing.
 

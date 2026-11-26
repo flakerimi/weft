@@ -136,13 +136,6 @@ function cleanSegments(path: string): string[] {
 }
 
 /**
- * The params of `path` against a runtime page's `pattern`, or null when it
- * does not match, as warp.Serve matches: `:name` takes one segment, `:...name`
- * the rest of the path (joined by `/`) or none of it (`''`), and a static
- * segment is compared exactly. `path` is decoded already, and cleaned here as
- * the server cleans it (cleanSegments).
- */
-/**
  * A path as asked for, decoded as net/http decodes it into r.URL.Path: every
  * escape that decodes does, a character's escapes together, and one that
  * does not (%FF, a cut-off %C3) stays as it is.
@@ -170,6 +163,24 @@ export function decodePath(path: string): string {
   }
 }
 
+/**
+ * A decoded path as warp.Serve looks it up after path.Clean: no empty or `.`
+ * segment, a `..` taking the one before it back (none above the root), and a
+ * trailing slash kept only when the path had one, since a file is served at
+ * its exact path alone.
+ */
+export function cleanPath(path: string): string {
+  const clean = '/' + cleanSegments(path).join('/')
+  return clean !== '/' && path.endsWith('/') ? clean + '/' : clean
+}
+
+/**
+ * The params of `path` against a runtime page's `pattern`, or null when it
+ * does not match, as warp.Serve matches: `:name` takes one segment, `:...name`
+ * the rest of the path (joined by `/`) or none of it (`''`), and a static
+ * segment is compared exactly. `path` is decoded already, and cleaned here as
+ * the server cleans it (cleanSegments).
+ */
 export function matchPattern(pattern: string, path: string): Record<string, string> | null {
   const want = segmentsOf(pattern)
   const got = cleanSegments(path)

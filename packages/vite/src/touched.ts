@@ -125,9 +125,12 @@ function resetOf(el: HTMLSelectElement): boolean[] {
 }
 
 /**
- * Whether an option is disabled as HTML defines it, which is what `:disabled`
- * matches in a browser: its own attribute, or a disabled optgroup around it.
- * Written out, since not every DOM a test runs in matches it so.
+ * Whether an option is disabled for the choice of the option a drop-down
+ * shows after a reset, as HTML defines it: its own attribute, or a disabled
+ * optgroup around it. A disabled fieldset around the select does not count:
+ * its options match `:disabled` in a browser, yet the first one is still
+ * shown, so `:disabled` is not this rule. Written out, since not every DOM a
+ * test runs in follows it.
  */
 function optionDisabled(o: HTMLOptionElement): boolean {
   return o.disabled || (o.parentElement?.tagName === 'OPTGROUP' && o.parentElement.hasAttribute('disabled'))

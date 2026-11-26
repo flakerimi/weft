@@ -496,3 +496,25 @@ func TestCatchAllNeverHidesAPage(t *testing.T) {
 		}
 	}
 }
+
+// A path with dot segments, as a tool sends it (a browser cleans it first),
+// is served as path.Clean leaves it, escaped dots too; packages/vite's
+// dev.test.ts has the same rows for weft dev.
+func TestDotSegments(t *testing.T) {
+	h := Serve(runtimeBuild(t, runtimeRoutes), nil)
+	for p, want := range map[string]struct {
+		status int
+		body   string
+	}{
+		"/products/../counter":     {200, "<p>counter</p>"},
+		"/products/%2e%2e/counter": {200, "<p>counter</p>"},
+		"/products/./42":           {200, "<p>product shell</p>"},
+		"/blog/../products/42/":    {200, "<p>product shell</p>"},
+		"/products/42/..":          {404, "<p>not here</p>"},
+		"/..":                      {200, "<p>home</p>"},
+	} {
+		if r := do(t, h, "GET", p); r.StatusCode != want.status || r.body != want.body {
+			t.Errorf("%s: status %d body %q, want %d %q", p, r.StatusCode, r.body, want.status, want.body)
+		}
+	}
+}

@@ -5,7 +5,7 @@
 // name has a space and a non-ASCII letter (Review Focus 1).
 import { spawn, type ChildProcess } from 'node:child_process'
 import { cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { createServer as createHTTPServer, type Server } from 'node:http'
+import { createServer as createHTTPServer, request, type Server } from 'node:http'
 import { createServer as createNetServer, type AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -44,6 +44,20 @@ async function start(root: string, opts: Partial<Parameters<typeof devSite>[0]> 
 async function get(url: string) {
   const res = await fetch(url)
   return { status: res.status, type: res.headers.get('content-type'), body: await res.text() }
+}
+
+/** A GET of `path` exactly as written, dot segments kept, as a tool sends it: fetch would clean it. */
+function getRaw(base: string, path: string): Promise<{ status: number; body: string }> {
+  return new Promise((done, fail) => {
+    const req = request(base, { path, method: 'GET' }, (res) => {
+      let body = ''
+      res.setEncoding('utf8')
+      res.on('data', (c: string) => (body += c))
+      res.on('end', () => done({ status: res.statusCode ?? 0, body }))
+    })
+    req.on('error', fail)
+    req.end()
+  })
 }
 
 /** The body's text, without its tags. */
@@ -144,6 +158,23 @@ describe('devSite', { timeout: 30_000 }, () => {
     const doubled = await get(dev.url.replace(/\/$/, '') + '//api/products')
     expect(doubled.status).toBe(404)
     expect(text(doubled.body)).toContain('Nothing here')
+  })
+
+  it('cleans dot segments as warp.Serve does', async () => {
+    const dev = await start(site('dev-site'))
+    // The rows of TestDotSegments in warp/manifest_test.go.
+    for (const [path, status, has] of [
+      ['/products/../counter', 200, 'n is 2'],
+      ['/products/%2e%2e/counter', 200, 'n is 2'],
+      ['/products/./42', 200, 'Product []'],
+      ['/blog/../products/42/', 200, 'Product []'],
+      ['/products/42/..', 404, 'Nothing here'],
+      ['/..', 200, 'Hello from dev'],
+    ] as const) {
+      const page = await getRaw(dev.url, path)
+      expect(page.status, path).toBe(status)
+      expect(text(page.body), path).toContain(has)
+    }
   })
 
   it('refuses two runtime pages of one shape, as the build does', async () => {

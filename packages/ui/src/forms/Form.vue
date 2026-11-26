@@ -35,6 +35,12 @@
 //   fill while the script loads (the island runtime keeps what they hold
 //   through the hydration); with scripts off, `method="post"` keeps the
 //   values out of the address.
+// - A number field left empty (an InputNumber's null) is left out of the
+//   values the handler gets, so the server reads it as not sent: Go refuses
+//   null for a number that is not a pointer, and a sentence meant for the
+//   developer would reach the person. A required one is stopped first, by
+//   its own `required` rule. Any other null in the values is the app's, and
+//   is passed as it is.
 // The native form keeps `novalidate`: Weft shows the errors, not the browser.
 import { computed, isProxy, nextTick, ref, toRaw, useTemplateRef, watch } from 'vue'
 import { usePrePaint } from '../head/usePrePaint.ts'
@@ -104,6 +110,19 @@ watch(
   { flush: 'post' },
 )
 
+/** The names of the number fields in it, each read when the form submits. */
+const numbers = new Set<() => string | undefined>()
+
+/** The values the handler gets: a copy, without the number fields left empty. */
+function valuesToSend(): T {
+  const values = copy(props.state) as Record<string, unknown>
+  for (const name of numbers) {
+    const n = name()
+    if (n !== undefined && values[n] === null) delete values[n]
+  }
+  return values as T
+}
+
 const ruleOf = (name: string) => (props.schema as FieldSchema)[name]
 /** Check one field now: show its error, or clear it. */
 function check(name: string) {
@@ -124,6 +143,10 @@ provideForm({
   },
   input(name) {
     if (name in errors.value) check(name)
+  },
+  absentWhenEmpty(name) {
+    numbers.add(name)
+    return () => numbers.delete(name)
   },
 })
 
@@ -188,7 +211,7 @@ async function onSubmit(event: Event) {
   }
   // Noted before the handler runs, which may move focus at once.
   const focused = inForm(document.activeElement)
-  const result = props.onSubmit?.(copy(props.state))
+  const result = props.onSubmit?.(valuesToSend())
   if (!props.loadingAuto || !(result instanceof Promise)) return
   if (!busy.value) had = focused
   pending.value = true

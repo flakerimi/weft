@@ -15,7 +15,7 @@ import { contentType, CSS_MODULE, dropStaticComments } from './build.ts'
 import { siteConfig } from './config.ts'
 import { escapeHTML, iconTags, pageHTML, readStyles, THEMES, VIEW_TRANSITION, type Theme } from './document.ts'
 import { renderPage } from './render.ts'
-import { byPattern, decodePath, discoverRoutes, expandRoutes, matchPattern, refuseSameShape, type ExpandedRoute, type PageModule, type Route } from './routes.ts'
+import { byPattern, cleanPath, decodePath, discoverRoutes, expandRoutes, matchPattern, refuseSameShape, type ExpandedRoute, type PageModule, type Route } from './routes.ts'
 
 export interface DevOptions {
   /** The site's folder, which holds `pages/`. Its `package.json` may be in a folder above. */
@@ -238,8 +238,9 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next()
     // The path as asked for, decoded as net/http decodes it: not read as a
     // URL, where //api/x would be the host api, and with an escape that is
-    // not UTF-8 (%FF) kept as it is, so it is a param like any other.
-    const exact = decodePath((req.url ?? '/').replace(/[?#][\s\S]*$/, ''))
+    // not UTF-8 (%FF) kept as it is, so it is a param like any other; then
+    // cleaned of dot segments as warp.Serve cleans it (%2e%2e too).
+    const exact = cleanPath(decodePath((req.url ?? '/').replace(/[?#][\s\S]*$/, '')))
     // A page at its path, with or without a trailing slash, as warp.Serve has it.
     const path = exact.length > 1 && exact.endsWith('/') ? exact.slice(0, -1) : exact
     const done = queue.then(() => answer(path, exact))

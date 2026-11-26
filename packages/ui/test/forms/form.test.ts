@@ -4,6 +4,7 @@ import FormProbe from '../../src/forms/Form.vue'
 import type { FormApi } from '../../src/index.ts'
 import FormCases from '../fixtures/forms/FormCases.vue'
 import FormRef from '../fixtures/forms/FormRef.vue'
+import NumberForm from '../fixtures/forms/NumberForm.vue'
 import SearchForm from '../fixtures/forms/SearchForm.vue'
 import { actuallyDisabled, press } from '../keyboard.ts'
 import { mount } from '../mount.ts'
@@ -90,6 +91,44 @@ describe('Form', () => {
     expect(f.exposed.failed).toEqual([])
     expect(f.exposed.submitted).toEqual([{ email: 'ada@example.com', age: 36, terms: true, plan: 'free', nick: '', fruit: ['apple'], loose: '' }])
     expect(typeof (f.exposed.submitted as { age: unknown }[])[0]!.age).toBe('number')
+  })
+
+  it('leaves a cleared optional number out of what it submits, and stops a cleared required one', async () => {
+    const m = mount(NumberForm)
+    mounted.push(m)
+    const q = (sel: string) => m.el.querySelector<HTMLInputElement>(sel)!
+    const submit = async () => {
+      m.el.querySelector<HTMLButtonElement>('button[type="submit"]')!.click()
+      await settle()
+    }
+    const clear = async (input: HTMLInputElement) => {
+      input.focus()
+      type(input, '')
+      input.blur()
+      await settle()
+    }
+    // Cleared, the optional number is not sent at all, which the server reads
+    // as not sent; a null no number field holds is the app's, and is kept.
+    await clear(q('.price input'))
+    expect((m.exposed.state as { price: unknown }).price).toBeNull()
+    await submit()
+    expect(m.exposed.failed).toEqual([])
+    const [first] = m.exposed.submitted as Record<string, unknown>[]
+    expect(first).toEqual({ stock: 1, note: null })
+    expect('price' in first!).toBe(false)
+    expect('weight' in first!).toBe(false)
+    // Typed again, it is sent.
+    q('.price input').focus()
+    type(q('.price input'), '7')
+    q('.price input').blur()
+    await settle()
+    await submit()
+    expect((m.exposed.submitted as Record<string, unknown>[])[1]).toEqual({ price: 7, stock: 1, note: null })
+    // Cleared, a required number is the form's own error, and nothing is sent.
+    await clear(q('.stock input'))
+    await submit()
+    expect(m.exposed.failed).toEqual([{ stock: 'This is required.' }])
+    expect(m.exposed.submitted).toHaveLength(2)
   })
 
   it('submits when its submit button is pressed with Enter', async () => {

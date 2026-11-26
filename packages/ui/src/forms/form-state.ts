@@ -14,6 +14,13 @@ export interface FormContext {
   busy: () => boolean
   blur(name: string): void
   input(name: string): void
+  /**
+   * For a number control, during setup: its field, by the name `name` gives,
+   * is left out of what the Form submits while it is empty (null), so the
+   * server reads it as not sent; Go refuses null for a number that is not a
+   * pointer. It returns the function that forgets the control.
+   */
+  absentWhenEmpty?(name: () => string | undefined): () => void
 }
 
 /**
