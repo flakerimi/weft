@@ -115,7 +115,7 @@ Makes `.weft/` present and current as `weft build` does first, with no `pnpm ins
 
 ### weft gen
 
-Writes `web/.weft-types/api.ts` from the app's Go code. It builds the app with the `dev` tag, as `weft dev` does, and runs it with `WARP_DESCRIBE=1`, a free `PORT` and `HOST=127.0.0.1`, so warp's `Serve` prints the routes and types as JSON. From that it writes an interface per Go type, `api.<module>.<name>()` per typed route (`api.app` for routes outside a module), the `ApiError` every failed call rejects with, and `schema`, the rules of each body type for a form to check before it sends; `unique` and the rules of nested types are checked by the server only, and arrive as its field errors. It prints `Wrote web/.weft-types/api.ts`, or `web/.weft-types/api.ts is up to date` and leaves the file alone. `weft dev` runs it after each Go build that succeeds, and `weft build` before the page build. Never edit the file. An app none of whose Go files (tests aside) calls `warp.New` is not run: it gets the client of an app with no routes, which `weft gen` says.
+Writes `web/.weft-types/api.ts` from the app's Go code. It builds the app with the `dev` tag, as `weft dev` does, and runs it with `WARP_DESCRIBE=1`, a free `PORT` and `HOST=127.0.0.1`, so warp's `Serve` prints the routes and types as JSON. From that it writes an interface per Go type, `api.<module>.<name>()` per typed route (`api.app` for routes outside a module), the `ApiError` every failed call rejects with, and `schema`, the rules of each body type for a form to check before it sends; `unique` and the rules of nested types are checked by the server only, and arrive as its field errors. It prints `Wrote web/.weft-types/api.ts`, or `web/.weft-types/api.ts is up to date` and leaves the file alone. `weft dev` runs it after each Go build that succeeds, and `weft build` before the page build. Never edit the file. An app no package of which calls `warp.New`, as `go list` finds them with the `dev` tag, is not run: it gets the client of an app with no routes, which `weft gen` says, or keeps one that has routes, saying so.
 
 A compile error ends `weft gen: go build failed; fix what its output above says and run weft gen again.`; an app that exits with an error, or prints something else or nothing, its own output and `weft gen: the app did not describe itself; fix what its output above says and run weft gen again.`; one still running after 30 s is stopped. Each exits 1 and leaves the file as it was. `weft build` stops on the first two only; on the others it says so, as `weft dev` does, and goes on. A name the file cannot use (two routes that become one in camelCase, a type named as TypeScript reserves, an optional field, or any field of a partial body's type, named `constructor` or `toString`) is a sentence that says what to rename.
 
@@ -146,7 +146,7 @@ An app made by Weft 0.0.6 or before calls `weft.Serve` in `main.go`, which is no
 		return warp.Serve(dist, api.Handler())
 ```
 
-The `listen` function stays as it is. Such an app, as 0.0.7 made, has no `warp.App`, so `weft build` and `weft gen` give it a client with no routes at once. To use modules and typed routes, build a `warp.App` and serve it with its own `Serve`, as a new app's `main.go` does (see [Warp, the Go side](../guides/warp.md)); then they write its routes. An App passed to `warp.Serve` stops them, saying to call its own `Serve`.
+The `listen` function stays as it is. Such an app has no `warp.App`, so `weft build` and `weft gen` give it a client with no routes at once. An app made by 0.0.7 has one, so after `weft upgrade` they write its routes. To use modules and typed routes, build a `warp.App` and serve it with its own `Serve`, as a new app's `main.go` does (see [Warp, the Go side](../guides/warp.md)); then they write its routes. An App passed to `warp.Serve` stops them, saying to call its own `Serve`.
 
 ### weft catalog
 
@@ -178,6 +178,7 @@ Use: In help text, menus and tooltips, one Kbd per key of a shortcut.
 Avoid: For code or a value to copy, use a code element.
 
 Adapts:
+- …
 - width: Nothing changes.
 
 Props:
@@ -185,7 +186,8 @@ Props:
 
 Slots: default
 
-Notes: … (the notes, then Example: Basic and its code)
+Notes:
+…
 ````
 
 | Flag | What it does |
