@@ -142,6 +142,34 @@ function cleanSegments(path: string): string[] {
  * segment is compared exactly. `path` is decoded already, and cleaned here as
  * the server cleans it (cleanSegments).
  */
+/**
+ * A path as asked for, decoded as net/http decodes it into r.URL.Path: every
+ * escape that decodes does, a character's escapes together, and one that
+ * does not (%FF, a cut-off %C3) stays as it is.
+ */
+export function decodePath(path: string): string {
+  try {
+    return decodeURIComponent(path)
+  } catch {
+    return path.replace(/(?:%[0-9a-fA-F]{2})+/g, (run) => {
+      const bytes = run.match(/%../g)!
+      let out = ''
+      for (let i = 0; i < bytes.length; ) {
+        const lead = parseInt(bytes[i]!.slice(1), 16)
+        const n = lead >= 0xf0 ? 4 : lead >= 0xe0 ? 3 : lead >= 0xc0 ? 2 : 1
+        try {
+          out += decodeURIComponent(bytes.slice(i, i + n).join(''))
+          i += n
+        } catch {
+          out += bytes[i]
+          i++
+        }
+      }
+      return out
+    })
+  }
+}
+
 export function matchPattern(pattern: string, path: string): Record<string, string> | null {
   const want = segmentsOf(pattern)
   const got = cleanSegments(path)

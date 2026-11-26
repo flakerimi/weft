@@ -136,6 +136,14 @@ describe('devSite', { timeout: 30_000 }, () => {
     }
     // No other page carries the pattern.
     expect((await get(dev.url)).body).toContain('<html lang="en">')
+    // As warp.Serve answers them: an escape that is not UTF-8 is a param like
+    // any other, and a path that starts with // is a path, not a host.
+    const odd = await get(dev.url + 'products/%FF')
+    expect(odd.status).toBe(200)
+    expect(odd.body).toContain('data-weft-route="/products/:id"')
+    const doubled = await get(dev.url.replace(/\/$/, '') + '//api/products')
+    expect(doubled.status).toBe(404)
+    expect(text(doubled.body)).toContain('Nothing here')
   })
 
   it('refuses two runtime pages of one shape, as the build does', async () => {
