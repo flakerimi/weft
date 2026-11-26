@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -254,5 +255,64 @@ func TestFailedCommitKeepsTheDatabase(t *testing.T) {
 		if err := db.Tx(ctx, func(ctx context.Context) error { return s.Create(ctx, &Product{Name: "Chair"}) }); err != nil {
 			t.Fatalf("%s: the next Tx = %v", url, err)
 		}
+	}
+}
+
+// startWith starts an app with data and a products store over url, and
+// returns it and what Start said.
+func startWith(t *testing.T, url string) (*warp.App, error) {
+	t.Helper()
+	app := warp.New(warp.ConfigFrom(map[string]string{"DB_DRIVER": "sqlite", "DB_URL": url}))
+	app.Use(data.Module(), stores{"products", func(db *data.DB) { data.NewStore[Product](db, "products") }})
+	err := app.Start(ctx)
+	if err == nil {
+		t.Cleanup(func() { app.Stop(ctx) })
+	}
+	return app, err
+}
+
+// Start reads back on the database itself each setting the store relies on,
+// so no spelling of a _pragma can change one unseen: every spelling either
+// runs with Warp's value or stops the start with a sentence naming DB_URL.
+func TestStartChecksTheSettings(t *testing.T) {
+	const tooLow = `warp: module "data" could not migrate: DB_URL sets busy_timeout to 0, and the store needs at least 5000; remove it from DB_URL.`
+	for _, pragma := range []string{
+		"cache_size(10);pragma busy_timeout(0)", "cache_size(10); PRAGMA busy_timeout=0",
+		`"busy_timeout"=0`, "[busy_timeout]=0", "`busy_timeout`(0)", "/*x*/busy_timeout(0)", "main . busy_timeout=0",
+		"busy_timeout(0)", "BUSY_TIMEOUT=0", // the plain spellings, rewritten: Warp's value
+	} {
+		app, err := startWith(t, "file:"+dbFile(t)+"?_pragma="+url.QueryEscape(pragma))
+		if err != nil {
+			if err.Error() != tooLow {
+				t.Errorf("_pragma=%s: Start = %v\nwant %s", pragma, err, tooLow)
+			}
+			continue
+		}
+		var wait int
+		if err := data.For(app).QueryRow(ctx, "PRAGMA busy_timeout").Scan(&wait); err != nil || wait != 5000 {
+			t.Errorf("_pragma=%s: started with busy_timeout %d, %v", pragma, wait, err)
+		}
+	}
+	for pragma, want := range map[string]string{
+		"journal_mode(DELETE)":      `warp: module "data" could not migrate: DB_URL sets journal_mode in _pragma=journal_mode(DELETE), and the store needs Warp's own; remove it from DB_URL.`,
+		"locking_mode(EXCLUSIVE)":   `warp: module "data" could not migrate: DB_URL sets locking_mode in _pragma=locking_mode(EXCLUSIVE), and the store needs Warp's own; remove it from DB_URL.`,
+		`/**/"JOURNAL_MODE"=delete`: `warp: module "data" could not migrate: DB_URL sets journal_mode in _pragma=/**/"JOURNAL_MODE"=delete, and the store needs Warp's own; remove it from DB_URL.`,
+	} {
+		if _, err := startWith(t, "file:"+dbFile(t)+"?_pragma="+url.QueryEscape(pragma)); err == nil || err.Error() != want {
+			t.Errorf("_pragma=%s: Start = %v\nwant %s", pragma, err, want)
+		}
+	}
+	// A larger busy timeout and an unrelated _pragma start, and are kept.
+	app, err := startWith(t, "file:"+dbFile(t)+"?_busy_timeout=9000&_pragma=cache_size(-2000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wait, cache int
+	db := data.For(app)
+	if err := db.QueryRow(ctx, "PRAGMA busy_timeout").Scan(&wait); err != nil || wait != 9000 {
+		t.Errorf("busy_timeout %d, %v; want 9000", wait, err)
+	}
+	if err := db.QueryRow(ctx, "PRAGMA cache_size").Scan(&cache); err != nil || cache != -2000 {
+		t.Errorf("cache_size %d, %v; want -2000", cache, err)
 	}
 }

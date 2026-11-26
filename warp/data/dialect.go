@@ -42,6 +42,11 @@ type dialect interface {
 	uniqueColumn(err error, table string) (string, bool)
 	// busy reports whether err says another connection holds the database.
 	busy(err error) bool
+	// settingsProblem reads back, on connections of pool, each setting the
+	// store relies on, and returns the sentence naming DB_URL when one is not
+	// what the store needs; url is the DB_URL as written, memory whether the
+	// database lives in memory.
+	settingsProblem(ctx context.Context, pool *sql.DB, url string, memory bool) error
 	// outsideTx reports whether conn is outside any transaction, asking the
 	// connection itself and leaving it as it found it; false when it is
 	// inside one or cannot tell.
@@ -213,6 +218,89 @@ func (sqlite) busy(err error) bool {
 		err = inner
 	}
 	return err.Error() == "database is locked"
+}
+
+// settingsProblem asks the database rather than trusting the parse of
+// DB_URL: a _pragma is SQL, which no rewriting can follow in every spelling
+// (two statements, a quoted name, a comment). On two connections (one for a
+// database in memory, which has one), held at once, since every connection
+// runs the settings anew, it reads back:
+//   - busy_timeout, which must be at least busyTimeout;
+//   - journal_mode, which must be wal (memory for a database in memory);
+//   - foreign_keys, which must be 1;
+//   - locking_mode, which must be normal.
+//
+// A _pragma that names journal_mode or locking_mode is refused before that,
+// whatever it sets: the drivers run it on each new connection before
+// Warp's _journal_mode, so it switches the file's mode while another
+// connection has it open, and the second connection then fails to open;
+// that cannot be read back afterwards. SQLite compares a name without regard
+// to case and cannot spell it otherwise (quotes, brackets and comments go
+// around it), so a search for the name finds every spelling.
+//
+// The transaction lock mode cannot be read back: a connection does not say
+// how its driver begins a transaction. It holds because SQL cannot set it (no
+// pragma does), and dsn drops the one key the drivers read it from, _txlock,
+// in every form their parser accepts (any escape of the key; the key's case
+// is the drivers' to match, and they match it exactly).
+func (sqlite) settingsProblem(ctx context.Context, pool *sql.DB, url string, memory bool) error {
+	_, query, _ := strings.Cut(url, "?")
+	for part := range strings.SplitSeq(query, "&") {
+		key, value, _ := strings.Cut(part, "=")
+		if unescaped, err := neturl.QueryUnescape(key); err == nil {
+			key = unescaped
+		}
+		if unescaped, err := neturl.QueryUnescape(value); err == nil {
+			value = unescaped
+		}
+		if key != "_pragma" {
+			continue
+		}
+		for _, name := range []string{"journal_mode", "locking_mode"} {
+			if strings.Contains(strings.ToLower(value), name) {
+				return fmt.Errorf("DB_URL sets %s in _pragma=%s, and the store needs Warp's own; remove it from DB_URL.", name, value)
+			}
+		}
+	}
+	n := 2
+	if memory {
+		n = 1
+	}
+	var conns []*sql.Conn
+	defer func() {
+		for _, c := range conns {
+			c.Close()
+		}
+	}()
+	for i := range n {
+		c, err := pool.Conn(ctx)
+		if err != nil {
+			return fmt.Errorf("connection %d to the database cannot be opened (%v); check the settings in DB_URL.", i+1, err)
+		}
+		conns = append(conns, c)
+		var wait, fk int
+		var journal, locking string
+		for _, read := range []struct {
+			pragma string
+			into   any
+		}{{"busy_timeout", &wait}, {"journal_mode", &journal}, {"foreign_keys", &fk}, {"locking_mode", &locking}} {
+			if err := c.QueryRowContext(ctx, "PRAGMA "+read.pragma).Scan(read.into); err != nil {
+				return fmt.Errorf("the database's %s cannot be read (%v); check the settings in DB_URL.", read.pragma, err)
+			}
+		}
+		journal, locking = strings.ToLower(journal), strings.ToLower(locking)
+		switch {
+		case wait < busyTimeout:
+			return fmt.Errorf("DB_URL sets busy_timeout to %d, and the store needs at least %d; remove it from DB_URL.", wait, busyTimeout)
+		case journal != "wal" && !(memory && journal == "memory"):
+			return fmt.Errorf("DB_URL sets journal_mode to %s, and the store needs wal; remove it from DB_URL.", journal)
+		case fk != 1:
+			return fmt.Errorf("DB_URL sets foreign_keys to %d, and the store needs 1; remove it from DB_URL.", fk)
+		case locking != "normal":
+			return fmt.Errorf("DB_URL sets locking_mode to %s, and the store needs normal; remove it from DB_URL.", locking)
+		}
+	}
+	return nil
 }
 
 // outsideTx asks SQLite whether the connection is in autocommit mode, outside

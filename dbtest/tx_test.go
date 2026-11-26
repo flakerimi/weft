@@ -3,9 +3,13 @@ package dbtest
 import (
 	"context"
 	"errors"
+	"fmt"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/flakerimi/weft/warp/data"
+	"github.com/flakerimi/weft/warp/warptest"
 )
 
 func count(t *testing.T, db *data.DB) int {
@@ -152,5 +156,98 @@ func TestTxOfAnotherDB(t *testing.T) {
 	}
 	if count(t, db1) != 0 {
 		t.Fatal("the transaction was not rolled back")
+	}
+}
+
+// A Tx whose request ends, at any moment, never loses a database in memory,
+// whose one connection is the whole database: the transaction is rolled
+// back by Tx itself, in order, and the connection is kept.
+func TestCancelledTxKeepsTheDatabase(t *testing.T) {
+	var s *data.Store[Product]
+	c := warptest.New(t, map[string]string{"DB_DRIVER": "sqlite", "DB_URL": ":memory:"},
+		data.Module(), stores{"products", func(db *data.DB) { s = data.NewStore[Product](db, "products") }})
+	db := data.For(c.App)
+	if err := s.Create(ctx, &Product{Name: "Lamp"}); err != nil {
+		t.Fatal(err)
+	}
+	want := 1 // the products there should be
+	check := func(when string, i int) {
+		t.Helper()
+		if n, err := s.Count(ctx); err != nil || n != want {
+			t.Fatalf("%s, run %d: %d products, %v; want %d", when, i, n, err, want)
+		}
+		conn, err := db.SQL().Conn(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		if _, err := conn.ExecContext(ctx, "BEGIN"); err != nil {
+			t.Fatalf("%s, run %d: the pooled connection is inside a transaction: %v", when, i, err)
+		}
+		conn.ExecContext(ctx, "ROLLBACK")
+	}
+	goroutines := runtime.NumGoroutine()
+
+	// Ended before the function runs.
+	ended, cancel := context.WithCancel(ctx)
+	cancel()
+	if err := db.Tx(ended, func(context.Context) error { return nil }); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Tx on an ended context = %v", err)
+	}
+	check("ended before", 0)
+
+	// Ended during a statement: the statement is interrupted.
+	during, cancel := context.WithCancel(ctx)
+	time.AfterFunc(50*time.Millisecond, cancel)
+	err := db.Tx(during, func(ctx context.Context) error {
+		if err := s.Create(ctx, &Product{Name: "Desk"}); err != nil {
+			return err
+		}
+		var n int
+		return db.QueryRow(ctx, `WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c`).Scan(&n)
+	})
+	if err == nil {
+		t.Fatal("a statement that never ends returned")
+	}
+	check("ended during a statement", 0)
+
+	// Ended between the last statement and the commit, 2000 times: where
+	// database/sql once rolled back on a goroutine of its own while the
+	// commit failed.
+	for i := range 2000 {
+		between, cancel := context.WithCancel(ctx)
+		if err := db.Tx(between, func(ctx context.Context) error {
+			if err := s.Create(ctx, &Product{Name: "Desk"}); err != nil {
+				return err
+			}
+			cancel()
+			return nil
+		}); !errors.Is(err, context.Canceled) {
+			t.Fatalf("run %d: Tx ended before its commit = %v", i, err)
+		}
+		check("ended before the commit", i)
+	}
+
+	// Ended at about the moment of the commit, 2000 times.
+	for i := range 2000 {
+		racing, cancel := context.WithCancel(ctx)
+		err := db.Tx(racing, func(ctx context.Context) error {
+			if err := s.Create(ctx, &Product{Name: fmt.Sprintf("Chair %d", i)}); err != nil {
+				return err
+			}
+			go cancel()
+			return nil
+		})
+		cancel()
+		if err == nil {
+			want++ // the commit came first
+		} else if !errors.Is(err, context.Canceled) {
+			t.Fatalf("run %d: Tx = %v", i, err)
+		}
+		check("ended at the commit", i)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if n := runtime.NumGoroutine(); n > goroutines+5 {
+		t.Fatalf("%d goroutines left over (%d before)", n-goroutines, goroutines)
 	}
 }

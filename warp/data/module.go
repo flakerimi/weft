@@ -198,6 +198,10 @@ func (db *DB) open(ctx context.Context) error {
 		}
 		return cannot(err)
 	}
+	if err := d.settingsProblem(ctx, conn, url, memory); err != nil {
+		conn.Close()
+		return err
+	}
 	if err := migrate(ctx, conn, d, tables, url); err != nil {
 		conn.Close()
 		return err
@@ -414,7 +418,13 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context) error) error 
 		return fmt.Errorf("data: cannot begin a transaction: %w", err)
 	}
 	defer conn.Close()
-	tx, err := conn.BeginTx(ctx, nil)
+	// The transaction is begun with a context that the request's ending does
+	// not cancel, so that database/sql never rolls it back on a goroutine of
+	// its own, behind Tx's back; Tx alone ends it, here, in order. Each
+	// statement in it still runs with the request's context, so a request
+	// that ends interrupts the statement running.
+	bg := context.WithoutCancel(ctx)
+	tx, err := conn.BeginTx(bg, nil)
 	if err != nil {
 		if err := unavailable(ctx, d, err); isUnavailable(err) {
 			return err
@@ -426,7 +436,9 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context) error) error 
 	defer func() {
 		if !committing { // fn failed or panicked; a panic goes on after this
 			st.done.Store(true)
-			tx.Rollback()
+			if tx.Rollback() != nil {
+				settle(bg, conn, d)
+			}
 		}
 	}()
 	if err := fn(context.WithValue(ctx, txKey{db}, st)); err != nil {
@@ -434,24 +446,38 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context) error) error 
 	}
 	committing = true
 	st.done.Store(true) // from here on, a call on fn's context is told the Tx ended
-	if err := tx.Commit(); err != nil {
-		// A driver may leave the transaction open when its COMMIT fails
-		// (SQLite does after a busy COMMIT; modernc.org/sqlite rolls it back
-		// itself). Ask the connection: outside a transaction, it is kept as it
-		// is; inside one, it is rolled back, and thrown away only when that
-		// fails too.
-		bg := context.WithoutCancel(ctx)
-		if !d.outsideTx(bg, conn) {
-			if _, rerr := conn.ExecContext(bg, "ROLLBACK"); rerr != nil {
-				conn.Raw(func(any) error { return driver.ErrBadConn })
-			}
+	if err := ctx.Err(); err != nil {
+		// The request ended before the commit: what fn wrote is rolled back.
+		if tx.Rollback() != nil {
+			settle(bg, conn, d)
 		}
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		settle(bg, conn, d)
 		if err := unavailable(ctx, d, err); isUnavailable(err) {
 			return err
 		}
 		return fmt.Errorf("data: cannot commit the transaction: %w", err)
 	}
 	return nil
+}
+
+// settle leaves conn outside any transaction after one ended badly: a
+// driver may leave the transaction open when its COMMIT fails (SQLite does
+// after a busy COMMIT; modernc.org/sqlite rolls it back itself). Asked, a
+// connection outside one is kept as it is; one inside is rolled back, and
+// thrown away only when it is still inside one after that, so a healthy
+// connection, which for a database in memory is the whole database, is
+// never lost.
+func settle(ctx context.Context, conn *sql.Conn, d dialect) {
+	if d.outsideTx(ctx, conn) {
+		return
+	}
+	conn.ExecContext(ctx, "ROLLBACK")
+	if !d.outsideTx(ctx, conn) {
+		conn.Raw(func(any) error { return driver.ErrBadConn })
+	}
 }
 
 // isUnavailable reports whether err is the busy database's 503.
