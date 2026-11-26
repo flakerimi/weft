@@ -1,0 +1,40 @@
+{
+  "_": "The email rule's rows, read by warp's TestEmailRuleIsTheBrowsers and @weft/ui's schema test, so the server and a form agree on every one.",
+  "accept": [
+    "a@b.c",
+    "a@b",
+    "A.B+tag@x-y.example.com",
+    "a.@b.c",
+    ".a@b.c",
+    "!#$%&'*+/=?^_`{|}~-@x.co",
+    "a@1.2.3.4",
+    "a@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com",
+    "a@b-c.d",
+    "1@2"
+  ],
+  "refuse": [
+    "<a@b.c>",
+    "a@b.c ",
+    " a@b.c",
+    "é@b.c",
+    "a@é.c",
+    "a@[1.2.3.4]",
+    "a@-b.c",
+    "a@b-.c",
+    "a@b..c",
+    "a@.b",
+    "a@b.",
+    "@b.c",
+    "a",
+    "a b@c.d",
+    "a@b_c.d",
+    "A <a@b.c>",
+    "a@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com",
+    "a@b.c\n",
+    "a@b@c.d",
+    "a\"b@c.d",
+    "a@b.c\u0000",
+    " ",
+    "a@ b.c"
+  ]
+}

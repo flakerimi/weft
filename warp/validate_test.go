@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -100,7 +102,7 @@ func TestValidateMessages(t *testing.T) {
 	}
 	ok := []any{
 		S{Name: "abcde"}, N{Age: 0.5}, I{Qty: 3}, L{Tags: []string{"a", "b"}},
-		E{Email: "ada@example.com"}, E{Email: "<ada@example.com>"}, U{Site: "https://example.com/x"},
+		E{Email: "ada@example.com"}, U{Site: "https://example.com/x"},
 		En{Status: "live"}, B{On: true}, T{At: time.Now()},
 	}
 	for _, v := range ok {
@@ -904,6 +906,32 @@ func TestURLRuleIsTheBrowsers(t *testing.T) {
 		"http://x:", "http://x:8a", "http://u@", "http://x.com\u00a0", "http://x.com\ufeff", "\x00http://x.com", "http://x\x7f.com",
 	} {
 		if fieldsOf(t, &U{Site: bad})["site"] != "Enter a web address that starts with http:// or https://." {
+			t.Errorf("%q was taken", bad)
+		}
+	}
+}
+
+// The email rule is the browser's (EMAIL in packages/ui's forms/schema.ts),
+// on the rows both sides' tests read from testdata/email.json.
+func TestEmailRuleIsTheBrowsers(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("testdata", "email.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rows struct{ Accept, Refuse []string }
+	if err := json.Unmarshal(b, &rows); err != nil {
+		t.Fatal(err)
+	}
+	type E struct {
+		Mail string `json:"mail" warp:"email"`
+	}
+	for _, ok := range rows.Accept {
+		if err := Validate(&E{Mail: ok}); err != nil {
+			t.Errorf("%q was refused: %v", ok, err)
+		}
+	}
+	for _, bad := range rows.Refuse {
+		if fieldsOf(t, &E{Mail: bad})["mail"] != "Enter an email address." {
 			t.Errorf("%q was taken", bad)
 		}
 	}

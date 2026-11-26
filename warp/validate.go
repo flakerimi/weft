@@ -3,8 +3,8 @@ package warp
 import (
 	"fmt"
 	"math"
-	"net/mail"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -422,6 +422,15 @@ func checkField(fv reflect.Value, rules []rule) string {
 	return ""
 }
 
+// emailAddress is the email rule, the one browsers apply to type="email"
+// (WHATWG's valid email address), written as the browser's EMAIL is (in
+// packages/ui, src/forms/schema.ts), so a form and the server agree: the
+// whole text is a local part of one or more ASCII letters, digits and
+// .!#$%&'*+/=?^_`{|}~-, then @, then one or more labels joined by dots, each
+// of 1 to 63 ASCII letters, digits and hyphens that neither starts nor ends
+// with a hyphen. Nothing is trimmed, so spaces around it are refused.
+var emailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+
 // isWebAddress is the url rule, written as the browser's isWebAddress (in
 // packages/ui, src/forms/schema.ts) is, so a form and the server agree: no
 // whitespace, control character or backslash anywhere; http:// or https://
@@ -489,8 +498,7 @@ func checkRule(v reflect.Value, r rule) string {
 		if k != reflect.String {
 			return ""
 		}
-		a, err := mail.ParseAddress(v.String())
-		if err != nil || a.Name != "" {
+		if !emailAddress.MatchString(v.String()) {
 			return "Enter an email address."
 		}
 	case "url":
