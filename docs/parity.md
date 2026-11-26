@@ -27,7 +27,7 @@ Every Weft component adapts to touch, pointer, landing and app inside itself, wh
 | Accordion | `Accordion` | partial: no `valueKey`, `labelKey`, `unmountOnHide` | Content is always rendered, by design, so find-in-page reaches it (`hidden="until-found"`). |
 | Alert | `Alert` | partial: no `avatar`, `closeIcon` | `color` is `tone`. Defaults to `variant="soft"` (Nuxt: solid). |
 | App | `WeftProvider` | partial: no `tooltip`, `toaster`, `portal` | `locale` is on WeftProvider; the toaster is its own component (`Toaster`), and overlays always go to `#weft-overlays`. |
-| AuthForm | — | planned (phase 4b) | `weft.Auth` and the template's login form, on `Form` with a generated schema. |
+| AuthForm | — | planned (Warp W4) | `warp/auth` signs people in; no login-form component yet: `examples/shop` writes its own on `Form` with the schema `weft gen` writes. |
 | Avatar | `Avatar` | partial: no `chip`, `color` | Sizes are the shared `sm`/`md`/`lg` (Nuxt: 3xs to 3xl). Put a `Chip` around it for the dot. |
 | AvatarGroup | `AvatarGroup` | done | Nuxt's `color` has no Avatar counterpart in Weft. |
 | Badge | `Badge` | partial: no `square` | `color` is `tone`. |
@@ -85,7 +85,7 @@ Every Weft component adapts to touch, pointer, landing and app inside itself, wh
 | FileUpload | `FileUpload` | partial: no variant (button), `fileIcon`, `fileImage`, `fileDelete`, files-top, files-bottom and actions slots, icon overrides | `layout` (list, grid), `position` (inside, outside) and `reset` are there; on touch, one button offers camera, photos or files. |
 | Footer | `Footer` | done |  |
 | FooterColumns | — | planned (phase 7) | Landing blocks (the spec's `Footer` block). |
-| Form | `Form` | partial: no `validate`, `validateOn`, `validateOnInputDelay`, `transform`, `nested`, Standard Schema validators | Validates against Weft's field schema, the shape the Go contract generates (phase 4b); `onSubmit` and `loadingAuto` as in Nuxt. |
+| Form | `Form` | partial: no `validate`, `validateOn`, `validateOnInputDelay`, `transform`, `nested`, Standard Schema validators | Validates against Weft's field schema, the shape `weft gen` writes as `schema` from the Go types; `onSubmit` and `loadingAuto` as in Nuxt. |
 | FormField | `FormField` | partial: no `help`, `errorPattern`, `eagerValidation`, `validateOnInputDelay`, `orientation` |  |
 | Header | `Header` | partial: no `mode`, `toggleSide`, `autoClose`, `toggle`, title and toggle slots |  |
 | Icon | `Icon` | done | Lucide, inlined at build: only the icons a build uses ship. Iconify's `mode` and `customize` do not apply. |

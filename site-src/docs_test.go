@@ -102,3 +102,42 @@ func TestDocsBuildWithWeft(t *testing.T) {
 		}
 	}
 }
+
+// The Warp slice is documented: data, login and the types from Go each have
+// a guide the docs index links, Coming next no longer lists as not built what
+// the slice built, and no line of a doc, agent file or skill ties records to
+// a client router without naming the run-time page that shows one.
+func TestDocsCoverTheSlice(t *testing.T) {
+	index, err := os.ReadFile("content/docs/index.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, guide := range []string{"data", "login", "types-from-go"} {
+		if _, err := os.Stat("content/docs/guides/" + guide + ".md"); err != nil {
+			t.Errorf("content/docs/guides/%s.md is missing (%v); write that guide", guide, err)
+		}
+		if !strings.Contains(string(index), "(guides/"+guide+".md)") {
+			t.Errorf("content/docs/index.md does not link guides/%s.md; list it with the guides", guide)
+		}
+	}
+	coming, err := os.ReadFile("content/docs/coming-next.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// What Coming next says is not built: its Commands table, and the lines
+	// of each section that are not a pointer to what works today.
+	for _, line := range strings.Split(string(coming), "\n") {
+		for _, built := range []string{"`weft gen`", "`weft routes`", "`warp/data`", "`warp/describe`", "`auth.Can`", "`warp.Resource`"} {
+			if strings.Contains(line, built) && !strings.Contains(line, "work today") && !strings.Contains(line, "works today") {
+				t.Errorf("content/docs/coming-next.md lists %s as not built: %q; it is built, so say so or take it out", built, line)
+			}
+		}
+	}
+	for p, text := range filesUnder(t, "content/docs", "agents", "../skills") {
+		for _, line := range strings.Split(text, "\n") {
+			if strings.Contains(line, "router") && strings.Contains(line, "record") && !strings.Contains(line, "run-time page") {
+				t.Errorf("%s says a client router is needed for a record: %q; a run-time page shows one", p, line)
+			}
+		}
+	}
+}

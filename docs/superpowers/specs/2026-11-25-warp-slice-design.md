@@ -98,7 +98,7 @@ The smallest login that is honest about security:
 - **Passwords** are hashed with PBKDF2-HMAC-SHA256 from the standard library, 600,000 iterations, a random salt, stored with a prefix that names the scheme and its parameters so a later scheme can sit beside it.
 - **Sessions** are a signed cookie (HMAC-SHA256 with `AUTH_SECRET`): the user's id and an expiry. `HttpOnly`, `SameSite=Lax`, `Secure` when the request was HTTPS, lasting `AUTH_SESSION_DAYS` (default 30). `AUTH_SECRET` shorter than 32 bytes stops the app at start.
 - **Routes** under `/api/auth`: `login`, `logout`, `me`, and `setup`, which takes the one-time token and a password. A wrong email and a wrong password get the same answer. After 5 failed tries for one email and address within a minute, further tries get 429 for the rest of that minute. The address is `warp.ClientIP(r)`, without its port.
-- **The first user.** `AUTH_OWNER_EMAIL` names the owner. If no user exists at start, the app logs a one-time setup link, `APP_URL` and `/setup?token=…`; the page there sets the owner's password. The token is random, kept only in memory, made afresh at each start while no user exists, and useless once the owner exists. Until then login is impossible, which is the point.
+- **The first user.** `AUTH_OWNER_EMAIL` names the owner. If no user exists at start, the app logs a one-time setup link, `APP_URL` and `/setup#token=…` (in the fragment, so it reaches no proxy log or `Referer`; this was `?token=` until the login's review); the page there sets the owner's password. The token is random, kept only in memory, made afresh at each start while no user exists, and useless once the owner exists. Until then login is impossible, which is the point.
 - **Guarding.** `auth.Can("products:edit")` is a route option: it records the permission on the route and refuses a request with no session (401) or without the permission (403). In the slice the owner has every permission and there is no other role. `auth.User(ctx)` gives the signed-in user, read from the users table on each guarded request, so a removed user is out at once. `auth.Per("products")` gives `data.Resource` a permission per action: `products:read`, `products:create`, `products:edit`, `products:delete`.
 - **Vue side**, in the example app for now: a `useSession()` that asks `/api/auth/me`, a login page and a setup page.
 
@@ -158,6 +158,63 @@ The slice may change `@weft/ui` where it disagrees with Warp's wire format, sinc
 - The owner is set up through a one-time link in the log.
 - A record page's shell is answered 200 for any id.
 - The app template is not changed by the slice.
+
+## Calls made while building (2026-11-25, open to correction)
+
+Each was made by the coordinator or an implementer and held by a review; the task reports in `.superpowers/sdd/2026-11-25-warp-slice/` have the detail.
+
+- **Names.** Default route names clash only within a module; routes outside one are not checked. `GET /products` and `GET /products/{id}` both default to `products`, so a module with both names one of them.
+- **Mistakes from outside the core.** `(*App).Mistake(format, args...)` records a registration mistake for a package such as `data`, with `warp: ` in front.
+- **The description** carries what the generator needs beyond section 1: `typed` (false for `Handle`), each parameter's `style` and rules, each type's Go name, and an `…Input` twin for a body type that has readonly fields at any depth. Two types of one name, a half encoding, a map keyed by anything but text or a whole number, and `,string` are mistakes.
+- **Answers never hold `null`** for a list, a map or bytes, at any depth, so the generated types are true on the wire; a field typed `any`, and `WriteJSON` called directly, are the limits.
+- **Readonly fields are zeroed after decoding**, whatever the decoder chose; the body scan only decides the 400. A key that folds onto a readonly field's is refused at every level. The review showed one build flag (`GOEXPERIMENT=jsonv2`) makes the scan and the decoder disagree.
+- **On `PATCH` the body type's `Validate` does not run**, since the body holds zero for what was left out; `data.Resource`'s update lays the sent fields over the stored record and validates that, in the transaction that writes it.
+- **The `url` rule** is one written definition, the same in Go and in `Form`.
+- **The data layer.** Warp's SQLite settings (`_foreign_keys`, WAL, `_txlock=immediate`) win over a `DB_URL`'s, and a `DB_URL` may raise the 5 s busy timeout, never lower it (the owner's ruling reversed after a probe showed the store's own writers depend on it). A database held past it answers 503 `unavailable` (`warp.Unavailable`), logged at warn. `DB.Exec`, `Query` and `QueryRow` join the transaction on the context; `SQL()` is the pool. `Store.First` and `Store.Count` were added for the login.
+- **The login.** The cookie holds the user's id, the nanosecond the user was made and an expiry, so a replaced database refuses old cookies; under HTTPS it is `__Host-session`. Tries are counted before any lookup or hash: 5 a minute per email and address, 30 a minute per address, the address being `ClientKey` (an IPv6 client's /64). At most `GOMAXPROCS` hashes run at once; a login that finds no slot within 3 s is a 503 and costs no try. `LoginInput` and `SetupInput` are exported so the generated client names them; `auth.AddUser`, `auth.RemoveUser` and `auth.SetupToken` are for tools and tests.
+- **The generated client.** `schema` is typed by an annotation rather than `as const`, so it is assignable to `FieldSchema`. Every `api` function is async and every rejection an `ApiError` (`network` when nothing could be sent, `bad_request` for an empty or dot path parameter, before sending). `setBase` takes a path prefix or a URL of the pages' own origin; an API on another origin is not supported. Names TypeScript cannot use are refused with a sentence.
+- **`@weft/ui`.** `Table` hands `fetch` the wire's names, `{ page, per_page, sort?, q?, filter? }`. `Form` is `method="post"` behind an inline pre-paint script that cancels a Weft form's submit until its island is live, rather than disabled, so typing and password managers work; the island runtime keeps what was typed before hydration. A `Form` therefore needs an island.
+- **Run-time pages.** Of two patterns that match one path, the one with more fixed segments wins, then one without a catch-all, then fewer parameters, except that of two catch-alls the one with more wins, so a catch-all never hides a more specific page.
+- **`weft dev`** sets `APP_URL` to the page server's address unless its own environment has a non-empty one; a development `.weft/VERSION` carries the bundle's hash, so a changed bundle is unpacked again; `weft unpack` unpacks without installing; the app has 5 s to describe itself after each build.
+- **The shop.** `pnpm-lock.yaml` is git-ignored there, since its packages come from `.weft/`; `status` is `required`.
+
+## What the slice taught
+
+From the shop's list (Task 12), with what became of each in the consolidation wave (`wave-D-report.md`).
+
+| # | What the app had to do | Now |
+| --- | --- | --- |
+| 1 | Translate `Table`'s query names to the list route's | Fixed: `TableQuery` has the wire's names; `:fetch="api.products.list"` |
+| 2 | An `enum` field is `string` in TypeScript, not its values | Open |
+| 3 | A generated input type cannot be a form's state (`InputNumber` gives `null`) | Open: the shop's `Draft` type and `price ?? 0` |
+| 4 | Work out by hand which fields changed, for `PATCH` | Open: `changes()` in `ProductsTable` |
+| 5 | `useParams()` gives strings where the client takes numbers | Partly: the shop checks the id (`productId`), the client refuses empty and dot parameters; a typed `useParams` is open |
+| 6 | A body field with no control has nowhere to show its error | Open: `SetupForm` moves `fields.token` to the top |
+| 7 | Before hydration a `Form` was a GET form that put a password in the address | Fixed: `method="post"` and the pre-paint guard; typed values survive hydration |
+| 8 | Every form writes the same catch for an `ApiError` | Open: the shop's `formProblem` |
+| 9 | A `Form`'s template ref had no type | Fixed: `FormApi` |
+| 10 | A dialog's form is remounted to forget its errors | Open: `formKey` |
+| 11 | The table's search asks on every keystroke | Open |
+| 12 | Every app with a login writes the same session code | Open: `web/session.ts` and `nextPath` in `web/answers.ts` |
+| 13 | A guarded island waits for the session before it asks | Open: the `ready` flag |
+| 14 | Islands share module state only because the build made one chunk | Open: a doc line and a test |
+| 15 | `weft dev` did not set `APP_URL` | Fixed |
+| 16 | A development `.weft/` was never unpacked again | Fixed: the bundle's hash |
+| 17 | Nothing only unpacked `.weft/` | Fixed: `weft unpack` |
+| 18 | A driver's `go.sum` cannot be written before `.weft/go` exists | Open |
+| 19 | Nothing writes the secrets an app needs | Open: `scripts/shop.sh` and the test write `.env` |
+| 20 | No layouts: the header is repeated | Open, a non-goal |
+| 21 | `pnpm-lock.yaml` would go stale with `.weft/` | Open, the owner's call |
+| 22 | Money is a `float64` | Open |
+| 23 | The test kit takes raw, hand-escaped paths | Open |
+| 24 | What worked in one line: the model and its guarded routes in 12 lines of Go, the story test, `unique` on the form's field, `runtime = true`, a renamed field breaking the type check | Not a defect |
+| 25 | An open redirect in the shop's `nextPath` | Fixed in the shop |
+| 26 | A network failure showed fetch's own words | Fixed in the shop |
+| 27 | The setup token stayed in the address | Fixed in the shop (`history.replaceState`) |
+| 28 | `next` nested deeper on each press of Sign in | Fixed in the shop |
+| 29 | The shop's `AGENTS.md` did not say to unpack `.weft/` before `go test` | Fixed |
+
+The workarounds still standing in the shop, each something the framework still makes an app do by hand: the `Draft` type and `price ?? 0` (3), `changes()` (4), `formKey` (10), the `ready` flag (13), moving `fields.token` to the form's top (6), the session code and `nextPath` (12), and `scripts/shop.sh test` running `weft gen` so the web tests and the type check have the client.
 
 ## Agreed with Argon (the second agent, in `coord.md`, 2026-11-25)
 

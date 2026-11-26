@@ -1,7 +1,7 @@
 ---
 title: CLI
 description: Every command, flag and error of weft, weft-build-pages and weft-dev, and the installer's settings.
-order: 30
+order: 35
 ---
 
 Every command and flag `weft` has today, the flags of the page build and the page dev server, and the installer's settings. What is planned and not built is under [Coming next](../coming-next.md).
@@ -81,7 +81,7 @@ Runs an app while you work. It builds the Go code with the `dev` tag into `.weft
 | --- | --- |
 | `--port n` | The page server's port. Default `5173`; `0` takes a free one |
 
-Every 300 ms it looks for a changed `.go` file outside `.weft/`, `.git/`, `node_modules/` and `web/`, and for a changed `.env` in the app's folder. When one changed it builds again and, if the build succeeds, replaces the running Go server. A failed build prints the compiler's output, and the last build keeps serving `/api` until you save the fix. A rebuilt server that stops by itself, such as one that panics as it starts, prints `weft dev: the Go server stopped after the restart; fix it and save again.`, and the next save builds and starts it again. An unreadable folder is skipped, and named once. A change under `web/` reloads the browser and needs no build; a change to `web/vite.config` needs a restart. `weft dev` runs it with `PORT` set to a free port, `HOST=127.0.0.1`, `WEFT_DEV_PARENT=1` and `APP_URL=http://localhost:<the page server's port>`, which win over the app's `.env`, since under `weft dev` the pages are at the page server's address whatever `.env` says. So the Go server listens on `127.0.0.1` only and prints no address; the one address shown is the page server's, which sends `/api` on. An `APP_URL` in the environment `weft dev` started with is passed on instead.
+Every 300 ms it looks for a changed `.go` file outside `.weft/`, `.git/`, `node_modules/` and `web/`, and for a changed `.env` in the app's folder. When one changed it builds again and, if the build succeeds, replaces the running Go server. A failed build prints the compiler's output, and the last build keeps serving `/api` until you save the fix. A rebuilt server that stops by itself, such as one that panics as it starts, prints `weft dev: the Go server stopped after the restart; fix it and save again.`, and the next save builds and starts it again. An unreadable folder is skipped, and named once. A change under `web/` reloads the browser and needs no build; a change to `web/vite.config` needs a restart. The Go server's own output is passed through. It runs with `PORT` set to a free port, `HOST=127.0.0.1`, `WEFT_DEV_PARENT=1` and `APP_URL=http://localhost:<the page server's port>`, which win over `.env`, since the pages are at the page server's address. So the Go server listens on `127.0.0.1` only and prints no address. A non-empty `APP_URL` in `weft dev`'s own environment is passed on instead.
 
 The Go server must listen on the port in the `PORT` variable, which warp's `Serve` reads. If it does not answer there within 30 s of starting, `weft dev` stops both servers and says `weft dev: the Go server did not answer within 30 s; check that main.go serves the app (warp's Serve reads PORT), and run weft dev again.`, with exit status 1. The page server has the same 30 s, after which it says `weft dev: the page server did not answer within 30 s; see its output above.` The app has 5 s to describe itself after each build, else `weft dev: the app did not describe itself within 5 s, so web/.weft-types/api.ts is as it was; make sure main.go calls Serve before doing other work.` and goes on.
 
@@ -208,13 +208,10 @@ Example: Basic
 `--find` prints the list's lines of the components that match every word, in the catalogue's order:
 
 ```text
-$ weft catalog --find date
+$ weft catalog --find week
   Calendar        A month of dates to choose one, several or a range from, in the locale's names, digits and first day of the week.
   DatePicker      A date field where a date is typed as the locale writes it or chosen from a calendar that opens beside it.
-  DateRangePicker A field for a range of dates, a start and an end, typed in the locale or chosen in a calendar of two months.
-  InputTime       A time of day, typed part by part in the locale's order and hour cycle.
-  Separator       A rule that separates content, with an optional label or icon in its middle.
-  Timeline        Events in order, each a dot on a line with its date, title and description, the ones up to now marked done.
+  WeftProvider    Sets how the part of the page inside it is used, its input and its surface, for every Weft component within.
 ```
 
 When nothing matches it says `weft catalog: nothing matches "<words>"; run weft catalog to list them.`, with exit status 1. `--find` with no words, or only blank ones, is wrong usage.

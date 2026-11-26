@@ -218,7 +218,9 @@ For your editor and `vue-tsc`, the build writes `.weft-types/components.d.ts` in
 
 ## Before the first paint
 
-`usePrePaint(id, code)` adds a few lines of script to the top of the `<head>`, on the pages that render the calling component. Use it only to copy a stored preference onto `<html>` for CSS to read, as `AppShell` does for its collapsed sidebar. The server's markup must not depend on it.
+`usePrePaint(id, code)` adds a few lines of script to the top of the `<head>`, on the pages that render the calling component. It is for two things: copying a stored preference onto `<html>` for CSS to read, as `AppShell` does for its collapsed sidebar, and stopping what the server's markup would do before an island is live, as `Form` does: it cancels every submit of a Weft form until its island takes over. The server's markup must not depend on it. A site with a Content-Security-Policy allows this inline script by its hash, or with `'unsafe-inline'`; [`Form`'s page](/components/form) has its exact text.
+
+A `Form` sends only through its `@submit` handler, so it belongs in an island: one the page draws with no island around it never sends anything. What a person types, or a password manager fills, before the island is live is kept when it hydrates.
 
 ## Your Vite config
 

@@ -12,8 +12,8 @@ Weft is one UI system for Go and Vue apps. It has four parts:
 
 - **`@weft/ui`**: 76 Vue components, written once, that adapt to touch or pointer, to a landing page or an app, and to the width they are given. Every component is a Vapor component: no virtual DOM.
 - **`@weft/vite`**: the page build. It renders your pages to HTML when you build, compresses them, and ships JavaScript only for the parts you mark interactive.
-- **Warp, the Go package** `github.com/flakerimi/weft/warp`: an app made of modules, with typed routes that check their input and answer in one error shape, and `warp.Serve`, which serves the page build from memory next to that API, in one binary.
-- **The `weft` command**: it makes an app, runs it while you work, builds it into one binary, and updates itself. It carries the other three parts.
+- **Warp, the Go package** `github.com/flakerimi/weft/warp`: an app made of modules, with typed routes that check their input and answer in one error shape, records in SQLite, a login, and `warp.Serve`, which serves the page build from memory next to that API, in one binary.
+- **The `weft` command**: it makes an app, runs it while you work, writes the TypeScript types and client from its Go, builds it into one binary, and updates itself. It carries the other three parts.
 
 Weft is pre-alpha. Its packages are not published to npm: the `weft` command puts them in each app it makes. The repository is private for now.
 
@@ -28,13 +28,21 @@ Then read the guides as you need them:
 
 - [Pages and islands](guides/pages-and-islands.md): routes, the head, and the interactive parts.
 - [Markdown content](guides/markdown.md): docs like these, checked at build time.
-- [Warp, the Go side](guides/warp.md): modules, typed routes, validation, errors and `.env`.
+- [Warp, the Go side](guides/warp.md): the app, its modules, `.env`, a proxy, cross-site requests and tests.
+- [Typed routes](guides/routes.md): routes, their input, validation and errors.
+- [Data](guides/data.md): records in SQLite, and the five routes of a resource.
+- [Login](guides/login.md): the owner, sessions and permissions.
+- [Types from Go](guides/types-from-go.md): the typed client and form rules `weft gen` writes.
 - [Serving from Go](guides/go-serving.md): what `warp.Serve` sends, and when.
 - [Themes](guides/themes.md): colours, type and spacing as tokens.
 - [The adaptive model](guides/adaptive.md): input, surface and width.
 - [Publishing](guides/publishing.md): one binary on a server.
 
 The [CLI](reference/cli.md) and [Go package](reference/go.md) references list every command, flag and function.
+
+## An example app
+
+The repository's `examples/shop` is a small back office built the way these docs say: a login, a products table with search, a filter and a dialog to make and change one, and a page per product, with no fetch or HTTP handler written by hand. `scripts/shop.sh` runs it with the repository's Weft (`scripts/shop.sh build` builds it, `scripts/shop.sh test` runs its tests), and the suite builds and drives it on every run.
 
 ## This site
 

@@ -66,8 +66,8 @@ export function commandsNotYet(comingNext: string): string[] {
  * use today. A test checks each against Coming next and the catalogue.
  */
 export const NOT_YET: { see: string; missing: string; instead: string }[] = [
-  { see: 'Login and permissions', missing: 'Login, sessions and permissions (the `auth` module, `auth.Can`)', instead: 'write them as a module of your own in `app/`' },
-  { see: 'Types from Go', missing: 'TypeScript types and form schemas made from the Go types (`weft gen`)', instead: "write the TypeScript types and the `Form`'s schema by hand" },
+  { see: 'Login and permissions', missing: 'Roles other than the owner, registration and password reset', instead: 'sign in with `auth.Module()`, whose one role is the owner, and add users with `auth.AddUser`' },
+  { see: 'Data', missing: 'PostgreSQL, MySQL and relations between records', instead: 'keep records in SQLite with `warp/data`, and an id field for a link' },
   { see: 'Scaffolding and app blocks', missing: '`DataTable` and `EntityDialog`', instead: 'use `Table`, and a `Dialog` with a `Form`' },
   { see: 'Attachments and live data', missing: 'Attachments, `useLive` and the charts', instead: 'use `FileUpload` with a handler of your own mounted with `app.Handle`, and `StatCard`' },
   { see: 'App routes', missing: 'A client-side router and `layouts/`', instead: 'each page is a document of its own; share a layout as a component the pages use' },
@@ -127,7 +127,8 @@ export function indexMd({ docs, skills, components, version, appAgents }: IndexI
     '| --- | --- |',
     '| A page | Add `web/pages/<path>.vue`. Its path is the route: `index.vue` is the folder, and `[slug].vue` is one page per value its `getPaths()` returns. |',
     '| Something interactive | Write it in `web/components/<Name>.vue`, import it in the page, and render it with `<Island when="load" :component="Name" />`. Only islands run in the browser: a page without one ships no JavaScript. |',
-    `| An API route | In a module's \`Register\`, in \`app/<module>/routes.go\`, add a typed route: \`warp.Get(app, "/items", list)\` answers \`GET /api/items\`. Its input is a struct whose fields are tagged \`json\`, \`query\` or \`path\`, with rules in \`warp:"required,max=120"\`; return \`warp.NotFound(...)\` and the like for errors. A new module goes in \`app/<name>/\` and in \`app/modules.go\`. See ${SITE}/docs/guides/warp. |`,
+    `| An API route | In a module's \`Register\`, in \`app/<module>/routes.go\`, add a typed route: \`warp.Get(app, "/items", list)\` answers \`GET /api/items\`. Its input is a struct whose fields are tagged \`json\`, \`query\` or \`path\`, with rules in \`warp:"required,max=120"\`; return \`warp.NotFound(...)\` and the like for errors. A new module goes in \`app/<name>/\` and in \`app/modules.go\`. See ${SITE}/docs/guides/routes. |`,
+    `| Records | List \`data.Module()\` in \`app/modules.go\`, import \`_ "modernc.org/sqlite"\` in \`main.go\`, set \`DB_DRIVER=sqlite\` and \`DB_URL\` in \`.env\`; a model embeds \`data.Record\`, and \`data.Resource(app, "/items", data.NewStore[Item](data.For(app), "items"))\` gives it five routes. Pages call them with \`api.items.list()\` from \`web/.weft-types/api.ts\`, which \`weft dev\` writes. See ${SITE}/docs/guides/data and ${SITE}/docs/guides/types-from-go. |`,
     '| A look | Set `"theme"` in the `"weft"` object of `package.json` to `neutral`, `lisa` or `weft`, then start `weft dev` again, as it reads the theme once. Set `--weft-*` tokens in a stylesheet a page imports. |',
     '',
     '## 4. Rules',
@@ -151,7 +152,7 @@ export function indexMd({ docs, skills, components, version, appAgents }: IndexI
     '',
     `- The commands ${list(commands.map((c) => `\`${c.replace(/`/g, '')}\``))}.`,
     ...NOT_YET.map((n) => `- ${n.missing}: ${n.instead}.`),
-    "- Storing data is the app's own code today: `database/sql` and a driver, in a module in `app/`.",
+    '- The app template has no database or login: add `data.Module()` and `auth.Module()` yourself.',
     '',
     '## More',
     '',

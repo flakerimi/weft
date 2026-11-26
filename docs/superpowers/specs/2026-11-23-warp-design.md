@@ -197,15 +197,15 @@ Field types, from Base's generator: `string`, `text`, `email`, `url`, `phone`, `
 
 ## Phases
 
-These replace phases 4b and 5 of the Weft design. Each gets its own plan.
+These replace phases 4b and 5 of the Weft design. Each gets its own plan. W2 to W4 were first built together as one thin slice (`2026-11-25-warp-slice-design.md`, plan `docs/superpowers/plans/2026-11-25-warp-slice.md`), which each phase now widens.
 
 | Phase | Contents |
 | --- | --- |
 | W1 | Delivered (plan `docs/superpowers/plans/2026-11-25-warp-core.md`). The core: `warp.App`, modules, env configuration, typed routes on `ServeMux`, the error shape, validation; `weft.Serve` becomes `warp.Serve`; the template's `main.go` and `app/` move to this shape |
-| W2 | `warp/describe`, `weft gen` (types, the typed client, form schemas), `weft routes`; `weft dev` regenerates on a Go change |
-| W3 | `warp/data`: `Store`, additive migrations, list queries, `warp.Resource`; SQLite, then PostgreSQL, then MySQL |
-| W4 | `auth`: sessions, users, roles, permissions; `useSession`, the login page, `perm`, the route guard; `mail` with the `log` and `smtp` drivers |
-| W5 | `weft scaffold`, with `DataTable` and `EntityDialog` (from the Weft design's phase 5) |
+| W2 | A first pass delivered by the slice (`2026-11-25-warp-slice-design.md`): `Describe` in the core rather than `warp/describe`, `weft gen`, `weft routes`, `weft dev` regenerating. Left: an `enum` typed as its values, a typed `useParams`, an API on another origin. As designed: `warp/describe`, `weft gen` (types, the typed client, form schemas), `weft routes`; `weft dev` regenerates on a Go change |
+| W3 | A first pass delivered by the slice: `warp/data` with SQLite, `Store`, additive migrations, list queries, and `data.Resource` in place of `warp.Resource`. Left: PostgreSQL, MySQL, relations, `weft db`. As designed: `warp/data`: `Store`, additive migrations, list queries, `warp.Resource`; SQLite, then PostgreSQL, then MySQL |
+| W4 | A first pass delivered by the slice: `warp/auth` with one owner, a signed-cookie session, `auth.Can` and `auth.Per`. Left: roles, registration, reset, `mail`, `useSession`, `perm`, a route guard in Vue. As designed: `auth`: sessions, users, roles, permissions; `useSession`, the login page, `perm`, the route guard; `mail` with the `log` and `smtp` drivers |
+| W5 | Not started; the slice's shop is the code it is to be written from. As designed: `weft scaffold`, with `DataTable` and `EntityDialog` (from the Weft design's phase 5) |
 | W6 | `storage` and attachments; `events` and `live` with `useLive` |
 | W7 | `jobs`, `i18n`, `middleware` (rate limit, API keys), `docs` |
 

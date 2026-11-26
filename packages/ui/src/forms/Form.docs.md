@@ -10,7 +10,7 @@ adapts:
 ---
 `state` is the values, an object the fields bind into with `v-model`;
 `schema` is a Weft field schema - plain JSON a server can send, the same
-shape the Go contract will generate - keyed by field name:
+shape `weft gen` writes as `schema` from the Go types - keyed by field name:
 
     { email: { required: true, email: true }, age: { min: 18, message: 'You must be 18 or over.' } }
 
