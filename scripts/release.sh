@@ -23,6 +23,9 @@ scripts/version.sh "$version" || {
 	exit 2
 }
 targets=${WEFT_TARGETS:-darwin/arm64 darwin/amd64 linux/arm64 linux/amd64}
+# $targets is split on spaces but never globbed, so a * is refused as itself;
+# restore and the SHA256SUMS line below glob, and turn it back on for themselves.
+set -f
 # shellcheck disable=SC2086
 [ -n "$(printf '%s' $targets)" ] || {
 	echo "release: WEFT_TARGETS names no target; name os/arch pairs such as \"linux/amd64 windows/arm64\", or unset it for the default four." >&2
@@ -54,6 +57,7 @@ bundle="$root/cmd/weft/bundle"
 # deleted. Without bundle.sh's mark the folder is not its output, and is left.
 restore() {
 	[ -e "$bundle/.weft-bundle" ] || return 0
+	set +f
 	kept=$(mktemp -d)
 	for f in "$bundle"/* "$bundle"/.[!.]* "$bundle"/..?*; do
 		[ -e "$f" ] || continue
@@ -90,7 +94,7 @@ for target in $targets; do
 	echo "built $archive"
 done
 # The tarballs first, as before there were zips, then the zips; each by name.
-(cd "$out" && set -- && for f in weft_*.tar.gz weft_*.zip; do
+(cd "$out" && set +f && set -- && for f in weft_*.tar.gz weft_*.zip; do
 	[ ! -e "$f" ] || set -- "$@" "$f"
 done && if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi) >"$out/SHA256SUMS"
 printf '%s\n' "$version" >"$releases/latest"

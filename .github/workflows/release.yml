@@ -1,9 +1,8 @@
 # Builds and tests a release of the weft command on every system it is built
 # for, and keeps it as this run's artifact and, for a tag or when asked, as a
 # draft GitHub Release. It never publishes weft.base.al, which stays the
-# release channel (the repository is private): the owner publishes with
-# scripts/publish-site.sh. It never makes a release that is not a draft, and
-# never replaces or deletes one.
+# release channel: the owner publishes with scripts/publish-site.sh. It never
+# makes a release that is not a draft, and never replaces or deletes one.
 name: release
 on:
   push:
@@ -92,17 +91,15 @@ jobs:
       # here) and is skipped elsewhere; WEFT_BROWSER would name one.
       - run: go test -timeout 30m . ./warp/... ./cmd/weft
 
+  # Read-only, like every job but draft: it runs pnpm install and the whole
+  # build, whose dependencies' code then runs with this job's token.
   build:
     needs: [version, test]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Only to make the draft; every other job reads.
-    permissions:
-      contents: write
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
-      # No token is left in .git, so nothing the build runs can push.
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
@@ -128,8 +125,25 @@ jobs:
           name: weft-${{ needs.version.outputs.version }}
           path: ${{ runner.temp }}/releases/${{ needs.version.outputs.version }}
           if-no-files-found: error
+
+  # The only job that may write. It checks out nothing and runs no code of
+  # the repository's or its dependencies': it downloads the build's files and
+  # hands them to gh.
+  draft:
+    needs: [version, build]
+    if: github.event_name == 'push' || inputs.draft_release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: weft-${{ needs.version.outputs.version }}
+          path: ${{ runner.temp }}/releases/${{ needs.version.outputs.version }}
       - name: Make the draft release
-        if: github.event_name == 'push' || inputs.draft_release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -142,6 +156,7 @@ jobs:
             exit 1
           fi
           dir="$RUNNER_TEMP/releases/$VERSION"
+          ls -l "$dir"
           gh release create "$tag" --draft --title "$tag" --target "$GITHUB_SHA" \
             --notes "weft $VERSION for darwin, linux and windows, on amd64 and arm64, built and tested by the release workflow from $GITHUB_SHA. A draft: weft.base.al is published with scripts/publish-site.sh." \
             "$dir"/weft_*.tar.gz "$dir"/weft_*.zip "$dir/SHA256SUMS"
