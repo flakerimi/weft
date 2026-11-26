@@ -34,6 +34,8 @@ type column struct {
 	null   bool // a pointer: NULL is nil
 	unique bool // the rule unique: a unique index
 	auto   bool // id, created_at or updated_at, which the store sets
+	// What the column takes part in, in a list: its data tag, read by listTag.
+	sort, filter, search bool
 }
 
 // table is a model's table: its columns in field order.
@@ -162,6 +164,7 @@ func (w *walker) walk(rt reflect.Type, prefix []int) {
 				c.unique = true
 			}
 		}
+		w.listTag(c, f)
 		if other := w.owners[name]; other != nil {
 			switch {
 			case other.auto:

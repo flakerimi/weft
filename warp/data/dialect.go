@@ -36,6 +36,12 @@ type dialect interface {
 	// needs, the folder to make for the file (none for memory), and whether
 	// the database lives in memory, where one connection must hold it.
 	dsn(url string) (dsn, dir string, memory bool)
+	// contains is the condition that the column named name holds the n-th
+	// value, written by containsText, ignoring case as far as the engine does.
+	contains(name string, n int) string
+	// containsText is the value contains takes for the text s, every wildcard
+	// in s escaped so that it is taken literally.
+	containsText(s string) string
 }
 
 // sqlite is the dialect of SQLite.
@@ -157,3 +163,14 @@ func (sqlite) dsn(url string) (string, string, bool) {
 	}
 	return dsn, filepath.Dir(path), false
 }
+
+// contains uses LIKE, which in SQLite ignores the case of ASCII letters alone,
+// with \ as its escape character.
+func (d sqlite) contains(name string, n int) string {
+	return d.quote(name) + " LIKE " + d.placeholder(n) + ` ESCAPE '\'`
+}
+
+// likeEscapes escapes the escape character and LIKE's two wildcards.
+var likeEscapes = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+func (sqlite) containsText(s string) string { return "%" + likeEscapes.Replace(s) + "%" }
