@@ -251,8 +251,8 @@ func (sqlite) busy(err error) bool {
 
 // settingsProblem asks the database rather than trusting the parse of
 // DB_URL: a _pragma is SQL, which no rewriting can follow in every spelling
-// (two statements, a quoted name, a comment). On two connections (one for a
-// database in memory, which has one), held at once, since every connection
+// (two statements, a quoted name, a comment). On three connections (one for
+// a database in memory, which has one), held at once, since every connection
 // runs the settings anew, it reads back:
 //   - busy_timeout, which must be at least busyTimeout and at most
 //     maxBusyTimeout;
@@ -267,7 +267,11 @@ func (sqlite) busy(err error) bool {
 // file out of WAL whenever a connection opens alone, under another
 // process's feet. So pragmaJournal reads a _pragma's journal_mode itself:
 // WAL, in any case, starts; a mention in a comment starts; any other value,
-// or a spelling it cannot read, is refused.
+// or a spelling it cannot read, is refused. A spelling it reads wrong (a
+// comment marker inside a quoted string) is caught by the database: the
+// first connection holds a read while the second and third open, and a
+// connection cannot turn the journal out of WAL while another reads, so its
+// open fails as busy, which is refused too.
 //
 // The transaction lock mode cannot be read back: a connection does not say
 // how its driver begins a transaction. It holds because SQL cannot set it (no
@@ -290,12 +294,16 @@ func (sqlite) settingsProblem(ctx context.Context, pool *sql.DB, url string, mem
 			}
 		}
 	}
-	n := 2
+	n := 3
 	if memory {
 		n = 1
 	}
 	var conns []*sql.Conn
+	var reading *sql.Conn // the first, while it holds a read
 	defer func() {
+		if reading != nil {
+			reading.ExecContext(context.WithoutCancel(ctx), "ROLLBACK")
+		}
 		for _, c := range conns {
 			c.Close()
 		}
@@ -303,6 +311,9 @@ func (sqlite) settingsProblem(ctx context.Context, pool *sql.DB, url string, mem
 	for i := range n {
 		c, err := pool.Conn(ctx)
 		if err != nil {
+			if i > 0 && sqlite.busy(sqlite{}, err) {
+				return fmt.Errorf("DB_URL's _pragma sets journal_mode on each new connection, which cannot open while another reads, and the store needs wal; remove journal_mode from DB_URL.")
+			}
 			return fmt.Errorf("connection %d to the database cannot be opened (%v); check the settings in DB_URL.", i+1, err)
 		}
 		conns = append(conns, c)
@@ -328,6 +339,22 @@ func (sqlite) settingsProblem(ctx context.Context, pool *sql.DB, url string, mem
 			return fmt.Errorf("DB_URL sets foreign_keys to %d, and the store needs 1; remove it from DB_URL.", fk)
 		case locking != "normal":
 			return fmt.Errorf("DB_URL sets locking_mode to %s, and the store needs normal; remove it from DB_URL.", locking)
+		}
+		// The first connection holds a read while the next ones open, as the
+		// app's own connections do under load. A _pragma that turns the
+		// journal out of WAL as a connection opens, which no reading of its
+		// text can be sure to see, needs the database to itself for that,
+		// so such a connection cannot open; settings that keep WAL need no
+		// lock to open.
+		if i == 0 && n > 1 {
+			if _, err := c.ExecContext(ctx, "BEGIN"); err != nil {
+				return fmt.Errorf("the database cannot be read (%v); check the settings in DB_URL.", err)
+			}
+			reading = c
+			var tables int
+			if err := c.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master").Scan(&tables); err != nil {
+				return fmt.Errorf("the database cannot be read (%v); check the settings in DB_URL.", err)
+			}
 		}
 	}
 	return nil

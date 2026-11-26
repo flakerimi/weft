@@ -375,3 +375,23 @@ func TestJournalPragmas(t *testing.T) {
 		}
 	}
 }
+
+// A comment marker inside a quoted string hides a journal_mode setting from
+// the reading of a _pragma. Every connection still ends in WAL, so no read
+// back sees it; but a connection opened while another reads cannot turn the
+// journal out of WAL, so it cannot open, which refuses it. The value set
+// cannot be named without reading the text, so the sentence names none.
+func TestJournalHiddenByAQuotedCommentMarker(t *testing.T) {
+	for _, pragma := range []string{
+		"cache_size('--');pragma journal_mode=delete",
+		"cache_size('/*');pragma journal_mode=delete;--*/",
+		`cache_size("--");pragma journal_mode=delete`,
+		"cache_size('-- x');pragma main.journal_mode = DELETE",
+		"cache_size('/* ');pragma journal_mode=truncate; select ' */'",
+	} {
+		const want = `warp: module "data" could not migrate: DB_URL's _pragma sets journal_mode on each new connection, which cannot open while another reads, and the store needs wal; remove journal_mode from DB_URL.`
+		if _, err := startWith(t, "file:"+dbFile(t)+"?_pragma="+url.QueryEscape(pragma)); err == nil || err.Error() != want {
+			t.Errorf("_pragma=%s: Start = %v\nwant %s", pragma, err, want)
+		}
+	}
+}
