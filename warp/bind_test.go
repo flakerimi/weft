@@ -3,10 +3,12 @@ package warp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net/http/httptest"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -1997,4 +1999,151 @@ func TestBodyWrongValueSays(t *testing.T) {
 			t.Errorf("%s: %d %s, want %v", body, w.Code, w.Body, want)
 		}
 	}
+}
+
+// refusedCode reads itself from text and refuses "bad".
+type refusedCode string
+
+func (c *refusedCode) UnmarshalText(b []byte) error {
+	if string(b) == "bad" {
+		return errors.New("bad code")
+	}
+	*c = refusedCode(b)
+	return nil
+}
+
+// stampNode holds itself, and a list of times at each level.
+type stampNode struct {
+	N *stampNode  `json:"n"`
+	T []time.Time `json:"t"`
+}
+
+type codesIn struct {
+	Body struct {
+		Codes []refusedCode `json:"codes"`
+	} `body:"json"`
+}
+
+type stampsIn struct {
+	Body stampNode `body:"json"`
+}
+
+// refusedBodies are the two bodies that once made the search for a refused
+// value cost hundreds of megabytes: n text values then one their decoder
+// refuses, in a 1 MiB body for n = 262 000; and n times then a text that is
+// not one, 61 objects deep, in 2.3 MB for n = 100 000. Before the search, a request
+// with either cost about 27 MB and 25 MB in all.
+var refusedBodies = []struct {
+	name       string
+	in         reflect.Type
+	post       func(*App)
+	body       func(n int) []byte
+	n          int
+	path, says string
+}{
+	{
+		"codes", reflect.TypeFor[codesIn](), func(a *App) { Post(a, "/x", func(context.Context, codesIn) (None, error) { return None{}, nil }) },
+		func(n int) []byte { return []byte(`{"codes":[` + strings.Repeat(`"a",`, n) + `"bad"]}`) },
+		262_000, "codes", "Send a value this field takes.",
+	},
+	{
+		"stamps", reflect.TypeFor[stampsIn](), func(a *App) { Post(a, "/x", func(context.Context, stampsIn) (None, error) { return None{}, nil }) },
+		func(n int) []byte {
+			return []byte(strings.Repeat(`{"n":`, 61) + `{"t":[` + strings.Repeat(`"2026-11-25T10:00:00Z",`, n) + `"bad"]}` + strings.Repeat("}", 61))
+		},
+		100_000, strings.Repeat("n.", 61) + "t", "Send a time like 2026-11-25T10:00:00Z.",
+	},
+}
+
+// The value a field's own decoder refused is found by reading the body once:
+// the search costs the same few allocations however many values came before
+// the refused one, and a request costs about what it did before the search
+// named the field.
+func TestBodyRefusedValueCost(t *testing.T) {
+	for _, c := range refusedBodies {
+		p, mistakes := planFor(c.in, "POST", "/x")
+		if mistakes != nil {
+			t.Fatal(mistakes)
+		}
+		big, small := c.body(c.n), c.body(c.n/1000)
+		var e *Error
+		if err := p.refused(big); !errors.As(err, &e) || !reflect.DeepEqual(e.Fields, map[string]string{c.path: c.says}) {
+			t.Fatalf("%s: %v, want %s: %s", c.name, err, c.path, c.says)
+		}
+		bigAllocs := testing.AllocsPerRun(1, func() { p.refused(big) })
+		smallAllocs := testing.AllocsPerRun(1, func() { p.refused(small) })
+		if bigAllocs > smallAllocs || bigAllocs > 64 {
+			t.Errorf("%s: the search cost %.0f allocations after %d values and %.0f after %d; want the same, at most 64", c.name, bigAllocs, c.n, smallAllocs, c.n/1000)
+		}
+		if b := allocated(func() { p.refused(big) }); b > 64<<10 {
+			t.Errorf("%s: the search allocated %d bytes, want at most 64 KiB", c.name, b)
+		}
+		// Each value with a decoder of its own is tried once, and each key
+		// looked up at most twice.
+		if r := refusedIn(p.view, big); r.tried != c.n+1 || r.compares > 2*62 {
+			t.Errorf("%s: %d values tried and %d looks of a key, want %d and at most %d", c.name, r.tried, r.compares, c.n+1, 2*62)
+		}
+		app := New(Config{MaxBodyBytes: 4 << 20})
+		c.post(app)
+		h := mustRegister(t, app)
+		var w *httptest.ResponseRecorder
+		body := string(big)
+		request := allocated(func() { w = send(t, h, "POST", "/api/x", body) })
+		if _, _, fields := apiError(t, w); w.Code != 400 || !reflect.DeepEqual(fields, map[string]string{c.path: c.says}) {
+			t.Fatalf("%s: %d %s", c.name, w.Code, w.Body)
+		}
+		// The request reads the body and decodes it once, as it did before
+		// the search: 27 MB and 25 MB then, for these two.
+		once := allocated(func() { decodeStrict(big, reflect.New(p.view).Interface()) })
+		if limit := once + 3*uint64(len(big)); request > limit {
+			t.Errorf("%s: the request allocated %d bytes, want at most %d (decoding the body once, %d, and three times its size)", c.name, request, limit, once)
+		}
+	}
+}
+
+// The search reads a value as encoding/json hands it to its decoder: a key in
+// any case, an escaped text unquoted, null left to a pointer and to a type
+// that reads itself from text, and the path ending at a map's field.
+func TestBodyRefusedValueFound(t *testing.T) {
+	type In struct {
+		Codes []refusedCode           `json:"codes"`
+		Opt   []*refusedCode          `json:"opt"`
+		When  *time.Time              `json:"when"`
+		At    time.Time               `json:"at"`
+		Data  [][]byte                `json:"data"`
+		By    map[string][]stampNode  `json:"by"`
+		Deep  map[string]*refusedCode `json:"deep"`
+	}
+	app := New(Config{})
+	Post(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+	h := mustRegister(t, app)
+	for body, want := range map[string]map[string]string{
+		`{"CODES":["a","bad"]}`:                   {"codes": "Send a value this field takes."},
+		`{"codes":["a","\u0062ad"]}`:              {"codes": "Send a value this field takes."},
+		`{"codes":[null,"a",5]}`:                  {"codes": "Send text."},
+		`{"opt":[null,"bad"]}`:                    {"opt": "Send a value this field takes."},
+		`{"when":null,"codes":["bad"]}`:           {"codes": "Send a value this field takes."},
+		`{"data":["YWI=",null,"!!"]}`:             {"data": "Send base64 text."},
+		`{"by":{"a.b":[{"n":{"t":["x"]}}]}}`:      {"by": "Send a time like 2026-11-25T10:00:00Z."},
+		`{"deep":{"k":null,"j":"bad"}}`:           {"deep": "Send a value this field takes."},
+		`{"codes":["a"],"at":"2026-11-25","x":1}`: {"at": "Send a time like 2026-11-25T10:00:00Z."},
+	} {
+		w := send(t, h, "POST", "/api/x", body)
+		if _, _, fields := apiError(t, w); w.Code != 400 || !reflect.DeepEqual(fields, want) {
+			t.Errorf("%s: %d %s, want %v", body, w.Code, w.Body, want)
+		}
+	}
+	if w := send(t, h, "POST", "/api/x", `{"codes":["A"],"opt":[null],"when":null,"data":["YWI="],"deep":{"k":null}}`); w.Code != 204 {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+}
+
+// allocated is how many bytes f allocates.
+func allocated(f func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	f()
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
 }

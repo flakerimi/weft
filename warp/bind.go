@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"math"
 	"mime"
 	"net/http"
@@ -925,73 +925,209 @@ func (p *plan) bodyError(data []byte, err error) error {
 }
 
 // refused is the answer to a body a field's own decoder refused: that field,
-// found by decoding each value of the body alone, and what it takes; or,
-// when no one field can be found, cannotTake.
+// found by reading the body once, and what it takes; or, when no one field
+// is found, cannotTake.
 func (p *plan) refused(data []byte) error {
-	if path, says, ok := refusedField(p.view, data); ok {
-		return wrongType(map[string]string{path: says})
+	if r := refusedIn(p.view, data); r.found {
+		return wrongType(map[string]string{strings.Join(r.path[:r.at], "."): r.says})
 	}
 	return BadRequest(cannotTake)
 }
 
-// refusedField finds the value of raw, a JSON value for type t, that t's
-// decoder refuses: its path (the keys of struct fields, a list's index left
-// out and nothing after a map's field, as fieldPath writes it) and what it
-// takes.
-func refusedField(t reflect.Type, raw []byte) (path, says string, ok bool) {
+// refusedIn searches data, a JSON value for type t, for the value a field's
+// own decoder refuses.
+func refusedIn(t reflect.Type, data []byte) *refusal {
+	r := &refusal{bodyScan: bodyScan{data: data, mapAt: -1}}
+	r.value(0, t)
+	return r
+}
+
+// refusal is one search of a body for the value a field's own decoder
+// refuses. It reads the body once, as the decoder does, in order, with the
+// scan's helpers, and tries each value of a type with a decoder of its own
+// (time.Time, one that reads its own JSON or text, a []byte) once, as
+// encoding/json would hand it over, into a value kept for the type and made
+// zero before each try; the first one refused is decoded once more by
+// encoding/json itself, to be sure. Its path is the keys of struct fields, a
+// list's index left out and nothing after a map's field, as fieldPath writes
+// it. Its allocations do not grow with the values tried, beyond what their
+// own decoders allocate: a struct's keys are made once for its type, and an
+// escaped text or a []byte is read into one buffer.
+type refusal struct {
+	bodyScan
+	objects map[reflect.Type]*keyed
+	values  map[reflect.Type]reflect.Value
+	buf     []byte
+	tried   int // values handed to their own decoder, which tests bound
+	found   bool
+	at      int // path[:at] is the refused value's path
+	says    string
+}
+
+// keyed is a struct type's object, for match, and its fields' types.
+type keyed struct {
+	object
+	types []reflect.Type
+}
+
+// value reads the value at i as one of type t and returns where it ends,
+// stopping the search at the first refused.
+func (r *refusal) value(i int, t reflect.Type) int {
 	for t.Kind() == reflect.Pointer && !decodesItself(t) {
 		t = t.Elem()
 	}
-	refuses := func() bool { return decodeStrict(raw, reflect.New(t).Interface()) != nil }
+	c := r.data[i]
 	switch {
 	case t == timeType || decodesItself(t) || isBytes(t):
-		if refuses() {
-			return "", takes(t, raw), true
-		}
-	case t.Kind() == reflect.Struct:
-		var obj map[string]json.RawMessage
-		if json.Unmarshal(raw, &obj) != nil {
-			return "", "", false
-		}
-		fields, _ := inputFields(t, nil)
-		for _, key := range slices.Sorted(maps.Keys(obj)) {
-			for _, f := range fields {
-				name, _, ok := jsonTagOf(f.StructField)
-				if !ok || name != key && !strings.EqualFold(name, key) {
-					continue
-				}
-				if inner, says, ok := refusedField(f.Type, obj[key]); ok {
-					return strings.TrimSuffix(name+"."+inner, "."), says, true
-				}
-				break
+		end := r.skip(i)
+		if r.refuses(t, r.data[i:end]) {
+			r.found, r.says = true, takes(t, r.data[i:end])
+			r.at = r.depth
+			if r.mapAt >= 0 {
+				r.at = r.mapAt
 			}
 		}
-	case t.Kind() == reflect.Slice || t.Kind() == reflect.Array:
-		var list []json.RawMessage
-		if json.Unmarshal(raw, &list) != nil {
-			return "", "", false
+		return end
+	case t.Kind() == reflect.Struct && c == '{':
+		o := r.objectOf(t)
+		i = r.space(i + 1)
+		if r.data[i] == '}' {
+			return i + 1
 		}
-		for _, v := range list {
-			if inner, says, ok := refusedField(t.Elem(), v); ok {
-				return inner, says, true
+		for {
+			end := r.str(i)
+			k, _ := r.match(&o.object, r.data[i:end])
+			if i = r.space(r.space(end) + 1); k >= 0 {
+				r.path[r.depth] = o.names[k]
+				r.depth++
+				i = r.value(i, o.types[k])
+				r.depth--
+			} else {
+				i = r.skip(i)
 			}
-		}
-	case t.Kind() == reflect.Map:
-		var obj map[string]json.RawMessage
-		if json.Unmarshal(raw, &obj) != nil {
-			return "", "", false
-		}
-		for _, key := range slices.Sorted(maps.Keys(obj)) {
-			if _, says, ok := refusedField(t.Elem(), obj[key]); ok {
-				return "", says, true // a key may hold dots: the path ends at the map
+			if r.found {
+				return i
 			}
+			if i = r.space(i); r.data[i] == '}' {
+				return i + 1
+			}
+			i = r.space(i + 1)
 		}
-	default:
-		if refuses() {
-			return "", sendWhat(t, ""), true
+	case (t.Kind() == reflect.Slice || t.Kind() == reflect.Array) && c == '[':
+		if i = r.space(i + 1); r.data[i] == ']' {
+			return i + 1
+		}
+		for {
+			if i = r.value(i, t.Elem()); r.found {
+				return i
+			}
+			if i = r.space(i); r.data[i] == ']' {
+				return i + 1
+			}
+			i = r.space(i + 1)
+		}
+	case t.Kind() == reflect.Map && c == '{':
+		was := r.mapAt
+		if was < 0 {
+			r.mapAt = r.depth
+		}
+		defer func() { r.mapAt = was }()
+		if i = r.space(i + 1); r.data[i] == '}' {
+			return i + 1
+		}
+		for {
+			i = r.space(r.space(r.str(i)) + 1)
+			if i = r.value(i, t.Elem()); r.found {
+				return i
+			}
+			if i = r.space(i); r.data[i] == '}' {
+				return i + 1
+			}
+			i = r.space(i + 1)
 		}
 	}
-	return "", "", false
+	// Anything else is refused, if at all, as a wrong type, which the
+	// decoder names itself.
+	return r.skip(i)
+}
+
+// objectOf is the keys of struct type t, made once a search.
+func (r *refusal) objectOf(t reflect.Type) *keyed {
+	if o, ok := r.objects[t]; ok {
+		return o
+	}
+	o := &keyed{}
+	fields, _ := inputFields(t, nil)
+	for _, f := range fields {
+		if key, _, ok := jsonTagOf(f.StructField); ok && key != "" {
+			o.names = append(o.names, key)
+			o.types = append(o.types, f.Type)
+		}
+	}
+	o.index()
+	if r.objects == nil {
+		r.objects = map[reflect.Type]*keyed{}
+	}
+	r.objects[t] = o
+	return o
+}
+
+// refuses reports whether t's own decoder refuses raw, handing it raw as
+// encoding/json v1 does (literalStore, indirect): null to a pointer sets it
+// to nil; a type that reads its own JSON is handed raw, null included; one
+// that reads itself from text, and a []byte, take a string, its text
+// unquoted, and leave null alone.
+func (r *refusal) refuses(t reflect.Type, raw []byte) bool {
+	base := t
+	for base.Kind() == reflect.Pointer {
+		base = base.Elem()
+	}
+	isNull := raw[0] == 'n'
+	if base != t && isNull {
+		return false
+	}
+	v, ok := r.values[base]
+	if !ok {
+		v = reflect.New(base)
+		if r.values == nil {
+			r.values = map[reflect.Type]reflect.Value{}
+		}
+		r.values[base] = v
+	}
+	v.Elem().SetZero()
+	r.tried++
+	var err error
+	if u, ok := v.Interface().(json.Unmarshaler); ok {
+		err = u.UnmarshalJSON(raw)
+	} else if isNull {
+		return false
+	} else if raw[0] != '"' {
+		err = errNotText
+	} else if text := r.text(raw); isBytes(base) && !decodesItself(base) {
+		n := base64.StdEncoding.DecodedLen(len(text))
+		start := len(r.buf)
+		r.buf = slices.Grow(r.buf, n)
+		_, err = base64.StdEncoding.Decode(r.buf[start:start+n], text)
+		r.buf = r.buf[:start]
+	} else if u, ok := v.Interface().(encoding.TextUnmarshaler); ok {
+		err = u.UnmarshalText(text)
+	}
+	return err != nil && decodeStrict(raw, reflect.New(t).Interface()) != nil
+}
+
+// errNotText is what refuses says of anything but a string or null for a
+// type that reads itself from text, or a []byte.
+var errNotText = errors.New("not a string")
+
+// text is what the JSON string raw says: its text itself unless it has an
+// escape or is not well-formed UTF-8, else read into r's buffer.
+func (r *refusal) text(raw []byte) []byte {
+	text := raw[1 : len(raw)-1]
+	if !needsUnquote(text) {
+		return text
+	}
+	r.buf = appendUnquoted(r.buf[:0], text)
+	return r.buf
 }
 
 // takes says what a type that reads itself takes, raw being what was sent.
