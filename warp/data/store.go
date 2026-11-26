@@ -73,6 +73,9 @@ func (s *Store[T]) ready(ctx context.Context) (querier, dialect, error) {
 	if conn == nil {
 		return nil, nil, fmt.Errorf("warp: the %s store was used before the app started; use it from a handler, or after Start.", s.name)
 	}
+	if s.db.stopped() {
+		return nil, nil, errStopping
+	}
 	q, err := s.db.q(ctx, conn)
 	return q, d, err
 }

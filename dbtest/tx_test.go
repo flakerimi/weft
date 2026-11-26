@@ -354,3 +354,24 @@ func TestStopWaitsForTx(t *testing.T) {
 		}
 	})
 }
+
+// A store call made after Stop closed the database, as a handler that
+// outlived the drain makes, is the 503 of a stopping app, not the driver's
+// words.
+func TestCallAfterStopIsUnavailable(t *testing.T) {
+	app := warp.New(warp.ConfigFrom(env(dbFile(t))))
+	var s *data.Store[Product]
+	app.Use(data.Module(), stores{"products", func(db *data.DB) { s = data.NewStore[Product](db, "products") }})
+	if err := app.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	app.Stop(ctx)
+	_, err := s.List(ctx, data.Query{})
+	var e *warp.Error
+	if !errors.As(err, &e) || e.Status != 503 || e.Message != "warp/data: the app is stopping." {
+		t.Errorf("List after Stop = %v", err)
+	}
+	if err := s.Create(ctx, &Product{Name: "Lamp"}); !errors.As(err, &e) || e.Status != 503 {
+		t.Errorf("Create after Stop = %v", err)
+	}
+}

@@ -92,6 +92,7 @@ type DB struct {
 	stopping bool
 	txs      sync.WaitGroup
 	running  int
+	closed   bool // Stop closed the database
 }
 
 // SQL returns the database's pool, for queries of the app's own that need it
@@ -295,6 +296,9 @@ func (db *DB) close() error {
 	if conn == nil {
 		return nil
 	}
+	db.mu.Lock()
+	db.closed = true
+	db.mu.Unlock()
 	if err := conn.Close(); err != nil {
 		return fmt.Errorf("warp: the database cannot be closed (%w); check the disk it is on.", err)
 	}
@@ -346,6 +350,9 @@ const busyMessage = "The database is busy; try again in a moment."
 // is a typed handler's: once for each refusal, which is once a request
 // unless the handler tries again.
 func unavailable(ctx context.Context, d dialect, err error) error {
+	if err != nil && err.Error() == "sql: database is closed" { // database/sql's errDBClosed, unexported
+		return errStopping
+	}
 	if errors.Is(err, sql.ErrTxDone) {
 		// A call on fn's context that got past the check in q just as the Tx
 		// ended: the same sentence as one after it.
@@ -360,6 +367,16 @@ func unavailable(ctx context.Context, d dialect, err error) error {
 		slog.Warn("data: the database was busy, so the call was answered 503", "error", err)
 	}
 	return warp.Unavailable(busyMessage)
+}
+
+// errStopping is the answer to a call once the app has begun to stop.
+var errStopping = warp.Unavailable("warp/data: the app is stopping.")
+
+// stopped reports whether Stop has closed the database.
+func (db *DB) stopped() bool {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	return db.closed
 }
 
 // on returns what a call on ctx runs on, the transaction on ctx or the pool,
@@ -492,7 +509,7 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context) error) error 
 	db.mu.Lock()
 	if db.stopping {
 		db.mu.Unlock()
-		return warp.Unavailable("warp/data: the app is stopping.")
+		return errStopping
 	}
 	db.txs.Add(1)
 	db.running++
