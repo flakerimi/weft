@@ -1005,9 +1005,13 @@ func TestBodyValueItsFieldCannotTake(t *testing.T) {
 	app := New(Config{})
 	Post(app, "/events", func(ctx context.Context, in EventIn) (Item, error) { return Item{}, nil })
 	h := mustRegister(t, app)
-	for _, body := range []string{`{"when":"tomorrow"}`, `{"data":"!!!"}`} {
+	// The field is named, with what to send, however the decoder words it.
+	for body, want := range map[string]map[string]string{
+		`{"when":"tomorrow"}`: {"when": "Send a time like 2026-11-25T10:00:00Z."},
+		`{"data":"!!!"}`:      {"data": "Send base64 text."},
+	} {
 		w := send(t, h, "POST", "/api/events", body)
-		if code, msg, fields := apiError(t, w); w.Code != 400 || code != "bad_request" || msg != "The body has a value its field cannot take." || fields != nil {
+		if code, msg, fields := apiError(t, w); w.Code != 400 || code != "bad_request" || msg != "1 field has the wrong type." || !reflect.DeepEqual(fields, want) {
 			t.Errorf("%s: status %d, code %q, message %q, fields %v", body, w.Code, code, msg, fields)
 		}
 	}
@@ -1947,5 +1951,50 @@ func TestBodyFixedArray(t *testing.T) {
 	}
 	if w := send(t, h, "POST", "/api/x", `{"rgb":[1,2,3],"grid":[[1,2],[3,4]],"one":["a"]}`); w.Code != 204 || got.RGB != [3]int{1, 2, 3} || got.Grid[1][1] != 4 {
 		t.Fatalf("%d %s, %+v", w.Code, w.Body, got)
+	}
+}
+
+// shout reads itself from text in capitals only.
+type shout string
+
+func (s shout) MarshalText() ([]byte, error) { return []byte(s), nil }
+func (s *shout) UnmarshalText(b []byte) error {
+	if strings.ToUpper(string(b)) != string(b) {
+		return fmt.Errorf("%q is not in capitals", b)
+	}
+	*s = shout(b)
+	return nil
+}
+
+// A wrong type, a number out of a field's range, and a value a field's own
+// decoder refuses, each name the field and say what it takes, at any depth.
+func TestBodyWrongValueSays(t *testing.T) {
+	type Stamp struct {
+		When time.Time `json:"when"`
+	}
+	type In struct {
+		N8     int8    `json:"n8"`
+		U8     uint8   `json:"u8"`
+		I      int     `json:"i"`
+		Code   shout   `json:"code"`
+		Nested Stamp   `json:"nested"`
+		List   []Stamp `json:"list"`
+	}
+	app := New(Config{})
+	Post(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+	h := mustRegister(t, app)
+	for body, want := range map[string]map[string]string{
+		`{"n8":300}`:              {"n8": "Send a whole number from -128 to 127."},
+		`{"u8":-1}`:               {"u8": "Send a whole number from 0 to 255."},
+		`{"i":1.5}`:               {"i": "Send a whole number."},
+		`{"code":5}`:              {"code": "Send text."},
+		`{"code":"lower"}`:        {"code": "Send a value this field takes."},
+		`{"nested":{"when":"x"}}`: {"nested.when": "Send a time like 2026-11-25T10:00:00Z."},
+		`{"list":[{"when":"2026-11-25T10:00:00Z"},{"when":"x"}]}`: {"list.when": "Send a time like 2026-11-25T10:00:00Z."},
+	} {
+		w := send(t, h, "POST", "/api/x", body)
+		if _, _, fields := apiError(t, w); w.Code != 400 || !reflect.DeepEqual(fields, want) {
+			t.Errorf("%s: %d %s, want %v", body, w.Code, w.Body, want)
+		}
 	}
 }

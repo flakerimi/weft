@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"mime"
 	"net/http"
@@ -907,10 +908,10 @@ func (p *plan) bodyError(data []byte, err error) error {
 		// (base64 for bytes) is a type error that wraps its cause; encoding/json
 		// v1 returns the cause itself.
 		if errors.Unwrap(te) != nil {
-			return BadRequest(cannotTake)
+			return p.refused(data)
 		}
 		if te.Field != "" {
-			return wrongType(map[string]string{fieldPath(p.view, te.Field): sendWhat(te.Type)})
+			return wrongType(map[string]string{fieldPath(p.view, te.Field): sendWhat(te.Type, te.Value)})
 		}
 		return BadRequest(notJSON)
 	}
@@ -920,7 +921,90 @@ func (p *plan) bodyError(data []byte, err error) error {
 	if se := (*json.SyntaxError)(nil); errors.As(err, &se) {
 		return BadRequest(notJSON)
 	}
+	return p.refused(data)
+}
+
+// refused is the answer to a body a field's own decoder refused: that field,
+// found by decoding each value of the body alone, and what it takes; or,
+// when no one field can be found, cannotTake.
+func (p *plan) refused(data []byte) error {
+	if path, says, ok := refusedField(p.view, data); ok {
+		return wrongType(map[string]string{path: says})
+	}
 	return BadRequest(cannotTake)
+}
+
+// refusedField finds the value of raw, a JSON value for type t, that t's
+// decoder refuses: its path (the keys of struct fields, a list's index left
+// out and nothing after a map's field, as fieldPath writes it) and what it
+// takes.
+func refusedField(t reflect.Type, raw []byte) (path, says string, ok bool) {
+	for t.Kind() == reflect.Pointer && !decodesItself(t) {
+		t = t.Elem()
+	}
+	refuses := func() bool { return decodeStrict(raw, reflect.New(t).Interface()) != nil }
+	switch {
+	case t == timeType || decodesItself(t) || isBytes(t):
+		if refuses() {
+			return "", takes(t, raw), true
+		}
+	case t.Kind() == reflect.Struct:
+		var obj map[string]json.RawMessage
+		if json.Unmarshal(raw, &obj) != nil {
+			return "", "", false
+		}
+		fields, _ := inputFields(t, nil)
+		for _, key := range slices.Sorted(maps.Keys(obj)) {
+			for _, f := range fields {
+				name, _, ok := jsonTagOf(f.StructField)
+				if !ok || name != key && !strings.EqualFold(name, key) {
+					continue
+				}
+				if inner, says, ok := refusedField(f.Type, obj[key]); ok {
+					return strings.TrimSuffix(name+"."+inner, "."), says, true
+				}
+				break
+			}
+		}
+	case t.Kind() == reflect.Slice || t.Kind() == reflect.Array:
+		var list []json.RawMessage
+		if json.Unmarshal(raw, &list) != nil {
+			return "", "", false
+		}
+		for _, v := range list {
+			if inner, says, ok := refusedField(t.Elem(), v); ok {
+				return inner, says, true
+			}
+		}
+	case t.Kind() == reflect.Map:
+		var obj map[string]json.RawMessage
+		if json.Unmarshal(raw, &obj) != nil {
+			return "", "", false
+		}
+		for _, key := range slices.Sorted(maps.Keys(obj)) {
+			if _, says, ok := refusedField(t.Elem(), obj[key]); ok {
+				return "", says, true // a key may hold dots: the path ends at the map
+			}
+		}
+	default:
+		if refuses() {
+			return "", sendWhat(t, ""), true
+		}
+	}
+	return "", "", false
+}
+
+// takes says what a type that reads itself takes, raw being what was sent.
+func takes(t reflect.Type, raw []byte) string {
+	switch {
+	case t == timeType:
+		return "Send a time like 2026-11-25T10:00:00Z."
+	case isBytes(t):
+		return "Send base64 text."
+	case !t.Implements(jsonUnmarshaler) && !reflect.PointerTo(t).Implements(jsonUnmarshaler) && !bytes.HasPrefix(bytes.TrimSpace(raw), []byte(`"`)):
+		return "Send text." // a type that reads itself from text, sent something else
+	}
+	return "Send a value this field takes."
 }
 
 const cannotTake = "The body has a value its field cannot take."
@@ -999,13 +1083,29 @@ func wrongType(fields map[string]string) *Error {
 	return e
 }
 
-// sendWhat says what kind of value a field of type t takes.
-func sendWhat(t reflect.Type) string {
+// sendWhat says what kind of value a field of type t takes, given the
+// decoder's word for what was sent ("number 300", "string"): a whole number's
+// range when a number fell outside it, text for a type that reads itself
+// from text.
+func sendWhat(t reflect.Type, sent string) string {
 	for t != nil && t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	switch {
 	case t == nil:
+	case t == timeType:
+		return takes(t, nil)
+	case decodesItself(t) && !t.Implements(jsonUnmarshaler) && !reflect.PointerTo(t).Implements(jsonUnmarshaler):
+		return "Send text."
+	case isIntegerKind(t.Kind()):
+		number, isNumber := strings.CutPrefix(sent, "number ")
+		if !isNumber || strings.ContainsAny(number, ".eE") || t.Bits() == 64 {
+			return "Send a whole number."
+		}
+		if t.Kind() >= reflect.Uint {
+			return fmt.Sprintf("Send a whole number from 0 to %d.", uint64(1)<<t.Bits()-1)
+		}
+		return fmt.Sprintf("Send a whole number from %d to %d.", -(int64(1) << (t.Bits() - 1)), int64(1)<<(t.Bits()-1)-1)
 	case t.Kind() == reflect.String:
 		return "Send text."
 	case isNumberKind(t.Kind()):
