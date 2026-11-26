@@ -1,0 +1,147 @@
+# Builds and tests a release of the weft command on every system it is built
+# for, and keeps it as this run's artifact and, for a tag or when asked, as a
+# draft GitHub Release. It never publishes weft.base.al, which stays the
+# release channel (the repository is private): the owner publishes with
+# scripts/publish-site.sh. It never makes a release that is not a draft, and
+# never replaces or deletes one.
+name: release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'The version, such as 0.1.0 or 0.1.0-alpha.1 (no v); it must pass scripts/version.sh'
+        required: true
+        type: string
+      draft_release:
+        description: 'Also make a draft GitHub Release v<version> (otherwise only build and test)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One run per version at a time, so two cannot both find no release and make one.
+concurrency:
+  group: release-${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            version=$INPUT_VERSION
+          else
+            version=${GITHUB_REF_NAME#v}
+          fi
+          scripts/version.sh "$version" || {
+            echo "release: \"$version\" is not a version like 0.1.0 or 0.1.0-alpha.1; tag v<version>, or give the version without its v." >&2
+            exit 1
+          }
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+
+  # The full tests of the CLI, not -short: they make, install, build and run
+  # real apps, which is the point on each system. macOS and Windows run only
+  # here, not on every push (ci.yml is Linux).
+  test:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        # Git Bash on Windows, for the repository's shell scripts, which the
+        # tests run with sh.
+        shell: bash
+    steps:
+      # The scripts must keep LF line ends, which sh needs.
+      - if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      # The tests stage a bundle with scripts/bundle.sh, which builds the packages.
+      - run: pnpm install --frozen-lockfile
+      - run: go vet ./cmd/weft ./warp/...
+      # The shop's browser test runs where Chrome is found (Linux and macOS
+      # here) and is skipped elsewhere; WEFT_BROWSER would name one.
+      - run: go test -timeout 30m . ./warp/... ./cmd/weft
+
+  build:
+    needs: [version, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Only to make the draft; every other job reads.
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      # No token is left in .git, so nothing the build runs can push.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build every system
+        run: |
+          WEFT_TARGETS="darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/arm64 windows/amd64" \
+            scripts/release.sh "$VERSION" "$RUNNER_TEMP/releases"
+          ls -l "$RUNNER_TEMP/releases/$VERSION"
+          cat "$RUNNER_TEMP/releases/$VERSION/SHA256SUMS"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: weft-${{ needs.version.outputs.version }}
+          path: ${{ runner.temp }}/releases/${{ needs.version.outputs.version }}
+          if-no-files-found: error
+      - name: Make the draft release
+        if: github.event_name == 'push' || inputs.draft_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="v$VERSION"
+          # Drafts have no tag yet, so look by name and tag among them all.
+          found=$(gh release list --limit 1000 --json tagName,name --jq ".[] | select(.tagName == \"$tag\" or .name == \"$tag\") | .tagName")
+          if [ -n "$found" ]; then
+            echo "release: a GitHub Release named $tag already exists, and this workflow never replaces or deletes one; remove it by hand, or release a new version." >&2
+            exit 1
+          fi
+          dir="$RUNNER_TEMP/releases/$VERSION"
+          gh release create "$tag" --draft --title "$tag" --target "$GITHUB_SHA" \
+            --notes "weft $VERSION for darwin, linux and windows, on amd64 and arm64, built and tested by the release workflow from $GITHUB_SHA. A draft: weft.base.al is published with scripts/publish-site.sh." \
+            "$dir"/weft_*.tar.gz "$dir"/weft_*.zip "$dir/SHA256SUMS"
