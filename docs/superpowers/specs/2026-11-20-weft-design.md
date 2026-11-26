@@ -381,8 +381,9 @@ checked at `pointer` and `touch` with both themes.
    first page at `weft.base.al`.
 2. Tokens, themes, `useWeft()` adaptive core, layout tier.
 2b. Fast pages: build-time rendering with Vapor hydration, islands,
-   pre-compressed embedded assets, ETags, 103 Early Hints, prefetch and view
-   transitions in `weft.Serve`, and the Astro benchmark in `bench/`.
+   pre-compressed embedded assets, ETags, 103 Early Hints where a browser can
+   use them, prefetch and view transitions in `weft.Serve`, and the Astro
+   benchmark in `bench/`.
 2d. Benchmark set by the owner (2026-11-21): Nuxt UI 4.13.0 for component
    coverage and quality, Nuxt for app features. The components plan
    (`docs/superpowers/plans/2026-11-21-weft-components.md`) runs before the
@@ -464,7 +465,8 @@ The binary does all expensive work at build time and none per request:
   brotli (maximum level) and gzip, chosen per `Accept-Encoding`; strong ETags
   from the build hash answer `304` with no body. Nothing is compressed per request.
 - **103 Early Hints.** Go sends the route's CSS and font preloads before the
-  page, from a manifest written at build.
+  page, from a manifest written at build, to a navigation over HTTP/2 or
+  through a proxy, where a browser can use them; the page carries them always.
 - **Critical CSS inlined** into each page; the rest loaded without blocking.
 - **Instant navigation.** Pages prefetch on hover or when visible, and the
   browser's Speculation Rules prerender likely next pages; View Transitions

@@ -44,10 +44,11 @@ const (
 // Each answer is the stored brotli or gzip variant the client accepts best,
 // or the file as it is, with the manifest's ETag (a variant's with -br or -gz
 // added), so If-None-Match gets a 304. Hashed files are cached for a year and
-// the rest revalidated. A page with Early Hints first gets a 103 with its Link
-// headers. The build's own files (manifest.json, routes.json, .weft-build and
-// the page files under /pages/) are never served as they are. Serve panics,
-// naming the file, if the build is incomplete.
+// the rest revalidated. A page with Early Hints carries their Link headers,
+// and first gets a 103 with them when the request is a navigation over HTTP/2
+// or later, or through a proxy. The build's own files (manifest.json,
+// routes.json, .weft-build and the page files under /pages/) are never served
+// as they are. Serve panics, naming the file, if the build is incomplete.
 //
 // Otherwise dist is a single-page app, and a manifest.json in it is just a
 // file. Files in dist are served as they are, and every other path gets

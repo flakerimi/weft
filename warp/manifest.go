@@ -293,10 +293,10 @@ func (s *site) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // serve writes res with status: the 304 when it is a 200 the client already
-// has, else a 103 with its Link values when it has some (and the client
-// speaks HTTP/1.1 or later), then the variant the client accepts best. Its
-// only allocation is the one slice that holds the header values, so a handler
-// after it may change them without changing res.
+// has, else a 103 with its Link values when it has some and earlyHints says
+// a browser can use one, then the variant the client accepts best, with the
+// same Link values. Its only allocation is the one slice that holds the
+// header values, so a handler after it may change them without changing res.
 func (res *resource) serve(w http.ResponseWriter, r *http.Request, status int) {
 	v := res.pick(r.Header["Accept-Encoding"])
 	n := len(v.values)
@@ -313,8 +313,7 @@ func (res *resource) serve(w http.ResponseWriter, r *http.Request, status int) {
 	}
 	if len(res.links) > 0 {
 		h["Link"] = values[n:len(values):len(values)]
-		// RFC 9110 §15.2: no 1xx response to an HTTP/1.0 client.
-		if r.ProtoAtLeast(1, 1) {
+		if earlyHints(r) {
 			w.WriteHeader(http.StatusEarlyHints)
 		}
 	}
@@ -325,6 +324,25 @@ func (res *resource) serve(w http.ResponseWriter, r *http.Request, status int) {
 	if r.Method != http.MethodHead {
 		w.Write(v.body)
 	}
+}
+
+// earlyHints reports whether a 103 Early Hints can help the client of r: r is
+// a browser's navigation (Sec-Fetch-Mode: navigate), and it arrived over
+// HTTP/2 or later or through a proxy (Forwarded, X-Forwarded-For or Via),
+// which may speak HTTP/2 to the browser. A browser acts on a 103 over HTTP/2
+// or later, and Chrome ignores one over HTTP/1.1, so one sent straight to an
+// HTTP/1.1 client is a wasted write. It is a hint about an optional response, not a trust decision, so
+// TRUST_PROXY does not change it; and never a 1xx to an HTTP/1.0 client
+// (RFC 9110 §15.2).
+func earlyHints(r *http.Request) bool {
+	if mode := r.Header["Sec-Fetch-Mode"]; len(mode) == 0 || mode[0] != "navigate" {
+		return false
+	}
+	if r.ProtoMajor >= 2 {
+		return true
+	}
+	h := r.Header
+	return r.ProtoAtLeast(1, 1) && (len(h["Forwarded"]) > 0 || len(h["X-Forwarded-For"]) > 0 || len(h["Via"]) > 0)
 }
 
 // pick returns the variant to send for these Accept-Encoding values: the

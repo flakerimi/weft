@@ -327,7 +327,7 @@ func TestRuntimePage(t *testing.T) {
 	const shell = "<p>product shell</p>"
 	// Any id, made after the build or never made: the record's 404 is the API's (Review Focus 5).
 	for _, p := range []string{"/products/42", "/products/999", "/products/42/", "/products/a%20b"} {
-		r := do(t, h, "GET", p, "Accept-Encoding", "br")
+		r := do(t, h, "GET", p, append([]string{"Accept-Encoding", "br"}, throughProxy...)...)
 		if r.StatusCode != 200 || r.body != "br:"+shell || r.Header.Get("Content-Encoding") != "br" || r.Header.Get("ETag") != `"product-br"` {
 			t.Errorf("%s: status %d body %q encoding %q etag %s", p, r.StatusCode, r.body, r.Header.Get("Content-Encoding"), r.Header.Get("ETag"))
 		}

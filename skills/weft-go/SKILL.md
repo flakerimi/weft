@@ -69,7 +69,7 @@ Test `app.Handler()` with `httptest` after checking `app.Err()`, and `app.Start(
 
 ## What Serve answers
 
-`/api` goes to the API. Every other path gets its page, else a listed file, else the app's `index.html` under `--app-prefix`, else a run-time page whose pattern matches, else `pages/404.vue` with 404. Serve sends the stored brotli or gzip, compressing nothing per request, with the build's `ETag`; it caches hashed files for a year, sends `103 Early Hints`, and answers only `GET` and `HEAD`. It panics at start if the build is incomplete.
+`/api` goes to the API. Every other path gets its page, else a listed file, else the app's `index.html` under `--app-prefix`, else a run-time page whose pattern matches, else `pages/404.vue` with 404. Serve sends the stored brotli or gzip and the build's `ETag`, caches hashed files for a year, sends `103 Early Hints` to a navigation over HTTP/2 or through a proxy, and answers only `GET` and `HEAD`. It panics at start if the build is incomplete.
 
 ## Files from disk
 

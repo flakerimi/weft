@@ -451,10 +451,14 @@ func TestManifestAPI(t *testing.T) {
 	}
 }
 
+// throughProxy is a browser's navigation as a proxy passes it on: the request
+// headers that earn a page its 103 over HTTP/1.1.
+var throughProxy = []string{"Sec-Fetch-Mode", "navigate", "Via", "1.1 proxy.example"}
+
 func TestManifestEarlyHintsHeaders(t *testing.T) {
 	h := Serve(pageBuild(t), nil)
 	links := siteHints["/counter"]
-	r := do(t, h, "GET", "/counter")
+	r := do(t, h, "GET", "/counter", throughProxy...)
 	if len(r.early) != 1 || !slices.Equal(r.early[0].Values("Link"), links) {
 		t.Fatalf("103s %v", r.early)
 	}
@@ -462,20 +466,24 @@ func TestManifestEarlyHintsHeaders(t *testing.T) {
 		t.Fatalf("200: Link %q body %q", r.Header.Values("Link"), r.body)
 	}
 	// The not-found page's hints are under "404".
-	r = do(t, h, "GET", "/nope")
+	r = do(t, h, "GET", "/nope", throughProxy...)
 	if len(r.early) != 1 || !slices.Equal(r.Header.Values("Link"), siteHints["404"]) || r.StatusCode != 404 {
 		t.Fatalf("404: 103s %v, Link %q, status %d", r.early, r.Header.Values("Link"), r.StatusCode)
 	}
 	// A page without hints sends no 103.
-	if r := do(t, h, "GET", "/about"); len(r.early) != 0 || r.Header.Get("Link") != "" {
+	if r := do(t, h, "GET", "/about", throughProxy...); len(r.early) != 0 || r.Header.Get("Link") != "" {
 		t.Fatalf("about: 103s %v Link %q", r.early, r.Header.Get("Link"))
 	}
 }
 
-// RFC 9110 §15.2: no 1xx to an HTTP/1.0 client. The Link headers stay on the 200.
+// RFC 9110 §15.2: no 1xx to an HTTP/1.0 client, even a navigation through a
+// proxy. The Link headers stay on the 200.
 func TestManifestNoEarlyHintsForHTTP10(t *testing.T) {
 	req := httptest.NewRequest("GET", "/counter", nil)
 	req.Proto, req.ProtoMajor, req.ProtoMinor = "HTTP/1.0", 1, 0
+	for i := 0; i < len(throughProxy); i += 2 {
+		req.Header.Set(throughProxy[i], throughProxy[i+1])
+	}
 	rec := &recorder{ResponseRecorder: httptest.NewRecorder()}
 	Serve(pageBuild(t), nil).ServeHTTP(rec, req)
 	res := rec.Result()
@@ -487,34 +495,154 @@ func TestManifestNoEarlyHintsForHTTP10(t *testing.T) {
 	}
 }
 
-func TestManifestEarlyHintsOverTheWire(t *testing.T) {
-	srv := httptest.NewServer(Serve(pageBuild(t), nil))
-	defer srv.Close()
-	var codes []int
-	var hinted [][]string
+// hintsServer serves the page build on a real server: over TLS with HTTP/2
+// when h2 is set, else over HTTP/1.1 in the clear.
+func hintsServer(t *testing.T, h2 bool) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewUnstartedServer(Serve(pageBuild(t), nil))
+	if h2 {
+		srv.EnableHTTP2 = true
+		srv.StartTLS()
+	} else {
+		srv.Start()
+	}
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// wired is a response read off the wire, with the 1xx responses before it.
+type wired struct {
+	*http.Response
+	body  string
+	codes []int      // the status of each 1xx, in order
+	early [][]string // the Link values of each 1xx
+}
+
+// onWire sends one request to srv with header name/value pairs, asking for
+// brotli or gzip so the client leaves the body as sent, and reads the answer.
+// It fails the test if the answer did not come over the protocol srv speaks.
+func onWire(t *testing.T, srv *httptest.Server, method, path string, header ...string) wired {
+	t.Helper()
+	var w wired
 	trace := &httptrace.ClientTrace{
-		Got1xxResponse: func(code int, header textproto.MIMEHeader) error {
-			codes = append(codes, code)
-			hinted = append(hinted, header.Values("Link"))
+		Got1xxResponse: func(code int, h textproto.MIMEHeader) error {
+			w.codes = append(w.codes, code)
+			w.early = append(w.early, h.Values("Link"))
 			return nil
 		},
 	}
-	req, err := http.NewRequestWithContext(httptrace.WithClientTrace(context.Background(), trace), "GET", srv.URL+"/counter", nil)
+	req, err := http.NewRequestWithContext(httptrace.WithClientTrace(context.Background(), trace), method, srv.URL+path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Accept-Encoding", "identity")
+	req.Header.Set("Accept-Encoding", "br, gzip")
+	for i := 0; i < len(header); i += 2 {
+		req.Header.Add(header[i], header[i+1])
+	}
 	res, err := srv.Client().Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer res.Body.Close()
-	links := siteHints["/counter"]
-	if !slices.Equal(codes, []int{http.StatusEarlyHints}) || !slices.Equal(hinted[0], links) {
-		t.Fatalf("1xx codes %v, Link %q", codes, hinted)
+	want := 1
+	if srv.EnableHTTP2 {
+		want = 2
 	}
-	if res.StatusCode != 200 || !slices.Equal(res.Header.Values("Link"), links) || body(res) != "<p>counter</p>" {
-		t.Fatalf("status %d, Link %q", res.StatusCode, res.Header.Values("Link"))
+	if res.ProtoMajor != want {
+		t.Fatalf("%s %s: answered over %s, want HTTP/%d", method, path, res.Proto, want)
+	}
+	w.Response, w.body = res, body(res)
+	return w
+}
+
+// Early Hints go out only to a navigation that arrived over HTTP/2 or later,
+// or through a proxy, which may speak HTTP/2 to the browser: a browser acts
+// on a 103 over HTTP/2 and ignores one over HTTP/1.1. The final response is
+// the same either way.
+func TestManifestEarlyHintsOnlyWhereUsable(t *testing.T) {
+	h1, h2 := hintsServer(t, false), hintsServer(t, true)
+	// What each server sends for the page when no 103 can help.
+	plain := map[*httptest.Server]wired{h1: onWire(t, h1, "GET", "/counter"), h2: onWire(t, h2, "GET", "/counter")}
+	links := siteHints["/counter"]
+	for _, c := range []struct {
+		name   string
+		srv    *httptest.Server
+		header []string
+		hinted bool
+	}{
+		{"HTTP/2 navigation", h2, []string{"Sec-Fetch-Mode", "navigate"}, true},
+		{"HTTP/1.1 navigation with X-Forwarded-For", h1, []string{"Sec-Fetch-Mode", "navigate", "X-Forwarded-For", "203.0.113.7"}, true},
+		{"HTTP/1.1 navigation with Forwarded", h1, []string{"Sec-Fetch-Mode", "navigate", "Forwarded", "for=203.0.113.7;proto=https"}, true},
+		{"HTTP/1.1 navigation with Via", h1, []string{"Sec-Fetch-Mode", "navigate", "Via", "2 proxy.example"}, true},
+		{"HTTP/1.1 navigation, no proxy", h1, []string{"Sec-Fetch-Mode", "navigate"}, false},
+		{"HTTP/2, no Sec-Fetch-Mode", h2, nil, false},
+		{"HTTP/2 cors", h2, []string{"Sec-Fetch-Mode", "cors"}, false},
+		{"HTTP/2 no-cors", h2, []string{"Sec-Fetch-Mode", "no-cors"}, false},
+		{"HTTP/1.1 through a proxy, no Sec-Fetch-Mode", h1, []string{"X-Forwarded-For", "203.0.113.7", "Via", "1.1 proxy.example"}, false},
+		{"HTTP/1.1 cors through a proxy", h1, []string{"Sec-Fetch-Mode", "cors", "Forwarded", "for=203.0.113.7"}, false},
+		{"HTTP/1.1 no-cors through a proxy", h1, []string{"Sec-Fetch-Mode", "no-cors", "Via", "1.1 proxy.example"}, false},
+	} {
+		r := onWire(t, c.srv, "GET", "/counter", c.header...)
+		if c.hinted && (!slices.Equal(r.codes, []int{http.StatusEarlyHints}) || !slices.Equal(r.early[0], links)) {
+			t.Errorf("%s: 1xx %v with Link %q, want one 103 with %q", c.name, r.codes, r.early, links)
+		}
+		if !c.hinted && len(r.codes) != 0 {
+			t.Errorf("%s: 1xx %v with Link %q, want none", c.name, r.codes, r.early)
+		}
+		if r.StatusCode != 200 || !slices.Equal(r.Header.Values("Link"), links) {
+			t.Errorf("%s: status %d, Link %q", c.name, r.StatusCode, r.Header.Values("Link"))
+		}
+		// The 200 is byte for byte the one sent with no 103.
+		want := plain[c.srv]
+		got, base := r.Header.Clone(), want.Header.Clone()
+		got.Del("Date")
+		base.Del("Date")
+		if !maps.EqualFunc(got, base, slices.Equal) || r.body != want.body || r.body != "br:<p>counter</p>" {
+			t.Errorf("%s: 200 %v %q, want %v %q", c.name, got, r.body, base, want.body)
+		}
+	}
+}
+
+// What a navigation that may have a 103 gets in every other case.
+func TestManifestEarlyHintsCases(t *testing.T) {
+	h1, h2 := hintsServer(t, false), hintsServer(t, true)
+	nav := []string{"Sec-Fetch-Mode", "navigate"}
+	for _, srv := range []*httptest.Server{h1, h2} {
+		header := nav
+		if srv == h1 {
+			header = throughProxy
+		}
+		// A page with no Link headers never has a 103.
+		if r := onWire(t, srv, "GET", "/about", header...); len(r.codes) != 0 || r.Header.Get("Link") != "" || r.StatusCode != 200 {
+			t.Errorf("about over %s: 1xx %v, Link %q, status %d", r.Proto, r.codes, r.Header.Get("Link"), r.StatusCode)
+		}
+		// The not-found page has its own.
+		if r := onWire(t, srv, "GET", "/nope", header...); !slices.Equal(r.codes, []int{http.StatusEarlyHints}) ||
+			!slices.Equal(r.early[0], siteHints["404"]) || r.StatusCode != 404 || !slices.Equal(r.Header.Values("Link"), siteHints["404"]) {
+			t.Errorf("404 over %s: 1xx %v with %q, status %d, Link %q", r.Proto, r.codes, r.early, r.StatusCode, r.Header.Values("Link"))
+		}
+		// A 304 is answered before any 103, so it has none and no Link.
+		cond := append(slices.Clone(header), "If-None-Match", `"counter-br"`)
+		if r := onWire(t, srv, "GET", "/counter", cond...); r.StatusCode != http.StatusNotModified || len(r.codes) != 0 || r.Header.Get("Link") != "" || r.body != "" {
+			t.Errorf("304 over %s: status %d, 1xx %v, Link %q, body %q", r.Proto, r.StatusCode, r.codes, r.Header.Get("Link"), r.body)
+		}
+		// HEAD is answered as GET is, without the body.
+		get, head := onWire(t, srv, "GET", "/counter", header...), onWire(t, srv, "HEAD", "/counter", header...)
+		if !slices.Equal(head.codes, []int{http.StatusEarlyHints}) || !slices.Equal(head.early[0], siteHints["/counter"]) || head.body != "" {
+			t.Errorf("HEAD over %s: 1xx %v with %q, body %q", head.Proto, head.codes, head.early, head.body)
+		}
+		for _, k := range []string{"Link", "Content-Length", "Content-Encoding", "Etag", "Cache-Control", "Vary"} {
+			if g, h := get.Header.Values(k), head.Header.Values(k); !slices.Equal(g, h) || len(g) == 0 {
+				t.Errorf("HEAD over %s: %s %q, GET %q", head.Proto, k, h, g)
+			}
+		}
+		if r := onWire(t, srv, "HEAD", "/counter", "Sec-Fetch-Mode", "no-cors"); len(r.codes) != 0 {
+			t.Errorf("no-cors HEAD over %s: 1xx %v", r.Proto, r.codes)
+		}
+	}
+	// Over HTTP/1.1 a HEAD with no proxy has none either.
+	if r := onWire(t, h1, "HEAD", "/counter", nav...); len(r.codes) != 0 || !slices.Equal(r.Header.Values("Link"), siteHints["/counter"]) {
+		t.Errorf("HEAD over HTTP/1.1, no proxy: 1xx %v, Link %q", r.codes, r.Header.Values("Link"))
 	}
 }
 
@@ -534,10 +662,18 @@ func (d *discard) Header() http.Header         { return d.h }
 func (d *discard) Write(b []byte) (int, error) { return len(b), nil }
 func (d *discard) WriteHeader(int)             {}
 
-func servePage(tb testing.TB) func() {
+// servePage returns a function that asks for the page with hints over
+// HTTP/proto (1 or 2), with header name/value pairs.
+func servePage(tb testing.TB, proto int, header ...string) func() {
 	h := Serve(pageBuild(tb), nil)
 	req := httptest.NewRequest("GET", "/counter/", nil)
+	if proto == 2 {
+		req.Proto, req.ProtoMajor, req.ProtoMinor = "HTTP/2.0", 2, 0
+	}
 	req.Header.Set("Accept-Encoding", "gzip, deflate, br;q=0.9")
+	for i := 0; i < len(header); i += 2 {
+		req.Header.Set(header[i], header[i+1])
+	}
 	w := &discard{h: http.Header{}}
 	return func() {
 		clear(w.h)
@@ -546,16 +682,54 @@ func servePage(tb testing.TB) func() {
 }
 
 func TestManifestServePageAllocs(t *testing.T) {
-	if n := testing.AllocsPerRun(100, servePage(t)); n > 3 {
+	if n := testing.AllocsPerRun(100, servePage(t, 1)); n > 3 {
 		t.Fatalf("%v allocs per page, want at most 3", n)
 	}
 }
 
+// earlyHintsCases are requests for a page with hints, a 103 sent or not.
+var earlyHintsCases = []struct {
+	name   string
+	proto  int
+	header []string
+}{
+	{"plain", 1, nil},
+	{"navigation", 1, []string{"Sec-Fetch-Mode", "navigate"}},
+	{"navigation-proxy", 1, []string{"Sec-Fetch-Mode", "navigate", "X-Forwarded-For", "203.0.113.7"}},
+	{"navigation-h2", 2, []string{"Sec-Fetch-Mode", "navigate"}},
+	{"cors-proxy", 1, []string{"Sec-Fetch-Mode", "cors", "Forwarded", "for=203.0.113.7"}},
+}
+
+// Deciding whether to send a 103 allocates nothing: every page request makes
+// the one slice of header values, and no more.
+func TestManifestEarlyHintsDecisionAllocs(t *testing.T) {
+	if raceDetector {
+		t.Skip("the race detector changes allocation counts")
+	}
+	for _, c := range earlyHintsCases {
+		if n := testing.AllocsPerRun(100, servePage(t, c.proto, c.header...)); n != 1 {
+			t.Errorf("%s: %v allocs per page, want 1", c.name, n)
+		}
+	}
+}
+
 func BenchmarkServePage(b *testing.B) {
-	serve := servePage(b)
+	serve := servePage(b, 1)
 	b.ReportAllocs()
 	for b.Loop() {
 		serve()
+	}
+}
+
+func BenchmarkServePageEarlyHints(b *testing.B) {
+	for _, c := range earlyHintsCases {
+		b.Run(c.name, func(b *testing.B) {
+			serve := servePage(b, c.proto, c.header...)
+			b.ReportAllocs()
+			for b.Loop() {
+				serve()
+			}
+		})
 	}
 }
 
