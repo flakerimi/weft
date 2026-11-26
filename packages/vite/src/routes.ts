@@ -205,7 +205,9 @@ export async function expandRoutes(
       continue
     }
     if (typeof getPaths !== 'function') {
-      throw new Error(`page "${r.file}" is dynamic but does not export getPaths()`)
+      throw new Error(
+        `page "${r.file}" is dynamic and exports neither getPaths() nor runtime = true; export getPaths() to build its pages ahead, or runtime = true to build one page that reads its params in the browser.`,
+      )
     }
     for (const params of await getPaths()) add(fill(r, params), r.file, params)
   }

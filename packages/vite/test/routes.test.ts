@@ -109,7 +109,7 @@ describe('expandRoutes', () => {
   it('throws, naming the file, when getPaths is missing', async () => {
     const routes = await discoverRoutes(dir('routes-dynamic'))
     await expect(expandRoutes(routes, async () => ({}))).rejects.toThrow(
-      'page "[slug].vue" is dynamic but does not export getPaths()',
+      'page "[slug].vue" is dynamic and exports neither getPaths() nor runtime = true; export getPaths() to build its pages ahead, or runtime = true to build one page that reads its params in the browser.',
     )
   })
 
@@ -196,7 +196,7 @@ describe('runtime pages', () => {
     const routes = await discoverRoutes(pagesWith('products/[id].vue'))
     for (const mod of [{}, { runtime: false }]) {
       await expect(expandRoutes(routes, async () => mod)).rejects.toThrow(
-        new Error('page "products/[id].vue" is dynamic but does not export getPaths()'),
+        new Error('page "products/[id].vue" is dynamic and exports neither getPaths() nor runtime = true; export getPaths() to build its pages ahead, or runtime = true to build one page that reads its params in the browser.'),
       )
     }
   })
