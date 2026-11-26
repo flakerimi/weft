@@ -1,6 +1,6 @@
 ---
 name: weft-site
-description: Use when building or changing a site made with Weft's page build - adding pages and routes, dynamic pages with getPaths, islands (the only parts that ship JavaScript), Markdown collections in content/, the head, raw files with useFile, and running weft-build-pages - and when a page build fails and you need to know which check refused it.
+description: Use when building or changing a site made with Weft's page build - adding pages and routes, dynamic pages with getPaths, islands (the only parts that ship JavaScript), Markdown collections in content/, the head, raw files with useFile, and running weft-build-pages - and when a page build fails, to learn which check refused it.
 ---
 
 # Building a site with Weft
@@ -9,10 +9,10 @@ A Weft site is a folder of Vue pages. `weft-build-pages` renders each page to HT
 
 ## Where you work
 
-The packages are not on npm. An app is made with `weft create <name>`: the `weft` command carries Weft's packages and unpacks them into the app's `.weft/`, which you never edit. You need Go 1.26, Node 22.18 or later and pnpm 10. The app's site is `web/`, with its Go API beside it in `app/`:
+An app is made with `weft create <name>`: the `weft` command carries Weft's packages, which are not on npm, and unpacks them into the app's `.weft/`, which you never edit. You need Go 1.26, Node 22.18 or later and pnpm 10. The site is `web/`, its Go API `app/`:
 
-- `weft dev` runs the page dev server beside the Go API. It renders each page when it is asked for and reloads the browser when a file changes;
-- `weft build` builds the pages into `web/dist` with `weft-build-pages --root web --out web/dist` and the app's theme, then the binary. It prints `weft: built N pages into web/dist`.
+- `weft dev` runs the page dev server beside the Go API, rendering each page when asked for and reloading the browser when a file changes;
+- `weft build` runs `weft-build-pages --root web --out web/dist` with the app's theme, then builds the binary. It prints `weft: built N pages into web/dist`.
 
 ## The layout of a site
 
@@ -31,9 +31,9 @@ myapp/
   main.go               the server (see weft-go)
 ```
 
-The build writes the icon tags in every page's `<head>` by itself, one for each of `favicon.ico`, `favicon.svg` and `apple-touch-icon.png` that `public/` holds, with no setting. Drop the files in `web/public/` and leave the tags out of `useHead`.
+The build writes the icon tags in every page's `<head>` itself, one for each of `favicon.ico`, `favicon.svg` and `apple-touch-icon.png` in `web/public/`, with no setting: leave them out of `useHead`.
 
-Inside the Weft repository, for work on Weft itself, a site is a workspace package whose `build` script runs `weft-build-pages --root . --out dist`, as `site-src/` does; `weft-dev --root <site>`, from `@weft/vite`, is its page dev server.
+Inside the Weft repository, a site is a workspace package whose `build` script runs `weft-build-pages --root . --out dist`, as `site-src/` does; `weft-dev --root <site>`, from `@weft/vite`, is its page dev server.
 
 ## Pages and routes
 
@@ -82,19 +82,19 @@ A page for records made after the build exports `runtime = true` instead: it is 
 
 ## Islands: the only JavaScript
 
-Render static content directly. Wrap only what must run in the browser, such as a form, a menu or a dialog:
+Wrap only what must run in the browser, such as a form, a menu or a dialog:
 
 ```vue
 <Island when="visible" :component="Counter" :props="{ start: 0 }" />
 ```
 
 - `when` is `load`, `idle`, `visible` or `media`. With `media`, also give `media="(min-width: 1024px)"`.
-- The island's file name is its id. Two islands may not share a file name.
-- Props must survive JSON: strings, finite numbers, booleans, `null`, arrays and plain objects. Anything else fails the build, which names the prop.
+- The island's file name is its id: two islands may not share one.
+- Props must survive JSON: strings, finite numbers, booleans, `null`, arrays and plain objects. Anything else fails the build, naming the prop.
 - The server renders the island too, so it shows before any script runs. Read input and width through `useWeft()` and `useWidth()`, which answer `pointer` and `wide` on the server.
 - `usePrePaint(id, code)` runs before the first paint: to copy a stored preference onto `<html>`, or, as `Form` does, to stop a submit before the island is live. So a `Form` belongs in an island.
 
-A page with no island loads no JavaScript. To list the pages that do load it:
+To list the pages that load JavaScript:
 
 ```sh
 grep -rl '<script type="module"' web/dist/pages --include=index.html
@@ -111,13 +111,10 @@ export default { docs: { schema: { section: 'string?' } } } satisfies ContentCon
 ```
 
 - Every page needs `title` and `description`. `order` is optional, and the `schema` adds fields of its own.
-- A collection takes `base`, the route it is served at (default `/<name>`).
-- It also takes `dir`, a folder outside `content/` such as `../skills`.
-- `index` names the file that is its folder's page, such as `SKILL.md`.
-- A collection's folder holds only pages and their images; any other file fails the build. So a skill kept as a collection (`skills/<name>/SKILL.md`) cannot carry supporting files, such as scripts or templates, beside it yet.
-- `titleField` reads the title from another field, such as `name`.
+- A collection takes `base`, the route it is served at (default `/<name>`); `dir`, a folder outside `content/` such as `../skills`; `index`, the file that is its folder's page, such as `SKILL.md`; and `titleField`, which reads the title from another field, such as `name`.
+- A collection's folder holds only pages and their images; any other file fails the build, so a skill kept as a collection (`skills/<name>/SKILL.md`) cannot yet carry supporting files such as scripts or templates.
 
-Pages read the content on the server only, from `virtual:weft/content`:
+Pages read content on the server only, from `virtual:weft/content`:
 
 - `useContent(collection, slug)` returns `html`, `toc`, `frontmatter`, `prev`, `next`, `parts` and `source`;
 - `useCollection(collection)` lists the pages for a sidebar;
@@ -127,7 +124,7 @@ A code block marked `sh copy` becomes a part of its own, so the page can put a c
 
 ## Raw files beside the pages
 
-A page's setup can write a file into the build, such as JSON for agents. It is compressed and listed in the manifest:
+A page's setup can write a file into the build, such as JSON for agents, compressed and listed in the manifest:
 
 ```ts
 import { useFile } from 'virtual:weft/files'
@@ -135,7 +132,7 @@ import { useFile } from 'virtual:weft/files'
 useFile('/catalog.json', text)
 ```
 
-The path starts with `/` and may not be under `/pages/` or `/assets/`. Two pages may write the same file only with the same bytes.
+The path starts with `/` and may not be under `/pages/` or `/assets/`. Two pages may write one file only with the same bytes.
 
 ## Checks that fail the build
 
@@ -151,7 +148,7 @@ The build stops with one sentence naming the file, and often the line, when:
 - `--out` holds files an earlier build did not write;
 - `--theme` is not `neutral`, `lisa` or `weft`.
 
-Fix the cause. Never weaken the check.
+Fix the cause; never weaken the check.
 
 ## Do not
 
@@ -163,7 +160,7 @@ Fix the cause. Never weaken the check.
 
 ## Not yet
 
-These are planned but not built (see https://weft.base.al/docs/coming-next):
+Planned, not built (see https://weft.base.al/docs/coming-next):
 
 - app routes: a client-side router and `layouts/`. An app is pages rendered at build, with islands, and run-time pages for records;
 - an `<Image>` component, actions, environment values, a development overlay and `weft deploy`;

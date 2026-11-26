@@ -1,11 +1,11 @@
 ---
 name: weft-go
-description: Use when writing the Go side of a Weft app or shipping it - the warp.App in main.go and its modules in app/modules.go, typed routes with warp.Get and warp.Post, their tags and validation rules, the one error shape, .env configuration, records with warp/data, the login with warp/auth, the client weft gen writes, testing with warptest, serving the page build with warp.Serve and a folder with warp.WithFiles, and building the binary with weft build for another system or a scratch image.
+description: Use when writing or shipping the Go side of a Weft app - warp.App in main.go and its modules in app/modules.go, typed routes with warp.Get and warp.Post, tags and validation, the error shape, .env configuration, records with warp/data, login with warp/auth, the client weft gen writes, testing with warptest, serving the page build with warp.Serve and a folder with warp.WithFiles, and building the binary with weft build for another system or a scratch image.
 ---
 
 # The Go side of a Weft app, and shipping it
 
-An app's Go half is Warp, `github.com/flakerimi/weft/warp`, on Go's standard library alone: a `warp.App` of modules whose routes are typed Go functions, and `warp.Serve`, which serves the page build from memory beside the API, in one binary. Pages are the `weft-site` skill. Install `weft` per https://weft.base.al/docs/getting-started/install.
+Warp (`github.com/flakerimi/weft/warp`, standard library only) is an app's Go half: a `warp.App` of modules with typed Go functions as routes, and `warp.Serve`, serving the page build from memory beside the API in one binary. Pages are the `weft-site` skill. Install `weft` per https://weft.base.al/docs/getting-started/install.
 
 ## The app
 
@@ -23,9 +23,9 @@ func main() {
 ```
 
 - `dist` embeds `web/dist`, and is nil under `-tags dev`, as `weft dev` builds it: `go test -tags dev ./...` until the first `weft build`.
-- `app/modules.go` is the one list of modules, in the order they start; nothing registers itself from `init`. A new module is `app/<name>/` with a `Module()`, added to the list.
+- `app/modules.go` lists the modules in the order they start; a new one is `app/<name>/` with a `Module()`, added there.
 - A module is `Name() string` and `Register(app *warp.App) error`, and may add `Migrate`, `Start` and `Stop(ctx) error`: in order before serving, stop in reverse after.
-- Never edit `.weft/`, where `go.mod` finds Warp.
+- Never edit `.weft/`, in which `go.mod` finds Warp.
 
 ## Typed routes
 
@@ -43,12 +43,11 @@ func (module) Register(app *warp.App) error {
 }
 ```
 
-- Paths have no `/api`. 200, `Post` 201, `warp.Status(200)` to change it; `warp.None` reads nothing, or answers 204.
-- Each exported input field has exactly one tag: `json` (the body: POST, PUT, PATCH only), `body:"json"` (the whole body, on one struct field), `query` (text, bool, numbers, a pointer to one, `[]string`, `map[string]string` for `filter[k]`) or `path` (a `{name}` wildcard).
+- 200, `Post` 201, `warp.Status(200)` to change it; `warp.None` reads nothing, or answers 204.
+- Each exported input field takes exactly one tag: `json` (the body: POST, PUT, PATCH only), `body:"json"` (the whole body, on one struct field), `query` (text, bool, numbers, a pointer to one, `[]string`, `map[string]string` for `filter[k]`) or `path` (a `{name}` wildcard).
 - A body is `application/json` (else 415), with no field the input lacks (400).
-- A `readonly` field is never read. On `Patch` rules run only on sent fields (`warp.Sent`).
-- Rules: `required`, `email`, `url`, `min=N`, `max=N`, `enum=a|b`, `unique` (a `data` store checks it), `readonly`. Every rule but `required` passes an empty value; a non-nil pointer was sent. A failure is 422. A `Validate(ctx) error` method checks across fields.
-- `GET /products` and `GET /products/{id}` are both named `products`: give each a `warp.Name`. A mistake is one sentence from `app.Err()`; `Serve` will not start.
+- Rules: `required`, `email`, `url`, `min=N`, `max=N`, `enum=a|b`, `unique` (a `data` store checks it), `readonly` (never read). All rules but `required` pass an empty value; a non-nil pointer was sent. On `Patch` rules run only on sent fields (`warp.Sent`). A failure is 422. A `Validate(ctx) error` method checks across fields.
+- `GET /products` and `GET /products/{id}` are both named `products`: give each a `warp.Name`. A mistake is one sentence from `app.Err()`, and `Serve` will not start.
 - `warp.Request(ctx)` is the request, `warp.ResponseHeader(ctx)` the answer's headers. `app.Handle("GET /export.csv", h)` mounts a plain handler; `app.Wrap(mw)` wraps every API request, `warp.With(mw)` one route.
 
 ## Errors and configuration
@@ -65,15 +64,15 @@ Errors are `{"error":{"code":"…","message":"…","fields":{…}}}`. Return `wa
 
 ## Testing a module
 
-Test `app.Handler()` with `httptest` after checking `app.Err()`, and `app.Start(ctx)` a module that migrates or starts. `warptest.New(t, vars, modules...)` starts the app with a client that keeps cookies; `authtest.Owner(t, c)` signs it in.
+Test `app.Handler()` with `httptest` after checking `app.Err()`; `app.Start(ctx)` a module that migrates or starts. `warptest.New(t, vars, modules...)` starts the app with a client that keeps cookies; `authtest.Owner(t, c)` signs it in.
 
 ## What Serve answers
 
-`/api` goes to the API. Every other path gets its page, else a listed file, else the app's `index.html` under `--app-prefix`, else a run-time page whose pattern matches, else `pages/404.vue` with 404. Serve sends the stored brotli or gzip and the build's `ETag`, caches hashed files for a year, sends `103 Early Hints` to a navigation over HTTP/2 or through a proxy, and answers only `GET` and `HEAD`. It panics at start if the build is incomplete.
+`/api` goes to the API. Any other path gets its page, else a listed file, else the app's `index.html` under `--app-prefix`, else a run-time page whose pattern matches, else `pages/404.vue` with 404. Serve sends the stored brotli or gzip and the build's `ETag`, caches hashed files for a year, sends `103 Early Hints` to a navigation over HTTP/2 or through a proxy, and answers only `GET` and `HEAD`. It panics at start if the build is incomplete.
 
 ## Files from disk
 
-For downloads and media, give `Serve` a folder:
+For downloads and media:
 
 ```go
 files, err := os.OpenRoot("/data/files")
@@ -85,16 +84,16 @@ if err := server.Serve(dist, warp.WithFiles("/files/", files.FS())); err != nil 
 }
 ```
 
-Each file is read once at start for its ETag; one changed since gets 500, a new one is not served. A symlink or a dotfile is a panic. `weft dev` does not serve it.
+Each file is read once at start for its ETag; one changed since gets 500, a new one is not served. A symlink or dotfile panics. `weft dev` does not serve the files.
 
 ## One binary
 
 ```sh
-weft build                                     # the pages into web/dist, then ./<name>
+weft build  # the pages into web/dist, then ./<name>
 GOOS=linux GOARCH=arm64 weft build -o myapp-linux-arm64
 ```
 
-It builds the pages, then the binary with `-trimpath -ldflags "-s -w"` and `CGO_ENABLED=0` unless set. It needs nothing beside it, and runs on `FROM scratch`:
+The binary is built with `-trimpath -ldflags "-s -w"` and `CGO_ENABLED=0` unless set. It needs nothing beside it and runs on `FROM scratch`:
 
 ```dockerfile
 FROM scratch
@@ -104,14 +103,14 @@ EXPOSE 8080
 ENTRYPOINT ["/myapp"]
 ```
 
-Build it for the image's system, with a `.dockerignore` of `*` and `!myapp`.
+Build it for the image's system, using a `.dockerignore` of `*` and `!myapp`.
 
 ## Do not
 
-- Add a Go dependency the app does not need. Go: use the standard library and `github.com/flakerimi/weft/warp`; add a dependency only for what the standard library cannot do, such as a database driver.
+- Add a Go dependency you do not need. Go: use the standard library and `github.com/flakerimi/weft/warp`; add a dependency only for what the standard library cannot do, such as a database driver.
 - Register a module from `init`, write `/api` in a route's path, or answer an error with JSON of your own.
 - Compress, render or hash anything per request, or embed large media.
-- Run `scripts/publish-site.sh`, `scripts/rollback-site.sh` or `lisa` for weft.base.al without `--dry-run`. Publishing that site is the owner's step.
+- Run `scripts/publish-site.sh`, `scripts/rollback-site.sh` or `lisa` for weft.base.al without `--dry-run`: that is the owner's step.
 
 ## Not yet
 

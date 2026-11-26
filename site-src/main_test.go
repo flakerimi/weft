@@ -737,7 +737,9 @@ func TestDocsFontsAreSelfHosted(t *testing.T) {
 	if len(fonts) != 2 || !strings.Contains(names[0], "bricolage-grotesque-latin") || !strings.Contains(names[1], "jetbrains-mono-latin") {
 		t.Errorf("the docs preload %v, want Bricolage Grotesque and JetBrains Mono", names)
 	}
-	// Nor does it link the repository while that is private (WEFT_REPO_PUBLIC=1 builds the link in).
+	// Nor does it load or link anything on another site, but for the footer's
+	// two links: the repository, public since 2026-11-26, and Basecode LLC's site.
+	html = strings.NewReplacer(`href="https://github.com/flakerimi/weft"`, "", `href="http://basecode.llc"`, "").Replace(html)
 	if regexp.MustCompile(`(?i)(src|href)="https?:|url\(https?:`).MatchString(html) {
 		t.Error("the docs page links or loads something on another site")
 	}

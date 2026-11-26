@@ -155,7 +155,9 @@ func TestLandingPage(t *testing.T) {
 	if !strings.Contains(page, `<a class="site-skip" href="#main">`) || !regexp.MustCompile(`<main [^>]*id="main"`).MatchString(page) {
 		t.Error("no skip link to the main content")
 	}
-	if regexp.MustCompile(`(?i)(src|href)="https?:|url\(https?:`).MatchString(page) {
+	// The footer's two links (the repository and Basecode LLC's site) are the only ones out.
+	offSite := strings.NewReplacer(`href="https://github.com/flakerimi/weft"`, "", `href="http://basecode.llc"`, "").Replace(page)
+	if regexp.MustCompile(`(?i)(src|href)="https?:|url\(https?:`).MatchString(offSite) {
 		t.Error("the landing page links or loads something on another site")
 	}
 }
