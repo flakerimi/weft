@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -264,17 +265,27 @@ var errKeptClient = fmt.Errorf("%w, as no package it is built from calls warp.Ne
 // no warp.App, and returns errNoWarpApp; over a client that has routes it
 // writes nothing and returns errKeptClient.
 func writeNoRoutes(appDir string) (bool, error) {
-	empty, err := generate(noRoutes)
-	if err != nil {
-		return false, err
-	}
-	if old, err := os.ReadFile(filepath.Join(appDir, apiTypes)); err == nil && !bytes.Equal(old, empty) {
+	if old, err := os.ReadFile(filepath.Join(appDir, apiTypes)); err == nil && clientHasRoutes(old) {
 		return false, errKeptClient
 	}
 	if _, err := writeAPI(appDir, noRoutes); err != nil {
 		return false, err
 	}
 	return false, errNoWarpApp
+}
+
+// emptyAPI is a client's api object with nothing in it: export const api =
+// at the start of a line, then { and }, with only spaces, line ends and
+// comments between them.
+var emptyAPI = regexp.MustCompile(`(?m)^export const api\s*=\s*\{(?:\s|//[^\n]*|/\*(?:[^*]|\*+[^*/])*\*+/)*\}`)
+
+// clientHasRoutes says whether src, a client weft gen wrote, has routes:
+// whether its api object is anything but empty, whichever weft wrote it, so
+// a client with none from an older or a newer weft is not taken for one with
+// routes. A file that does not read so, a client or not, counts as having
+// routes, so it is never written over by mistake.
+func clientHasRoutes(src []byte) bool {
+	return !emptyAPI.Match(src)
 }
 
 // noRoutes is the description of an app with no routes.

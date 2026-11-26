@@ -1240,3 +1240,51 @@ func TestSchemaSaysNullable(t *testing.T) {
 		}
 	}
 }
+
+// A client has no routes when what it says is an empty api object, whoever
+// wrote it: today's empty client, one from an older or a newer weft (other
+// header text, CRLF line endings, another body of the helper code), one with
+// a comment inside the braces. A client with a route, or a file that is not
+// a client at all, has routes as far as weft can tell, so it is kept.
+func TestClientHasRoutes(t *testing.T) {
+	empty := mustGenerate(t, noRoutes)
+	older := strings.Replace(empty, "class ApiError", "class ApiError /* older */", 1)
+	if older == empty {
+		t.Fatal("the empty client has no class ApiError to change")
+	}
+	for name, c := range map[string]struct {
+		src    string
+		routes bool
+	}{
+		"today's empty client":  {empty, false},
+		"other header text":     {"// Written by an older weft; do not edit.\n" + strings.Replace(empty, "/**", "/** (old)", 1), false},
+		"CRLF line endings":     {strings.ReplaceAll(empty, "\n", "\r\n"), false},
+		"another helper body":   {older, false},
+		"a comment in the api":  {strings.Replace(empty, "export const api = {}", "export const api = { /* none */\n  // yet\n}", 1), false},
+		"one route":             {mustGenerate(t, fixture(t)), true},
+		"not a client":          {"hello\n", true},
+		"an empty file":         {"", true},
+		"api only in a comment": {"// export const api = {}\nexport const api = { x: 1 }\n", true},
+	} {
+		if got := clientHasRoutes([]byte(c.src)); got != c.routes {
+			t.Errorf("%s: clientHasRoutes = %v, want %v", name, got, c.routes)
+		}
+	}
+
+	// An App-less app keeps a client with routes, and writes over an older
+	// empty one.
+	app := t.TempDir()
+	file := filepath.Join(app, apiTypes)
+	os.MkdirAll(filepath.Dir(file), 0o755)
+	os.WriteFile(file, []byte(strings.ReplaceAll(older, "\n", "\r\n")), 0o644)
+	if _, err := writeNoRoutes(app); !errors.Is(err, errNoWarpApp) || errors.Is(err, errKeptClient) {
+		t.Errorf("an older empty client: %v, want it written over", err)
+	}
+	if got, _ := os.ReadFile(file); string(got) != empty {
+		t.Error("the older empty client was not written over")
+	}
+	os.WriteFile(file, []byte("hello\n"), 0o644)
+	if _, err := writeNoRoutes(app); !errors.Is(err, errKeptClient) {
+		t.Errorf("a file that is not a client: %v, want it kept", err)
+	}
+}
