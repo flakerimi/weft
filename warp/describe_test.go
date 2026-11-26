@@ -452,7 +452,8 @@ func TestServeDescribes(t *testing.T) {
 	if !strings.HasPrefix(out.String(), "{\n  \"routes\"") || !strings.HasSuffix(out.String(), "}\n") {
 		t.Fatalf("Serve printed %q, want indented JSON and a newline", out)
 	}
-	// The app was never started, so it still can be.
+	// The app was never started, so it still can be, outside a describing run.
+	t.Setenv("WARP_DESCRIBE", "")
 	if err := app.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -1032,18 +1033,20 @@ func TestDescribeOmitemptyOnTwin(t *testing.T) {
 	}
 }
 
-// An app that serves with the package-level Serve and has no App, as one made
-// by Weft 0.0.7 does, describes itself as an App with no routes would, and
-// exits 0 without serving; Run, which an App's Serve calls, never does that.
+// An app that serves with the package-level Serve and has no App (a 0.0.6
+// app after weft upgrade's two-line change), or whose only App has no routes,
+// describes itself as an App with no routes would, and exits 0 without
+// serving.
 func TestPackageServeDescribesNothing(t *testing.T) {
 	out := describeTo(t)
-	made := appsMade.Load()
-	appsMade.Store(0) // the Apps other tests made are not this process's
-	t.Cleanup(func() { appsMade.Store(made) })
+	made := appsWithRoutes.Load()
+	appsWithRoutes.Store(0) // the Apps other tests made are not this process's
+	t.Cleanup(func() { appsWithRoutes.Store(made) })
 	code := -1
 	old := exit
 	exit = func(c int) { code = c; panic(exited{}) }
 	t.Cleanup(func() { exit = old })
+	_ = New(FromEnv()).Config() // an App made only to read its configuration
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -1065,18 +1068,61 @@ func TestPackageServeDescribesNothing(t *testing.T) {
 	if out.String() != want.String() {
 		t.Fatalf("Serve printed %q, want %q", out, &want)
 	}
+}
 
-	// Run serves the build with the same handler, and does not exit.
-	out.Reset()
-	code = -1
+// Under WARP_DESCRIBE=1, an App describes itself however it serves, and
+// starts nothing, so a describing run never migrates a database or answers
+// a request: Run closes the listener it was given and returns what Serve
+// does; Start, called by the app itself, writes the description and ends
+// the process.
+func TestRunAndStartDescribe(t *testing.T) {
+	out := describeTo(t)
+	var log []string
+	made := func() *App {
+		app := New(Config{})
+		app.Use(mod("store", &log))
+		Get(app, "/hello", func(context.Context, None) (Gadget, error) { return Gadget{}, nil })
+		return app
+	}
+	var want bytes.Buffer
+	if err := made().describeTo(&want); err != nil {
+		t.Fatal(err)
+	}
+
 	ln := listenLocal(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if err := New(Config{}).Run(ctx, ln, dist); err != nil {
+	if err := made().Run(context.Background(), ln, dist); err != nil {
 		t.Fatalf("Run = %v", err)
 	}
-	if code != -1 || out.Len() != 0 {
-		t.Fatalf("Run under WARP_DESCRIBE=1 exited %d and printed %q", code, out)
+	if out.String() != want.String() {
+		t.Errorf("Run printed %q, want %q", out, &want)
+	}
+	if _, err := ln.Accept(); err == nil {
+		t.Error("Run left its listener open")
+	}
+
+	out.Reset()
+	code := -1
+	old := exit
+	exit = func(c int) { code = c; panic(exited{}) }
+	t.Cleanup(func() { exit = old })
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if _, ok := r.(exited); !ok {
+					panic(r)
+				}
+			}
+		}()
+		made().Start(context.Background())
+		t.Fatal("Start returned under WARP_DESCRIBE=1")
+	}()
+	if code != 0 || out.String() != want.String() {
+		t.Errorf("Start: exit %d, printed %q; want 0 and %q", code, out, &want)
+	}
+	for _, entry := range notes(&log) {
+		if !strings.HasPrefix(entry, "register:") {
+			t.Errorf("a describing run did %s", entry)
+		}
 	}
 }
 

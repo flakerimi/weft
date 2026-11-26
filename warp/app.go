@@ -140,13 +140,6 @@ type App struct {
 // New returns an app configured by cfg, with no modules. A mistake in cfg is
 // reported by Err, and by Run.
 func New(cfg Config) *App {
-	appsMade.Add(1)
-	return newApp(cfg)
-}
-
-// newApp is New, uncounted, for the empty App the package-level Serve
-// describes.
-func newApp(cfg Config) *App {
 	xo, bad := cfg.xo, []string(nil)
 	if xo == nil || !slices.Equal(cfg.TrustedOrigins, cfg.xoFor) {
 		xo, bad = newOriginProtection(cfg.TrustedOrigins) // a Config made by hand, or changed since
@@ -383,6 +376,9 @@ func (a *App) route(method, path string, in, out reflect.Type, p *plan, status i
 	}
 	for _, req := range rc.requires {
 		a.needs = append(a.needs, routeNeed{name, req})
+	}
+	if len(a.routes) == 0 {
+		appsWithRoutes.Add(1) // the package-level Serve cannot describe it
 	}
 	a.routes = append(a.routes, Route{
 		Module: module, Name: rc.name, Method: method, Path: "/api" + path,

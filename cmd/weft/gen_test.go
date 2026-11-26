@@ -1032,13 +1032,15 @@ func describedOn(t *testing.T, app string) {
 	}
 }
 
-// An app that starts its modules before it serves is described: Warp's
-// configuration takes the port the describing run is given. One that serves
-// its App through the package-level warp.Serve, which cannot see the App's
-// routes, stops the build with Warp's sentence, not an empty client.
+// An app that starts its modules before it serves is described by Start,
+// which starts nothing in a describing run (whose port is one Warp's
+// configuration takes), whether it then serves through its own Serve or
+// through the package-level warp.Serve. One that serves its App through
+// warp.Serve without starting it, whose routes Serve cannot see, stops the
+// build with Warp's sentence, not an empty client.
 func TestBuildDescribesAnAppThatStartsFirst(t *testing.T) {
 	app := genApp(t)
-	head := "package main\n\nimport (\n\t\"context\"\n\t\"io/fs\"\n\t\"log\"\n\t\"net/http\"\n\t\"os\"\n\n\t\"github.com/flakerimi/weft/warp\"\n\n\t\"myapp/app\"\n)\n\nvar dist fs.FS\n\nvar _ http.Handler\n\nfunc main() {\n\tserver := warp.New(warp.FromEnv())\n\tserver.Use(app.Modules()...)\n\tif err := server.Start(context.Background()); err != nil {\n\t\tlog.Fatal(err)\n\t}\n\tos.WriteFile(\"describe-env.txt\", []byte(os.Getenv(\"PORT\")+\" \"+os.Getenv(\"HOST\")), 0o644)\n"
+	head := "package main\n\nimport (\n\t\"context\"\n\t\"io/fs\"\n\t\"log\"\n\t\"net/http\"\n\t\"os\"\n\n\t\"github.com/flakerimi/weft/warp\"\n\n\t\"myapp/app\"\n)\n\nvar dist fs.FS\n\nvar _ http.Handler\n\nfunc main() {\n\tos.WriteFile(\"describe-env.txt\", []byte(os.Getenv(\"PORT\")+\" \"+os.Getenv(\"HOST\")), 0o644)\n\tserver := warp.New(warp.FromEnv())\n\tserver.Use(app.Modules()...)\n\tif err := server.Start(context.Background()); err != nil {\n\t\tlog.Fatal(err)\n\t}\n"
 	starts := head + "\tif err := server.Serve(dist); err != nil {\n\t\tlog.Fatal(err)\n\t}\n}\n"
 	if err := os.WriteFile(filepath.Join(app, "main.go"), []byte(starts), 0o644); err != nil {
 		t.Fatal(err)
@@ -1053,7 +1055,19 @@ func TestBuildDescribesAnAppThatStartsFirst(t *testing.T) {
 	}
 	os.Remove(filepath.Join(app, "myapp"))
 
-	pkg := head + "\tif dist == nil {\n\t\tdist = os.DirFS(\".\")\n\t}\n\tlog.Fatal(http.ListenAndServe(\"127.0.0.1:\"+os.Getenv(\"PORT\"), warp.Serve(dist, server.Handler())))\n}\n"
+	// Started first, then served through warp.Serve: Start describes it.
+	tail := "\tif dist == nil {\n\t\tdist = os.DirFS(\".\")\n\t}\n\tlog.Fatal(http.ListenAndServe(\"127.0.0.1:\"+os.Getenv(\"PORT\"), warp.Serve(dist, server.Handler())))\n}\n"
+	os.WriteFile(filepath.Join(app, "main.go"), []byte(head+tail), 0o644)
+	if code, out, errs := build(t); code != 0 || strings.Contains(errs, "describe") {
+		t.Fatalf("started, then warp.Serve: exit %d, stdout %q, stderr %q", code, out, errs)
+	}
+	if src, _ := os.ReadFile(filepath.Join(app, "web", ".weft-types", "api.ts")); !strings.Contains(string(src), "    async hello(): Promise<Message> {\n") {
+		t.Errorf("started, then warp.Serve: the app was not described:\n%s", src)
+	}
+	os.Remove(filepath.Join(app, "myapp"))
+
+	// Not started, served through warp.Serve: its routes cannot be seen.
+	pkg := strings.Replace(head, "\tif err := server.Start(context.Background()); err != nil {\n\t\tlog.Fatal(err)\n\t}\n", "\t_ = context.Background\n", 1) + tail
 	os.WriteFile(filepath.Join(app, "main.go"), []byte(pkg), 0o644)
 	code, out, errs = build(t)
 	want := "warp: Serve was called from the package and the app's routes are on an App; call the app's own Serve so they can be described.\nweft build: the app did not describe itself; fix what its output above says and run weft build again.\n"

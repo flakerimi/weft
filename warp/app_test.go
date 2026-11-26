@@ -607,7 +607,9 @@ func TestMistake(t *testing.T) {
 		t.Fatalf("Serve printed %q", out)
 	}
 
-	// After start it is logged as well, since nothing reads Err then.
+	// After start it is logged as well, since nothing reads Err then; Start
+	// is the app's, not a describing run's.
+	t.Setenv("WARP_DESCRIBE", "")
 	logs := captureLog(t)
 	app = New(Config{})
 	if err := app.Start(context.Background()); err != nil {

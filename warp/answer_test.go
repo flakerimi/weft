@@ -407,6 +407,9 @@ func TestAnswerWithoutPlanCostsNothingExtra(t *testing.T) {
 	}
 	answered := cost("/api/typed") - cost("/api/plain")
 	none := cost("/api/typed-none") - cost("/api/plain-none")
+	if raceDetector {
+		return // -race changes the allocations a call makes, so they are not compared
+	}
 	if answered != none {
 		t.Fatalf("a typed route costs %v allocations over WriteJSON when it answers flatOut, and %v when it answers nothing", answered, none)
 	}

@@ -130,7 +130,16 @@ func untilEOF(parent context.Context, r io.Reader) (context.Context, context.Can
 // ends it lets the requests in flight finish, for up to 10 seconds, and
 // stops the app, as Stop does. Run closes ln, and returns nil after a clean
 // stop.
+//
+// With WARP_DESCRIBE=1 in the environment it closes ln and does what Serve
+// does then: it writes the description and returns, starting nothing.
 func (a *App) Run(ctx context.Context, ln net.Listener, dist fs.FS, opts ...ServeOption) error {
+	if os.Getenv("WARP_DESCRIBE") == "1" {
+		if ln != nil {
+			ln.Close()
+		}
+		return a.describeTo(describeOut)
+	}
 	if ln == nil {
 		return errors.New("warp: Run needs a listener; call Serve, or pass one from net.Listen.")
 	}
@@ -170,7 +179,22 @@ func (a *App) serve(ctx context.Context, ln net.Listener, dist fs.FS, opts ...Se
 // database) is closed. It returns the registration mistakes first, as Err
 // does, and may be called once; Run calls it. A test that serves Handler
 // calls Start and Stop around it.
+//
+// With WARP_DESCRIBE=1 in the environment it starts nothing: it writes the
+// description, as Serve does then, and ends the process, with status 0, or
+// 1 after printing a registration mistake.
 func (a *App) Start(ctx context.Context) error {
+	// A describing run starts nothing, whatever the app does next: an app
+	// that starts its App itself before it serves would otherwise migrate
+	// the database in DB_URL, so the description is written here and the
+	// process ends, as the package-level Serve ends it.
+	if os.Getenv("WARP_DESCRIBE") == "1" {
+		if err := a.describeTo(describeOut); err != nil {
+			fmt.Fprintln(describeErr, err)
+			exit(1)
+		}
+		exit(0)
+	}
 	if err := a.Err(); err != nil {
 		return err
 	}
