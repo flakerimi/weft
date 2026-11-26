@@ -12,7 +12,11 @@
  * - `pattern`: a regular expression the whole text must match, as the HTML
  *   `pattern` attribute reads it (`[0-9]+` means digits only).
  * - `email`: the text must be an email address, by the rule browsers use for
- *   `type="email"`.
+ *   `type="email"` (WHATWG's valid email address), which the Go side has
+ *   too: a local part of one or more ASCII letters, digits and
+ *   .!#$%&'*+/=?^_`{|}~-, then @, then one or more labels joined by dots,
+ *   each of 1 to 63 ASCII letters, digits and hyphens that neither starts
+ *   nor ends with a hyphen. Nothing is trimmed.
  * - `url`: the text must be an absolute web address: `http:` or `https:`
  *   with a host.
  * - `enum`: the text must be one of these values (`enum: ['draft', 'live']`).
@@ -53,7 +57,9 @@ export interface FieldRule {
 /** Rules by field name. */
 export type FieldSchema<Name extends string = string> = { [K in Name]?: FieldRule }
 
-// The WHATWG "valid email address" rule, which browsers apply to type="email".
+// The WHATWG "valid email address" rule, which browsers apply to type="email";
+// warp/validate.go's emailAddress is the same pattern, and both are tested on
+// the rows of warp/testdata/email.json.
 const EMAIL =
   /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/
 

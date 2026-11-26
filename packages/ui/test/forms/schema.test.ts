@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { validateField, validateFields, type FieldSchema } from '../../src/forms/schema.ts'
 
@@ -61,6 +62,13 @@ describe('validateField', () => {
     for (const bad of ['ada', 'ada@', '@example.com', 'a da@example.com', 'ada@exa_mple.com']) {
       expect(validateField(bad, { email: true }), bad).toBe('Enter an email address.')
     }
+  })
+
+  it('checks email as Go does, on the rows both sides read from warp/testdata/email.json', () => {
+    const rows = JSON.parse(readFileSync(new URL('../../../../warp/testdata/email.json', import.meta.url), 'utf8')) as { accept: string[]; refuse: string[] }
+    expect(rows.accept.length).toBeGreaterThan(5)
+    for (const good of rows.accept) expect(validateField(good, { email: true }), JSON.stringify(good)).toBeUndefined()
+    for (const bad of rows.refuse) expect(validateField(bad, { email: true }), JSON.stringify(bad)).toBe('Enter an email address.')
   })
 
   it('checks enum: the value must be one of them, in the order given', () => {
