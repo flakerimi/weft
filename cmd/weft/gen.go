@@ -259,21 +259,27 @@ func regenerate(ctx context.Context, appDir, bin string, within time.Duration, s
 
 // describeApp runs bin in the app's folder with the environment and
 // WARP_DESCRIBE=1, for at most within, and reads the description from its
-// standard output, at most describeMax of it. PORT=0 and HOST=127.0.0.1 are
-// set too, so an app that ignores WARP_DESCRIBE and listens takes neither
-// its real port nor a public address while weft waits. Its standard error
+// standard output, at most describeMax of it. PORT, a port free at
+// localhost as weft dev gives its Go server, and HOST=127.0.0.1 are set too,
+// so an app that ignores WARP_DESCRIBE and listens takes neither its real
+// port nor a public address while weft waits, and an app that starts before
+// it serves has a port Warp's configuration takes. Its standard error
 // passes through; of a standard output that is not a description, the first
 // shownMax bytes do too, so the app's own words come before weft's sentence.
 func describeApp(ctx context.Context, appDir, bin string, within time.Duration, stderr io.Writer) (description, error) {
+	port, err := freePort()
+	if err != nil {
+		return description{}, err
+	}
 	run, cancel := context.WithTimeout(ctx, within)
 	defer cancel()
 	cmd := exec.CommandContext(run, bin)
 	cmd.Dir = appDir
-	cmd.Env = append(os.Environ(), "WARP_DESCRIBE=1", "PORT=0", "HOST=127.0.0.1")
+	cmd.Env = append(os.Environ(), "WARP_DESCRIBE=1", "PORT="+strconv.Itoa(port), "HOST=127.0.0.1")
 	out := &cappedBuffer{max: describeMax, over: cancel}
 	cmd.Stdout, cmd.Stderr = out, stderr
 	cmd.WaitDelay = time.Second
-	err := cmd.Run()
+	err = cmd.Run()
 	show := func() {
 		b := out.buf.Bytes()[:min(out.buf.Len(), shownMax)]
 		if len(b) > 0 {

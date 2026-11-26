@@ -940,9 +940,7 @@ func TestBuildGoesOnWithoutDescription(t *testing.T) {
 	if code != 0 || !strings.Contains(errs, want) || !exists(t, filepath.Join(app, "myapp")) {
 		t.Fatalf("never describes: exit %d, stdout %q, stderr %q, want %q and a binary", code, out, errs, want)
 	}
-	if env, _ := os.ReadFile(filepath.Join(app, "describe-env.txt")); string(env) != "0 127.0.0.1" {
-		t.Errorf("the describing run had PORT and HOST %q, want \"0 127.0.0.1\"", env)
-	}
+	describedOn(t, app)
 	if after, _ := os.ReadFile(file); !bytes.Equal(after, before) {
 		t.Error("api.ts changed")
 	}
@@ -955,6 +953,33 @@ func TestBuildGoesOnWithoutDescription(t *testing.T) {
 	if code != 0 || !strings.Contains(errs, want) || !exists(t, filepath.Join(app, "myapp")) {
 		t.Fatalf("prints text: exit %d, stdout %q, stderr %q, want %q and a binary", code, out, errs, want)
 	}
+}
+
+// describedOn checks the PORT and HOST the describing run had, as the app
+// wrote them to describe-env.txt: a port Warp's configuration takes, free at
+// localhost and not the app's own 8080, and 127.0.0.1.
+func describedOn(t *testing.T, app string) {
+	t.Helper()
+	env, _ := os.ReadFile(filepath.Join(app, "describe-env.txt"))
+	port, host, _ := strings.Cut(string(env), " ")
+	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 || n == 8080 || host != "127.0.0.1" {
+		t.Errorf("the describing run had PORT and HOST %q, want a free port and 127.0.0.1", env)
+	}
+}
+
+// An app that starts its modules before it serves is described: Warp's
+// configuration takes the port the describing run is given.
+func TestBuildDescribesAnAppThatStartsFirst(t *testing.T) {
+	app := genApp(t)
+	starts := "package main\n\nimport (\n\t\"context\"\n\t\"io/fs\"\n\t\"log\"\n\t\"net/http\"\n\t\"os\"\n\n\t\"github.com/flakerimi/weft/warp\"\n)\n\nvar dist fs.FS\n\nfunc main() {\n\tserver := warp.New(warp.FromEnv())\n\tif err := server.Start(context.Background()); err != nil {\n\t\tlog.Fatal(err)\n\t}\n\tos.WriteFile(\"describe-env.txt\", []byte(os.Getenv(\"PORT\")+\" \"+os.Getenv(\"HOST\")), 0o644)\n\tif dist == nil {\n\t\tdist = os.DirFS(\".\")\n\t}\n\tlog.Fatal(http.ListenAndServe(\"127.0.0.1:\"+os.Getenv(\"PORT\"), warp.Serve(dist, server.Handler())))\n}\n"
+	if err := os.WriteFile(filepath.Join(app, "main.go"), []byte(starts), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs := build(t)
+	if code != 0 || strings.Contains(errs, "PORT") || strings.Contains(errs, "describe") || !exists(t, filepath.Join(app, "myapp")) {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errs)
+	}
+	describedOn(t, app)
 }
 
 // weft build type-checks the pages against the client it has just written, so
