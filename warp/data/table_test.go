@@ -455,7 +455,22 @@ func TestDSN(t *testing.T) {
 		{"file:app.db?_timeout=100&_busy_timeout=4999", "file:app.db?" + settings, ".", false, 2},
 		{"file:app.db?_busy_timeout=9000", "file:app.db?_busy_timeout=9000&_foreign_keys=1&_journal_mode=WAL&_txlock=immediate", ".", false, 0},
 		{"file:app.db?_timeout=8000&_busy_timeout=6000", "file:app.db?_busy_timeout=8000&_foreign_keys=1&_journal_mode=WAL&_txlock=immediate", ".", false, 0},
-		{"file:app.db?_busy_timeout=soon", "file:app.db?_busy_timeout=soon&" + settings, ".", false, 0}, // the driver's to refuse
+		// Not a busy timeout SQLite keeps: as if not given, with a note.
+		{"file:app.db?_busy_timeout=soon", "file:app.db?" + settings, ".", false, 1},
+		{"file:app.db?_busy_timeout=99999999999", "file:app.db?" + settings, ".", false, 1},
+		// Every spelling of the _pragma, which the driver runs after the keys.
+		{"file:app.db?_pragma=busy_timeout(0)", "file:app.db?" + settings, ".", false, 1},
+		{"file:app.db?_pragma=busy_timeout%3D0", "file:app.db?" + settings, ".", false, 1},
+		{"file:app.db?_pragma=busy_timeout=0", "file:app.db?" + settings, ".", false, 1},
+		{"file:app.db?_pragma=BUSY_TIMEOUT(0)", "file:app.db?" + settings, ".", false, 1},
+		{"file:app.db?_pragma=%20busy_timeout(1)", "file:app.db?" + settings, ".", false, 1},
+		{"file:app.db?_pragma=+main.busy_timeout+=+'2'", "file:app.db?" + settings, ".", false, 1},
+		{"file:app.db?%5Fpragma=busy_timeout(0)", "file:app.db?" + settings, ".", false, 1},
+		{"file:app.db?_busy_timeout=9000&_pragma=busy_timeout(0)", "file:app.db?_busy_timeout=9000&_foreign_keys=1&_journal_mode=WAL&_txlock=immediate", ".", false, 1},
+		{"file:app.db?_pragma=busy_timeout(9000)&_pragma=busy_timeout(0)", "file:app.db?_busy_timeout=9000&_foreign_keys=1&_journal_mode=WAL&_txlock=immediate", ".", false, 1},
+		{"file:app.db?_pragma=busy_timeout(0)&_pragma=busy_timeout(9000)", "file:app.db?_busy_timeout=9000&_foreign_keys=1&_journal_mode=WAL&_txlock=immediate", ".", false, 1},
+		{"file:app.db?_pragma=busy_timeout", "file:app.db?_pragma=busy_timeout&" + settings, ".", false, 0}, // a question, which sets nothing
+		{"file:app.db?_pragma=cache_size(-2000)", "file:app.db?_pragma=cache_size(-2000)&" + settings, ".", false, 0},
 	}
 	for _, c := range cases {
 		dsn, dir, memory, notes := d.dsn(c.url)
@@ -463,10 +478,12 @@ func TestDSN(t *testing.T) {
 			t.Errorf("dsn(%q) = %q, %q, %v, %q; want %q, %q, %v and %d notes", c.url, dsn, dir, memory, notes, c.dsn, c.dir, c.memory, c.notes)
 		}
 	}
-	_, _, _, notes := d.dsn("file:app.db?_busy_timeout=0&_txlock=deferred")
+	_, _, _, notes := d.dsn("file:app.db?_busy_timeout=0&_txlock=deferred&_timeout=99999999999&_pragma=busy_timeout(1)")
 	if want := []string{
 		"DB_URL sets _busy_timeout=0, below Warp's 5000; 5000 is used, since the app's own writers wait on it.",
 		"DB_URL sets _txlock=deferred, which Warp sets itself; Warp's immediate is used, since the store relies on it.",
+		"DB_URL sets _timeout=99999999999, which is not a busy timeout SQLite keeps; Warp's 5000 is used.",
+		"DB_URL sets _pragma=busy_timeout(1), below Warp's 5000; 5000 is used, since the app's own writers wait on it.",
 	}; !reflect.DeepEqual(notes, want) {
 		t.Errorf("notes %q, want %q", notes, want)
 	}

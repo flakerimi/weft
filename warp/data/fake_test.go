@@ -13,14 +13,20 @@ import (
 // A small database/sql driver for what SQLite cannot be made to do on cue:
 // answer a ping or a COMMIT with SQLITE_BUSY. A connection that is inside a
 // transaction refuses to begin another, so a connection put back in the pool
-// while still inside one is seen at its next use.
+// while still inside one is seen at its next use. By default a failed COMMIT
+// leaves the connection outside the transaction, as modernc.org/sqlite does
+// (it rolls back itself); commitLeavesOpen leaves it inside, as SQLite does
+// after a busy COMMIT without the driver's help.
 
 type fakeState struct {
-	mu        sync.Mutex
-	pingBusy  int   // how many pings answer busy, -1 for every one
-	commitErr error // what COMMIT answers; the transaction stays open after it, as SQLite's does
-	rollbacks int   // ROLLBACKs run as statements
-	begun     int
+	mu               sync.Mutex
+	pingBusy         int   // how many pings answer busy, -1 for every one
+	commitErr        error // what COMMIT answers
+	commitLeavesOpen bool  // a failed COMMIT leaves the transaction open
+	rollbackFails    bool  // a ROLLBACK statement fails
+	rollbacks        int   // ROLLBACK statements that ended a transaction BeginTx began
+	opened           int   // connections the driver opened
+	begun            int
 }
 
 var (
@@ -51,12 +57,17 @@ type fakeDriver struct{}
 func (fakeDriver) Open(name string) (driver.Conn, error) {
 	fakeMu.Lock()
 	defer fakeMu.Unlock()
-	return &fakeConn{st: fakeStates[name]}, nil
+	st := fakeStates[name]
+	st.mu.Lock()
+	st.opened++
+	st.mu.Unlock()
+	return &fakeConn{st: st}, nil
 }
 
 type fakeConn struct {
-	st   *fakeState
-	inTx bool
+	st    *fakeState
+	inTx  bool
+	rawTx bool // the transaction is one a BEGIN statement began
 }
 
 func (c *fakeConn) Prepare(string) (driver.Stmt, error) {
@@ -91,11 +102,26 @@ func (c *fakeConn) Ping(context.Context) error {
 }
 
 func (c *fakeConn) ExecContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Result, error) {
-	if query == "ROLLBACK" {
-		c.inTx = false
-		c.st.mu.Lock()
-		c.st.rollbacks++
-		c.st.mu.Unlock()
+	c.st.mu.Lock()
+	defer c.st.mu.Unlock()
+	switch query {
+	case "BEGIN":
+		if c.inTx {
+			return nil, errors.New("fake: cannot start a transaction within a transaction")
+		}
+		c.inTx, c.rawTx = true, true
+		return driver.RowsAffected(0), nil
+	case "ROLLBACK":
+		switch {
+		case c.st.rollbackFails:
+			return nil, errors.New("fake: disk I/O error")
+		case !c.inTx:
+			return nil, errors.New("fake: cannot rollback - no transaction is active")
+		}
+		if !c.rawTx {
+			c.st.rollbacks++ // it ended a transaction BeginTx began
+		}
+		c.inTx, c.rawTx = false, false
 		return driver.RowsAffected(0), nil
 	}
 	return nil, errors.New("fake: no statements")
@@ -105,9 +131,9 @@ type fakeTx struct{ c *fakeConn }
 
 func (tx fakeTx) Commit() error {
 	tx.c.st.mu.Lock()
-	err := tx.c.st.commitErr
+	err, open := tx.c.st.commitErr, tx.c.st.commitLeavesOpen
 	tx.c.st.mu.Unlock()
-	if err == nil {
+	if err == nil || !open {
 		tx.c.inTx = false
 	}
 	return err
@@ -118,30 +144,43 @@ func (tx fakeTx) Rollback() error {
 	return nil
 }
 
-// A COMMIT the database refuses as busy is the 503, and the transaction is
-// rolled back on its connection, so the pool's next use begins cleanly.
-func TestTxRollsBackAFailedCommit(t *testing.T) {
+// A COMMIT that fails is the 503 when the database was busy, and leaves
+// the pool clean whatever the driver did: a connection the driver already
+// took out of the transaction is kept as it is, one left inside is rolled
+// back and kept, and one that cannot be rolled back is thrown away.
+func TestTxAfterAFailedCommit(t *testing.T) {
+	busy := codedError{5, "database is locked (5) (SQLITE_BUSY)"}
+	for _, c := range []struct {
+		name                 string
+		leavesOpen, rbFails  bool
+		rollbacks, connsOpen int
+	}{
+		{"the driver rolled back", false, false, 0, 1},
+		{"left inside", true, false, 1, 1},
+		{"left inside, and the rollback fails", true, true, 0, 2},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			pool, st := fakeDB(t)
+			db := &DB{sql: pool, dialect: sqlite{}}
+			st.commitErr, st.commitLeavesOpen, st.rollbackFails = busy, c.leavesOpen, c.rbFails
+			if err := db.Tx(context.Background(), func(context.Context) error { return nil }); !isUnavailable(err) {
+				t.Fatalf("Tx with a busy COMMIT = %v, want the 503", err)
+			}
+			st.commitErr, st.rollbackFails = nil, false
+			if err := db.Tx(context.Background(), func(context.Context) error { return nil }); err != nil {
+				t.Fatalf("the next Tx = %v: the connection was left inside a transaction", err)
+			}
+			if st.rollbacks != c.rollbacks || st.opened != c.connsOpen {
+				t.Fatalf("%d ROLLBACKs and %d connections opened, want %d and %d", st.rollbacks, st.opened, c.rollbacks, c.connsOpen)
+			}
+		})
+	}
+	// Another failure is a plain error, not the 503.
 	pool, st := fakeDB(t)
 	db := &DB{sql: pool, dialect: sqlite{}}
-	st.commitErr = codedError{5, "database is locked (5) (SQLITE_BUSY)"}
-	if err := db.Tx(context.Background(), func(context.Context) error { return nil }); !isUnavailable(err) {
-		t.Fatalf("Tx with a busy COMMIT = %v, want the 503", err)
-	}
-	if st.rollbacks != 1 {
-		t.Fatalf("%d ROLLBACKs after the failed COMMIT, want 1", st.rollbacks)
-	}
-	st.commitErr = nil
-	if err := db.Tx(context.Background(), func(context.Context) error { return nil }); err != nil {
-		t.Fatalf("the next Tx = %v: the connection was left inside a transaction", err)
-	}
-	// Another failure is a plain error, not the 503, and rolled back too.
 	st.commitErr = errors.New("disk I/O error")
 	if err := db.Tx(context.Background(), func(context.Context) error { return nil }); err == nil || isUnavailable(err) {
 		t.Fatalf("Tx with a failing COMMIT = %v", err)
-	}
-	st.commitErr = nil
-	if err := db.Tx(context.Background(), func(context.Context) error { return nil }); err != nil || st.rollbacks != 2 {
-		t.Fatalf("after a failing COMMIT: Tx = %v, %d ROLLBACKs", err, st.rollbacks)
 	}
 }
 

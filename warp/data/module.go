@@ -258,11 +258,17 @@ var errBeforeStart = errors.New("warp: the database was used before the app star
 const busyMessage = "The database is busy; try again in a moment."
 
 // unavailable is err, or the 503 when the dialect says another connection
-// held the database past the busy timeout. The client did not cause that, so
+// held the database past the busy timeout, or errTxDone for a call on a
+// transaction that had just ended. The client did not cause that, so
 // it is logged, at warn level, with the request's method and path when ctx
 // is a typed handler's: once for each refusal, which is once a request
 // unless the handler tries again.
 func unavailable(ctx context.Context, d dialect, err error) error {
+	if errors.Is(err, sql.ErrTxDone) {
+		// A call on fn's context that got past the check in q just as the Tx
+		// ended: the same sentence as one after it.
+		return errTxDone
+	}
 	if err == nil || d == nil || !d.busy(err) {
 		return err
 	}
@@ -416,10 +422,10 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context) error) error 
 		return fmt.Errorf("data: cannot begin a transaction: %w", err)
 	}
 	st := &txState{tx: tx}
-	defer st.done.Store(true)
 	committing := false
 	defer func() {
 		if !committing { // fn failed or panicked; a panic goes on after this
+			st.done.Store(true)
 			tx.Rollback()
 		}
 	}()
@@ -427,11 +433,18 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context) error) error 
 		return err
 	}
 	committing = true
+	st.done.Store(true) // from here on, a call on fn's context is told the Tx ended
 	if err := tx.Commit(); err != nil {
-		// SQLite keeps a transaction whose COMMIT was busy open; end it here,
-		// or have the connection thrown away.
-		if _, rerr := conn.ExecContext(context.WithoutCancel(ctx), "ROLLBACK"); rerr != nil {
-			conn.Raw(func(any) error { return driver.ErrBadConn })
+		// A driver may leave the transaction open when its COMMIT fails
+		// (SQLite does after a busy COMMIT; modernc.org/sqlite rolls it back
+		// itself). Ask the connection: outside a transaction, it is kept as it
+		// is; inside one, it is rolled back, and thrown away only when that
+		// fails too.
+		bg := context.WithoutCancel(ctx)
+		if !d.outsideTx(bg, conn) {
+			if _, rerr := conn.ExecContext(bg, "ROLLBACK"); rerr != nil {
+				conn.Raw(func(any) error { return driver.ErrBadConn })
+			}
 		}
 		if err := unavailable(ctx, d, err); isUnavailable(err) {
 			return err

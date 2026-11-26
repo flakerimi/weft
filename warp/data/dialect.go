@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	neturl "net/url"
 	"path/filepath"
 	"slices"
@@ -41,6 +42,10 @@ type dialect interface {
 	uniqueColumn(err error, table string) (string, bool)
 	// busy reports whether err says another connection holds the database.
 	busy(err error) bool
+	// outsideTx reports whether conn is outside any transaction, asking the
+	// connection itself and leaving it as it found it; false when it is
+	// inside one or cannot tell.
+	outsideTx(ctx context.Context, conn *sql.Conn) bool
 	// dsn is the driver's name for url with the settings every connection
 	// needs, the folder to make for the file (none for memory), whether the
 	// database lives in memory, where one connection must hold it, and a
@@ -210,6 +215,18 @@ func (sqlite) busy(err error) bool {
 	return err.Error() == "database is locked"
 }
 
+// outsideTx asks SQLite whether the connection is in autocommit mode, outside
+// any transaction: a BEGIN succeeds only then, and is rolled back at once.
+// BEGIN (deferred) and ROLLBACK take no lock, so neither waits on another
+// connection.
+func (sqlite) outsideTx(ctx context.Context, conn *sql.Conn) bool {
+	if _, err := conn.ExecContext(ctx, "BEGIN"); err != nil {
+		return false // already inside one, or the connection is not well
+	}
+	_, err := conn.ExecContext(ctx, "ROLLBACK")
+	return err == nil
+}
+
 // sqliteBusy is SQLITE_BUSY, the low byte of each of its extended codes.
 const sqliteBusy = 5
 
@@ -233,9 +250,58 @@ var ownSettings = map[string]string{
 	"_txlock": "immediate", "_journal_mode": "WAL", "_journal": "WAL", "_foreign_keys": "1", "_fk": "1",
 }
 
-// busyKeys are the drivers' names for the busy timeout. A DB_URL may raise
-// it above busyTimeout and never lower it.
+// The forms of a DB_URL that set the busy timeout, as the drivers read them
+// (modernc.org/sqlite v1.63.0, sqlite.go, applyQueryParams; mattn/go-sqlite3
+// reads the first two):
+//   - _busy_timeout=N, and its alias _timeout=N, which wins when both are
+//     given; only the first value of a key repeated is read;
+//   - _pragma=busy_timeout(N) and _pragma=busy_timeout=N, run as "PRAGMA
+//     busy_timeout…" after the two keys above, so any of them wins over
+//     those; every _pragma given is run, in any case, with spaces, a schema
+//     before the name and the value quoted, as SQL takes them.
+//
+// Every key and value may be percent-escaped, a + is a space. A DB_URL may
+// raise the busy timeout above busyTimeout and never lower it: dsn drops
+// every one of these and writes the largest of Warp's and theirs. A value
+// that is not a whole number from 0 to 2147483647 (SQLite's int; a larger
+// one is read as none) counts as not given.
 var busyKeys = []string{"_busy_timeout", "_timeout"}
+
+// pragmaBusy reads a _pragma value that sets the busy timeout: ok when it
+// is one, and its value as written.
+func pragmaBusy(pragma string) (value string, ok bool) {
+	p := strings.ToLower(strings.TrimSpace(pragma))
+	if i := strings.IndexByte(p, '.'); i >= 0 && !strings.ContainsAny(p[:i], "=( ") {
+		p = strings.TrimSpace(p[i+1:]) // a schema: main.busy_timeout
+	}
+	rest, ok := strings.CutPrefix(p, "busy_timeout")
+	if !ok {
+		return "", false
+	}
+	rest = strings.TrimSpace(rest)
+	switch {
+	case strings.HasPrefix(rest, "="):
+		value = rest[1:]
+	case strings.HasPrefix(rest, "(") && strings.HasSuffix(rest, ")"):
+		value = rest[1 : len(rest)-1]
+	case rest == "":
+		return "", false // a question, PRAGMA busy_timeout, which sets nothing
+	default:
+		value = rest // not SQL the driver can run; read as a value not given
+	}
+	value = strings.Trim(strings.TrimSpace(value), `'"`)
+	return value, true
+}
+
+// waitOf reads a busy timeout as SQLite takes it, ok false when it is not a
+// whole number SQLite keeps.
+func waitOf(value string) (int, bool) {
+	n, err := strconv.ParseInt(strings.TrimPrefix(value, "+"), 10, 64)
+	if err != nil || n > math.MaxInt32 {
+		return 0, false
+	}
+	return int(max(n, 0)), true
+}
 
 func (sqlite) dsn(url string) (dsn, dir string, memory bool, notes []string) {
 	path, query, _ := strings.Cut(url, "?")
@@ -258,15 +324,23 @@ func (sqlite) dsn(url string) (dsn, dir string, memory bool, notes []string) {
 			}
 			continue
 		}
-		if slices.Contains(busyKeys, key) {
-			if n, err := strconv.Atoi(value); err == nil {
-				if n < busyTimeout {
-					notes = append(notes, fmt.Sprintf("DB_URL sets %s=%s, below Warp's %d; %d is used, since the app's own writers wait on it.", key, value, busyTimeout, busyTimeout))
-				}
-				wait = max(wait, n)
-				continue
+		given, isBusy := value, slices.Contains(busyKeys, key)
+		if key == "_pragma" {
+			given, isBusy = pragmaBusy(value)
+		}
+		if isBusy {
+			written := key + "=" + value
+			n, ok := waitOf(given)
+			switch {
+			case !ok:
+				notes = append(notes, fmt.Sprintf("DB_URL sets %s, which is not a busy timeout SQLite keeps; Warp's %d is used.", written, busyTimeout))
+			case n < busyTimeout:
+				notes = append(notes, fmt.Sprintf("DB_URL sets %s, below Warp's %d; %d is used, since the app's own writers wait on it.", written, busyTimeout, busyTimeout))
 			}
-			// Not a number: left for the driver to refuse in its own words.
+			if ok {
+				wait = max(wait, n)
+			}
+			continue
 		}
 		kept = append(kept, part)
 	}

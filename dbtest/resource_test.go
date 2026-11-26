@@ -507,10 +507,16 @@ func (r Raced) Validate(ctx context.Context) error {
 // record never breaks the rule. Without the transaction around update's
 // read, check and write, both would read price 10 and sale 5 and pass.
 func TestResourcePatchesDoNotRace(t *testing.T) {
-	// _busy_timeout=0 in the URL is raised to Warp's: the second PATCH waits
-	// for the first, never a 503.
+	// A busy timeout of 0 in the URL, in either form, is raised to Warp's:
+	// the second PATCH waits for the first, never a 503.
+	for _, query := range []string{"?_busy_timeout=0", "?_pragma=busy_timeout(0)"} {
+		t.Run(query, func(t *testing.T) { patchesDoNotRace(t, query) })
+	}
+}
+
+func patchesDoNotRace(t *testing.T, query string) {
 	var s *data.Store[Raced]
-	c := warptest.New(t, map[string]string{"DB_DRIVER": "sqlite", "DB_URL": "file:" + dbFile(t) + "?_busy_timeout=0"},
+	c := warptest.New(t, map[string]string{"DB_DRIVER": "sqlite", "DB_URL": "file:" + dbFile(t) + query},
 		data.Module(), resourceModule[Raced]{&s, nil})
 	var rec Raced
 	c.Post("/api/products", map[string]any{"price": 10, "sale": 5}).Want(201).JSON(&rec)

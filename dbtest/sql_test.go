@@ -138,9 +138,18 @@ func TestWarpSettingsWinOverTheURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A busy timeout may be raised by the URL, never lowered: 0 is Warp's
-	// 5000, and 9000 is 9000.
-	for url, want := range map[string]int{"file:" + file + "?_busy_timeout=0": 5000, "file:" + file + "?_busy_timeout=9000": 9000} {
+	// A busy timeout may be raised by the URL, never lowered, in every form
+	// the driver takes: 0 is Warp's 5000, and 9000 is 9000.
+	base := "file:" + file + "?"
+	for url, want := range map[string]int{
+		base + "_busy_timeout=0": 5000, base + "_busy_timeout=9000": 9000, base + "_timeout=0": 5000,
+		base + "_pragma=busy_timeout(0)": 5000, base + "_pragma=busy_timeout%3D0": 5000, base + "_pragma=busy_timeout=0": 5000,
+		base + "_pragma=BUSY_TIMEOUT(0)": 5000, base + "_pragma=%20busy_timeout(1)": 5000,
+		base + "_busy_timeout=9000&_pragma=busy_timeout(0)":         9000,
+		base + "_pragma=busy_timeout(0)&_pragma=busy_timeout(7000)": 7000,
+		base + "_pragma=busy_timeout(7000)&_pragma=busy_timeout(0)": 7000,
+		base + "_busy_timeout=99999999999":                          5000,
+	} {
 		c2 := warptest.New(t, map[string]string{"DB_DRIVER": "sqlite", "DB_URL": url},
 			data.Module(), stores{"products", func(db *data.DB) { data.NewStore[Product](db, "products") }})
 		var got int
@@ -201,5 +210,49 @@ func TestBusyIsTheCodeNotTheWords(t *testing.T) {
 	})
 	if err == nil || errors.As(err, &e) || !strings.Contains(err.Error(), "locked") {
 		t.Fatalf("DROP TABLE with its rows open = %v, want SQLite's locked error, not a warp.Error", err)
+	}
+}
+
+// A COMMIT that fails (here a deferred foreign key, checked at COMMIT) on a
+// database in memory, which lives on its one connection, leaves the earlier
+// data and the tables there and the pool usable, and the failed
+// transaction's writes gone: the connection is not thrown away.
+func TestFailedCommitKeepsTheDatabase(t *testing.T) {
+	for _, url := range []string{":memory:", "file:" + dbFile(t)} {
+		var s *data.Store[Product]
+		c := warptest.New(t, map[string]string{"DB_DRIVER": "sqlite", "DB_URL": url},
+			data.Module(), stores{"products", func(db *data.DB) { s = data.NewStore[Product](db, "products") }})
+		db := data.For(c.App)
+		db.SQL().SetMaxOpenConns(1)
+		if err := s.Create(ctx, &Product{Name: "Lamp"}); err != nil {
+			t.Fatal(err)
+		}
+		for _, q := range []string{
+			`CREATE TABLE "parent" ("id" INTEGER PRIMARY KEY)`,
+			`CREATE TABLE "child" ("pid" INTEGER REFERENCES "parent"("id") DEFERRABLE INITIALLY DEFERRED)`,
+		} {
+			if _, err := db.Exec(ctx, q); err != nil {
+				t.Fatal(err)
+			}
+		}
+		err := db.Tx(ctx, func(ctx context.Context) error {
+			if err := s.Create(ctx, &Product{Name: "Desk"}); err != nil {
+				return err
+			}
+			_, err := db.Exec(ctx, `INSERT INTO "child" VALUES (999)`)
+			return err
+		})
+		if err == nil || !strings.Contains(err.Error(), "FOREIGN KEY") {
+			t.Fatalf("%s: the COMMIT = %v, want its foreign key error", url, err)
+		}
+		if n, err := s.Count(ctx); err != nil || n != 1 {
+			t.Fatalf("%s: after the failed COMMIT, %d products, %v; want the one from before", url, n, err)
+		}
+		if _, ok, _ := s.First(ctx, "name", "Desk"); ok {
+			t.Fatalf("%s: the failed transaction's row is there", url)
+		}
+		if err := db.Tx(ctx, func(ctx context.Context) error { return s.Create(ctx, &Product{Name: "Chair"}) }); err != nil {
+			t.Fatalf("%s: the next Tx = %v", url, err)
+		}
 	}
 }
