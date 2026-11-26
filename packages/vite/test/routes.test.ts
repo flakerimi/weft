@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
-import { discoverRoutes, expandRoutes } from '../src/routes.ts'
+import { byPattern, discoverRoutes, expandRoutes, matchPattern } from '../src/routes.ts'
 
 const dir = (n: string) => fileURLToPath(new URL(`./fixtures/${n}`, import.meta.url))
 
@@ -109,7 +109,7 @@ describe('expandRoutes', () => {
   it('throws, naming the file, when getPaths is missing', async () => {
     const routes = await discoverRoutes(dir('routes-dynamic'))
     await expect(expandRoutes(routes, async () => ({}))).rejects.toThrow(
-      'page "[slug].vue" is dynamic but does not export getPaths()',
+      'page "[slug].vue" is dynamic and exports neither getPaths() nor runtime = true; export getPaths() to build its pages ahead, or runtime = true to build one page that reads its params in the browser.',
     )
   })
 
@@ -161,6 +161,111 @@ describe('expandRoutes', () => {
           `getPaths() of "[slug].vue" returned ${JSON.stringify(slug)} for slug, which is not one path segment; a page named [...slug].vue takes several.`,
         ),
       )
+    }
+  })
+})
+
+describe('runtime pages', () => {
+  it('expands a page that exports runtime = true to one shell, its params empty', async () => {
+    const routes = await discoverRoutes(pagesWith('products/[id].vue', 'products/new.vue', 'docs/[...rest].vue'))
+    const out = await expandRoutes(routes, async () => ({ runtime: true }))
+    expect(out).toEqual([
+      { path: '/products/new', file: 'products/new.vue', params: {} },
+      { path: '/docs/:...rest', file: 'docs/[...rest].vue', params: { rest: '' }, runtime: true },
+      { path: '/products/:id', file: 'products/[id].vue', params: { id: '' }, runtime: true },
+    ])
+  })
+
+  it('takes any other value of runtime for no export', async () => {
+    const routes = await discoverRoutes(pagesWith('products/[id].vue'))
+    for (const runtime of [false, 'true', 1, null]) {
+      expect(await expandRoutes(routes, async () => ({ runtime, getPaths: async () => [{ id: 'a' }] }))).toEqual([
+        { path: '/products/a', file: 'products/[id].vue', params: { id: 'a' } },
+      ])
+    }
+  })
+
+  it('runtime and getPaths together fail', async () => {
+    const routes = await discoverRoutes(pagesWith('products/[id].vue'))
+    await expect(expandRoutes(routes, async () => ({ runtime: true, getPaths: async () => [] }))).rejects.toThrow(
+      new Error('page "products/[id].vue" exports both runtime and getPaths; keep one.'),
+    )
+  })
+
+  it('neither fails as before', async () => {
+    const routes = await discoverRoutes(pagesWith('products/[id].vue'))
+    for (const mod of [{}, { runtime: false }]) {
+      await expect(expandRoutes(routes, async () => mod)).rejects.toThrow(
+        new Error('page "products/[id].vue" is dynamic and exports neither getPaths() nor runtime = true; export getPaths() to build its pages ahead, or runtime = true to build one page that reads its params in the browser.'),
+      )
+    }
+  })
+
+  it('refuses two runtime pages of the same shape, and allows one an exact page overlaps', async () => {
+    const routes = await discoverRoutes(pagesWith('a/[x].vue', 'a/[y].vue'))
+    await expect(expandRoutes(routes, async () => ({ runtime: true }))).rejects.toThrow(
+      new Error('pages "a/[x].vue" and "a/[y].vue" both match paths like /a/1; keep one.'),
+    )
+    const rest = await discoverRoutes(pagesWith('docs/[...a].vue', 'docs/[...b]/index.vue'))
+    await expect(expandRoutes(rest, async () => ({ runtime: true }))).rejects.toThrow(
+      new Error('pages "docs/[...a].vue" and "docs/[...b]/index.vue" both match paths like /docs/1; keep one.'),
+    )
+    // Of another shape, or a page with getPaths, is allowed: the order, and then the exact page, decide.
+    const other = await discoverRoutes(pagesWith('a/[x].vue', 'a/[...y].vue', '[s]/[t].vue', 'a/b.vue'))
+    expect((await expandRoutes(other, async () => ({ runtime: true }))).map((r) => r.path)).toEqual(['/a/b', '/:s/:t', '/a/:...y', '/a/:x'])
+  })
+
+  it('orders patterns so that a catch-all never hides a more specific page', () => {
+    // More static segments first; then a catch-all last; then fewer params, but
+    // the longer of two catch-alls first; then by path.
+    const paths = [
+      '/:a', '/:section/:id', '/docs/:...rest', '/products/:id', '/products/:id/edit', '/blog/:slug',
+      '/a/b/:...c', '/:...all', '/docs/:a/:b', '/docs/:a/:...r', '/a/:x/:...r', '/a/:x/:y/:z',
+    ]
+    expect(paths.map((path) => ({ path })).sort(byPattern).map((r) => r.path)).toEqual([
+      '/products/:id/edit',
+      '/a/b/:...c',
+      '/blog/:slug',
+      '/products/:id',
+      '/docs/:a/:b',
+      '/a/:x/:y/:z',
+      '/a/:x/:...r',
+      '/docs/:a/:...r',
+      '/docs/:...rest',
+      '/:a',
+      '/:section/:id',
+      '/:...all',
+    ])
+    // So each of them answers some path: the first that matches is never a pattern listed earlier that covers it.
+    const sorted = paths.map((path) => ({ path })).sort(byPattern)
+    for (const [path, want] of [
+      ['/docs/x/y', '/docs/:a/:b'],
+      ['/docs/x/y/z', '/docs/:a/:...r'],
+      ['/docs/x', '/docs/:a/:...r'],
+      ['/docs', '/docs/:...rest'],
+      ['/a/x/y/z', '/a/:x/:y/:z'],
+      ['/a/x/y', '/a/:x/:...r'],
+      ['/x/y', '/:section/:id'],
+      ['/x', '/:a'],
+      ['/x/y/z', '/:...all'],
+    ] as const) {
+      expect(sorted.find((r) => matchPattern(r.path, path) !== null)?.path, path).toBe(want)
+    }
+  })
+
+  it('matches a path against a pattern as warp.Serve does', () => {
+    expect(matchPattern('/products/:id', '/products/42')).toEqual({ id: '42' })
+    expect(matchPattern('/:section/:id', '/a/b')).toEqual({ section: 'a', id: 'b' })
+    expect(matchPattern('/docs/:...rest', '/docs')).toEqual({ rest: '' })
+    expect(matchPattern('/docs/:...rest', '/docs/a/b')).toEqual({ rest: 'a/b' })
+    expect(matchPattern('/:...rest', '/')).toEqual({ rest: '' })
+    // Cleaned as path.Clean cleans it: empty and . segments dropped, .. taking one back.
+    expect(matchPattern('/products/:id', '/products//42/')).toEqual({ id: '42' })
+    expect(matchPattern('/products/:id', '/products/x/../42')).toEqual({ id: '42' })
+    expect(matchPattern('/products/:id', '/products/./42')).toEqual({ id: '42' })
+    expect(matchPattern('/products/:id', '/products/../42')).toBeNull()
+    for (const path of ['/products', '/products/', '/products/1/x', '/Products/1', '/product/1', '/']) {
+      expect(matchPattern('/products/:id', path), path).toBeNull()
     }
   })
 })

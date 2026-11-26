@@ -11,13 +11,13 @@
 // skeleton rows until it has rows; with no rows it shows the `empty` slot.
 // `perPage` pages the rows on the client with a Pagination; `fetch(query)`
 // asks a server for each page instead, in the wire format's `page`,
-// `perPage` and `sort`. Past 200 rows on one page it renders only the rows
-// in view, each a fixed height. When its own box is narrow, each row is a
-// card (a list item of label–value pairs) from the same columns, with the
-// same selection and sorting. With `keyboard` it is an APG grid
-// (useTableGrid): one tab stop, arrows between cells over every row, windowed
-// or not, the focused cell scrolled into view and its row kept drawn; the
-// controls in cells leave the tab order until Enter or F2 moves in.
+// `per_page`, `sort`, `q` and `filter`. Past 200 rows on one page it
+// renders only the rows in view, each a fixed height. When its own box is
+// narrow, each row is a card (a list item of label–value pairs) from the
+// same columns, with the same selection and sorting. With `keyboard` it is
+// an APG grid (useTableGrid): one tab stop, arrows between cells over every
+// row, windowed or not, the focused cell scrolled into view and its row kept
+// drawn; the controls in cells leave the tab order until Enter or F2 moves in.
 import { computed, onMounted, onScopeDispose, ref, useTemplateRef, watch } from 'vue'
 import Skeleton from '../basics/Skeleton.vue'
 import Button from '../basics/Button.vue'
@@ -29,7 +29,7 @@ import { useControllable } from '../headless/useControllable.ts'
 import { useRovingFocus } from '../headless/useRovingFocus.ts'
 import { useVirtualList } from '../headless/useVirtualList.ts'
 import type { Size } from '../types.ts'
-import { nextSort, parseSort, selectRange, TABLE_LABELS, textOf, valueOf, type RowKey, type TableColumn, type TableFetch, type TableLabels } from './table.ts'
+import { activeFilters, nextSort, parseSort, selectRange, TABLE_LABELS, textOf, valueOf, type RowKey, type TableColumn, type TableFetch, type TableLabels } from './table.ts'
 import { useTableGrid } from './tableGrid.ts'
 import { useTableData } from './useTableData.ts'
 import { useLocale } from '../adaptive/locale.ts'
@@ -42,8 +42,16 @@ const props = withDefaults(
     columns: TableColumn<T>[]
     /** The rows, sorted and paged on the client. */
     rows?: T[]
-    /** Asks for a page of rows instead (`{ page, perPage, sort }` → `{ items, total }`): sorting and paging happen on the server. */
+    /**
+     * Asks for a page of rows instead, in the wire format's names (`{ page, per_page, sort, q, filter }` →
+     * `{ items, total, page, per_page }`; the last two are optional), so a generated list function fits as it is:
+     * paging, sorting, search and filters happen on the server.
+     */
     fetch?: TableFetch<T>
+    /** The search text, sent to `fetch` as `q`; empty sends none. Does nothing without `fetch`. A new one goes to page 1. */
+    search?: string
+    /** Filters by field name, sent to `fetch` as `filter`; an empty value is no filter. Does nothing without `fetch`. New ones go to page 1. */
+    filters?: Record<string, string>
     /** A row's key, for selection and rendering: a property name or a function; default the row's `id`, else its place. */
     rowKey?: string | ((row: T) => RowKey)
     /** The sort, in the wire format (`name`, `-since`; null for none), bound with `v-model:sort`. */
@@ -86,6 +94,8 @@ const props = withDefaults(
   {
     rows: undefined,
     fetch: undefined,
+    search: undefined,
+    filters: undefined,
     sort: undefined,
     defaultSort: null,
     selected: undefined,
@@ -132,6 +142,14 @@ const page = useControllable(props, 'page', emit, () => props.defaultPage)
 
 const mounted = ref(false)
 onMounted(() => (mounted.value = true))
+// A new search or new filters go back to page 1, as a press on a header does for a sort; a parent that
+// sets the page in the same change keeps its page. (Before useTableData, so it asks once, for page 1.)
+watch(
+  [() => props.search, () => JSON.stringify(activeFilters(props.filters) ?? {}), () => page.value],
+  ([q, f, p], [oldQ, oldF, oldP]) => {
+    if (props.fetch && p === oldP && (q !== oldQ || f !== oldF) && page.value !== 1) page.value = 1
+  },
+)
 const data = useTableData<T>({
   rows: () => props.rows,
   fetch: () => props.fetch,
@@ -140,11 +158,16 @@ const data = useTableData<T>({
   sort,
   page,
   perPage: () => props.perPage,
+  search: () => props.search,
+  filters: () => props.filters,
   loading: () => !!props.loading,
   active: () => mounted.value,
   needKeys: () => !!props.selectable,
   locale: () => locale.value,
   onError: (error) => emit('error', error),
+  setPage: (p) => {
+    page.value = p
+  },
 })
 const { shown, total, perPage, pageCount, currentPage, busy, failed, load } = data
 

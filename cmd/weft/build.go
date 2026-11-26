@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -33,6 +35,41 @@ func buildCmd(args []string, stdout, stderr io.Writer) int {
 	cfg, err := ensure(appDir, stdout, stderr)
 	if err != nil {
 		return fail(stderr, "build", err)
+	}
+	// The typed client first, so the pages are built and checked against it.
+	// An app that makes no warp.App is not run: it gets the client of an
+	// app with no routes, and nothing is said, unless the client it has has
+	// routes, which is left as it is and said. One that makes one, builds and
+	// runs, but does not describe itself (it never reaches its Serve, or
+	// prints something else) is said, as weft dev says it, and the pages are
+	// built with the file as it was; one that does not compile or exits with
+	// an error stops the build.
+	if _, err := genTypes(context.Background(), "build", appDir, stderr); err != nil {
+		switch {
+		case errors.Is(err, errKeptClient):
+			fail(stderr, "build", err)
+		case errors.Is(err, errNoWarpApp):
+		case errors.Is(err, errDescribeTimeout):
+			fmt.Fprintf(stderr, "weft build: the app did not describe itself within %d s, so web/.weft-types/api.ts is as it was; make sure main.go calls Serve before doing other work.\n", int(describeWithin.Seconds()))
+		case errors.Is(err, errSilent), errors.As(err, new(outputError)):
+			if errors.As(err, new(outputError)) {
+				fail(stderr, "build", err)
+			}
+			fmt.Fprintln(stderr, "weft build: the app did not describe itself, so web/.weft-types/api.ts is as it was; fix what its output above says.")
+		default:
+			return genFailed(stderr, "build", err)
+		}
+	}
+
+	// The app's TypeScript, whatever web/tsconfig.json includes (the pages,
+	// and tests too), is type-checked against that client, so a page that
+	// reads a Go field that was renamed stops the build, not the browser. An
+	// app without vue-tsc or web/tsconfig.json is not checked.
+	if isFile(filepath.Join(appDir, "web", "tsconfig.json")) && isFile(filepath.Join(appDir, "node_modules", ".bin", "vue-tsc")) {
+		if err := runIn(appDir, stdout, stderr, "pnpm", "exec", "vue-tsc", "-p", filepath.Join("web", "tsconfig.json"), "--noEmit"); err != nil {
+			fmt.Fprintln(stderr, "weft build: the app's TypeScript does not type-check; fix what vue-tsc says above and run weft build again.")
+			return 1
+		}
 	}
 
 	pages := []string{"exec", "weft-build-pages", "--root", "web", "--out", filepath.Join("web", "dist")}
@@ -67,6 +104,12 @@ func buildCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "Built %s\n", shown)
 	return 0
+}
+
+// isFile reports whether p is there and is not a folder.
+func isFile(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && !fi.IsDir()
 }
 
 // goBuildArgs is the go command's arguments for the binary to ship: paths

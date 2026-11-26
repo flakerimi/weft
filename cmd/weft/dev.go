@@ -14,6 +14,8 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,6 +40,26 @@ const (
 // devReadyWithin is how long the Go server and the page server have to
 // answer once started; tests shorten it.
 var devReadyWithin = 30 * time.Second
+
+// goServerEnv is the Go server's environment under weft dev: environ with its
+// own port, HOST, WEFT_DEV_PARENT and, since the pages are at the page
+// server's address whatever the app's .env says, APP_URL, unless environ has
+// one. A later entry wins, so these override the app's .env, which the app
+// reads without replacing what is set.
+func goServerEnv(environ []string, goPort, pagePort int) []string {
+	env := append(slices.Clone(environ), "PORT="+strconv.Itoa(goPort), "HOST=127.0.0.1", "WEFT_DEV_PARENT=1")
+	for _, kv := range environ {
+		if v, ok := strings.CutPrefix(kv, "APP_URL="); ok && v != "" {
+			return env
+		}
+	}
+	return append(env, "APP_URL=http://localhost:"+strconv.Itoa(pagePort))
+}
+
+// devDescribeWithin is how long the app has to describe itself under weft dev,
+// which asks at every Go build, so an app that hangs costs this much each
+// time; weft gen has describeWithin.
+var devDescribeWithin = 5 * time.Second
 
 func devCmd(args []string, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), stopSignals...)
@@ -75,7 +97,7 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	// The page port is checked first, before pnpm install or any child, so
 	// a port in use is one sentence and nothing is left running.
 	if *port == 0 {
-		if *port, err = freePort(); err != nil {
+		if *port, err = freePort("dev"); err != nil {
 			return fail(stderr, "dev", err)
 		}
 	} else if !portFree(*port) {
@@ -89,7 +111,7 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		}
 		return fail(stderr, "dev", err)
 	}
-	goPort, err := freePort()
+	goPort, err := freePort("dev")
 	if err != nil {
 		return fail(stderr, "dev", err)
 	}
@@ -127,20 +149,44 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return now, true
 	}
 
-	bin := filepath.Join(appDir, ".weft", "dev", "app")
+	bin := devBinary(appDir)
 	last, _ := files()
-	if !goBuild(ctx, appDir, bin, stderr) {
+	if !goBuild(ctx, "dev", appDir, bin, stderr) {
 		if ctx.Err() != nil {
 			return 0
 		}
 		fmt.Fprintln(stderr, "weft dev: go build failed; fix what its output above says and run weft dev again.")
 		return 1
 	}
+	// gen writes web/.weft-types/api.ts from the build just made. An app that
+	// does not describe itself is said, and weft dev goes on with the file as
+	// it was; it has devDescribeWithin to describe itself.
+	gen := func() {
+		_, err := regenerate(ctx, appDir, bin, devDescribeWithin, stderr)
+		switch {
+		case err == nil, ctx.Err() != nil:
+		case errors.Is(err, errKeptClient):
+			say(fmt.Sprintf("weft dev: %s.", err))
+		case errors.Is(err, errDescribeTimeout):
+			fmt.Fprintln(stderr, "weft dev: the app did not describe itself within 5 s, so web/.weft-types/api.ts is as it was; make sure main.go calls Serve before doing other work.")
+		case errors.Is(err, errNoDescription), errors.As(err, new(outputError)):
+			if errors.As(err, new(outputError)) {
+				fail(stderr, "dev", err)
+			}
+			fmt.Fprintln(stderr, "weft dev: the app did not describe itself, so web/.weft-types/api.ts is as it was; fix what its output above says.")
+		default:
+			fail(stderr, "dev", err)
+		}
+	}
+	gen()
+	if ctx.Err() != nil {
+		return 0
+	}
 
 	goServer := func() (*child, error) {
 		cmd := exec.Command(bin)
 		cmd.Dir = appDir
-		cmd.Env = append(os.Environ(), "PORT="+strconv.Itoa(goPort), "HOST=127.0.0.1", "WEFT_DEV_PARENT=1")
+		cmd.Env = goServerEnv(os.Environ(), goPort, *port)
 		cmd.Stdin = parentIn
 		cmd.Stdout, cmd.Stderr = stdout, stderr
 		return startChild("the Go server", cmd)
@@ -271,11 +317,15 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			continue
 		}
 		last = now
-		if !goBuild(ctx, appDir, bin, stderr) {
+		if !goBuild(ctx, "dev", appDir, bin, stderr) {
 			if ctx.Err() == nil {
 				fmt.Fprintln(stderr, "weft dev: go build failed; fix what its output above says, and until you save the fix the last build keeps serving /api.")
 			}
 			continue
+		}
+		gen()
+		if ctx.Err() != nil {
+			return stopAsked()
 		}
 		if api != nil {
 			api.stop()
@@ -315,19 +365,29 @@ func (c *child) stop() {
 }
 
 // goBuild builds the app with the dev tag into bin, passing the compiler's
-// output through; it says whether the build succeeded.
-func goBuild(ctx context.Context, appDir, bin string, stderr io.Writer) bool {
+// output through; it says whether the build succeeded. command names the
+// weft command in its sentence.
+func goBuild(ctx context.Context, command, appDir, bin string, stderr io.Writer) bool {
 	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
-		fmt.Fprintf(stderr, "weft dev: cannot make %s (%v); make the app's folder writable.\n", filepath.Dir(bin), err)
+		fmt.Fprintf(stderr, "weft %s: cannot make %s (%v); make the app's folder writable.\n", command, filepath.Dir(bin), err)
 		return false
 	}
 	cmd := exec.CommandContext(ctx, "go", "build", "-tags", "dev", "-o", bin, ".")
-	cmd.Dir = appDir
+	cmd.Dir, cmd.Env = appDir, hostBuildEnv(os.Environ())
 	cmd.Stdout, cmd.Stderr = stderr, stderr
 	// Stopped as a Ctrl-C would, so go stops the compilers it started.
 	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
 	cmd.WaitDelay = 3 * time.Second
 	return cmd.Run() == nil
+}
+
+// hostBuildEnv is environ with GOOS and GOARCH set to this machine's, and
+// every variable that picks a CPU level reset to its default, since the dev
+// build runs here even when the environment asks weft build for another
+// system.
+func hostBuildEnv(environ []string) []string {
+	return append(slices.Clone(environ), "GOOS="+runtime.GOOS, "GOARCH="+runtime.GOARCH, "GOAMD64=", "GOARM=", "GOARM64=",
+		"GO386=", "GOMIPS=", "GOMIPS64=", "GOPPC64=", "GORISCV64=", "GOWASM=")
 }
 
 // goFiles returns the modification time of every .go file in the app, and of
@@ -409,8 +469,12 @@ func portFree(port int) bool {
 	return true
 }
 
-// freePort returns a port that is free at localhost.
-func freePort() (int, error) {
+// portFreeAt is portFree; a test puts another in its place.
+var portFreeAt = portFree
+
+// freePort returns a port that is free at localhost; command names the weft
+// command in the sentence when there is none.
+func freePort(command string) (int, error) {
 	for range 20 {
 		l, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
@@ -418,11 +482,11 @@ func freePort() (int, error) {
 		}
 		port := l.Addr().(*net.TCPAddr).Port
 		l.Close()
-		if portFree(port) {
+		if portFreeAt(port) {
 			return port, nil
 		}
 	}
-	return 0, errors.New("found no free port on localhost; stop some servers and run weft dev again")
+	return 0, fmt.Errorf("found no free port on localhost; stop some servers and run weft %s again", command)
 }
 
 var probe = &http.Client{Timeout: time.Second}

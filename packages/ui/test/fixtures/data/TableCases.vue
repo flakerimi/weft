@@ -19,6 +19,8 @@ const props = withDefaults(
     columns?: TableColumn<Person>[]
     selectable?: boolean
     perPage?: number
+    search?: string
+    filters?: Record<string, string>
     loading?: boolean
     keyboard?: boolean
     caption?: string
@@ -29,6 +31,8 @@ const props = withDefaults(
     rowHeight?: number
     height?: string
     locale?: string
+    /** A page bound one-way, whose update is ignored. */
+    pinnedPage?: number
   }>(),
   { rows: undefined, fetch: undefined, columns: undefined, caption: 'People' },
 )
@@ -41,9 +45,11 @@ const COLUMNS: TableColumn<Person>[] = [
 const sort = ref<string | null>(null)
 const selected = ref<RowKey[]>([])
 const page = ref(1)
+const searchText = ref(props.search)
+const filterValues = ref(props.filters)
 const errors = ref<unknown[]>([])
 const table = ref<{ refresh(): Promise<void> } | null>(null)
-defineExpose({ sort, selected, page, errors, table })
+defineExpose({ searchText, filterValues, sort, selected, page, errors, table })
 </script>
 
 <template>
@@ -53,12 +59,15 @@ defineExpose({ sort, selected, page, errors, table })
         ref="table"
         v-model:sort="sort"
         v-model:selected="selected"
-        v-model:page="page"
+        :page="pinnedPage ?? page"
+        @update:page="pinnedPage === undefined && (page = $event)"
         :rows="rows"
         :fetch="fetch"
         :columns="columns ?? COLUMNS"
         :selectable="selectable"
         :per-page="perPage"
+        :search="searchText"
+        :filters="filterValues"
         :loading="loading"
         :keyboard="keyboard"
         :caption="caption"

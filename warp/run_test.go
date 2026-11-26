@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -106,7 +107,8 @@ func TestRunStartFailureStopsEarlier(t *testing.T) {
 	if want := `warp: module "b" could not start: boom`; errText(err) != want {
 		t.Fatalf("Run = %q, want %q", errText(err), want)
 	}
-	if want := []string{"start:a", "start:b", "stop:a"}; !reflect.DeepEqual(log[len(log)-3:], want) {
+	// Every module migrated before any started, so every one is stopped.
+	if want := []string{"start:a", "start:b", "stop:c", "stop:b", "stop:a"}; !reflect.DeepEqual(log[len(log)-5:], want) {
 		t.Fatalf("log %v", log)
 	}
 	if !closed(ln.Addr().String()) {
@@ -124,7 +126,7 @@ func TestRunMigrateFailure(t *testing.T) {
 	if want := `warp: module "b" could not migrate: table exists`; errText(err) != want {
 		t.Fatalf("Run = %q, want %q", errText(err), want)
 	}
-	if want := []string{"register:a", "register:b", "register:c", "migrate:a", "migrate:b"}; !reflect.DeepEqual(log, want) {
+	if want := []string{"register:a", "register:b", "register:c", "migrate:a", "migrate:b", "stop:a"}; !reflect.DeepEqual(log, want) {
 		t.Fatalf("log %v", log)
 	}
 }
@@ -323,9 +325,9 @@ func TestRegisteringAfterStartIsAMistake(t *testing.T) {
 		t.Fatal(err)
 	}
 	mistakes := []string{
-		"warp: Use was called after the app started serving; list every module before Serve.",
-		`warp: route "GET /x" was registered after the app started serving; register every route before Serve.`,
-		"warp: Wrap was called after the app started serving; wrap before Serve.",
+		"warp: Use was called after the app started; list every module before Serve or Start.",
+		`warp: route "GET /x" was registered after the app started; register every route before Serve or Start.`,
+		"warp: Wrap was called after the app started; wrap before Serve or Start.",
 	}
 	if want := strings.Join(mistakes, "\n"); errText(app.Err()) != want {
 		t.Fatalf("Err() = %q\nwant %q", errText(app.Err()), want)
@@ -437,4 +439,254 @@ func TestRunNeedsAListener(t *testing.T) {
 	if err := app.Run(context.Background(), nil, nil); errText(err) != "warp: Run needs a listener; call Serve, or pass one from net.Listen." {
 		t.Fatalf("Run = %q", errText(err))
 	}
+}
+
+func TestStartAndStop(t *testing.T) {
+	ctx := context.Background()
+	t.Run("order", func(t *testing.T) {
+		var log []string
+		app := New(Config{})
+		app.Use(mod("a", &log), mod("b", &log), mod("c", &log))
+		app.Handle("GET /ping", text("pong"))
+		if err := app.Start(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if w := serve(t, app.Handler(), "GET", "/api/ping"); w.Body.String() != "pong" {
+			t.Fatalf("body %q", w.Body.String())
+		}
+		if err := app.Stop(ctx); err != nil {
+			t.Fatal(err)
+		}
+		want := []string{
+			"register:a", "register:b", "register:c",
+			"migrate:a", "migrate:b", "migrate:c",
+			"start:a", "start:b", "start:c",
+			"stop:c", "stop:b", "stop:a",
+		}
+		if !reflect.DeepEqual(log, want) {
+			t.Fatalf("log %v\nwant %v", log, want)
+		}
+		if err := app.Stop(ctx); err != nil || len(log) != len(want) {
+			t.Fatalf("a second Stop: %v, log %v", err, log)
+		}
+		if err := app.Start(ctx); errText(err) != "warp: the app was already started." {
+			t.Fatalf("a second Start = %q", errText(err))
+		}
+	})
+	t.Run("a failing start stops every module that migrated", func(t *testing.T) {
+		var log []string
+		b := mod("b", &log)
+		b.startErr = errors.New("boom")
+		app := New(Config{})
+		app.Use(mod("a", &log), b, mod("c", &log))
+		if err := app.Start(ctx); errText(err) != `warp: module "b" could not start: boom` {
+			t.Fatalf("Start = %q", errText(err))
+		}
+		if want := []string{"start:a", "start:b", "stop:c", "stop:b", "stop:a"}; !reflect.DeepEqual(log[len(log)-5:], want) {
+			t.Fatalf("log %v", log)
+		}
+		n := len(log)
+		if err := app.Stop(ctx); err != nil || len(log) != n {
+			t.Fatalf("Stop after a failed Start: %v, log %v", err, log)
+		}
+	})
+	t.Run("a failing migrate starts nothing and stops what migrated", func(t *testing.T) {
+		var log []string
+		b := mod("b", &log)
+		b.migrateErr = errors.New("table exists")
+		app := New(Config{})
+		app.Use(mod("a", &log), b)
+		if err := app.Start(ctx); errText(err) != `warp: module "b" could not migrate: table exists` {
+			t.Fatalf("Start = %q", errText(err))
+		}
+		if err := app.Stop(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if want := []string{"register:a", "register:b", "migrate:a", "migrate:b", "stop:a"}; !reflect.DeepEqual(log, want) {
+			t.Fatalf("log %v", log)
+		}
+	})
+	t.Run("a module that only migrates is stopped when a later one fails", func(t *testing.T) {
+		for _, fail := range []string{"migrate", "start"} {
+			var log []string
+			db := &migrateOnly{name: "db", log: &log}
+			later := mod("later", &log)
+			if fail == "migrate" {
+				later.migrateErr = errors.New("boom")
+			} else {
+				later.startErr = errors.New("boom")
+			}
+			plain := &stopOnly{name: "plain", log: &log} // neither migrates nor started: left alone
+			app := New(Config{})
+			app.Use(db, plain, later)
+			if err := app.Start(ctx); err == nil {
+				t.Fatalf("%s: Start succeeded", fail)
+			}
+			want := []string{"migrate:db", "migrate:later", "stop:db"}
+			if fail == "start" {
+				want = []string{"migrate:db", "migrate:later", "start:later", "stop:later", "stop:db"}
+			}
+			if got := notes(&log)[1:]; !reflect.DeepEqual(got, want) { // after register:later
+				t.Fatalf("%s fails: log %v, want %v", fail, got, want)
+			}
+		}
+	})
+	t.Run("stop failures are joined", func(t *testing.T) {
+		var log []string
+		a, c := mod("a", &log), mod("c", &log)
+		a.stopErr, c.stopErr = errors.New("a stuck"), errors.New("c stuck")
+		app := New(Config{})
+		app.Use(a, mod("b", &log), c)
+		if err := app.Start(ctx); err != nil {
+			t.Fatal(err)
+		}
+		want := "warp: module \"c\" could not stop: c stuck\nwarp: module \"a\" could not stop: a stuck"
+		if err := app.Stop(ctx); errText(err) != want || !errors.Is(err, a.stopErr) {
+			t.Fatalf("Stop = %q, want %q", errText(err), want)
+		}
+	})
+	t.Run("registration mistakes come first", func(t *testing.T) {
+		var log []string
+		app := New(Config{})
+		app.Use(mod("a", &log), mod("a", &log))
+		if err := app.Start(ctx); errText(err) != `warp: two modules are named "a"; give one another name.` {
+			t.Fatalf("Start = %q", errText(err))
+		}
+		if want := []string{"register:a"}; !reflect.DeepEqual(log, want) {
+			t.Fatalf("log %v", log)
+		}
+	})
+	t.Run("Run after Start", func(t *testing.T) {
+		app := New(Config{})
+		if err := app.Start(ctx); err != nil {
+			t.Fatal(err)
+		}
+		ln := listenLocal(t)
+		if err := app.Run(ctx, ln, nil); errText(err) != "warp: the app was already started." {
+			t.Fatalf("Run = %q", errText(err))
+		}
+		if !closed(ln.Addr().String()) {
+			t.Fatal("the listener is still open")
+		}
+	})
+	t.Run("Start after Run", func(t *testing.T) {
+		var log []string
+		app := New(Config{})
+		app.Use(mod("a", &log))
+		app.Handle("GET /ping", text("pong"))
+		r := startApp(t, app, nil)
+		if status, _ := fetch(t, r.url+"/api/ping"); status != 200 {
+			t.Fatalf("status %d", status)
+		}
+		if err := app.Start(ctx); errText(err) != "warp: the app was already started." {
+			t.Fatalf("Start = %q", errText(err))
+		}
+		if err := r.stop(t); err != nil {
+			t.Fatal(err)
+		}
+		if want := []string{"register:a", "migrate:a", "start:a", "stop:a"}; !reflect.DeepEqual(notes(&log), want) {
+			t.Fatalf("log %v", notes(&log))
+		}
+	})
+}
+
+// migrateOnly migrates and stops, and has nothing to start, as data's module
+// opens its database in Migrate.
+type migrateOnly struct {
+	name string
+	log  *[]string
+}
+
+func (m *migrateOnly) Name() string                  { return m.name }
+func (m *migrateOnly) Register(*App) error           { return nil }
+func (m *migrateOnly) Migrate(context.Context) error { note(m.log, "migrate:"+m.name); return nil }
+func (m *migrateOnly) Stop(context.Context) error    { note(m.log, "stop:"+m.name); return nil }
+
+// stopOnly has only a Stop, which no failed Start reaches.
+type stopOnly struct {
+	name string
+	log  *[]string
+}
+
+func (m *stopOnly) Name() string               { return m.name }
+func (m *stopOnly) Register(*App) error        { return nil }
+func (m *stopOnly) Stop(context.Context) error { note(m.log, "stop:"+m.name); return nil }
+
+// Serve listens once the app has started: nothing answers on the port while
+// the modules migrate, and a start that fails never says it is listening.
+func TestServeListensOnceStarted(t *testing.T) {
+	logs := captureLog(t)
+	ln := listenLocal(t)
+	_, port, _ := net.SplitHostPort(ln.Addr().String())
+	ln.Close()
+	var log []string
+	m := mod("probe", &log)
+	answered := make(chan bool, 1)
+	m.migrateErr = errors.New("stop here")
+	m.register = func(app *App) {}
+	probe := &dialAtMigrate{testMod: m, addr: net.JoinHostPort("127.0.0.1", port), answered: answered}
+	app := New(ConfigFrom(map[string]string{"HOST": "127.0.0.1", "PORT": port}))
+	app.Use(probe)
+	err := app.Serve(nil)
+	if err == nil || !strings.Contains(err.Error(), "stop here") {
+		t.Fatalf("Serve = %v", err)
+	}
+	if <-answered {
+		t.Error("the port answered while the modules migrated")
+	}
+	if strings.Contains(logs.String(), "listening on") {
+		t.Errorf("a start that failed said it was listening: %s", logs)
+	}
+}
+
+// dialAtMigrate dials addr as it migrates, and says whether anything answered.
+type dialAtMigrate struct {
+	*testMod
+	addr     string
+	answered chan bool
+}
+
+func (m *dialAtMigrate) Migrate(ctx context.Context) error {
+	c, err := net.DialTimeout("tcp", m.addr, 200*time.Millisecond)
+	if err == nil {
+		c.Close()
+	}
+	m.answered <- err == nil
+	return m.testMod.Migrate(ctx)
+}
+
+// A module whose Stop ignores its context does not hold the app past its
+// time: Stop says which one it left, and the modules before it still stop.
+func TestStopGoesOnPastAModuleThatDoesNotStop(t *testing.T) {
+	var log []string
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	app := New(Config{})
+	app.Use(mod("first", &log), stuckStop{release})
+	if err := app.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	began := time.Now()
+	err := app.Stop(ctx)
+	if took := time.Since(began); took > 3*time.Second {
+		t.Fatalf("Stop took %v", took)
+	}
+	want := `warp: module "stuck" did not stop before the app's time to stop ran out, so the app went on without it; make its Stop return when its context ends.`
+	if errText(err) != want {
+		t.Errorf("Stop = %q, want %q", errText(err), want)
+	}
+	if !slices.Contains(notes(&log), "stop:first") {
+		t.Errorf("steps %v: the module before it was not stopped", notes(&log))
+	}
+}
+
+type stuckStop struct{ release chan struct{} }
+
+func (stuckStop) Name() string            { return "stuck" }
+func (stuckStop) Register(app *App) error { return nil }
+func (m stuckStop) Stop(context.Context) error {
+	<-m.release
+	return nil
 }

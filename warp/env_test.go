@@ -187,3 +187,41 @@ func TestMaxBodyUpperBound(t *testing.T) {
 		t.Fatalf("MAX_BODY_MB=%s was taken", over)
 	}
 }
+
+func TestAppURL(t *testing.T) {
+	if got := New(Config{}).Config().URL; got != "http://localhost:8080" {
+		t.Errorf("default URL %q", got)
+	}
+	if got := New(ConfigFrom(map[string]string{"PORT": "3000"})).Config().URL; got != "http://localhost:3000" {
+		t.Errorf("URL with PORT=3000 %q", got)
+	}
+	for in, want := range map[string]string{
+		"https://shop.example.com":  "https://shop.example.com",
+		"https://shop.example.com/": "https://shop.example.com",
+		"http://localhost:5173":     "http://localhost:5173",
+		"HTTP://127.0.0.1:9000/":    "http://127.0.0.1:9000",
+	} {
+		cfg := ConfigFrom(map[string]string{"APP_URL": in})
+		if cfg.Err() != nil || New(cfg).Config().URL != want {
+			t.Errorf("APP_URL=%s: Err() = %v, URL %q, want %q", in, cfg.Err(), New(cfg).Config().URL, want)
+		}
+	}
+	for _, in := range []string{"shop.example.com", "ftp://shop.example.com", "https://", "https://shop.example.com/app", "https://shop.example.com?a=1", "https://shop.example.com/#top", "/setup", "http://%zz", "https://:8080", "http://:80/"} {
+		want := `APP_URL is "` + in + `"; set it to an address like https://shop.example.com.`
+		if err := ConfigFrom(map[string]string{"APP_URL": in}).Err(); errText(err) != want {
+			t.Errorf("APP_URL=%s: Err() = %v, want %q", in, err, want)
+		}
+	}
+}
+
+func TestTrustProxy(t *testing.T) {
+	if ConfigFrom(nil).TrustProxy || (Config{}).TrustProxy {
+		t.Error("TrustProxy is on by default")
+	}
+	if !ConfigFrom(map[string]string{"TRUST_PROXY": "on"}).TrustProxy {
+		t.Error("TRUST_PROXY=on did not turn TrustProxy on")
+	}
+	if ConfigFrom(map[string]string{"TRUST_PROXY": "off"}).TrustProxy {
+		t.Error("TRUST_PROXY=off turned TrustProxy on")
+	}
+}

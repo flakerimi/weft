@@ -11,7 +11,7 @@ import { weft } from './plugin.ts'
 import type { ContentAsset } from './content.ts'
 import { iconTags, pageHTML, readStyles, THEMES, VIEW_TRANSITION, type Theme } from './document.ts'
 import { createRenderServer, renderPage, type RenderResult } from './render.ts'
-import { discoverRoutes, expandRoutes, type ExpandedRoute, type PageModule, type RoutesJson } from './routes.ts'
+import { byPattern, discoverRoutes, expandRoutes, type ExpandedRoute, type PageModule, type RoutesJson } from './routes.ts'
 
 export type { Theme } from './document.ts'
 
@@ -209,7 +209,9 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
     // The pages' CSS is minified for the browsers the site's Vite config targets.
     cssTarget = cssTargets(server.config.build.cssTarget)
     const load = (file: string) => server.ssrLoadModule(`/pages/${file}`) as Promise<PageModule>
-    for (const route of await expandRoutes(routes, load)) {
+    const expanded = await expandRoutes(routes, load)
+    refuseSharedFiles(expanded)
+    for (const route of expanded) {
       const page = join('pages', route.file)
       const rendered = await renderPage({ root, page, props: route.params, server, providedCSS: baseFiles, bundleCSS: bundles })
       pages.push({ ...route, ...rendered })
@@ -535,6 +537,8 @@ async function writeBuild(
 
   const hints: Manifest['hints'] = {}
   const routesJson: RoutesJson = { pages: [], notFound: null, app }
+  // After every exact page, in the order the server tries them.
+  const runtimePages: RoutesJson['pages'] = []
   const rules = speculationRules(app)
   const sentSize = sentSizes()
   const minify = minifier(cssTarget)
@@ -578,8 +582,9 @@ async function writeBuild(
           ]
         : []),
     ]
-    const file = htmlFile(page.path)
-    await write(file, pageHTML({ body: dropStaticComments(page.html), head: page.head, prePaint: page.prePaint, icons, fonts, css, stylesheet, tags }))
+    const file = pageFile(page)
+    const route = page.runtime ? page.path : undefined
+    await write(file, pageHTML({ body: dropStaticComments(page.html), head: page.head, prePaint: page.prePaint, icons, fonts, css, stylesheet, tags, route }))
 
     const links = [
       ...fonts.map((f) => `<${f}>; rel=preload; as=font; type="font/woff2"; crossorigin`),
@@ -589,8 +594,10 @@ async function writeBuild(
     const notFound = page.file === '404.vue'
     if (links.length) hints[notFound ? '404' : page.path] = links
     if (notFound) routesJson.notFound = file
+    else if (page.runtime) runtimePages.push({ path: page.path, html: file, islands: page.islands, runtime: true })
     else routesJson.pages.push({ path: page.path, html: file, islands: page.islands })
   }
+  routesJson.pages.push(...runtimePages.sort(byPattern))
   // The files the pages wrote with useFile, each once.
   const given = new Map<string, { path: string; body: string; page: string }>()
   for (const page of pages) {
@@ -1077,6 +1084,36 @@ function htmlFile(path: string): string {
   if (segments.some((s) => s === '' || s === '.' || s === '..' || s.includes('\\'))) {
     throw new Error(`buildSite: page path ${path} has an empty, "." or ".." segment.`)
   }
+  return `pages/${segments.join('/')}/index.html`
+}
+
+/** The file a page is written to: a runtime page's shell, or the folder its path names. */
+const pageFile = (route: ExpandedRoute) => (route.runtime ? shellFile(route.path) : htmlFile(route.path))
+
+/**
+ * Refuse two pages that would write one file, which only a runtime page's
+ * shell and a page whose path is its folder's name can (a getPaths value
+ * of `[id]`), compared without case or Unicode form so that it fails on
+ * every OS alike. The other pages come first, so they are named first.
+ */
+function refuseSharedFiles(routes: ExpandedRoute[]) {
+  const writers = new Map<string, string>()
+  for (const route of [...routes.filter((r) => !r.runtime), ...routes.filter((r) => r.runtime)]) {
+    const file = pageFile(route)
+    const key = file.normalize('NFC').toLowerCase()
+    const other = writers.get(key)
+    if (other !== undefined) throw new Error(`pages "${other}" and "${route.file}" both write ${file}; rename one.`)
+    writers.set(key, route.file)
+  }
+}
+
+/**
+ * A runtime page's shell, in a folder named as its file is, brackets kept
+ * (a colon is no safe file name): `/products/:id` → `pages/products/[id]/index.html`,
+ * `/docs/:...rest` → `pages/docs/[...rest]/index.html`.
+ */
+function shellFile(pattern: string): string {
+  const segments = pattern.slice(1).split('/').map((s) => s.replace(/^:(.+)$/, '[$1]'))
   return `pages/${segments.join('/')}/index.html`
 }
 

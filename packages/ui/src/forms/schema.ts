@@ -1,7 +1,7 @@
 /**
  * The Weft field schema: what a Form checks before it submits. It is plain
- * JSON, so a server can send the same rules it enforces (the Go contract will
- * generate it), keyed by field name:
+ * JSON, so a server can send the same rules it enforces (weft gen writes it
+ * from the Go types, as schema), keyed by field name:
  *
  *     { email: { required: true, email: true }, age: { min: 18 } }
  *
@@ -12,23 +12,34 @@
  * - `pattern`: a regular expression the whole text must match, as the HTML
  *   `pattern` attribute reads it (`[0-9]+` means digits only).
  * - `email`: the text must be an email address, by the rule browsers use for
- *   `type="email"`.
+ *   `type="email"` (WHATWG's valid email address), which the Go side has
+ *   too: a local part of one or more ASCII letters, digits and
+ *   .!#$%&'*+/=?^_`{|}~-, then @, then one or more labels joined by dots,
+ *   each of 1 to 63 ASCII letters, digits and hyphens that neither starts
+ *   nor ends with a hyphen. Nothing is trimmed.
+ * - `url`: the text must be an absolute web address: `http:` or `https:`
+ *   with a host.
+ * - `enum`: the text must be one of these values (`enum: ['draft', 'live']`).
  * - `message`: one sentence to show in place of any of the sentences below.
+ * - `nullable`: not a check: null is the field's empty value, so a Form sends
+ *   an emptied one (null, or '') as null; every other null it leaves out.
  *
  * By the value's type at run time:
  *
- * | value          | required | min, max          | pattern, email      |
- * |----------------|----------|-------------------|---------------------|
- * | text           | yes      | length, in chars  | the text            |
- * | number         | yes      | the number itself | the number written  |
- * |                |          |                   | out (`String(n)`)   |
- * | list (array)   | yes      | how many          | not checked         |
- * | anything else  | yes      | not checked       | not checked         |
+ * | value          | required | min, max          | pattern, email      | url, enum   |
+ * |----------------|----------|-------------------|---------------------|-------------|
+ * | text           | yes      | length, in chars  | the text            | the text    |
+ * | number         | yes      | the number itself | the number written  | not checked |
+ * |                |          |                   | out (`String(n)`)   |             |
+ * | list (array)   | yes      | how many          | not checked         | not checked |
+ * | anything else  | yes      | not checked       | not checked         | not checked |
  *
  * (A boolean, a date, a file: only `required` applies.)
  *
- * An empty value that is not required passes every other rule. A field's
- * first failing rule, in the order above, gives its error.
+ * Only a missing value (undefined, null, '' or an empty list) passes every rule but
+ * `required`; text of only spaces is checked by each of them, as the server
+ * does. A field's first failing rule, in the order above (`url` and `enum`
+ * last, `email` before them), gives its error.
  */
 
 /** The rules for one field. */
@@ -38,13 +49,24 @@ export interface FieldRule {
   max?: number
   pattern?: string
   email?: boolean
+  /** The text must be an absolute `http:` or `https:` address with a host. */
+  url?: boolean
+  /** The text must be one of these values. */
+  enum?: string[]
   message?: string
+  /**
+   * null is the field's empty value (a pointer in Go, as weft gen's schema
+   * says): a Form sends an emptied one as null, which clears it. Not checked.
+   */
+  nullable?: boolean
 }
 
 /** Rules by field name. */
 export type FieldSchema<Name extends string = string> = { [K in Name]?: FieldRule }
 
-// The WHATWG "valid email address" rule, which browsers apply to type="email".
+// The WHATWG "valid email address" rule, which browsers apply to type="email";
+// warp/validate.go's emailAddress is the same pattern, and both are tested on
+// the rows of warp/testdata/email.json.
 const EMAIL =
   /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/
 
@@ -77,7 +99,11 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 /** The error for `value` under `rule`, or undefined when it passes. */
 export function validateField(value: unknown, rule: FieldRule): string | undefined {
   const fail = (sentence: string) => rule.message ?? sentence
-  if (isEmpty(value)) return rule.required ? fail('This field is required.') : undefined
+  if (rule.required && isEmpty(value)) return fail('This is required.')
+  // Every other rule skips only a missing or empty value or an empty list;
+  // text of only spaces is checked like any other.
+  if (value === undefined || value === null || value === '') return undefined
+  if (Array.isArray(value) && value.length === 0) return undefined
   if (typeof value === 'number') {
     if (rule.min !== undefined && value < rule.min) return fail(`Enter ${rule.min} or more.`)
     if (rule.max !== undefined && value > rule.max) return fail(`Enter ${rule.max} or less.`)
@@ -89,7 +115,7 @@ export function validateField(value: unknown, rule: FieldRule): string | undefin
     const length = Array.from(value).length
     if (rule.min !== undefined && length < rule.min) return fail(`Use at least ${plural(rule.min, 'character', 'characters')}.`)
     if (rule.max !== undefined && length > rule.max) return fail(`Use at most ${plural(rule.max, 'character', 'characters')}.`)
-    return textRules(value, rule, fail)
+    return textRules(value, rule, fail) ?? webRules(value, rule, fail)
   }
   return undefined
 }
@@ -99,6 +125,32 @@ function textRules(text: string, rule: FieldRule, fail: (sentence: string) => st
   if (rule.pattern !== undefined && !compiled(rule.pattern).test(text)) return fail('Use the format asked for.')
   if (rule.email && !EMAIL.test(text)) return fail('Enter an email address.')
   return undefined
+}
+
+/** `url` and `enum`, for text only (as the Go side checks them). */
+function webRules(text: string, rule: FieldRule, fail: (sentence: string) => string): string | undefined {
+  if (rule.url && !isWebAddress(text)) {
+    return fail('Enter a web address that starts with http:// or https://.')
+  }
+  if (rule.enum && !rule.enum.includes(text)) return fail(`Choose one of: ${rule.enum.join(', ')}.`)
+  return undefined
+}
+
+/**
+ * An absolute web address, as the Go side reads it: no whitespace, control
+ * character or backslash; `http://` or `https://` (any case); then an
+ * authority (up to the first `/`, `?` or `#`) of `host` or `host:port`,
+ * after any `user:password@`. The host is not empty; a port is one to five
+ * digits. An IPv6 host in brackets is a host.
+ */
+function isWebAddress(text: string): boolean {
+  if (/[\s\x00-\x1f\x7f\\]/u.test(text)) return false
+  const m = /^https?:\/\/([^/?#]*)/i.exec(text)
+  if (!m) return false
+  const authority = m[1]!.slice(m[1]!.lastIndexOf('@') + 1)
+  const port = /:([^:\]]*)$/.exec(authority)
+  const host = port ? authority.slice(0, port.index) : authority
+  return host !== '' && (!port || /^[0-9]{1,5}$/.test(port[1]!))
 }
 
 /** The first error of each field in `schema` that fails, by name; `{}` when all pass. */

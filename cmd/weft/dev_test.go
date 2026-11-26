@@ -1067,3 +1067,194 @@ func TestDevGoServerIsLocalOnly(t *testing.T) {
 		t.Errorf("exit %d: %s", code, r.stderr)
 	}
 }
+
+// An app that hangs when asked to describe itself costs weft dev 5 s at each
+// Go build, not the 30 s of weft gen; it says so, and goes on.
+func TestDevDescribeLimit(t *testing.T) {
+	if devDescribeWithin != 5*time.Second {
+		t.Errorf("devDescribeWithin = %v, want 5s", devDescribeWithin)
+	}
+}
+
+func TestDevAppThatHangsWhenDescribing(t *testing.T) {
+	app := devApp(t)
+	main := `package main
+
+import (
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/flakerimi/weft/warp"
+)
+
+func main() {
+	_ = warp.New(warp.Config{})
+	if os.Getenv("WARP_DESCRIBE") != "" {
+		time.Sleep(time.Minute)
+	}
+	http.ListenAndServe(os.Getenv("HOST")+":"+os.Getenv("PORT"), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("up")) }))
+}
+`
+	if err := os.WriteFile(filepath.Join(app, "main.go"), []byte(main), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	was := devDescribeWithin
+	devDescribeWithin = time.Second
+	t.Cleanup(func() { devDescribeWithin = was })
+	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
+	want := "weft dev: the app did not describe itself within 5 s, so web/.weft-types/api.ts is as it was; make sure main.go calls Serve before doing other work.\n"
+	if !strings.Contains(r.stderr.String(), want) {
+		t.Errorf("stderr %q, want it to hold %q", r.stderr, want)
+	}
+	if code := r.stop(t); code != 0 {
+		t.Errorf("exit %d: %s", code, r.stderr)
+	}
+}
+
+// An app that makes no warp.App, as a 0.0.6 app is after weft upgrade's
+// two-line change, is not run to describe itself under weft dev: it gets the
+// client of an app with no routes, and nothing is said; over a client that
+// has routes, the file is left and that is said once.
+func TestDevAppWithoutWarpApp(t *testing.T) {
+	app := devApp(t)
+	main := `package main
+
+import (
+	"net/http"
+	"os"
+)
+
+func main() {
+	if os.Getenv("WARP_DESCRIBE") != "" {
+		os.WriteFile("described.txt", nil, 0o644)
+	}
+	http.ListenAndServe(os.Getenv("HOST")+":"+os.Getenv("PORT"), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("up")) }))
+}
+`
+	if err := os.WriteFile(filepath.Join(app, "main.go"), []byte(main), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(app, "web", ".weft-types", "api.ts")
+	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
+	src, err := os.ReadFile(file)
+	if err != nil || string(src) != mustGenerate(t, noRoutes) {
+		t.Errorf("api.ts is not the client of an app with no routes: %v\n%s", err, src)
+	}
+	if exists(t, filepath.Join(app, "described.txt")) {
+		t.Error("the app was run to describe itself")
+	}
+	if code := r.stop(t); code != 0 || strings.Contains(r.stderr.String(), "describe") || strings.Contains(r.stderr.String(), "warp.App") {
+		t.Errorf("exit %d: %s", code, r.stderr)
+	}
+
+	// Over a client with routes: left as it is, said once, through a rebuild.
+	const routes = "export const api = { hello: {} }\n"
+	os.WriteFile(file, []byte(routes), 0o644)
+	r = startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
+	os.WriteFile(filepath.Join(app, "main.go"), []byte(main+"\n// saved again\n"), 0o644)
+	want := "weft dev: the app has no warp.App, as no package it is built from calls warp.New, so web/.weft-types/api.ts, which has routes, was left as it was; if the app has routes, make sure its main package is built from one that calls warp.New, and if it has none, remove the file.\n"
+	for deadline := time.Now().Add(10 * time.Second); !strings.Contains(r.stderr.String(), want) && time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+	}
+	time.Sleep(3 * time.Second) // the rebuild after the save, which says nothing again
+	if got, _ := os.ReadFile(file); string(got) != routes {
+		t.Errorf("api.ts was changed: %q", got)
+	}
+	if code := r.stop(t); code != 0 || strings.Count(r.stderr.String(), want) != 1 {
+		t.Errorf("exit %d, stderr %q, want %q once", code, r.stderr, want)
+	}
+}
+
+// Under weft dev the pages are at the page server's address, so the Go
+// server is told that one as APP_URL, unless weft dev was started with its own.
+func TestGoServerEnv(t *testing.T) {
+	base := []string{"A=1", "PORT=9", "APP_URL="}
+	got := goServerEnv(base, 4000, 5173)
+	for _, want := range []string{"PORT=4000", "HOST=127.0.0.1", "WEFT_DEV_PARENT=1", "APP_URL=http://localhost:5173"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("env has no %q: %v", want, got)
+		}
+	}
+	got = goServerEnv([]string{"APP_URL=https://x.example"}, 4000, 5173)
+	if !slices.Contains(got, "APP_URL=https://x.example") || slices.Contains(got, "APP_URL=http://localhost:5173") {
+		t.Errorf("a given APP_URL is not passed on: %v", got)
+	}
+}
+
+func TestDevGoServerGetsAppURL(t *testing.T) {
+	for _, given := range []string{"", "https://shop.example"} {
+		app := devApp(t)
+		t.Setenv("APP_URL", given)
+		os.WriteFile(filepath.Join(app, ".env"), []byte("APP_URL=http://from-dotenv\n"), 0o644)
+		r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
+		want := "APP_URL=" + r.url
+		if given != "" {
+			want = "APP_URL=" + given
+		}
+		pid := goServerPID(t, app)
+		if pid == 0 {
+			t.Fatal("found no Go server")
+		}
+		if env := strings.Split(processEnv(t, pid), "\n"); !slices.Contains(env, want) {
+			t.Errorf("the Go server's environment has no %q", want)
+		}
+		if code := r.stop(t); code != 0 {
+			t.Errorf("exit %d: %s", code, r.stderr)
+		}
+	}
+}
+
+// weft dev writes web/.weft-types/api.ts before it starts the Go server, and
+// again after each Go change that builds. One that does not describe itself
+// is said, leaves the file as it was, and does not stop weft dev.
+func TestDevRunsGenAfterGoChange(t *testing.T) {
+	app := devApp(t)
+	file := filepath.Join(app, "web", ".weft-types", "api.ts")
+	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
+	src, err := os.ReadFile(file)
+	if err != nil || !strings.Contains(string(src), "    async hello(): Promise<Message> {\n") {
+		t.Fatalf("weft dev wrote no client before it started: %v\n%s", err, src)
+	}
+	waitFor := func(want string) {
+		t.Helper()
+		for deadline := time.Now().Add(15 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+			if b, _ := os.ReadFile(file); strings.Contains(string(b), want) {
+				return
+			}
+			if time.Now().After(deadline) {
+				b, _ := os.ReadFile(file)
+				t.Fatalf("api.ts has no %q within 15 s: %s\n%s", want, r.stderr, b)
+			}
+		}
+	}
+	routes := filepath.Join(app, "app", "hello", "routes.go")
+	goSrc, err := os.ReadFile(routes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withCount := strings.Replace(string(goSrc), "\tMessage string `json:\"message\"`\n", "\tMessage string `json:\"message\"`\n\tCount   int    `json:\"count\"`\n", 1)
+	if withCount == string(goSrc) {
+		t.Fatalf("app/hello/routes.go has no Message field: %s", goSrc)
+	}
+	os.WriteFile(routes, []byte(withCount), 0o644)
+	waitFor("  count: number\n")
+
+	// A registration mistake: the description fails, and so does the server.
+	before, _ := os.ReadFile(file)
+	os.WriteFile(routes, []byte(strings.Replace(withCount, `"/hello"`, `"hello"`, 1)), 0o644)
+	want := "weft dev: the app did not describe itself, so web/.weft-types/api.ts is as it was; fix what its output above says.\n"
+	for deadline := time.Now().Add(15 * time.Second); !strings.Contains(r.stderr.String(), want); time.Sleep(50 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("no %q within 15 s: %s", want, r.stderr)
+		}
+	}
+	if after, _ := os.ReadFile(file); !bytes.Equal(after, before) {
+		t.Error("api.ts changed after a failed description")
+	}
+	os.WriteFile(routes, goSrc, 0o644)
+	waitFor("export interface Message {\n  message: string\n}\n")
+	eventually(t, r.url+"/api/hello", "Hello from Go", 10*time.Second)
+	if code := r.stop(t); code != 0 {
+		t.Errorf("exit %d: %s", code, r.stderr)
+	}
+}

@@ -76,6 +76,8 @@ const props = defineProps<{ slug: string }>()
 </script>
 ```
 
+A page for records made after the build exports `runtime = true` instead: it is built once, as a shell served for every path its pattern matches that no other page has. An island on it reads the params in the browser with `useParams()`, in `onMounted`.
+
 `useHead({ title, description, image })` writes the `<title>`, the description and the Open Graph tags. Every page also gets speculation rules and view transitions.
 
 ## Islands: the only JavaScript
@@ -90,7 +92,7 @@ Render static content directly. Wrap only what must run in the browser, such as 
 - The island's file name is its id. Two islands may not share a file name.
 - Props must survive JSON: strings, finite numbers, booleans, `null`, arrays and plain objects. Anything else fails the build, which names the prop.
 - The server renders the island too, so it shows before any script runs. Read input and width through `useWeft()` and `useWidth()`, which answer `pointer` and `wide` on the server.
-- `usePrePaint(id, code)` is only for copying a stored preference onto `<html>` before the first paint.
+- `usePrePaint(id, code)` runs before the first paint: to copy a stored preference onto `<html>`, or, as `Form` does, to stop a submit before the island is live. So a `Form` belongs in an island.
 
 A page with no island loads no JavaScript. To list the pages that do load it:
 
@@ -139,7 +141,7 @@ The path starts with `/` and may not be under `/pages/` or `/assets/`. Two pages
 
 The build stops with one sentence naming the file, and often the line, when:
 
-- two files make the same route, or a dynamic page has no `getPaths()`;
+- two files make the same route, or a dynamic page has neither `getPaths()` nor `runtime`, or both;
 - an island's prop is not JSON, or an island is not a `.vue` file the page imports;
 - an island imports `virtual:weft/content` or `virtual:weft/files`, which exist only on the server;
 - Markdown frontmatter is not valid YAML, misses a field, or has one of the wrong type or one the schema lacks;
@@ -163,6 +165,6 @@ Fix the cause. Never weaken the check.
 
 These are planned but not built (see https://weft.base.al/docs/coming-next):
 
-- app routes: a client-side router and `layouts/`. An app is pages rendered at build, with islands;
+- app routes: a client-side router and `layouts/`. An app is pages rendered at build, with islands, and run-time pages for records;
 - an `<Image>` component, actions, environment values, a development overlay and `weft deploy`;
 - `weft scaffold`, `DataTable` and `EntityDialog`.

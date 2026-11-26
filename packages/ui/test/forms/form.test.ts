@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { reactive, ref, toRaw } from 'vue'
 import FormProbe from '../../src/forms/Form.vue'
+import type { FormApi } from '../../src/index.ts'
 import FormCases from '../fixtures/forms/FormCases.vue'
+import FormRef from '../fixtures/forms/FormRef.vue'
+import NumberForm from '../fixtures/forms/NumberForm.vue'
 import SearchForm from '../fixtures/forms/SearchForm.vue'
 import { actuallyDisabled, press } from '../keyboard.ts'
 import { mount } from '../mount.ts'
@@ -29,6 +32,18 @@ describe('Form', () => {
     const form = render().q<HTMLFormElement>('form')
     expect(form.className).toBe('weft-form')
     expect(form.noValidate).toBe(true)
+    // With scripts off a submit is a POST, so nothing reaches the address.
+    expect(form.getAttribute('method')).toBe('post')
+  })
+
+  it('stops the native submit once mounted, and leaves its fields enabled', async () => {
+    const f = render()
+    const form = f.q<HTMLFormElement>('form')
+    const event = new SubmitEvent('submit', { bubbles: true, cancelable: true })
+    form.dispatchEvent(event)
+    await settle()
+    expect(event.defaultPrevented).toBe(true)
+    expect(f.q('.email input').disabled).toBe(false)
   })
 
   it('marks fields the schema requires', () => {
@@ -49,9 +64,9 @@ describe('Form', () => {
   it('on submit with errors shows each, marks the controls invalid, emits error and focuses the first invalid control', async () => {
     const f = render()
     await f.submit()
-    expect(f.error('email')).toBe('This field is required.')
-    expect(f.error('terms')).toBe('This field is required.')
-    expect(f.error('plan')).toBe('This field is required.')
+    expect(f.error('email')).toBe('This is required.')
+    expect(f.error('terms')).toBe('This is required.')
+    expect(f.error('plan')).toBe('This is required.')
     expect(f.error('age')).toBeUndefined()
     expect(f.error('nick')).toBeUndefined()
     const email = f.q('.email input')
@@ -59,7 +74,7 @@ describe('Form', () => {
     expect(email.getAttribute('aria-describedby')).toBe(f.q('.email .weft-form-field__error').id)
     expect(f.q('.plan [role="radiogroup"]').getAttribute('aria-invalid')).toBe('true')
     expect(f.exposed.submitted).toEqual([])
-    expect(f.exposed.failed).toEqual([{ email: 'This field is required.', terms: 'This field is required.', plan: 'This field is required.' }])
+    expect(f.exposed.failed).toEqual([{ email: 'This is required.', terms: 'This is required.', plan: 'This is required.' }])
     expect(document.activeElement).toBe(email)
   })
 
@@ -76,6 +91,61 @@ describe('Form', () => {
     expect(f.exposed.failed).toEqual([])
     expect(f.exposed.submitted).toEqual([{ email: 'ada@example.com', age: 36, terms: true, plan: 'free', nick: '', fruit: ['apple'], loose: '' }])
     expect(typeof (f.exposed.submitted as { age: unknown }[])[0]!.age).toBe('number')
+  })
+
+  it('sends null for an emptied nullable field, leaves other nulls out, and stops an emptied required one', async () => {
+    const m = mount(NumberForm)
+    mounted.push(m)
+    const q = (sel: string) => m.el.querySelector<HTMLInputElement>(sel)!
+    const submit = async () => {
+      m.el.querySelector<HTMLButtonElement>('button[type="submit"]')!.click()
+      await settle()
+    }
+    const clear = async (input: HTMLInputElement) => {
+      input.focus()
+      type(input, '')
+      input.blur()
+      await settle()
+    }
+    // Emptied: a nullable field (a pointer in Go) is sent as null, which
+    // clears it; a number that is not nullable is not sent at all, which the
+    // server reads as not sent; text that is not nullable is sent empty; a
+    // null no nullable field holds is left out too.
+    for (const field of ['.price', '.sale', '.memo', '.nick']) await clear(q(`${field} input`))
+    await submit()
+    expect(m.exposed.failed).toEqual([])
+    const [first] = m.exposed.submitted as Record<string, unknown>[]
+    expect(first).toEqual({ stock: 1, sale: null, memo: null, nick: '' })
+    for (const gone of ['price', 'weight', 'note']) expect(gone in first!, gone).toBe(false)
+    // Typed again, each is sent.
+    for (const [field, text] of [['.price', '7'], ['.sale', '2'], ['.memo', 'x']] as const) {
+      q(`${field} input`).focus()
+      type(q(`${field} input`), text)
+      q(`${field} input`).blur()
+      await settle()
+    }
+    await submit()
+    expect((m.exposed.submitted as Record<string, unknown>[])[1]).toEqual({ price: 7, stock: 1, sale: 2, memo: 'x', nick: '' })
+    // Emptied, a required number is the form's own error, and nothing is sent.
+    await clear(q('.stock input'))
+    await submit()
+    expect(m.exposed.failed).toEqual([{ stock: 'This is required.' }])
+    expect(m.exposed.submitted).toHaveLength(2)
+  })
+
+  it('without a schema, leaves every null out and sends empty text as it is', async () => {
+    const m = mount(NumberForm, { noSchema: true })
+    mounted.push(m)
+    for (const field of ['.sale', '.memo']) {
+      const input = m.el.querySelector<HTMLInputElement>(`${field} input`)!
+      input.focus()
+      type(input, '')
+      input.blur()
+    }
+    await settle()
+    m.el.querySelector<HTMLButtonElement>('button[type="submit"]')!.click()
+    await settle()
+    expect(m.exposed.submitted).toEqual([{ price: 5, stock: 1, memo: '', nick: 'ada' }])
   })
 
   it('submits when its submit button is pressed with Enter', async () => {
@@ -195,7 +265,7 @@ describe('Form', () => {
     const f = render()
     expect((f.exposed.validate as () => boolean)()).toBe(false)
     await settle()
-    expect(f.error('email')).toBe('This field is required.')
+    expect(f.error('email')).toBe('This is required.')
   })
 
   it('while disabled disables every control in it, in a FormField or not, buttons too, and ignores a submit', async () => {
@@ -381,5 +451,24 @@ describe('Form', () => {
     // One object reached twice is one object in the copy.
     expect([...copy!.set][0]).toBe(copy!.map.get('a'))
     expect(copy!.when).toBe(toRaw(state).when)
+  })
+})
+
+describe('FormApi', () => {
+  it('types a Form\'s template ref, and is what the ref gives', async () => {
+    const m = mount(FormRef)
+    mounted.push(m)
+    const form = m.exposed.form as FormApi
+    expect(Object.keys(form).sort()).toEqual(['clear', 'errors', 'loading', 'setErrors', 'submit', 'validate'])
+    expect((m.exposed.check as () => FormApi | null)()).not.toBeNull()
+    expect(form.validate()).toBe(false)
+    expect(form.errors).toEqual({ email: 'This is required.' })
+    expect(form.loading).toBe(false)
+    form.setErrors({ email: 'That address is taken.' })
+    await settle()
+    expect(m.el.querySelector('.email .weft-form-field__error')?.textContent?.trim()).toBe('That address is taken.')
+    form.clear()
+    await settle()
+    expect(form.errors).toEqual({})
   })
 })

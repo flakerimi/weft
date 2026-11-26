@@ -177,6 +177,39 @@ func TestGoBuildEnv(t *testing.T) {
 	}
 }
 
+// The dev build runs on this machine, whatever system weft build is asked
+// to build for.
+func TestHostBuildEnv(t *testing.T) {
+	in := []string{"PATH=/bin", "GOOS=plan9", "GOARCH=mips", "GOAMD64=v4", "GOARM=5"}
+	want := append(slices.Clone(in), "GOOS="+runtime.GOOS, "GOARCH="+runtime.GOARCH, "GOAMD64=", "GOARM=", "GOARM64=",
+		"GO386=", "GOMIPS=", "GOMIPS64=", "GOPPC64=", "GORISCV64=", "GOWASM=")
+	if got := hostBuildEnv(in); !slices.Equal(got, want) {
+		t.Errorf("hostBuildEnv(%q) = %q, want %q", in, got, want)
+	}
+	if len(in) != 5 {
+		t.Error("hostBuildEnv changed its argument")
+	}
+
+	// A dev build made with another system and CPU level in the environment
+	// still runs here.
+	t.Setenv("GOOS", "plan9")
+	t.Setenv("GOARCH", "mips")
+	t.Setenv("GOAMD64", "v4")
+	t.Setenv("GOARM", "5")
+	t.Setenv("GOWASM", "satconv")
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module probe\n\ngo 1.26\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n\nfunc main() { println(\"ran\") }\n"), 0o644)
+	bin := filepath.Join(dir, "probe")
+	var stderr bytes.Buffer
+	if !goBuild(context.Background(), "gen", dir, bin, &stderr) {
+		t.Fatalf("goBuild failed: %s", stderr.String())
+	}
+	if out, err := exec.Command(bin).CombinedOutput(); err != nil || !strings.Contains(string(out), "ran") {
+		t.Errorf("the dev build does not run here: %v %s", err, out)
+	}
+}
+
 func TestBuildMakesBinary(t *testing.T) {
 	inTempDir(t, "work")
 	app := copyApp(t, ".")

@@ -2,7 +2,14 @@ package warp
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math/rand/v2"
+	"net/http/httptest"
 	"reflect"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -138,7 +145,7 @@ func TestQueryConversion(t *testing.T) {
 
 	w = send(t, h, "GET", "/api/items?small=300&count=-1&price=cheap&open=maybe&page=1.5&limit=x", "")
 	want := map[string]string{
-		"small": "Send a whole number.", "count": "Send a whole number.", "price": "Send a number.",
+		"small": "Send a whole number from -128 to 127.", "count": "Send a whole number.", "price": "Send a number.",
 		"open": "Send true or false.", "page": "Send a whole number.", "limit": "Send a whole number.",
 	}
 	if _, msg, fields := apiError(t, w); w.Code != 400 || msg != "6 fields have the wrong type." || !reflect.DeepEqual(fields, want) {
@@ -323,14 +330,14 @@ func TestRegistrationMistakes(t *testing.T) {
 				Name string
 			}
 			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
-		}, []string{"ShowIn.Name has no json, query or path tag; add one."}},
+		}, []string{"ShowIn.Name has no json, query, path or body tag; add one."}},
 		{"json:\"-\" is no tag", func(app *App) {
 			type ShowIn struct {
 				ID   int    `path:"id"`
 				Name string `json:"-"`
 			}
 			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
-		}, []string{"ShowIn.Name has no json, query or path tag; add one."}},
+		}, []string{"ShowIn.Name has no json, query, path or body tag; add one."}},
 		{"path tag without wildcard", func(app *App) {
 			type ShowIn struct {
 				ID  int `path:"id"`
@@ -353,17 +360,17 @@ func TestRegistrationMistakes(t *testing.T) {
 		}, []string{"ShowIn.Body is tagged json, and GET reads no body; tag it query or path."}},
 		{"a type no value fills", func(app *App) {
 			type ShowIn struct {
-				When time.Time         `query:"when"`
-				Nums []int             `query:"num"`
-				Opts *int              `path:"id"`
-				By   map[string]string `query:"by"`
+				When time.Time      `query:"when"`
+				Nums []int          `query:"num"`
+				Opts *int           `path:"id"`
+				By   map[string]int `query:"by"`
 			}
 			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
 		}, []string{
 			"ShowIn.When is a time.Time, which a query or path value cannot fill; use a string, a number or a bool.",
 			"ShowIn.Nums is a []int, which a query or path value cannot fill; use a string, a number or a bool.",
 			"ShowIn.Opts is a *int, which a query or path value cannot fill; use a string, a number or a bool.",
-			"ShowIn.By is a map[string]string, which a query or path value cannot fill; use a string, a number or a bool.",
+			"ShowIn.By is a map[string]int; a filter map is a map[string]string.",
 		}},
 		{"two tags", func(app *App) {
 			type ShowIn struct {
@@ -396,7 +403,7 @@ func TestRegistrationMistakes(t *testing.T) {
 				Name string `query:"name" warp:"emal"`
 			}
 			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
-		}, []string{`ShowIn.Name has the rule "emal", which warp does not know; use required, email, url, min=, max=, enum= or unique.`}},
+		}, []string{`ShowIn.Name has the rule "emal", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`}},
 		{"every mistake", func(app *App) {
 			type ShowIn struct {
 				Name string
@@ -405,7 +412,7 @@ func TestRegistrationMistakes(t *testing.T) {
 			}
 			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
 		}, []string{
-			"ShowIn.Name has no json, query or path tag; add one.",
+			"ShowIn.Name has no json, query, path or body tag; add one.",
 			"ShowIn.Body is tagged json, and GET reads no body; tag it query or path.",
 			`the path has {id}, and ShowIn has no field tagged path:"id".`,
 			`ShowIn.Tag has "min=x"; write a number after min=.`,
@@ -469,7 +476,7 @@ func TestTypedRouteKeepsRouteChecks(t *testing.T) {
 	Get(app, "/items", func(context.Context, None) (Item, error) { return Item{}, nil })
 	got := strings.Split(errText(app.Err()), "\n")
 	if len(got) != 3 || !strings.Contains(got[0], "does not start with /") || !strings.Contains(got[1], "already gets /api") ||
-		!strings.Contains(got[2], "cannot be registered") {
+		!strings.Contains(got[2], "conflicts with GET /items, registered before it") {
 		t.Fatalf("Err() = %q", got)
 	}
 	if routes := app.Routes(); len(routes) != 1 {
@@ -617,7 +624,7 @@ func TestTypedRouteAfterStart(t *testing.T) {
 	app.started = true
 	app.mu.Unlock()
 	Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil }, Status(0))
-	want := `warp: route "GET /products/{id}" was registered after the app started serving; register every route before Serve.`
+	want := `warp: route "GET /products/{id}" was registered after the app started; register every route before Serve or Start.`
 	if got := errText(app.Err()); got != want {
 		t.Fatalf("Err() = %q\nwant %q", got, want)
 	}
@@ -726,7 +733,7 @@ func TestNestedBodyMistakes(t *testing.T) {
 		}, []string{
 			"Geo.Lat has no json tag; add one.",
 			"Address.Zone has no json tag; add one.",
-			"OrderIn.Note has no json, query or path tag; add one.",
+			"OrderIn.Note has no json, query, path or body tag; add one.",
 		}},
 		{"a self-referencing type", func(app *App) {
 			type Node struct {
@@ -1000,13 +1007,1286 @@ func TestBodyValueItsFieldCannotTake(t *testing.T) {
 	app := New(Config{})
 	Post(app, "/events", func(ctx context.Context, in EventIn) (Item, error) { return Item{}, nil })
 	h := mustRegister(t, app)
-	for _, body := range []string{`{"when":"tomorrow"}`, `{"data":"!!!"}`} {
+	// The field is named, with what to send, however the decoder words it.
+	for body, want := range map[string]map[string]string{
+		`{"when":"tomorrow"}`: {"when": "Send a time like 2026-11-25T10:00:00Z."},
+		`{"data":"!!!"}`:      {"data": "Send base64 text."},
+	} {
 		w := send(t, h, "POST", "/api/events", body)
-		if code, msg, fields := apiError(t, w); w.Code != 400 || code != "bad_request" || msg != "The body has a value its field cannot take." || fields != nil {
+		if code, msg, fields := apiError(t, w); w.Code != 400 || code != "bad_request" || msg != "1 field has the wrong type." || !reflect.DeepEqual(fields, want) {
 			t.Errorf("%s: status %d, code %q, message %q, fields %v", body, w.Code, code, msg, fields)
 		}
 	}
 	if w := send(t, h, "POST", "/api/events", `{"when":"2026-11-25T10:00:00Z","data":"YWI="}`); w.Code != 201 {
 		t.Fatalf("status %d, body %q", w.Code, w.Body.String())
 	}
+}
+
+// bodyFields is the type of a body field in the tests below.
+type bodyFields struct {
+	Name  string  `json:"name" warp:"required"`
+	Price float64 `json:"price" warp:"min=0"`
+}
+
+func TestBodyField(t *testing.T) {
+	type UpdateIn struct {
+		ID   int        `path:"id"`
+		Page int        `query:"page"`
+		Body bodyFields `body:"json"`
+	}
+	var got UpdateIn
+	var sent []string
+	var hasName, hasBody bool
+	app := New(Config{})
+	Put(app, "/items/{id}", func(ctx context.Context, in UpdateIn) (Item, error) {
+		got, sent = in, SentKeys(ctx)
+		hasName, hasBody = Sent(ctx, "name"), Sent(ctx, "body")
+		return Item{ID: in.ID, Name: in.Body.Name}, nil
+	})
+	h := mustRegister(t, app)
+	w := send(t, h, "PUT", "/api/items/3?page=2", `{"price":5,"name":"lamp"}`)
+	if w.Code != 200 || w.Body.String() != `{"id":3,"name":"lamp"}`+"\n" {
+		t.Fatalf("status %d, body %q", w.Code, w.Body.String())
+	}
+	if want := (UpdateIn{ID: 3, Page: 2, Body: bodyFields{Name: "lamp", Price: 5}}); got != want {
+		t.Fatalf("input %+v, want %+v", got, want)
+	}
+	if !reflect.DeepEqual(sent, []string{"price", "name"}) || !hasName || hasBody {
+		t.Fatalf("SentKeys %q, Sent(name) %v, Sent(body) %v", sent, hasName, hasBody)
+	}
+	for _, c := range []struct {
+		body   string
+		status int
+		msg    string
+		fields map[string]string
+	}{
+		{`{"price":-1}`, 422, "2 fields need attention.", map[string]string{"name": "This is required.", "price": "Enter 0 or more."}},
+		{`{"name":"a","price":"x"}`, 400, "1 field has the wrong type.", map[string]string{"price": "Send a number."}},
+		{`{"body":{"name":"a"}}`, 400, `The body has the field "body", which this route does not take.`, nil},
+		{`{"name":"a","id":9}`, 400, `The body has the field "id", which this route does not take.`, nil},
+		{`{"name":"a","page":9}`, 400, `The body has the field "page", which this route does not take.`, nil},
+	} {
+		w := send(t, h, "PUT", "/api/items/3", c.body)
+		if _, msg, fields := apiError(t, w); w.Code != c.status || msg != c.msg || !reflect.DeepEqual(fields, c.fields) {
+			t.Errorf("%s: status %d, message %q, fields %v", c.body, w.Code, msg, fields)
+		}
+	}
+	// Validate called directly keys the body's fields without a prefix too.
+	if got := fieldsOf(t, UpdateIn{}); !reflect.DeepEqual(got, map[string]string{"name": "This is required."}) {
+		t.Fatalf("Validate: fields %v", got)
+	}
+}
+
+// withID is the input a generic package writes: a struct may hold a field of
+// a type parameter where it may not embed one.
+type withID[T any] struct {
+	ID   int64 `path:"id"`
+	Body T     `body:"json"`
+}
+
+func TestBodyFieldGeneric(t *testing.T) {
+	var got withID[bodyFields]
+	app := New(Config{})
+	Post(app, "/items/{id}", func(ctx context.Context, in withID[bodyFields]) (Item, error) {
+		got = in
+		return Item{}, nil
+	})
+	h := mustRegister(t, app)
+	if w := send(t, h, "POST", "/api/items/8", `{"name":"lamp","price":2}`); w.Code != 201 {
+		t.Fatalf("status %d, body %q", w.Code, w.Body.String())
+	}
+	if want := (withID[bodyFields]{ID: 8, Body: bodyFields{Name: "lamp", Price: 2}}); got != want {
+		t.Fatalf("input %+v, want %+v", got, want)
+	}
+	w := send(t, h, "POST", "/api/items/8", `{}`)
+	if _, _, fields := apiError(t, w); w.Code != 422 || !reflect.DeepEqual(fields, map[string]string{"name": "This is required."}) {
+		t.Fatalf("status %d, fields %v", w.Code, fields)
+	}
+}
+
+func TestBodyFieldMistakes(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		register func(app *App)
+		want     []string
+	}{
+		{"not a struct", func(app *App) {
+			type UpdateIn struct {
+				ID   int    `path:"id"`
+				Body string `body:"json"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: UpdateIn.Body is tagged body:"json" and is a string; make it a struct.`}},
+		{"a pointer, time and a type that decodes itself", func(app *App) {
+			type UpdateIn struct {
+				ID   int         `path:"id"`
+				Body *bodyFields `body:"json"`
+				When time.Time   `body:"json"`
+				Cash Money       `body:"json"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{
+			`warp: PATCH /products/{id}: UpdateIn.Body is tagged body:"json" and is a *warp.bodyFields; make it a struct.`,
+			`warp: PATCH /products/{id}: UpdateIn.When is tagged body:"json" and is a time.Time; make it a struct.`,
+			`warp: PATCH /products/{id}: UpdateIn.Cash is tagged body:"json" and is a warp.Money; make it a struct.`,
+		}},
+		{"a json field beside it", func(app *App) {
+			type UpdateIn struct {
+				ID   int        `path:"id"`
+				Name string     `json:"name"`
+				Body bodyFields `body:"json"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: UpdateIn has a body field and the json field Name; move Name into the body's type.`}},
+		{"two body fields", func(app *App) {
+			type UpdateIn struct {
+				ID    int        `path:"id"`
+				Body  bodyFields `body:"json"`
+				Other bodyFields `body:"json"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: UpdateIn has two body fields, Body and Other; keep one.`}},
+		{"on GET", func(app *App) {
+			type ShowIn struct {
+				ID   int        `path:"id"`
+				Body bodyFields `body:"json"`
+			}
+			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: GET /products/{id}: ShowIn.Body is tagged body, and GET reads no body; remove it.`}},
+		{"another kind", func(app *App) {
+			type UpdateIn struct {
+				ID   int        `path:"id"`
+				Body bodyFields `body:"xml"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: UpdateIn.Body is tagged body:"xml"; the only body kind is json.`}},
+		{"a body and a json tag", func(app *App) {
+			type UpdateIn struct {
+				ID   int        `path:"id"`
+				Body bodyFields `body:"json" json:"body"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: UpdateIn.Body has both a body and a json tag; keep one.`}},
+		{"inside the body", func(app *App) {
+			type Address struct {
+				City string     `json:"city"`
+				Body bodyFields `body:"json"`
+			}
+			type Fields struct {
+				Name    string  `json:"name"`
+				Address Address `json:"address"`
+			}
+			type UpdateIn struct {
+				ID   int    `path:"id"`
+				Body Fields `body:"json"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: Address.Body is tagged body inside a body field; only the route's input itself has a body field.`}},
+		{"not exported", func(app *App) {
+			type UpdateIn struct {
+				ID   int        `path:"id"`
+				body bodyFields `body:"json"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: UpdateIn.body is tagged body and is not exported; export it.`}},
+		{"on an embedded struct", func(app *App) {
+			type Base struct {
+				Name string `json:"name"`
+			}
+			type UpdateIn struct {
+				ID   int `path:"id"`
+				Base `body:"json"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: UpdateIn embeds Base tagged body; give the body field a name.`}},
+		{"readonly", func(app *App) {
+			type UpdateIn struct {
+				ID   int        `path:"id"`
+				Body bodyFields `body:"json" warp:"readonly"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{`warp: PATCH /products/{id}: UpdateIn.Body is tagged body and readonly; a body is always read, so remove readonly.`}},
+		{"the body's own fields are checked", func(app *App) {
+			type Base struct {
+				Name string `json:"name"`
+			}
+			type Fields struct {
+				Base
+				Title string `json:"name"`
+				Bare  string
+				Page  int `query:"page"`
+			}
+			type UpdateIn struct {
+				ID   int    `path:"id"`
+				Body Fields `body:"json"`
+			}
+			Patch(app, "/products/{id}", func(context.Context, UpdateIn) (Item, error) { return Item{}, nil })
+		}, []string{
+			`warp: PATCH /products/{id}: Fields.Name and Fields.Title both have the json key "name"; rename one.`,
+			`warp: PATCH /products/{id}: Fields.Bare has no json tag; add one.`,
+			`warp: PATCH /products/{id}: Fields.Page is tagged query inside a body field; only the route's input itself takes query and path tags.`,
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			app := New(Config{})
+			c.register(app)
+			if got := strings.Split(errText(app.Err()), "\n"); !reflect.DeepEqual(got, c.want) {
+				t.Fatalf("Err() =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(c.want, "\n"))
+			}
+			if routes := app.Routes(); len(routes) != 0 {
+				t.Fatalf("Routes() = %v, want none", routes)
+			}
+		})
+	}
+}
+
+// The types of TestReadonly: a record's fields are answered and never read.
+type roRecord struct {
+	ID        int64     `json:"id" warp:"readonly"`
+	CreatedAt time.Time `json:"created_at" warp:"readonly"`
+}
+
+type roPerson struct {
+	Name string `json:"name" warp:"required"`
+	Bare string
+}
+
+type roLine struct {
+	ID  int    `json:"id" warp:"readonly"`
+	SKU string `json:"sku" warp:"required"`
+}
+
+type roAddress struct {
+	ID   int64  `json:"id" warp:"readonly"`
+	City string `json:"city"`
+}
+
+type roProduct struct {
+	roRecord
+	Name    string             `json:"name" warp:"required"`
+	Owner   roPerson           `json:"owner" warp:"readonly"`
+	Address roAddress          `json:"address"`
+	Lines   []roLine           `json:"lines"`
+	ByName  map[string]*roLine `json:"by_name"`
+	Any     any                `json:"any"`
+	Where   *roAddress         `json:"where"`
+}
+
+func TestReadonly(t *testing.T) {
+	var got roProduct
+	app := New(Config{})
+	Post(app, "/products", func(ctx context.Context, in struct {
+		Body roProduct `body:"json"`
+	}) (roProduct, error) {
+		got = in.Body
+		out := in.Body
+		out.ID, out.Owner.Name = 7, "Ada"
+		return out, nil
+	})
+	type PlainIn struct {
+		ID   int    `json:"id" warp:"readonly"`
+		Name string `json:"name"`
+	}
+	Post(app, "/plain", func(ctx context.Context, in PlainIn) (Item, error) { return Item{}, nil })
+	h := mustRegister(t, app)
+
+	// Answered: the output carries it. Not validated: Owner's required Name
+	// is empty, and Owner's untagged field is no registration mistake.
+	body := `{"name":"lamp","address":{"city":"Oslo"},"lines":[{"sku":"a"}],"by_name":{"x":{"sku":"b"},"y":null},"any":{"id":1}}`
+	w := send(t, h, "POST", "/api/products", body)
+	if w.Code != 201 || !strings.Contains(w.Body.String(), `"id":7,"created_at":"0001-01-01T00:00:00Z","name":"lamp","owner":{"name":"Ada","Bare":""}`) {
+		t.Fatalf("status %d, body %q", w.Code, w.Body.String())
+	}
+	if got.Name != "lamp" || got.Address.City != "Oslo" || got.Lines[0].SKU != "a" || got.ByName["x"].SKU != "b" || got.ID != 0 {
+		t.Fatalf("input %+v", got)
+	}
+	if err := Validate(roProduct{Name: "lamp"}); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+
+	// Refused in the body, at every depth, and whatever its case.
+	for _, c := range []struct{ path, body, field string }{
+		{"/api/products", `{"name":"a","id":9}`, "id"},
+		{"/api/products", `{"ID":9}`, "ID"},
+		{"/api/products", `{"created_at":"2026-11-25T10:00:00Z"}`, "created_at"},
+		{"/api/products", `{"owner":{"name":"x"}}`, "owner"},
+		{"/api/products", `{"name":"a","address":{"city":"Oslo","id":3}}`, "id"},
+		{"/api/products", `{"address":{"Id":3}}`, "Id"},
+		{"/api/products", `{"address":{"id":3}}`, "id"},
+		{"/api/products", `{"address":{"ID":3}}`, "ID"},
+		{"/api/products", `{"lines":[{"sku":"a"},{"sku":"b","id":1}]}`, "id"},
+		{"/api/products", `{"by_name":{"x":{"id":1,"sku":"b"}}}`, "id"},
+		{"/api/plain", `{"id":1}`, "id"},
+		// Through a pointer to a struct.
+		{"/api/products", `{"where":{"id":1}}`, "id"},
+		{"/api/products", `{"where":{"city":"x","ID":1}}`, "ID"},
+		// Sent with a type it does not take: still the field it does not take,
+		// not the type it would need.
+		{"/api/products", `{"address":{"id":"x"}}`, "id"},
+		{"/api/products", `{"lines":[{"id":"x"}]}`, "id"},
+		{"/api/products", `{"where":{"id":[1]}}`, "id"},
+		{"/api/products", `{"by_name":{"x":{"ID":{}}}}`, "ID"},
+		{"/api/products", `{"name":5,"address":{"id":"x"}}`, "id"},
+	} {
+		w := send(t, h, "POST", c.path, c.body)
+		want := `The body has the field "` + c.field + `", which this route does not take.`
+		if code, msg, _ := apiError(t, w); w.Code != 400 || code != "bad_request" || msg != want {
+			t.Errorf("%s: status %d, code %q, message %q", c.body, w.Code, code, msg)
+		}
+	}
+}
+
+func TestReadonlyMistakes(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		register func(app *App)
+		want     string
+	}{
+		{"on a query field", func(app *App) {
+			type ShowIn struct {
+				ID   int `path:"id"`
+				Page int `query:"page" warp:"readonly"`
+			}
+			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
+		}, `warp: GET /products/{id}: ShowIn.Page is tagged query and readonly; readonly is for json fields.`},
+		{"on a path field", func(app *App) {
+			type ShowIn struct {
+				ID int `path:"id" warp:"readonly"`
+			}
+			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
+		}, `warp: GET /products/{id}: ShowIn.ID is tagged path and readonly; readonly is for json fields.`},
+		{"beside other rules", func(app *App) {
+			type Product struct {
+				ID   int64  `json:"id" warp:"readonly,min=1"`
+				Name string `json:"name"`
+			}
+			Post(app, "/products", func(context.Context, struct {
+				Body Product `body:"json"`
+			}) (Item, error) {
+				return Item{}, nil
+			})
+		}, `warp: POST /products: Product.ID has the rule "readonly" beside other rules; a readonly field is never read, so remove them.`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			app := New(Config{})
+			c.register(app)
+			if got := errText(app.Err()); got != c.want {
+				t.Fatalf("Err() = %q\nwant %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestSentKeys(t *testing.T) {
+	type Address struct {
+		Zip string `json:"zip"`
+	}
+	type In struct {
+		A       int     `json:"a"`
+		B       int     `json:"b"`
+		C       *int    `json:"c"`
+		Address Address `json:"address"`
+	}
+	var sent []string
+	var sentB, sentZip bool
+	ran := false
+	app := New(Config{})
+	Post(app, "/things", func(ctx context.Context, in In) (Item, error) {
+		ran = true
+		sent, sentB, sentZip = SentKeys(ctx), Sent(ctx, "b"), Sent(ctx, "zip")
+		return Item{}, nil
+	})
+	Get(app, "/things", func(ctx context.Context, in None) (Item, error) {
+		ran = true
+		sent, sentB = SentKeys(ctx), Sent(ctx, "b")
+		return Item{}, nil
+	})
+	h := mustRegister(t, app)
+	for _, c := range []struct {
+		method, body string
+		want         []string
+		b            bool
+	}{
+		{"POST", `{"b":1,"address":{"zip":"x"},"a":2,"B":3,"c":null}`, []string{"b", "address", "a", "c"}, true},
+		{"POST", `{"a":1,"a":2,"A":3}`, []string{"a"}, false},
+		{"POST", `{"a":1, "b" : 2 }`, []string{"a", "b"}, true},
+		{"POST", ``, nil, false},
+		{"POST", `{}`, nil, false},
+		{"GET", ``, nil, false},
+	} {
+		sent, sentB, sentZip, ran = nil, false, false, false
+		if w := send(t, h, c.method, "/api/things", c.body); w.Code >= 300 || !ran {
+			t.Fatalf("%s %s: status %d, body %q", c.method, c.body, w.Code, w.Body.String())
+		}
+		if !reflect.DeepEqual(sent, c.want) || sentB != c.b || sentZip {
+			t.Errorf("%s %s: SentKeys %q, Sent(b) %v, Sent(zip) %v", c.method, c.body, sent, sentB, sentZip)
+		}
+	}
+	// A key the route does not take is refused before the handler runs.
+	ran = false
+	if w := send(t, h, "POST", "/api/things", `{"a":1,"zz":2}`); w.Code != 400 || ran {
+		t.Fatalf("an unknown key: status %d, ran %v", w.Code, ran)
+	}
+	if Sent(context.Background(), "a") || SentKeys(context.Background()) != nil {
+		t.Fatal("outside a typed route, nothing was sent")
+	}
+}
+
+// Finding the sent keys costs a few allocations, not some for each key.
+func TestSentKeysCostLittle(t *testing.T) {
+	type In struct {
+		A int   `json:"a"`
+		B []any `json:"b"`
+		C any   `json:"c"`
+	}
+	p, mistakes := planFor(reflect.TypeFor[In](), "POST", "/x")
+	if mistakes != nil {
+		t.Fatal(mistakes)
+	}
+	body := "{" + strings.TrimSuffix(strings.Repeat(`"a":1,"b":[1,{"x":"y\"z"}],"c":{"k":[true,null]},`, 3000), ",") + "}"
+	keys, err := p.walk([]byte(body))
+	if err != nil || !reflect.DeepEqual(keys, []string{"a", "b", "c"}) {
+		t.Fatalf("keys %q, err %v", keys, err)
+	}
+	if allocs := testing.AllocsPerRun(5, func() { p.walk([]byte(body)) }); allocs > 3 {
+		t.Fatalf("finding the keys of 9000: %.0f allocations, want at most 3", allocs)
+	}
+}
+
+func TestFilterMap(t *testing.T) {
+	type Filters map[string]string
+	type ListIn struct {
+		Filter map[string]string `query:"filter"`
+		Where  Filters           `query:"where"`
+		Page   int               `query:"page"`
+	}
+	var got ListIn
+	app := New(Config{})
+	Get(app, "/items", func(ctx context.Context, in ListIn) (Item, error) {
+		got = in
+		return Item{}, nil
+	})
+	h := mustRegister(t, app)
+	get := func(query string) *httptest.ResponseRecorder {
+		t.Helper()
+		got = ListIn{}
+		return send(t, h, "GET", "/api/items?"+query, "")
+	}
+	if w := get("filter[status]=live&filter%5Bcat%5D=3&filter[status]=draft&where[size]=&page=2"); w.Code != 200 {
+		t.Fatalf("status %d, body %q", w.Code, w.Body.String())
+	}
+	if want := (ListIn{Filter: map[string]string{"status": "live", "cat": "3"}, Where: Filters{"size": ""}, Page: 2}); !reflect.DeepEqual(got, want) {
+		t.Fatalf("input %+v, want %+v", got, want)
+	}
+	// Keys that are not filter[name] are ignored, as other keys are.
+	if w := get("filter[]=a&filter[a=b&filter=c&filter[a]b=d&filter[a][b]=e&filters[x]=f&page=1"); w.Code != 200 || got.Filter != nil {
+		t.Fatalf("status %d, input %+v", w.Code, got)
+	}
+	keys := func(prefix string, n int) string {
+		var parts []string
+		for i := range n {
+			parts = append(parts, fmt.Sprintf("%s[k%d]=v", prefix, i))
+		}
+		return strings.Join(parts, "&")
+	}
+	if w := get(keys("filter", 32) + "&" + keys("other", 40)); w.Code != 200 || len(got.Filter) != 32 {
+		t.Fatalf("32 keys: status %d, %d keys", w.Code, len(got.Filter))
+	}
+	for _, c := range []struct{ query, msg string }{
+		{keys("filter", 33), "The query has more filter[...] keys than a route takes (32)."},
+		{keys("where", 33), "The query has more where[...] keys than a route takes (32)."},
+		{"filter[" + strings.Repeat("k", 65) + "]=v", "A filter[...] key is longer than 64 bytes."},
+		{"where[" + strings.Repeat("k", 65) + "]=v", "A where[...] key is longer than 64 bytes."},
+	} {
+		w := get(c.query)
+		if code, msg, _ := apiError(t, w); w.Code != 400 || code != "bad_request" || msg != c.msg {
+			t.Errorf("%.30s…: status %d, code %q, message %q", c.query, w.Code, code, msg)
+		}
+	}
+	long := strings.Repeat("k", 64)
+	if w := get("filter[" + long + "]=v"); w.Code != 200 || got.Filter[long] != "v" {
+		t.Fatalf("a 64-byte key: status %d, input %+v", w.Code, got)
+	}
+}
+
+func TestFilterMapMistake(t *testing.T) {
+	type ListIn struct {
+		Filter map[string]int    `query:"filter"`
+		By     map[int]string    `query:"by"`
+		ID     map[string]string `path:"id"`
+	}
+	app := New(Config{})
+	Get(app, "/items/{id}", func(context.Context, ListIn) (Item, error) { return Item{}, nil })
+	want := strings.Join([]string{
+		"warp: GET /items/{id}: ListIn.Filter is a map[string]int; a filter map is a map[string]string.",
+		"warp: GET /items/{id}: ListIn.By is a map[int]string; a filter map is a map[string]string.",
+		"warp: GET /items/{id}: ListIn.ID is a map[string]string, which a query or path value cannot fill; use a string, a number or a bool.",
+	}, "\n")
+	if got := errText(app.Err()); got != want {
+		t.Fatalf("Err() =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// Warp does not take ,string: a number is sent and read as a number, as the
+// description says.
+func TestJSONStringOption(t *testing.T) {
+	const fix = ` has json:",string"; remove ,string, since Warp sends and reads a number as a number.`
+	type Inner struct {
+		N int `json:"n,omitempty,string"`
+	}
+	type ShowIn struct {
+		Count int   `json:"count,string"`
+		ID    int64 `json:"id,string" warp:"readonly"`
+		Inner Inner `json:"inner"`
+	}
+	type BodyOf struct {
+		Flag bool `json:"flag,string"`
+	}
+	type WithBody struct {
+		Body BodyOf `body:"json"`
+	}
+	app := New(Config{})
+	Post(app, "/show", func(context.Context, ShowIn) (None, error) { return None{}, nil })
+	Put(app, "/body", func(context.Context, WithBody) (None, error) { return None{}, nil })
+	want := strings.Join([]string{
+		"warp: POST /show: ShowIn.Count" + fix,
+		"warp: POST /show: ShowIn.ID" + fix,
+		"warp: POST /show: Inner.N" + fix,
+		"warp: PUT /body: BodyOf.Flag" + fix,
+	}, "\n")
+	if errText(app.Err()) != want {
+		t.Fatalf("Err =\n%s\nwant\n%s", errText(app.Err()), want)
+	}
+	if len(app.Routes()) != 0 {
+		t.Fatalf("routes %v registered", app.Routes())
+	}
+}
+
+// zFan's two keys differ only in case, and the type holds itself through
+// both: a body could make the scan read a value once for each, at every
+// level. Two keys of one object that fold the same are a registration
+// mistake.
+type zFan struct {
+	ID int   `json:"id" warp:"readonly"`
+	A  *zFan `json:"ab"`
+	AA *zFan `json:"AB"`
+}
+
+type FoldBase struct {
+	Kind string `json:"kind"`
+}
+
+// zSelf decodes itself, with the usual alias, so Warp cannot see what its
+// decoder sets.
+type zSelf struct {
+	ID   int    `json:"id" warp:"readonly"`
+	Name string `json:"name"`
+}
+
+func (z *zSelf) UnmarshalJSON(b []byte) error {
+	type alias zSelf
+	return json.Unmarshal(b, (*alias)(z))
+}
+
+type zText struct {
+	ID int `json:"id" warp:"readonly"`
+}
+
+func (z *zText) UnmarshalText(b []byte) error { return nil }
+
+func TestBodyKeyMistakes(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		register func(app *App)
+		want     []string
+	}{
+		{"two keys that differ only in case, at the top", func(app *App) {
+			type In struct {
+				Ab int `json:"ab"`
+				AB int `json:"AB"`
+			}
+			Post(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+		}, []string{`warp: POST /x: In has the fields Ab and AB, whose keys differ only in case; rename one.`}},
+		{"in a body field's type, a readonly one among them", func(app *App) {
+			type Top struct {
+				ID    int `json:"id" warp:"readonly"`
+				Ident int `json:"ID"`
+			}
+			Post(app, "/x", func(context.Context, struct {
+				Body Top `body:"json"`
+			}) (None, error) {
+				return None{}, nil
+			})
+		}, []string{`warp: POST /x: Top has the fields ID and Ident, whose keys differ only in case; rename one.`}},
+		{"nested, in a type that holds itself", func(app *App) {
+			type In struct {
+				Fan zFan `json:"fan"`
+			}
+			Post(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+		}, []string{`warp: POST /x: zFan has the fields A and AA, whose keys differ only in case; rename one.`}},
+		{"promoted from an embedded struct", func(app *App) {
+			type Line struct {
+				FoldBase
+				KIND string `json:"KIND"`
+			}
+			type In struct {
+				Lines []Line `json:"lines"`
+			}
+			Post(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+		}, []string{`warp: POST /x: Line has the fields Kind and KIND, whose keys differ only in case; rename one.`}},
+		{"by Unicode folding, k and the Kelvin sign", func(app *App) {
+			type In struct {
+				Kb int `json:"kb"`
+				KB int `json:"Kb"`
+			}
+			Put(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+		}, []string{"warp: PUT /x: In has the fields Kb and KB, whose keys differ only in case; rename one."}},
+		{"a readonly field inside a type that decodes itself", func(app *App) {
+			type In struct {
+				Self  zSelf  `json:"self"`
+				Ptr   *zSelf `json:"ptr"`
+				Text  zText  `json:"text"`
+				Fine  zSelf  `json:"fine" warp:"readonly"` // never read: nothing to see
+				Lines []struct {
+					Deep map[string]zSelf `json:"deep"`
+				} `json:"lines"`
+			}
+			Post(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+		}, []string{
+			`warp: POST /x: zSelf decodes itself, so Warp cannot see what it sets, and zSelf.ID is tagged readonly; drop the tag or the type's own decoding.`,
+			`warp: POST /x: zText decodes itself, so Warp cannot see what it sets, and zText.ID is tagged readonly; drop the tag or the type's own decoding.`,
+		}},
+		{"readonly on an embedded struct", func(app *App) {
+			type In struct {
+				FoldBase `warp:"readonly"`
+				Name     string `json:"name"`
+			}
+			Post(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+		}, []string{`warp: POST /x: In embeds FoldBase tagged readonly; tag the fields inside it, or give the field a name.`}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			app := New(Config{})
+			c.register(app)
+			if got := strings.Split(errText(app.Err()), "\n"); !reflect.DeepEqual(got, c.want) {
+				t.Fatalf("Err() =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(c.want, "\n"))
+			}
+		})
+	}
+}
+
+// The types of TestBodyChecksIgnoreFieldOrder. rT has a readonly field and
+// is used both plainly and inside types that decode themselves; rBad has
+// ordinary mistakes and is used inside one too.
+type rT struct {
+	ID   int    `json:"id" warp:"readonly"`
+	Name string `json:"name"`
+}
+
+type rBad struct {
+	X     int `json:"x"`
+	Y     int `json:"X"`
+	NoTag int
+}
+
+// rNode holds itself and a readonly field.
+type rNode struct {
+	Mark string `json:"mark" warp:"readonly"`
+	Next *rNode `json:"next"`
+}
+
+type rD struct {
+	Inner rT `json:"inner"`
+}
+
+func (d *rD) UnmarshalJSON(b []byte) error {
+	type alias rD
+	return json.Unmarshal(b, (*alias)(d))
+}
+
+// rD2 is another type that decodes itself, holding the same rT.
+type rD2 struct {
+	Inner []rT `json:"inner"`
+}
+
+func (d *rD2) UnmarshalJSON(b []byte) error {
+	type alias rD2
+	return json.Unmarshal(b, (*alias)(d))
+}
+
+type rDBad struct {
+	Inner rBad `json:"inner"`
+}
+
+func (d *rDBad) UnmarshalJSON(b []byte) error {
+	type alias rDBad
+	return json.Unmarshal(b, (*alias)(d))
+}
+
+type rDNode struct {
+	Head rNode `json:"head"`
+}
+
+func (d *rDNode) UnmarshalJSON(b []byte) error {
+	type alias rDNode
+	return json.Unmarshal(b, (*alias)(d))
+}
+
+// What an input's fields find, whatever order they are in: each check runs
+// on every type it is for, never skipped because another check met the type
+// first. A seeded shuffle tries many orders.
+func TestBodyChecksIgnoreFieldOrder(t *testing.T) {
+	const ro = " decodes itself, so Warp cannot see what it sets, and "
+	fields := []reflect.StructField{
+		{Name: "A", Type: reflect.TypeFor[rT](), Tag: `json:"a"`},
+		{Name: "B", Type: reflect.TypeFor[rD](), Tag: `json:"b"`},
+		{Name: "C", Type: reflect.TypeFor[rD2](), Tag: `json:"c"`},
+		{Name: "D", Type: reflect.TypeFor[rBad](), Tag: `json:"d"`},
+		{Name: "E", Type: reflect.TypeFor[rDBad](), Tag: `json:"e"`},
+		{Name: "F", Type: reflect.TypeFor[*rD](), Tag: `json:"f"`},
+		{Name: "G", Type: reflect.TypeFor[[]rD2](), Tag: `json:"g"`},
+		{Name: "H", Type: reflect.TypeFor[map[string]rDNode](), Tag: `json:"h"`},
+	}
+	want := []string{
+		"warp: POST /x: rBad has the fields X and Y, whose keys differ only in case; rename one.",
+		"warp: POST /x: rBad.NoTag has no json tag; add one.",
+		"warp: POST /x: rD" + ro + "rT.ID is tagged readonly; drop the tag or the type's own decoding.",
+		"warp: POST /x: rD2" + ro + "rT.ID is tagged readonly; drop the tag or the type's own decoding.",
+		"warp: POST /x: rDNode" + ro + "rNode.Mark is tagged readonly; drop the tag or the type's own decoding.",
+	}
+	slices.Sort(want)
+	mistakesOf := func(order []reflect.StructField) []string {
+		in := reflect.StructOf(order)
+		_, mistakes := planFor(in, "POST", "/x")
+		var got []string
+		for _, m := range mistakes {
+			got = append(got, "warp: POST /x: "+m)
+		}
+		slices.Sort(got)
+		return got
+	}
+	r := rand.New(rand.NewPCG(20261125, 3))
+	for i := range 200 {
+		order := slices.Clone(fields)
+		if i > 0 {
+			r.Shuffle(len(order), func(a, b int) { order[a], order[b] = order[b], order[a] })
+		}
+		var names []string
+		for _, f := range order {
+			names = append(names, f.Name)
+		}
+		if got := mistakesOf(order); !slices.Equal(got, want) {
+			t.Fatalf("fields in the order %v:\n%s\nwant\n%s", names, strings.Join(got, "\n"), strings.Join(want, "\n"))
+		}
+	}
+}
+
+// A readonly field inside a type that decodes itself is refused when a
+// plain use of its type comes first, so it never reaches a handler.
+func TestReadonlyInsideADecoderAfterAPlainUse(t *testing.T) {
+	for _, in := range []reflect.Type{
+		reflect.TypeFor[struct {
+			A rT `json:"a"`
+			B rD `json:"b"`
+		}](),
+		reflect.TypeFor[struct {
+			B rD `json:"b"`
+			A rT `json:"a"`
+		}](),
+	} {
+		_, mistakes := planFor(in, "POST", "/x")
+		if want := "rD decodes itself, so Warp cannot see what it sets, and rT.ID is tagged readonly; drop the tag or the type's own decoding."; !slices.Equal(mistakes, []string{want}) {
+			t.Errorf("%s: %q", in, mistakes)
+		}
+	}
+}
+
+// A type error under a map, whose key may hold dots, is named by the map's
+// field, on both builds.
+func TestTypeErrorUnderAMap(t *testing.T) {
+	type Line struct {
+		SKU string `json:"sku"`
+	}
+	type In struct {
+		ByName map[string]Line `json:"by_name"`
+	}
+	app := New(Config{})
+	Post(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+	h := mustRegister(t, app)
+	for _, body := range []string{`{"by_name":{"a.b.c":{"sku":123}}}`, `{"by_name":{"a":{"sku":123}}}`} {
+		w := send(t, h, "POST", "/api/x", body)
+		if _, _, fields := apiError(t, w); w.Code != 400 || !reflect.DeepEqual(fields, map[string]string{"by_name": "Send text."}) {
+			t.Errorf("%s: %d %v", body, w.Code, fields)
+		}
+	}
+}
+
+// null for a field that cannot be null (anything but a pointer, an interface
+// or a type that reads its own JSON) is a field error, at any depth, on Post,
+// Put and Patch alike: never sent, never written. A pointer takes null as
+// before.
+func TestBodyNullForAValue(t *testing.T) {
+	type Geo struct {
+		Lat  float64  `json:"lat"`
+		Note *string  `json:"note"`
+		Pin  *float64 `json:"pin"`
+	}
+	type Line struct {
+		SKU string `json:"sku"`
+	}
+	type Body struct {
+		Name  string            `json:"name"`
+		Price float64           `json:"price"`
+		Live  bool              `json:"live"`
+		When  time.Time         `json:"when"`
+		Tags  []string          `json:"tags"`
+		Lines []Line            `json:"lines"`
+		Ptrs  []*Line           `json:"ptrs"`
+		By    map[string]Line   `json:"by"`
+		ByPtr map[string]*Line  `json:"by_ptr"`
+		Geo   Geo               `json:"geo"`
+		Opt   *Geo              `json:"opt"`
+		Any   any               `json:"any"`
+		Raw   json.RawMessage   `json:"raw"`
+		Bytes []byte            `json:"bytes"`
+		Nums  map[string]int    `json:"nums"`
+		Grid  [][]int           `json:"grid"`
+		Deep  map[string][]Line `json:"deep"`
+	}
+	var ran bool
+	var got Body
+	var sent []string
+	app := New(Config{})
+	handle := func(ctx context.Context, in struct {
+		ID   int  `path:"id"`
+		Body Body `body:"json"`
+	}) (None, error) {
+		ran, got, sent = true, in.Body, SentKeys(ctx)
+		return None{}, nil
+	}
+	Post(app, "/things/{id}", handle)
+	Put(app, "/things/{id}", handle)
+	Patch(app, "/things/{id}", handle)
+	h := mustRegister(t, app)
+	const notNull = "Send a value, not null."
+	for _, method := range []string{"POST", "PUT", "PATCH"} {
+		for _, c := range []struct {
+			body   string
+			fields map[string]string
+		}{
+			{`{"price":null}`, map[string]string{"price": notNull}},
+			{`{"name":null,"live":null}`, map[string]string{"name": notNull, "live": notNull}},
+			{`{"when":null}`, map[string]string{"when": notNull}},
+			{`{"tags":null}`, map[string]string{"tags": notNull}},
+			{`{"tags":["a",null]}`, map[string]string{"tags": notNull}},
+			{`{"lines":[{"sku":"a"},null]}`, map[string]string{"lines": notNull}},
+			{`{"lines":[{"sku":null}]}`, map[string]string{"lines.sku": notNull}},
+			{`{"by":{"a.b":null}}`, map[string]string{"by": notNull}},
+			{`{"by":{"x":{"sku":null}}}`, map[string]string{"by": notNull}},
+			{`{"geo":null}`, map[string]string{"geo": notNull}},
+			{`{"geo":{"lat":null}}`, map[string]string{"geo.lat": notNull}},
+			{`{"opt":{"lat":null}}`, map[string]string{"opt.lat": notNull}},
+			{`{"bytes":null}`, map[string]string{"bytes": notNull}},
+			{`{"nums":{"a":null}}`, map[string]string{"nums": notNull}},
+			{`{"grid":[[1,null]]}`, map[string]string{"grid": notNull}},
+			{`{"deep":{"k":[null]}}`, map[string]string{"deep": notNull}},
+			{`{"PRICE":null}`, map[string]string{"price": notNull}},
+			{`{"price":1,"price":null}`, map[string]string{"price": notNull}},
+		} {
+			ran = false
+			w := send(t, h, method, "/api/things/1", c.body)
+			_, msg, fields := apiError(t, w)
+			if w.Code != 400 || ran || !reflect.DeepEqual(fields, c.fields) || !strings.HasSuffix(msg, "the wrong type.") {
+				t.Errorf("%s %s: %d %q %v, ran %v; want 400 with %v", method, c.body, w.Code, msg, fields, ran, c.fields)
+			}
+		}
+		// What may be null takes it, and is sent.
+		ran = false
+		body := `{"opt":null,"ptrs":[null],"by_ptr":{"x":null},"any":null,"raw":null,"geo":{"lat":1,"note":null,"pin":null}}`
+		if w := send(t, h, method, "/api/things/1", body); w.Code >= 300 || !ran {
+			t.Fatalf("%s %s: %d %s", method, body, w.Code, w.Body.String())
+		}
+		if got.Opt != nil || got.Ptrs[0] != nil || got.ByPtr["x"] != nil || got.Any != nil || got.Geo.Note != nil || !slices.Equal(sent, []string{"opt", "ptrs", "by_ptr", "any", "raw", "geo"}) {
+			t.Errorf("%s: input %+v, sent %q", method, got, sent)
+		}
+	}
+	// A readonly key is still refused first.
+	type RO struct {
+		ID    int     `json:"id" warp:"readonly"`
+		Price float64 `json:"price"`
+	}
+	app = New(Config{})
+	Post(app, "/ro", func(ctx context.Context, in struct {
+		Body RO `body:"json"`
+	}) (None, error) {
+		return None{}, nil
+	})
+	h = mustRegister(t, app)
+	w := send(t, h, "POST", "/api/ro", `{"price":null,"id":1}`)
+	if _, msg, _ := apiError(t, w); w.Code != 400 || msg != `The body has the field "id", which this route does not take.` {
+		t.Errorf("readonly and null: %d %q", w.Code, msg)
+	}
+}
+
+// A fixed-size array takes a list of exactly its size: a longer or shorter
+// one is refused on its field, never cut or padded.
+func TestBodyFixedArray(t *testing.T) {
+	type In struct {
+		RGB  [3]int    `json:"rgb"`
+		Grid [2][2]int `json:"grid"`
+		One  [1]string `json:"one"`
+	}
+	var got In
+	app := New(Config{})
+	Post(app, "/x", func(_ context.Context, in In) (None, error) { got = in; return None{}, nil })
+	h := mustRegister(t, app)
+	for body, fields := range map[string]map[string]string{
+		`{"rgb":[1,2,3,4,5]}`:  {"rgb": "Send a list of 3 values."},
+		`{"rgb":[1,2]}`:        {"rgb": "Send a list of 3 values."},
+		`{"rgb":[]}`:           {"rgb": "Send a list of 3 values."},
+		`{"grid":[[1,2],[3]]}`: {"grid": "Send a list of 2 values."},
+		`{"one":["a","b"]}`:    {"one": "Send a list of 1 value."},
+	} {
+		w := send(t, h, "POST", "/api/x", body)
+		if _, _, f := apiError(t, w); w.Code != 400 || !reflect.DeepEqual(f, fields) {
+			t.Errorf("%s: %d %v, want %v", body, w.Code, f, fields)
+		}
+	}
+	if w := send(t, h, "POST", "/api/x", `{"rgb":[1,2,3],"grid":[[1,2],[3,4]],"one":["a"]}`); w.Code != 204 || got.RGB != [3]int{1, 2, 3} || got.Grid[1][1] != 4 {
+		t.Fatalf("%d %s, %+v", w.Code, w.Body, got)
+	}
+}
+
+// shout reads itself from text in capitals only.
+type shout string
+
+func (s shout) MarshalText() ([]byte, error) { return []byte(s), nil }
+func (s *shout) UnmarshalText(b []byte) error {
+	if strings.ToUpper(string(b)) != string(b) {
+		return fmt.Errorf("%q is not in capitals", b)
+	}
+	*s = shout(b)
+	return nil
+}
+
+// A wrong type, a number out of a field's range, and a value a field's own
+// decoder refuses, each name the field and say what it takes, at any depth.
+func TestBodyWrongValueSays(t *testing.T) {
+	type Stamp struct {
+		When time.Time `json:"when"`
+	}
+	type Line struct {
+		Qty int `json:"qty"`
+	}
+	type In struct {
+		N8     int8            `json:"n8"`
+		U8     uint8           `json:"u8"`
+		I      int             `json:"i"`
+		Code   shout           `json:"code"`
+		Nested Stamp           `json:"nested"`
+		List   []Stamp         `json:"list"`
+		B      []byte          `json:"b"`
+		PB     *[]byte         `json:"pb"`
+		When   time.Time       `json:"when"`
+		PWhen  *time.Time      `json:"pwhen"`
+		PCode  *shout          `json:"pcode"`
+		Lines  []Line          `json:"lines"`
+		Grid   [][]Line        `json:"grid"`
+		Arr    [2]Line         `json:"arr"`
+		ByKey  map[string]Line `json:"by_key"`
+	}
+	app := New(Config{})
+	Post(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+	h := mustRegister(t, app)
+	for body, want := range map[string]map[string]string{
+		`{"n8":300}`:              {"n8": "Send a whole number from -128 to 127."},
+		`{"u8":-1}`:               {"u8": "Send a whole number from 0 to 255."},
+		`{"i":1.5}`:               {"i": "Send a whole number."},
+		`{"code":5}`:              {"code": "Send text."},
+		`{"code":"lower"}`:        {"code": "Send a value this field takes."},
+		`{"nested":{"when":"x"}}`: {"nested.when": "Send a time like 2026-11-25T10:00:00Z."},
+		`{"list":[{"when":"2026-11-25T10:00:00Z"},{"when":"x"}]}`: {"list.when": "Send a time like 2026-11-25T10:00:00Z."},
+		// A []byte takes base64 text, whatever else was sent.
+		`{"b":5}`: {"b": "Send base64 text."}, `{"b":{}}`: {"b": "Send base64 text."}, `{"pb":true}`: {"pb": "Send base64 text."},
+		`{"b":"!!"}`: {"b": "Send base64 text."}, `{"pb":"!!"}`: {"pb": "Send base64 text."},
+		// A whole number narrower than 64 bits says its range whatever was
+		// sent, so a body with another bad field keeps it too.
+		`{"n8":"x"}`: {"n8": "Send a whole number from -128 to 127."}, `{"u8":1.5}`: {"u8": "Send a whole number from 0 to 255."},
+		`{"n8":300,"i":"x"}`: {"n8": "Send a whole number from -128 to 127."}, `{"n8":"x","i":1.5}`: {"n8": "Send a whole number from -128 to 127."},
+		// A pointer says what its value takes.
+		`{"pwhen":"bad"}`: {"pwhen": "Send a time like 2026-11-25T10:00:00Z."}, `{"pwhen":5}`: {"pwhen": "Send a time like 2026-11-25T10:00:00Z."},
+		`{"when":"bad"}`: {"when": "Send a time like 2026-11-25T10:00:00Z."}, `{"pcode":5}`: {"pcode": "Send text."},
+		`{"pcode":"lower"}`: {"pcode": "Send a value this field takes."},
+		// A wrong type in a list's object is named by the object's field, a
+		// map's by the map's.
+		`{"lines":[{"qty":1},{"qty":"x"}]}`: {"lines.qty": "Send a whole number."}, `{"grid":[[{"qty":"x"}]]}`: {"grid.qty": "Send a whole number."},
+		`{"arr":[{},{"qty":"x"}]}`: {"arr.qty": "Send a whole number."}, `{"lines":["x"]}`: {"lines": "Send an object."},
+		`{"by_key":{"a.b":{"qty":"x"}}}`: {"by_key": "Send a whole number."},
+	} {
+		w := send(t, h, "POST", "/api/x", body)
+		if _, _, fields := apiError(t, w); w.Code != 400 || !reflect.DeepEqual(fields, want) {
+			t.Errorf("%s: %d %s, want %v", body, w.Code, w.Body, want)
+		}
+	}
+}
+
+// refusedCode reads itself from text and refuses "bad".
+type refusedCode string
+
+func (c *refusedCode) UnmarshalText(b []byte) error {
+	if string(b) == "bad" {
+		return errors.New("bad code")
+	}
+	*c = refusedCode(b)
+	return nil
+}
+
+// stampNode holds itself, and a list of times at each level.
+type stampNode struct {
+	N *stampNode  `json:"n"`
+	T []time.Time `json:"t"`
+}
+
+type codesIn struct {
+	Body struct {
+		Codes []refusedCode `json:"codes"`
+	} `body:"json"`
+}
+
+type stampsIn struct {
+	Body stampNode `body:"json"`
+}
+
+type bytesIn struct {
+	Body struct {
+		Lists [][]byte          `json:"lists"`
+		ByKey map[string][]byte `json:"by_key"`
+		At    time.Time         `json:"at"`
+	} `body:"json"`
+}
+
+// refusedBodies are the two bodies that once made the search for a refused
+// value cost hundreds of megabytes: n text values then one their decoder
+// refuses, in a 1 MiB body for n = 262 000; and n times then a text that is
+// not one, 61 objects deep, in 2.3 MB for n = 100 000. Before the search, a request
+// with either cost about 27 MB and 25 MB in all.
+var refusedBodies = []struct {
+	name       string
+	in         reflect.Type
+	post       func(*App)
+	body       func(n int) []byte
+	n          int
+	path, says string
+	tries      func(n int) int // the values handed to their own decoder
+}{
+	{
+		"codes", reflect.TypeFor[codesIn](), func(a *App) { Post(a, "/x", func(context.Context, codesIn) (None, error) { return None{}, nil }) },
+		func(n int) []byte { return []byte(`{"codes":[` + strings.Repeat(`"a",`, n) + `"bad"]}`) },
+		262_000, "codes", "Send a value this field takes.", func(n int) int { return n + 1 },
+	},
+	{
+		"stamps", reflect.TypeFor[stampsIn](), func(a *App) { Post(a, "/x", func(context.Context, stampsIn) (None, error) { return None{}, nil }) },
+		func(n int) []byte {
+			return []byte(strings.Repeat(`{"n":`, 61) + `{"t":[` + strings.Repeat(`"2026-11-25T10:00:00Z",`, n) + `"bad"]}` + strings.Repeat("}", 61))
+		},
+		100_000, strings.Repeat("n.", 61) + "t", "Send a time like 2026-11-25T10:00:00Z.", func(n int) int { return n + 1 },
+	},
+	// A []byte sent as a list of numbers, which encoding/json takes, in a
+	// list and in a map, before a time that is refused.
+	{
+		"byte lists", reflect.TypeFor[bytesIn](), func(a *App) { Post(a, "/x", func(context.Context, bytesIn) (None, error) { return None{}, nil }) },
+		func(n int) []byte { return []byte(`{"lists":[` + strings.Repeat(`[1],`, n) + `[1]],"at":"bad"}`) },
+		262_000, "at", "Send a time like 2026-11-25T10:00:00Z.", func(int) int { return 1 },
+	},
+	{
+		"byte lists in a map", reflect.TypeFor[bytesIn](), func(a *App) { Post(a, "/x", func(context.Context, bytesIn) (None, error) { return None{}, nil }) },
+		func(n int) []byte {
+			return []byte(`{"by_key":{` + strings.Repeat(`"k":[1],`, n) + `"k":[1]},"at":"bad"}`)
+		},
+		131_000, "at", "Send a time like 2026-11-25T10:00:00Z.", func(int) int { return 1 },
+	},
+}
+
+// The value a field's own decoder refused is found by reading the body once:
+// the search costs the same few allocations however many values came before
+// the refused one, and a request costs about what it did before the search
+// named the field.
+func TestBodyRefusedValueCost(t *testing.T) {
+	for _, c := range refusedBodies {
+		p, mistakes := planFor(c.in, "POST", "/x")
+		if mistakes != nil {
+			t.Fatal(mistakes)
+		}
+		big, small := c.body(c.n), c.body(c.n/1000)
+		var e *Error
+		if err := p.refused(big); !errors.As(err, &e) || !reflect.DeepEqual(e.Fields, map[string]string{c.path: c.says}) {
+			t.Fatalf("%s: %v, want %s: %s", c.name, err, c.path, c.says)
+		}
+		// The race detector changes what allocates: the counts below hold
+		// without it, the steps after them with it too.
+		if !raceDetector {
+			bigAllocs := testing.AllocsPerRun(1, func() { p.refused(big) })
+			smallAllocs := testing.AllocsPerRun(1, func() { p.refused(small) })
+			if bigAllocs > smallAllocs || bigAllocs > 64 {
+				t.Errorf("%s: the search cost %.0f allocations after %d values and %.0f after %d; want the same, at most 64", c.name, bigAllocs, c.n, smallAllocs, c.n/1000)
+			}
+			if b := allocated(func() { p.refused(big) }); b > 64<<10 {
+				t.Errorf("%s: the search allocated %d bytes, want at most 64 KiB", c.name, b)
+			}
+		}
+		// Each value with a decoder of its own is tried once, and each key
+		// looked up at most twice.
+		if r := refusedIn(p.view, big); r.tried != c.tries(c.n) || r.confirms != 1 || r.compares > 2*62 {
+			t.Errorf("%s: %d values tried, %d decoded again and %d looks of a key, want %d, 1 and at most %d", c.name, r.tried, r.confirms, r.compares, c.tries(c.n), 2*62)
+		}
+		app := New(Config{MaxBodyBytes: 4 << 20})
+		c.post(app)
+		h := mustRegister(t, app)
+		var w *httptest.ResponseRecorder
+		body := string(big)
+		request := allocated(func() { w = send(t, h, "POST", "/api/x", body) })
+		if _, _, fields := apiError(t, w); w.Code != 400 || !reflect.DeepEqual(fields, map[string]string{c.path: c.says}) {
+			t.Fatalf("%s: %d %s", c.name, w.Code, w.Body)
+		}
+		// The request reads the body and decodes it once, as it did before
+		// the search: 27 MB and 25 MB then, for the first two.
+		once := allocated(func() { decodeStrict(big, reflect.New(p.view).Interface()) })
+		if limit := once + 3*uint64(len(big)); request > limit && !raceDetector {
+			t.Errorf("%s: the request allocated %d bytes, want at most %d (decoding the body once, %d, and three times its size)", c.name, request, limit, once)
+		}
+	}
+}
+
+// The search reads a value as encoding/json hands it to its decoder: a key in
+// any case, an escaped text unquoted, null left to a pointer and to a type
+// that reads itself from text, and the path ending at a map's field.
+func TestBodyRefusedValueFound(t *testing.T) {
+	type In struct {
+		Codes []refusedCode           `json:"codes"`
+		Opt   []*refusedCode          `json:"opt"`
+		When  *time.Time              `json:"when"`
+		At    time.Time               `json:"at"`
+		Data  [][]byte                `json:"data"`
+		By    map[string][]stampNode  `json:"by"`
+		Deep  map[string]*refusedCode `json:"deep"`
+	}
+	app := New(Config{})
+	Post(app, "/x", func(context.Context, In) (None, error) { return None{}, nil })
+	h := mustRegister(t, app)
+	for body, want := range map[string]map[string]string{
+		`{"CODES":["a","bad"]}`:                   {"codes": "Send a value this field takes."},
+		`{"codes":["a","\u0062ad"]}`:              {"codes": "Send a value this field takes."},
+		`{"codes":[null,"a",5]}`:                  {"codes": "Send text."},
+		`{"opt":[null,"bad"]}`:                    {"opt": "Send a value this field takes."},
+		`{"when":null,"codes":["bad"]}`:           {"codes": "Send a value this field takes."},
+		`{"data":["YWI=",null,"!!"]}`:             {"data": "Send base64 text."},
+		`{"by":{"a.b":[{"n":{"t":["x"]}}]}}`:      {"by": "Send a time like 2026-11-25T10:00:00Z."},
+		`{"deep":{"k":null,"j":"bad"}}`:           {"deep": "Send a value this field takes."},
+		`{"codes":["a"],"at":"2026-11-25","x":1}`: {"at": "Send a time like 2026-11-25T10:00:00Z."},
+	} {
+		w := send(t, h, "POST", "/api/x", body)
+		if _, _, fields := apiError(t, w); w.Code != 400 || !reflect.DeepEqual(fields, want) {
+			t.Errorf("%s: %d %s, want %v", body, w.Code, w.Body, want)
+		}
+	}
+	if w := send(t, h, "POST", "/api/x", `{"codes":["A"],"opt":[null],"when":null,"data":["YWI="],"deep":{"k":null}}`); w.Code != 204 {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+}
+
+// namedBytes is a []byte of another name, with no decoder of its own.
+type namedBytes []byte
+
+// keyText is a map key that reads itself from text.
+type keyText string
+
+func (k *keyText) UnmarshalText(b []byte) error { *k = keyText(b); return nil }
+
+// ownJSON reads its own JSON, any value.
+type ownJSON struct{ n int }
+
+func (o *ownJSON) UnmarshalJSON(b []byte) error { o.n = len(b); return nil }
+
+// Every kind of value the search can meet before the refused one is read
+// once and never decoded again: only the refused time is, and the search
+// costs as many allocations after a thousand such values as after ten.
+func TestBodyRefusedSearchKinds(t *testing.T) {
+	type In struct {
+		Bytes  [][]byte           `json:"bytes"`
+		Named  []namedBytes       `json:"named"`
+		Ptr    []*[]byte          `json:"ptr"`
+		Arrays [][2]byte          `json:"arrays"`
+		Raw    []json.RawMessage  `json:"raw"`
+		Any    []any              `json:"any"`
+		Keys   map[keyText]int    `json:"keys"`
+		Times  []time.Time        `json:"times"`
+		Codes  []refusedCode      `json:"codes"`
+		Own    []ownJSON          `json:"own"`
+		ByKey  map[string]ownJSON `json:"by_key"`
+		At     time.Time          `json:"at"`
+	}
+	p, mistakes := planFor(reflect.TypeFor[In](), "POST", "/x")
+	if mistakes != nil {
+		t.Fatal(mistakes)
+	}
+	list := func(key, value string) func(n int) []byte {
+		return func(n int) []byte {
+			return []byte(`{"` + key + `":[` + strings.Repeat(value+",", n) + value + `],"at":"bad"}`)
+		}
+	}
+	object := func(key string, entry func(i int) string) func(n int) []byte {
+		return func(n int) []byte {
+			var b strings.Builder
+			b.WriteString(`{"` + key + `":{`)
+			for i := range n + 1 {
+				if i > 0 {
+					b.WriteByte(',')
+				}
+				b.WriteString(entry(i))
+			}
+			b.WriteString(`},"at":"bad"}`)
+			return []byte(b.String())
+		}
+	}
+	for name, body := range map[string]func(n int) []byte{
+		"[]byte as numbers":          list("bytes", "[1,2]"),
+		"[]byte as base64":           list("bytes", `"YWI="`),
+		"[]byte with an escape":      list("bytes", `"YW\nI="`),
+		"a named []byte as numbers":  list("named", "[1]"),
+		"a named []byte as base64":   list("named", `"YQ=="`),
+		"a pointer to []byte":        list("ptr", "[1]"),
+		"[2]byte":                    list("arrays", "[1,2]"),
+		"json.RawMessage":            list("raw", `{"a":[1]}`),
+		"any":                        list("any", `{"a":[1]}`),
+		"a key that reads itself":    object("keys", func(i int) string { return fmt.Sprintf(`"k%d":1`, i) }),
+		"times with an offset":       list("times", `"2026-11-25T10:00:00.5+01:00"`),
+		"text with an escape":        list("codes", `"\u0061"`),
+		"a type that reads its JSON": list("own", `{"a":1}`),
+		"its JSON in a map":          object("by_key", func(i int) string { return fmt.Sprintf(`"k%d":[%d]`, i, i) }),
+	} {
+		big, small := body(1000), body(10)
+		var e *Error
+		if err := p.refused(big); !errors.As(err, &e) || !reflect.DeepEqual(e.Fields, map[string]string{"at": "Send a time like 2026-11-25T10:00:00Z."}) {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if r := refusedIn(p.view, big); r.confirms != 1 {
+			t.Errorf("%s: %d values decoded again, want 1, the refused one", name, r.confirms)
+		}
+		if raceDetector {
+			continue
+		}
+		if bigAllocs, smallAllocs := testing.AllocsPerRun(10, func() { p.refused(big) }), testing.AllocsPerRun(10, func() { p.refused(small) }); bigAllocs > smallAllocs {
+			t.Errorf("%s: the search cost %.0f allocations after 1000 values and %.0f after 10; want the same", name, bigAllocs, smallAllocs)
+		}
+	}
+}
+
+// allocated is how many bytes f allocates.
+func allocated(f func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	f()
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
 }

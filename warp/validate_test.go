@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -100,7 +102,7 @@ func TestValidateMessages(t *testing.T) {
 	}
 	ok := []any{
 		S{Name: "abcde"}, N{Age: 0.5}, I{Qty: 3}, L{Tags: []string{"a", "b"}},
-		E{Email: "ada@example.com"}, E{Email: "<ada@example.com>"}, U{Site: "https://example.com/x"},
+		E{Email: "ada@example.com"}, U{Site: "https://example.com/x"},
 		En{Status: "live"}, B{On: true}, T{At: time.Now()},
 	}
 	for _, v := range ok {
@@ -250,7 +252,7 @@ func TestCheckRules(t *testing.T) {
 	}
 	got := checkRules(reflect.TypeOf(Product{}))
 	want := []string{
-		`Product.Price has the rule "emial", which warp does not know; use required, email, url, min=, max=, enum= or unique.`,
+		`Product.Price has the rule "emial", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`,
 		`Product.Mail has the rule "email", which is for text; remove it or make the field a string.`,
 		`Product.Name has "min=abc"; write a number after min=.`,
 		`Product.Name has "max=-1"; write a number after max=.`,
@@ -293,7 +295,7 @@ type node struct {
 
 func TestCheckRulesSelfReferencing(t *testing.T) {
 	got := checkRules(reflect.TypeOf(node{}))
-	want := []string{`node.Name has the rule "bogus", which warp does not know; use required, email, url, min=, max=, enum= or unique.`}
+	want := []string{`node.Name has the rule "bogus", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q", got)
 	}
@@ -317,7 +319,7 @@ func TestCheckRulesNestedAndEmbedded(t *testing.T) {
 	}
 	got := checkRules(reflect.TypeOf(Order{}))
 	want := []string{
-		`Base.ID has the rule "nope", which warp does not know; use required, email, url, min=, max=, enum= or unique.`,
+		`Base.ID has the rule "nope", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`,
 		`Line.SKU has the rule "url", which is for text; remove it or make the field a string.`,
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -376,8 +378,8 @@ func TestCheckRulesDeclarationOrder(t *testing.T) {
 	}
 	got := checkRules(reflect.TypeOf(Outer{}))
 	want := []string{
-		`Inner.X has the rule "inner", which warp does not know; use required, email, url, min=, max=, enum= or unique.`,
-		`Outer.B has the rule "outer", which warp does not know; use required, email, url, min=, max=, enum= or unique.`,
+		`Inner.X has the rule "inner", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`,
+		`Outer.B has the rule "outer", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q", got)
@@ -799,7 +801,7 @@ func TestValidateSentPointerZero(t *testing.T) {
 	got := fieldsOf(t, S{N: &zero, Text: &empty, Mail: &empty, Kind: &empty, Need: &zero})
 	want := map[string]string{
 		"n":    "Enter 1 or more.",
-		"text": "Use at least 1 characters.",
+		"text": "Use at least 1 character.",
 		"mail": "Enter an email address.",
 		"kind": "Choose one of: a, b.",
 	}
@@ -840,5 +842,127 @@ func TestValidateMinMaxOnArrays(t *testing.T) {
 func TestKeyOfNoSteps(t *testing.T) {
 	if got := key(nil); got != "" {
 		t.Fatalf("key(nil) = %q", got)
+	}
+}
+
+func TestReadonlyIsNeverValidated(t *testing.T) {
+	type Person struct {
+		Name string `json:"name" warp:"required"`
+	}
+	type S struct {
+		ID    int64    `json:"id" warp:"readonly"`
+		Owner Person   `json:"owner" warp:" readonly "`
+		Peers []Person `json:"peers" warp:"readonly"`
+		Name  string   `json:"name" warp:"required"`
+	}
+	if got := fieldsOf(t, S{Peers: []Person{{}}}); !reflect.DeepEqual(got, map[string]string{"name": "This is required."}) {
+		t.Fatalf("fields %v", got)
+	}
+	var readonly []string
+	for _, spec := range specsOf(reflect.TypeFor[S]()) {
+		if spec.readonly {
+			readonly = append(readonly, spec.key)
+		}
+	}
+	if want := []string{"id", "owner", "peers"}; !reflect.DeepEqual(readonly, want) {
+		t.Fatalf("readonly specs %q, want %q", readonly, want)
+	}
+}
+
+func TestCheckRulesReadonly(t *testing.T) {
+	type Product struct {
+		ID    int64  `json:"id" warp:"readonly,required"`
+		Code  string `json:"code" warp:"min=1,readonly"`
+		Fine  int64  `json:"fine" warp:"readonly"`
+		Twice int64  `json:"twice" warp:"readonly,readonly"`
+	}
+	got := checkRules(reflect.TypeFor[Product]())
+	want := []string{
+		`Product.ID has the rule "readonly" beside other rules; a readonly field is never read, so remove them.`,
+		`Product.Code has the rule "readonly" beside other rules; a readonly field is never read, so remove them.`,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got:\n%q\nwant:\n%q", got, want)
+	}
+}
+
+// The url rule is the browser's (isWebAddress in packages/ui's
+// forms/schema.ts), on the rows of its test.
+func TestURLRuleIsTheBrowsers(t *testing.T) {
+	type U struct {
+		Site string `json:"site" warp:"url"`
+	}
+	for _, ok := range []string{
+		"http://x.com", "HTTPS://X.COM/a?b#c", "http://u:p@x.com", "http://x.com:8080", "http://[::1]:8080/",
+		"https://u@p@x.com", "http://x.com?q", "http://x.com#f", "http://1.2.3.4:1",
+	} {
+		if err := Validate(&U{Site: ok}); err != nil {
+			t.Errorf("%q was refused: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{
+		"ftp://x", "http://", "//x.com", "http:x.com", "http://a b.com", "http://x.com/a b", "http://:8080",
+		"https:///x.com", "http://x.com ", "http://x\t.com", "http://x.com/\na", `http://x.com\a`, "http://x:999999",
+		"http://x:", "http://x:8a", "http://u@", "http://x.com\u00a0", "http://x.com\ufeff", "\x00http://x.com", "http://x\x7f.com",
+	} {
+		if fieldsOf(t, &U{Site: bad})["site"] != "Enter a web address that starts with http:// or https://." {
+			t.Errorf("%q was taken", bad)
+		}
+	}
+}
+
+// The email rule is the browser's (EMAIL in packages/ui's forms/schema.ts),
+// on the rows both sides' tests read from testdata/email.json.
+func TestEmailRuleIsTheBrowsers(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("testdata", "email.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rows struct{ Accept, Refuse []string }
+	if err := json.Unmarshal(b, &rows); err != nil {
+		t.Fatal(err)
+	}
+	type E struct {
+		Mail string `json:"mail" warp:"email"`
+	}
+	for _, ok := range rows.Accept {
+		if err := Validate(&E{Mail: ok}); err != nil {
+			t.Errorf("%q was refused: %v", ok, err)
+		}
+	}
+	for _, bad := range rows.Refuse {
+		if fieldsOf(t, &E{Mail: bad})["mail"] != "Enter an email address." {
+			t.Errorf("%q was taken", bad)
+		}
+	}
+}
+
+// A count of one character is said in the singular, as the browser's schema
+// says it.
+func TestValidateSaysOneCharacter(t *testing.T) {
+	type One struct {
+		A string `json:"a" warp:"min=1"`
+		B string `json:"b" warp:"max=1"`
+	}
+	type Two struct {
+		A string `json:"a" warp:"min=2"`
+		B string `json:"b" warp:"max=2"`
+	}
+	if got := fieldsOf(t, One{A: " ", B: "xy"}); !reflect.DeepEqual(got, map[string]string{"b": "Use at most 1 character."}) {
+		t.Errorf("one: %v", got)
+	}
+	if got := fieldsOf(t, &struct {
+		A string `json:"a" warp:"min=1"`
+	}{A: ""}); got != nil {
+		t.Errorf("empty passes min: %v", got)
+	}
+	if got := fieldsOf(t, Two{A: "x", B: "xyz"}); !reflect.DeepEqual(got, map[string]string{"a": "Use at least 2 characters.", "b": "Use at most 2 characters."}) {
+		t.Errorf("two: %v", got)
+	}
+	type OneMin struct {
+		A string `json:"a" warp:"min=2,max=1"`
+	}
+	if got := fieldsOf(t, OneMin{A: "x"}); got["a"] != "Use at least 2 characters." {
+		t.Errorf("min first: %v", got)
 	}
 }

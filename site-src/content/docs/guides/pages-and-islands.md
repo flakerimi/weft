@@ -43,6 +43,56 @@ const props = defineProps<{ slug: string }>()
 
 The build makes `/notes/first` and `/notes/second`. A `[name]` value is one path segment; a `[...name]` value may hold several, and `''` is the folder itself.
 
+### Pages for records made after the build
+
+A page for a record that is made later, such as `/products/42`, cannot list its paths at build. It exports `runtime = true` in place of `getPaths()`. The page is rendered once, at build, before any address exists, so it reads its params in an [island](#islands) with `useParams()`. Write `hello/pages/products/[id].vue`:
+
+```vue
+<script lang="ts">
+export const runtime = true
+</script>
+
+<script setup vapor lang="ts">
+import { Island } from '@weft/ui'
+import Product from '../../components/Product.vue'
+</script>
+
+<template>
+  <Island when="load" :component="Product" />
+</template>
+```
+
+and `hello/components/Product.vue`, which reads the id once it is mounted, the place to fetch the record from the API:
+
+```vue
+<script setup vapor lang="ts">
+import { onMounted, ref } from 'vue'
+import { useParams } from '@weft/ui'
+
+const id = ref('')
+// In the browser only: at build the page has no address, and useParams() is {}.
+onMounted(() => {
+  id.value = useParams().id ?? ''
+})
+</script>
+
+<template>
+  <p>Product {{ id }}</p>
+</template>
+```
+
+`useParams()` runs in the browser only; on the server it returns `{}`.
+
+The build makes the page once, as a shell, with every param the empty string, and writes it to `pages/products/[id]/index.html`. The Go server answers every path that matches `/products/:id` with that shell and status 200, when no other page and no file has the path: `/products/new` from `pages/products/new.vue` wins. `[id]` matches one segment that is not empty, and `[...rest]` the rest of the path, or none of it. A record that does not exist is the API's 404, which the page shows; the page itself is always 200. `weft dev` serves the page the same way.
+
+The build writes the pattern on the page's `<html>` as `data-weft-route="/products/:id"`. `useParams()` reads `location.pathname` against it and returns each param, or `{}` on another page. It splits the path as the server does, decoded first, so an id that holds an encoded slash (`%2F`) is two segments and cannot be one param. It is not reactive: the page loads once per address. Some things fail the build:
+
+- a dynamic page that exports both `runtime` and `getPaths()`, or neither;
+- two runtime pages that match the same paths, such as `a/[x].vue` and `a/[y].vue`;
+- a runtime page whose shell another page also writes, such as a `getPaths()` value of `[id]`.
+
+When two patterns match one path, the one with more fixed segments wins; then one without a `[...name]`; then the one with fewer params, except that of two with a `[...name]`, the one with more wins. So a `[...name]` never hides a more specific page.
+
 ## The head
 
 `useHead` sets the `<title>`, the description and the Open Graph image:
@@ -168,7 +218,9 @@ For your editor and `vue-tsc`, the build writes `.weft-types/components.d.ts` in
 
 ## Before the first paint
 
-`usePrePaint(id, code)` adds a few lines of script to the top of the `<head>`, on the pages that render the calling component. Use it only to copy a stored preference onto `<html>` for CSS to read, as `AppShell` does for its collapsed sidebar. The server's markup must not depend on it.
+`usePrePaint(id, code)` adds a few lines of script to the top of the `<head>`, on the pages that render the calling component. It is for two things: copying a stored preference onto `<html>` for CSS to read, as `AppShell` does for its collapsed sidebar, and stopping what the server's markup would do before an island is live, as `Form` does: it cancels every submit of a Weft form until its island takes over. The server's markup must not depend on it. A site with a Content-Security-Policy allows this inline script by its hash, or with `'unsafe-inline'`; [`Form`'s page](/components/form) has its exact text.
+
+A `Form` sends only through its `@submit` handler, so it belongs in an island: one the page draws with no island around it never sends anything. What a person types, or a password manager fills, before the island is live is kept when it hydrates.
 
 ## Your Vite config
 

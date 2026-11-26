@@ -379,7 +379,9 @@ function setText(value: string, opening: boolean) {
     emit('change', null)
     f.input()
   }
-  if (opening && !open.value && value !== '') show(null)
+  // Only for the field a person is typing in: text put back into a field
+  // they have left (what they typed before the page was live) opens nothing.
+  if (opening && !open.value && value !== '' && document.activeElement === fieldEl()) show(null)
 }
 const onType = (value: string | number | null) => setText(String(value ?? ''), true)
 

@@ -1,5 +1,5 @@
 // What a Table is told and what it works out: its columns, the query it
-// asks a `fetch` function (the wire format's `page`, `perPage` and `sort`),
+// asks a `fetch` function (the wire format's `page`, `per_page`, `sort`, `q` and `filter[...]`),
 // the stable client-side sort, row keys and the words it says.
 import { DEFAULT_LOCALE } from '../adaptive/locale.ts'
 
@@ -23,21 +23,29 @@ export interface TableColumn<T = Record<string, unknown>> {
   rowHeader?: boolean
 }
 
-/** What a Table asks its `fetch` for: the wire format's query parameters. */
+/**
+ * What a Table asks its `fetch` for: the wire format's list query, in its
+ * names, so a generated list function (`api.products.list`) takes it as it is.
+ */
 export interface TableQuery {
   /** The page, from 1. */
   page: number
-  perPage: number
+  /** Rows per page. */
+  per_page: number
   /** The column key, ascending (`name`), or descending with a minus (`-since`); absent when unsorted. */
   sort?: string
+  /** The search text; absent when empty. */
+  q?: string
+  /** Filters by field name (`filter[<field>]`), none with an empty value; absent when none. */
+  filter?: Record<string, string>
 }
 
-/** What `fetch` answers: the wire format's list (`page` and `perPage` may come back too, and are not needed). */
+/** What `fetch` answers: the wire format's list (`page` and `per_page` may come back too, and are not needed). */
 export interface TableResult<T> {
   items: T[]
   total: number
   page?: number
-  perPage?: number
+  per_page?: number
 }
 
 export type TableFetch<T> = (query: TableQuery) => Promise<TableResult<T>> | TableResult<T>
@@ -161,10 +169,18 @@ export function keyOf<T>(row: T, rowKey: string | ((row: T) => RowKey) | undefin
   return typeof value === 'string' || typeof value === 'number' ? value : fallback
 }
 
-/** A query as URL search parameters, as the wire format reads them: `page=2&perPage=20&sort=-since`. */
+/** The filters that say something: a value of `''`, undefined or null is no filter; undefined when none is left. */
+export function activeFilters(filters: Record<string, string | null | undefined> | undefined): Record<string, string> | undefined {
+  const kept = Object.entries(filters ?? {}).filter((e): e is [string, string] => e[1] !== '' && e[1] != null)
+  return kept.length ? Object.fromEntries(kept) : undefined
+}
+
+/** A query as URL search parameters, as the wire format reads them: `page=2&per_page=20&sort=-since&q=ada&filter[plan]=pro`. */
 export function tableSearch(query: TableQuery): URLSearchParams {
-  const params = new URLSearchParams({ page: String(query.page), perPage: String(query.perPage) })
+  const params = new URLSearchParams({ page: String(query.page), per_page: String(query.per_page) })
   if (query.sort) params.set('sort', query.sort)
+  if (query.q) params.set('q', query.q)
+  for (const [field, value] of Object.entries(activeFilters(query.filter) ?? {})) params.set(`filter[${field}]`, value)
   return params
 }
 

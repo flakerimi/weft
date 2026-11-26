@@ -58,7 +58,7 @@ it('hydrates every form component inside an island', async () => {
   island.querySelector<HTMLButtonElement>('button[type="submit"]')!.click()
   await settle()
   const errors = [...island.querySelectorAll('.weft-form-field__error')].map((e) => e.textContent!.trim())
-  expect(errors).toEqual(['Enter an email address.', 'This field is required.'])
+  expect(errors).toEqual(['Enter an email address.', 'This is required.'])
   expect(document.activeElement).toBe(email)
   expect(email.getAttribute('aria-invalid')).toBe('true')
   expect(warn).not.toHaveBeenCalled()

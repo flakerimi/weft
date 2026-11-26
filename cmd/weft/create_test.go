@@ -87,14 +87,14 @@ func assertCreated(t *testing.T, dir string) {
 	if !strings.Contains(read("package.json"), `"weft":{"version":"0.0.0-dev","theme":"neutral"}`) {
 		t.Errorf("package.json = %q", read("package.json"))
 	}
-	if got := strings.TrimSpace(read(".weft/VERSION")); got != "0.0.0-dev" {
-		t.Errorf(".weft/VERSION = %q", got)
+	if got := strings.Split(read(".weft/VERSION"), "\n"); got[0] != "0.0.0-dev" || len(got[1]) != 64 {
+		t.Errorf(".weft/VERSION = %q, want the version and the bundle's hash", got)
 	}
 	if !strings.Contains(read("package.json"), `"name": "`+filepath.Base(dir)+`"`) {
 		t.Errorf("package.json has the wrong name: %q", read("package.json"))
 	}
 	ignore := strings.Split(read(".gitignore"), "\n")
-	for _, want := range []string{".weft/", "node_modules/", "web/dist/", "web/.weft-types/", ".env", "/" + filepath.Base(dir)} {
+	for _, want := range []string{".weft/", ".weft.lock", ".weft-new-*/", ".weft-old-*/", "node_modules/", "web/dist/", "web/.weft-types/", ".env", "/" + filepath.Base(dir)} {
 		found := false
 		for _, l := range ignore {
 			found = found || l == want

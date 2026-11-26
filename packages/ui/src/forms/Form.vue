@@ -27,8 +27,25 @@
 //   from `loading` or from the handler.
 // - `setErrors` on a field the schema has no rule for: the error clears the
 //   first time the field changes, as there is nothing to check it against.
+// - It sends nothing before it is live. The server renders it in full, so
+//   until its island hydrates a press on submit, or Enter in a field, would
+//   be the browser's own submit. A pre-paint script (usePrePaint, one per
+//   page) stops every submit of a `.weft-form` from the first moment, and
+//   leaves the fields usable, so a person can type and a password manager
+//   fill while the script loads (the island runtime keeps what they hold
+//   through the hydration); with scripts off, `method="post"` keeps the
+//   values out of the address.
+// - An emptied field the schema marks `nullable` (a pointer in Go, as weft
+//   gen's schema says) is sent as null, '' too, so the person's clear
+//   reaches the server and clears it. Any other null (an emptied number,
+//   date or choice) is left out of the values the handler gets, so the
+//   server reads it as not sent, as Go refuses null for a field that is not a
+//   pointer; with no schema every null is left out. A required field is
+//   stopped first, by its own `required` rule.
 // The native form keeps `novalidate`: Weft shows the errors, not the browser.
 import { computed, isProxy, nextTick, ref, toRaw, useTemplateRef, watch } from 'vue'
+import { usePrePaint } from '../head/usePrePaint.ts'
+import { formGuard } from './guard.ts'
 import { tabbables } from '../headless/dom.ts'
 import { provideForm } from './field.ts'
 import { validateField, validateFields, type FieldSchema } from './schema.ts'
@@ -63,6 +80,9 @@ defineSlots<{
   default?: () => unknown
 }>()
 
+// Before the body is parsed: once hydrated, onSubmit stops the submit as well.
+usePrePaint('form:submit', import.meta.env.SSR ? formGuard(import.meta.env.DEV) : '')
+
 const errors = ref<Record<string, string>>({})
 const submitted = ref(false)
 const pending = ref(false)
@@ -90,6 +110,19 @@ watch(
   },
   { flush: 'post' },
 )
+
+/** The values the handler gets: a copy, an emptied nullable field as null, and no other null. */
+function valuesToSend(): T {
+  const values = copy(props.state) as Record<string, unknown>
+  for (const [name, value] of Object.entries(values)) {
+    if (ruleOf(name)?.nullable) {
+      if (value === undefined || value === '') values[name] = null
+    } else if (value === null || value === undefined) {
+      delete values[name]
+    }
+  }
+  return values as T
+}
 
 const ruleOf = (name: string) => (props.schema as FieldSchema)[name]
 /** Check one field now: show its error, or clear it. */
@@ -175,7 +208,7 @@ async function onSubmit(event: Event) {
   }
   // Noted before the handler runs, which may move focus at once.
   const focused = inForm(document.activeElement)
-  const result = props.onSubmit?.(copy(props.state))
+  const result = props.onSubmit?.(valuesToSend())
   if (!props.loadingAuto || !(result instanceof Promise)) return
   if (!busy.value) had = focused
   pending.value = true
@@ -186,6 +219,8 @@ async function onSubmit(event: Event) {
   }
 }
 
+// Typed for apps as FormApi (form-state.ts);
+// test/fixtures/forms/FormRef.vue checks the two agree.
 defineExpose({
   /** Show these errors (a server's answer), in place of the ones shown now; `{}` clears them. */
   setErrors(next: Record<string, string>) {
@@ -219,6 +254,7 @@ defineExpose({
   <form
     ref="form"
     class="weft-form"
+    method="post"
     novalidate
     :data-disabled="off ? 'true' : undefined"
     :aria-busy="busy ? 'true' : undefined"

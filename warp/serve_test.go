@@ -558,3 +558,14 @@ func BenchmarkServePage(b *testing.B) {
 		serve()
 	}
 }
+
+// Serve with no build says what to pass, in place of a nil pointer.
+func TestServeNilDist(t *testing.T) {
+	defer func() {
+		want := "warp.Serve: dist is nil; pass the page build, or serve the API alone with app.Handler()."
+		if r := recover(); r != want {
+			t.Fatalf("Serve(nil, api) panicked with %v, want %q", r, want)
+		}
+	}()
+	Serve(nil, http.NotFoundHandler())
+}

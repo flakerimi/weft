@@ -52,6 +52,8 @@ func TestCommandHelp(t *testing.T) {
 		{"create", "Usage is weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install].\n"},
 		{"build", "Usage is weft build [-o <file>].\n"},
 		{"dev", "Usage is weft dev [--port n].\n"},
+		{"gen", "Usage is weft gen.\n"},
+		{"routes", "Usage is weft routes.\n"},
 		{"upgrade", "Usage is weft upgrade [--no-install].\n"},
 		{"catalog", "Usage is weft catalog [<Name>...] [--examples] [--json], or weft catalog --find <word> [<word>...].\n"},
 	} {

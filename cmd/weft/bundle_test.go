@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 )
 
 func testBundle(files ...string) fstest.MapFS {
@@ -313,5 +317,448 @@ func TestBundleScriptMarksBeforeBuilding(t *testing.T) {
 	}
 	if !exists(t, filepath.Join(out, ".weft-bundle")) {
 		t.Error("a failed run left no .weft-bundle, so the next run would refuse the folder")
+	}
+}
+
+// folderBundle writes files (path to content) into a new folder and points
+// WEFT_BUNDLE at it.
+func folderBundle(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, content := range files {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("WEFT_BUNDLE", dir)
+	return dir
+}
+
+// A development weft is always 0.0.0-dev, so .weft/VERSION also records a
+// hash of the bundle, and the bundle changing unpacks it again; the version
+// stays the first line.
+func TestRefreshUnpacksADevelopmentBundleThatChanged(t *testing.T) {
+	app := t.TempDir()
+	bundle := folderBundle(t, map[string]string{"weft/a": "one", "weft/b": "two"})
+	if did, err := refreshWeft(app, devVersion); err != nil || !did {
+		t.Fatalf("first refresh = %v, %v; want it to unpack", did, err)
+	}
+	if got := unpacked(app); got != devVersion {
+		t.Errorf("unpacked = %q, want %q", got, devVersion)
+	}
+	b, _ := os.ReadFile(filepath.Join(app, ".weft", "VERSION"))
+	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
+	if len(lines) != 2 || lines[0] != devVersion || len(lines[1]) != 64 {
+		t.Errorf("VERSION = %q, want the version, then a 64-digit hash", b)
+	}
+	os.WriteFile(filepath.Join(app, ".weft", "marker"), []byte("x"), 0o644)
+	if did, err := refreshWeft(app, devVersion); err != nil || did {
+		t.Fatalf("same bundle: refresh = %v, %v; want no unpack", did, err)
+	}
+	if !exists(t, filepath.Join(app, ".weft", "marker")) {
+		t.Error("the same bundle was unpacked again")
+	}
+	// Changed bytes, then a file gone: each unpacks again, and the gone file
+	// is gone from .weft.
+	os.WriteFile(filepath.Join(bundle, "weft", "a"), []byte("one!"), 0o644)
+	if did, err := refreshWeft(app, devVersion); err != nil || !did {
+		t.Fatalf("changed bytes: refresh = %v, %v; want an unpack", did, err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(app, ".weft", "a")); string(got) != "one!" || exists(t, filepath.Join(app, ".weft", "marker")) {
+		t.Errorf(".weft/a = %q, or the marker is left", got)
+	}
+	if err := os.Rename(filepath.Join(bundle, "weft", "b"), filepath.Join(t.TempDir(), "b")); err != nil {
+		t.Fatal(err)
+	}
+	if did, err := refreshWeft(app, devVersion); err != nil || !did {
+		t.Fatalf("file gone: refresh = %v, %v; want an unpack", did, err)
+	}
+	if exists(t, filepath.Join(app, ".weft", "b")) {
+		t.Error(".weft/b is still there after the bundle lost it")
+	}
+}
+
+// Two bundles with the same bytes in other files, or one name moved, differ.
+func TestBundleHashSeesNamesAndBytes(t *testing.T) {
+	h := func(files ...string) string {
+		t.Helper()
+		got, err := bundleHash(testBundle(files...))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	if h("weft/ab") == h("weft/a", "weft/b") || h("weft/a") == h("weft/b") || h("weft/a") != h("weft/a", "template/x") {
+		t.Error("the hash does not tell the bundles apart by file names, or looks outside weft/")
+	}
+}
+
+// A release is the version it says: other contents under the same version
+// string are not unpacked again, and a .weft with no VERSION file stays.
+func TestRefreshLeavesAReleaseAlone(t *testing.T) {
+	app := t.TempDir()
+	bundle := folderBundle(t, map[string]string{"weft/a": "one"})
+	if did, err := refreshWeft(app, "0.1.0"); err != nil || !did {
+		t.Fatalf("first refresh = %v, %v", did, err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(app, ".weft", "VERSION")); string(b) != "0.1.0\n" {
+		t.Errorf("VERSION = %q, want the version alone", b)
+	}
+	os.WriteFile(filepath.Join(bundle, "weft", "a"), []byte("other"), 0o644)
+	os.WriteFile(filepath.Join(bundle, "weft", "c"), []byte("new"), 0o644)
+	if did, err := refreshWeft(app, "0.1.0"); err != nil || did {
+		t.Fatalf("refresh = %v, %v; want no unpack", did, err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(app, ".weft", "a")); string(got) != "one" {
+		t.Errorf(".weft/a = %q, want the first bundle's", got)
+	}
+	foreign := t.TempDir()
+	os.MkdirAll(filepath.Join(foreign, ".weft"), 0o755)
+	if _, err := refreshWeft(foreign, devVersion); err == nil || !strings.Contains(err.Error(), "has no VERSION file") {
+		t.Errorf("a .weft with no VERSION: err = %v", err)
+	}
+}
+
+// A development weft with no bundle of its own keeps the .weft that is there.
+func TestRefreshWithoutABundleKeepsTheTree(t *testing.T) {
+	app := t.TempDir()
+	folderBundle(t, map[string]string{"weft/a": "one"})
+	if _, err := refreshWeft(app, devVersion); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("WEFT_BUNDLE", "")
+	if did, err := refreshWeft(app, devVersion); err != nil || did {
+		t.Errorf("refresh = %v, %v; want it to leave .weft as it is", did, err)
+	}
+}
+
+// weft unpack makes .weft/ current and does nothing more: no pnpm install, no
+// check of node or pnpm.
+func TestUnpackCommand(t *testing.T) {
+	app := t.TempDir()
+	os.WriteFile(filepath.Join(app, "package.json"), []byte(`{"name":"a","weft":{"version":"0.0.0-dev"}}`), 0o644)
+	bundle := folderBundle(t, map[string]string{"weft/go/go.mod.bundle": "module x\n", "weft/packages/a": "one"})
+	t.Setenv("PATH", t.TempDir())
+	t.Chdir(app)
+	code, out, errs := runCmd("unpack")
+	if code != 0 || out != "Unpacked .weft (Weft 0.0.0-dev)\n" || errs != "" {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errs)
+	}
+	if !exists(t, ".weft/go/go.mod") || exists(t, "node_modules") {
+		t.Error(".weft/go/go.mod is missing, or something was installed")
+	}
+	if code, out, _ := runCmd("unpack"); code != 0 || out != ".weft is current (Weft 0.0.0-dev)\n" {
+		t.Errorf("again: exit %d, stdout %q", code, out)
+	}
+	os.WriteFile(filepath.Join(bundle, "weft", "packages", "a"), []byte("two"), 0o644)
+	if code, out, _ := runCmd("unpack"); code != 0 || out != "Unpacked .weft (Weft 0.0.0-dev)\n" {
+		t.Errorf("changed bundle: exit %d, stdout %q", code, out)
+	}
+	os.WriteFile("package.json", []byte(`{"name":"a","weft":{"version":"9.9.9"}}`), 0o644)
+	code, _, errs = runCmd("unpack")
+	if want := "weft unpack: this app is on Weft 9.9.9 and this weft is 0.0.0-dev; run weft update --version 9.9.9 to match it.\n"; code != 1 || errs != want {
+		t.Errorf("other version: exit %d, stderr %q", code, errs)
+	}
+	if code, _, errs := runCmd("unpack", "x"); code != 2 || errs != "weft unpack: \"x\" is not a flag; usage is weft unpack.\n" {
+		t.Errorf("argument: exit %d, stderr %q", code, errs)
+	}
+}
+
+// countHashes counts the bundle hashes taken for the rest of the test.
+func countHashes(t *testing.T) *int {
+	t.Helper()
+	n := new(int)
+	was := hashBundle
+	hashBundle = func(b fs.FS) (string, error) { *n++; return was(b) }
+	t.Cleanup(func() { hashBundle = was })
+	return n
+}
+
+// A development refresh hashes the bundle once, whether .weft is missing or
+// its hash is old.
+func TestRefreshHashesOnce(t *testing.T) {
+	app := t.TempDir()
+	bundle := folderBundle(t, map[string]string{"weft/a": "one"})
+	n := countHashes(t)
+	if did, err := refreshWeft(app, devVersion); err != nil || !did || *n != 1 {
+		t.Fatalf("first refresh = %v, %v, %d hashes; want an unpack and one hash", did, err, *n)
+	}
+	os.WriteFile(filepath.Join(bundle, "weft", "a"), []byte("two"), 0o644)
+	*n = 0
+	if did, err := refreshWeft(app, devVersion); err != nil || !did || *n != 1 {
+		t.Fatalf("changed: refresh = %v, %v, %d hashes; want an unpack and one hash", did, err, *n)
+	}
+}
+
+// A bundle that cannot be read for its hash is named, with what to do.
+func TestRefreshNamesAnUnreadableBundle(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads every file")
+	}
+	app := t.TempDir()
+	bundle := folderBundle(t, map[string]string{"weft/a": "one"})
+	os.Chmod(filepath.Join(bundle, "weft", "a"), 0)
+	t.Cleanup(func() { os.Chmod(filepath.Join(bundle, "weft", "a"), 0o644) })
+	_, err := refreshWeft(app, devVersion)
+	if err == nil || !strings.HasPrefix(err.Error(), "cannot read the bundle in "+bundle+" (") || !strings.HasSuffix(err.Error(), "); make its files readable, or point WEFT_BUNDLE at a folder made by scripts/bundle.sh") {
+		t.Errorf("refresh = %v", err)
+	}
+}
+
+// A VERSION an older development build wrote, one line with no hash, is
+// unpacked again; one written with CRLF line endings is read as written.
+func TestRefreshReadsOlderAndCRLFVersions(t *testing.T) {
+	app := t.TempDir()
+	folderBundle(t, map[string]string{"weft/a": "one"})
+	if _, err := refreshWeft(app, devVersion); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(app, ".weft", "VERSION"))
+	hash := strings.Split(strings.TrimSpace(string(b)), "\n")[1]
+	for record, want := range map[string]bool{
+		devVersion + "\n":                   true,
+		devVersion + "\r\n":                 true,
+		devVersion + "\r\n" + hash + "\r\n": false,
+		devVersion + "\n" + hash + "\n":     false,
+		"0.0.1\r\n":                         true,
+	} {
+		os.WriteFile(filepath.Join(app, ".weft", "VERSION"), []byte(record), 0o644)
+		if did, err := refreshWeft(app, devVersion); err != nil || did != want {
+			t.Errorf("VERSION %q: refresh = %v, %v; want %v", record, did, err, want)
+		}
+	}
+	os.WriteFile(filepath.Join(app, ".weft", "VERSION"), []byte("0.1.0\r\n"), 0o644)
+	if did, err := refreshWeft(app, "0.1.0"); err != nil || did {
+		t.Errorf("a release VERSION with CRLF: refresh = %v, %v; want none", did, err)
+	}
+}
+
+// Two weft commands unpacking in one app at once both succeed, ten times
+// over, and leave one whole .weft and nothing of theirs beside it.
+func TestTwoUnpacksAtOnce(t *testing.T) {
+	app := t.TempDir()
+	bundle := folderBundle(t, map[string]string{"weft/a": "zero", "weft/sub/b": "b"})
+	for i := range 10 {
+		os.WriteFile(filepath.Join(bundle, "weft", "a"), []byte(strconv.Itoa(i)), 0o644)
+		errs := make(chan error, 2)
+		for range 2 {
+			go func() {
+				_, err := refreshWeft(app, devVersion)
+				errs <- err
+			}()
+		}
+		for range 2 {
+			if err := <-errs; err != nil {
+				t.Fatalf("round %d: %v", i, err)
+			}
+		}
+		if got, _ := os.ReadFile(filepath.Join(app, ".weft", "a")); string(got) != strconv.Itoa(i) || !exists(t, filepath.Join(app, ".weft", "sub", "b")) {
+			t.Fatalf("round %d: .weft/a = %q", i, got)
+		}
+		entries, _ := os.ReadDir(app)
+		if len(entries) != 1 {
+			var names []string
+			for _, e := range entries {
+				names = append(names, e.Name())
+			}
+			t.Fatalf("round %d: the app folder holds %q", i, names)
+		}
+	}
+}
+
+// A lock no running weft command holds is taken over at once, whatever it
+// says: one naming a process that is gone, one naming none, and one naming a
+// running process that is not a weft command (this test's parent), as a
+// pid reused after a weft command was killed would. One a running command
+// holds is waited for, which is said once.
+func TestLockLeftBehind(t *testing.T) {
+	app := t.TempDir()
+	lock := filepath.Join(app, ".weft.lock")
+	var said bytes.Buffer
+	was, wait := lockSays, lockWait
+	lockSays.command, lockSays.to, lockWait = "routes", &said, 5*time.Second
+	t.Cleanup(func() { lockSays, lockWait = was, wait })
+
+	gone := exec.Command("true")
+	if err := gone.Run(); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name string
+		text string
+	}{
+		{"a gone process", fmt.Sprintf("%d\n", gone.Process.Pid)},
+		{"no process", ""},
+		{"garbage", "hello world"},
+		{"a running process that is not weft", fmt.Sprintf("%d\n", os.Getppid())},
+		{"this very process", fmt.Sprintf("%d\n", os.Getpid())},
+	} {
+		os.WriteFile(lock, []byte(c.text), 0o644)
+		start := time.Now()
+		unlock, err := lockWeft(app)
+		if took := time.Since(start); err != nil || took > 500*time.Millisecond {
+			t.Fatalf("%s: %v after %v", c.name, err, took)
+		}
+		if b, _ := os.ReadFile(lock); string(b) != fmt.Sprintf("%d\n", os.Getpid()) {
+			t.Errorf("%s: the lock holds %q", c.name, b)
+		}
+		unlock()
+		if exists(t, lock) {
+			t.Errorf("%s: the lock is left after unlock", c.name)
+		}
+	}
+	if said.Len() != 0 {
+		t.Errorf("taking over said %q", said.String())
+	}
+
+	// A holder that is running: another lockWeft, which lets go after 300 ms.
+	held, err := lockWeft(app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.AfterFunc(300*time.Millisecond, held)
+	start := time.Now()
+	unlock, err := lockWeft(app)
+	if took := time.Since(start); err != nil || took < 250*time.Millisecond {
+		t.Fatalf("a running holder: %v after %v, want a wait", err, took)
+	}
+	unlock()
+	if want := "weft routes: another weft command is unpacking in this app; waiting for it.\n"; said.String() != want {
+		t.Errorf("waiting said %q, want %q once", said.String(), want)
+	}
+
+	// One that does not let go is waited for lockWait, then said.
+	lockWait = 300 * time.Millisecond
+	held, err = lockWeft(app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held()
+	if _, err := lockWeft(app); err == nil || !strings.HasPrefix(err.Error(), "another weft command has been unpacking .weft in "+app) {
+		t.Errorf("a holder that does not let go: %v", err)
+	}
+}
+
+// Eight weft commands started at once on a lock left behind by a killed
+// one, fifty rounds over: every one exits 0, one unpacks, and .weft is whole,
+// with nothing of theirs left beside it.
+func TestEightCommandsOnALeftLock(t *testing.T) {
+	if os.Getenv("WEFT_LOCK_HELPER") != "" {
+		return
+	}
+	app := t.TempDir()
+	bundle := folderBundle(t, map[string]string{"weft/a": "zero", "weft/sub/b": "b"})
+	rounds := 50
+	if testing.Short() {
+		rounds = 10
+	}
+	for i := range rounds {
+		os.WriteFile(filepath.Join(bundle, "weft", "a"), []byte(strconv.Itoa(i)), 0o644)
+		os.WriteFile(filepath.Join(app, ".weft.lock"), []byte(fmt.Sprintf("%d\n", os.Getppid())), 0o644)
+		var cmds []*exec.Cmd
+		var outs []*bytes.Buffer
+		for range 8 {
+			cmd := exec.Command(os.Args[0], "-test.run=^TestLockHelperProcess$", "-test.short")
+			cmd.Env = append(os.Environ(), "WEFT_LOCK_HELPER="+app)
+			out := &bytes.Buffer{}
+			cmd.Stdout, cmd.Stderr = out, out
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+			cmds, outs = append(cmds, cmd), append(outs, out)
+		}
+		for j, cmd := range cmds {
+			if err := cmd.Wait(); err != nil {
+				t.Fatalf("round %d, command %d: %v\n%s", i, j, err, outs[j])
+			}
+		}
+		if got, _ := os.ReadFile(filepath.Join(app, ".weft", "a")); string(got) != strconv.Itoa(i) || !exists(t, filepath.Join(app, ".weft", "sub", "b")) {
+			t.Fatalf("round %d: .weft/a = %q", i, got)
+		}
+		if entries, _ := os.ReadDir(app); len(entries) != 1 {
+			var names []string
+			for _, e := range entries {
+				names = append(names, e.Name())
+			}
+			t.Fatalf("round %d: the app folder holds %q", i, names)
+		}
+	}
+}
+
+// TestLockHelperProcess is one weft command of TestEightCommandsOnALeftLock:
+// it refreshes the .weft of the app WEFT_LOCK_HELPER names.
+func TestLockHelperProcess(t *testing.T) {
+	app := os.Getenv("WEFT_LOCK_HELPER")
+	if app == "" {
+		t.Skip("run by TestEightCommandsOnALeftLock")
+	}
+	if _, err := refreshWeft(app, devVersion); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+// A rename whose folder is gone because another command finished the same
+// unpack meanwhile is no error when .weft is then current; any other failure
+// of the unpack is a sentence, not the system's words alone.
+func TestUnpackWhoseFolderWentMeanwhile(t *testing.T) {
+	app := t.TempDir()
+	folderBundle(t, map[string]string{"weft/a": "one"})
+	if _, err := refreshWeft(app, devVersion); err != nil {
+		t.Fatal(err)
+	}
+	bundle := folderBundle(t, map[string]string{"weft/a": "two"})
+	b, err := openBundle()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = bundle
+	hash, err := bundleHash(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := renameDir
+	t.Cleanup(func() { renameDir = old })
+	renameDir = func(from, to string) error {
+		// Another command finished: .weft is current, and what this one was
+		// about to move is gone.
+		os.WriteFile(filepath.Join(app, ".weft", "VERSION"), []byte(devVersion+"\n"+hash+"\n"), 0o644)
+		return &os.LinkError{Op: "rename", Old: from, New: to, Err: fs.ErrNotExist}
+	}
+	if _, err := refreshWeft(app, devVersion); err != nil {
+		t.Errorf("another command finished the unpack: %v", err)
+	}
+
+	folderBundle(t, map[string]string{"weft/a": "three"})
+	renameDir = func(from, to string) error {
+		return &os.LinkError{Op: "rename", Old: from, New: to, Err: fs.ErrNotExist}
+	}
+	_, err = refreshWeft(app, devVersion)
+	if err == nil || strings.HasPrefix(err.Error(), "rename ") || !strings.HasSuffix(err.Error(), "run the command again") {
+		t.Errorf("a rename that failed: %v, want a sentence", err)
+	}
+}
+
+// The folders an unpack that was killed left beside .weft (.weft-new-* and
+// .weft-old-*, which only weft makes, under its lock) are removed by the
+// next unpack, under the lock; a folder of another name is left alone.
+func TestUnpackRemovesWhatAKilledOneLeft(t *testing.T) {
+	app := t.TempDir()
+	folderBundle(t, map[string]string{"weft/a": "one"})
+	for _, d := range []string{".weft-new-123", ".weft-old-456/.weft", ".weft-mine", ".weft-new-x"} {
+		os.MkdirAll(filepath.Join(app, d), 0o755)
+		os.WriteFile(filepath.Join(app, d, "f"), []byte("x"), 0o644)
+	}
+	if _, err := refreshWeft(app, devVersion); err != nil {
+		t.Fatal(err)
+	}
+	for d, want := range map[string]bool{".weft-new-123": false, ".weft-old-456": false, ".weft-mine": true, ".weft-new-x": true, ".weft": true} {
+		if got := exists(t, filepath.Join(app, d)); got != want {
+			t.Errorf("%s there: %v, want %v", d, got, want)
+		}
 	}
 }

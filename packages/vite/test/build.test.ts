@@ -338,6 +338,95 @@ describe('buildSite on a site with islands', () => {
   })
 })
 
+describe('buildSite with runtime pages', () => {
+  let out: string
+  let manifest: Manifest
+  const read = (p: string) => readFileSync(join(out, p), 'utf8')
+
+  beforeAll(async () => {
+    out = tempDir()
+    manifest = await buildSite({ root: fixture('runtime-pages'), outDir: out })
+  })
+
+  it('runtime page builds one shell', () => {
+    // In the folder that keeps the bracket names: a colon is no file name.
+    const html = read('pages/products/[id]/index.html')
+    expect(html).toContain('<html lang="en" data-weft-route="/products/:id">')
+    // Every param is the empty string, as dev renders it too.
+    expect(html).toContain('<h1>Product []</h1>')
+    // An island as on any page.
+    expect(html).toContain('<weft-island data-id="Counter"')
+    expect(scripts(html).filter((a) => typeOf(a) === 'module')).toHaveLength(1)
+    expect(read('pages/docs/[...rest]/index.html')).toContain('<html lang="en" data-weft-route="/docs/:...rest">')
+    expect(read('pages/docs/[...rest]/index.html')).toContain('<h1>Docs []</h1>')
+    expect(read('pages/[section]/[id]/index.html')).toContain('<h1>Section [] []</h1>')
+    expect(read('pages/products/[id]/edit/index.html')).toContain('data-weft-route="/products/:id/edit"')
+    expect(files(out).filter((f) => f.startsWith('pages/products/[id]/'))).toEqual([
+      'pages/products/[id]/edit/index.html',
+      'pages/products/[id]/edit/index.html.br',
+      'pages/products/[id]/edit/index.html.gz',
+      'pages/products/[id]/index.html',
+      'pages/products/[id]/index.html.br',
+      'pages/products/[id]/index.html.gz',
+    ])
+    expect(brotliDecompressSync(readFileSync(join(out, 'pages/products/[id]/index.html.br'))).toString()).toBe(html)
+    expect(manifest.files['/pages/products/[id]/index.html']).toEqual({
+      etag: etagOf(Buffer.from(html)),
+      type: 'text/html; charset=utf-8',
+      br: true,
+      gz: true,
+      immutable: false,
+    })
+    // Early Hints by its pattern, as routes.json names it.
+    expect(manifest.hints['/products/:id']).toEqual(expect.arrayContaining([expect.stringMatching(/rel=modulepreload$/)]))
+  })
+
+  it('marks no other page with a route', () => {
+    for (const p of ['index', 'products/new', 'blog/first']) {
+      expect(read(`pages/${p}/index.html`), p).toContain('<html lang="en">')
+      expect(read(`pages/${p}/index.html`), p).not.toContain('data-weft-route')
+    }
+  })
+
+  it('routes.json orders patterns by static segments, after every exact page', () => {
+    const routes = JSON.parse(read('routes.json')) as RoutesJson
+    expect(routes).toEqual({
+      pages: [
+        { path: '/', html: 'pages/index/index.html', islands: [] },
+        { path: '/products/new', html: 'pages/products/new/index.html', islands: [] },
+        { path: '/blog/first', html: 'pages/blog/first/index.html', islands: [] },
+        { path: '/products/:id/edit', html: 'pages/products/[id]/edit/index.html', islands: [], runtime: true },
+        { path: '/products/:id', html: 'pages/products/[id]/index.html', islands: ['Counter', 'Product'], runtime: true },
+        { path: '/docs/:...rest', html: 'pages/docs/[...rest]/index.html', islands: [], runtime: true },
+        { path: '/:section/:id', html: 'pages/[section]/[id]/index.html', islands: [], runtime: true },
+      ],
+      notFound: null,
+      app: null,
+    })
+    // The other entries have no runtime key at all.
+    expect(read('routes.json')).not.toContain('"runtime": false')
+  })
+})
+
+describe('buildSite with a runtime page whose shell another page writes', { timeout: 30_000 }, () => {
+  it('refuses both in one sentence, naming the file', async () => {
+    const root = join(tempDir(), 'site')
+    mkdirSync(join(root, 'pages/blog'), { recursive: true })
+    symlinkSync(fileURLToPath(new URL('../node_modules', import.meta.url)), join(root, 'node_modules'))
+    // A value of getPaths that is literally [id] makes the shell's own file.
+    writeFileSync(
+      join(root, 'pages/blog/[slug].vue'),
+      "<script lang=\"ts\">\nexport const getPaths = async () => [{ slug: '[id]' }]\n</script>\n\n<template><p>post</p></template>\n",
+    )
+    writeFileSync(join(root, 'pages/blog/[id].vue'), '<script lang="ts">\nexport const runtime = true\n</script>\n\n<template><p>shell</p></template>\n')
+    const out = join(tempDir(), 'dist')
+    await expect(buildSite({ root, outDir: out })).rejects.toThrow(
+      new Error('pages "blog/[slug].vue" and "blog/[id].vue" both write pages/blog/[id]/index.html; rename one.'),
+    )
+    expect(existsSync(out)).toBe(false)
+  })
+})
+
 describe('buildSite on a site without islands', () => {
   let out: string
   let app: string

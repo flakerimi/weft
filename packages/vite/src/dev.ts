@@ -7,7 +7,8 @@
 // build.
 import { realpathSync, statSync } from 'node:fs'
 import { stat } from 'node:fs/promises'
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import { request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http'
+import { request as httpsRequest } from 'node:https'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer, isCSSRequest, normalizePath, type Plugin, type ViteDevServer } from 'vite'
@@ -15,7 +16,7 @@ import { contentType, CSS_MODULE, dropStaticComments } from './build.ts'
 import { siteConfig } from './config.ts'
 import { escapeHTML, iconTags, pageHTML, readStyles, THEMES, VIEW_TRANSITION, type Theme } from './document.ts'
 import { renderPage } from './render.ts'
-import { discoverRoutes, expandRoutes, type ExpandedRoute, type PageModule, type Route } from './routes.ts'
+import { byPattern, cleanPath, decodePath, discoverRoutes, expandRoutes, matchPattern, refuseSameShape, type ExpandedRoute, type PageModule, type Route } from './routes.ts'
 
 export interface DevOptions {
   /** The site's folder, which holds `pages/`. Its `package.json` may be in a folder above. */
@@ -46,8 +47,9 @@ const RESOLVED_ISLANDS = '\0' + ISLANDS
 
 /**
  * Start the dev server for the site at `root`. It renders a page whose path
- * is requested then (a dynamic page's `getPaths()` is called each time), an
- * unknown path as `pages/404.vue` with status 404 or a plain 404, and a page
+ * is requested then (a dynamic page's `getPaths()` is called each time), a
+ * path a runtime page's pattern matches as that page's shell, as the build
+ * writes it, an unknown path as `pages/404.vue` with status 404 or a plain 404, and a page
  * that fails as a 500 that names its file; serves the files the pages it has
  * rendered wrote with `useFile`; proxies `/api` to `api`; and
  * sends a full reload to the browser when a file under `root` changes.
@@ -102,6 +104,9 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
     },
     configureServer(vite) {
       server = vite
+      // Before Vite's own middleware, its proxy included: what warp.Serve
+      // would send to the API, as sent, and the escape net/http refuses.
+      vite.middlewares.use((req, res, next) => (asServed(req, res, opts.api) ? undefined : next()))
       // After Vite's own middleware (its modules, public/ and the site's files): what is left is a page.
       return () => vite.middlewares.use((req, res, next) => void pages(req, res, next))
     },
@@ -158,17 +163,27 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
 
   const load = (file: string) => server.ssrLoadModule(`/pages/${file}`) as Promise<PageModule>
 
-  /** The page at `path`: a static one, else the first dynamic page whose getPaths() gives it. */
-  async function find(routes: Route[], path: string, failing: { file: string }): Promise<ExpandedRoute | null> {
+  /**
+   * The page at `path`: a static one, else the first dynamic page whose
+   * getPaths() gives it. Without one, the runtime pages too, in the order
+   * warp.Serve tries them, for the caller to try after the files pages wrote.
+   */
+  async function find(routes: Route[], path: string, failing: { file: string }): Promise<{ route: ExpandedRoute | null; runtime: ExpandedRoute[] }> {
     const pages = routes.filter((r) => r.file !== '404.vue')
     const page = pages.find((r) => !r.dynamic && r.path === path)
-    if (page) return { path, file: page.file, params: {} }
+    if (page) return { route: { path, file: page.file, params: {} }, runtime: [] }
+    const runtime: ExpandedRoute[] = []
     for (const r of pages.filter((r) => r.dynamic)) {
       failing.file = r.file
-      const found = (await expandRoutes([r], load)).find((e) => e.path === path)
-      if (found) return found
+      const expanded = await expandRoutes([r], load)
+      const found = expanded.find((e) => !e.runtime && e.path === path)
+      if (found) return { route: found, runtime: [] }
+      runtime.push(...expanded.filter((e) => e.runtime))
     }
-    return null
+    // Refused as the build refuses them: two runtime pages of one shape.
+    failing.file = ''
+    refuseSameShape(runtime)
+    return { route: null, runtime: runtime.sort(byPattern) }
   }
 
   async function render(route: ExpandedRoute): Promise<string> {
@@ -186,6 +201,7 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
       fonts: [],
       css: [baseCSS, page.css, VIEW_TRANSITION].filter(Boolean).join('\n') + '\n',
       stylesheet: null,
+      route: route.runtime ? route.path : undefined,
       tags: [
         '<script type="module" src="/@vite/client"></script>',
         ...(page.islands.length ? [`<script type="module" src="/@id/__x00__${ISLANDS}?i=${islands}"></script>`] : []),
@@ -200,9 +216,12 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
     try {
       await freshen()
       const routes = await discoverRoutes(pagesDir)
-      let route = await find(routes, path, failing)
+      const found = await find(routes, path, failing)
+      let route = found.route
       const file = written.get(exact)
       if (!route && file !== undefined) return { status: 200, type: contentType(exact), body: file }
+      // A runtime page's shell, rendered as the build renders it: every param empty.
+      route ??= found.runtime.find((r) => matchPattern(r.path, path) !== null) ?? null
       const status = route ? 200 : 404
       if (!route && routes.some((r) => r.file === '404.vue')) route = { path, file: '404.vue', params: {} }
       if (!route) return { status: 404, type: 'text/plain; charset=utf-8', body: '404 page not found\n' }
@@ -221,12 +240,11 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
 
   async function pages(req: IncomingMessage, res: ServerResponse, next: (e?: unknown) => void) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next()
-    let exact: string
-    try {
-      exact = decodeURIComponent(new URL(req.url ?? '/', 'http://weft.invalid').pathname)
-    } catch {
-      return next()
-    }
+    // The path as asked for, decoded as net/http decodes it: not read as a
+    // URL, where //api/x would be the host api, and with an escape that is
+    // not UTF-8 (%FF) kept as it is, so it is a param like any other; then
+    // cleaned of dot segments as warp.Serve cleans it (%2e%2e too).
+    const exact = cleanPath(decodePath((req.url ?? '/').replace(/[?#][\s\S]*$/, '')))
     // A page at its path, with or without a trailing slash, as warp.Serve has it.
     const path = exact.length > 1 && exact.endsWith('/') ? exact.slice(0, -1) : exact
     const done = queue.then(() => answer(path, exact))
@@ -254,6 +272,41 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
   }
   const url = server.resolvedUrls?.local[0] ?? `http://${opts.host ?? 'localhost'}:${server.config.server.port}/`
   return { url, close: () => server.close() }
+}
+
+/**
+ * Answers a request as warp.Serve's side of net/http would before any page,
+ * and says whether it did: a path with a % that starts no escape is 400, as
+ * net/http refuses it; a path whose decoded form, before any cleaning, is
+ * /api or under it goes to `api` as it was sent (`/api/../login`,
+ * `/%61pi/x`), where Vite's proxy would clean it or miss it. A WebSocket's
+ * upgrade still goes through Vite's proxy.
+ */
+function asServed(req: IncomingMessage, res: ServerResponse, api: string | undefined): boolean {
+  const raw = (req.url ?? '/').replace(/[?#][\s\S]*$/, '')
+  if (/%(?![0-9a-fA-F]{2})/.test(raw)) {
+    res.statusCode = 400
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+    res.end('400 Bad Request')
+    return true
+  }
+  const path = decodePath(raw)
+  if (!api || (path !== '/api' && !path.startsWith('/api/'))) return false
+  const target = new URL(api)
+  const send = target.protocol === 'https:' ? httpsRequest : httpRequest
+  const up = send(
+    { protocol: target.protocol, hostname: target.hostname, port: target.port, method: req.method, path: target.pathname.replace(/\/$/, '') + (req.url ?? '/'), headers: req.headers },
+    (answer) => {
+      res.writeHead(answer.statusCode ?? 502, answer.headers)
+      answer.pipe(res)
+    },
+  )
+  up.on('error', () => {
+    if (!res.headersSent) res.statusCode = 502
+    res.end()
+  })
+  req.pipe(up)
+  return true
 }
 
 const inside = (dir: string, file: string) => resolve(file).startsWith(dir.endsWith(sep) ? dir : dir + sep)

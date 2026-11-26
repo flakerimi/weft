@@ -3,11 +3,12 @@
  *
  * A Table's rows: from `rows()`, sorted (stably) and sliced to the page on
  * the client; or from `fetch()`, asked for the page in the wire format
- * (`{ page, perPage, sort }`, sort absent when none) whenever one of those
- * values changes while `active()` (the Table passes "mounted", so the
- * server and the first render draw a busy table and agree). Only the
- * answer to the latest question is kept; a rejection is kept in `failed`
- * and passed to `onError`. `load()` asks again.
+ * (`{ page, per_page, sort, q, filter }`, each of the last three absent
+ * when none) whenever one of those values changes while `active()` (the
+ * Table passes "mounted", so the server and the first render draw a busy
+ * table and agree). Only the answer to the latest question is kept; a
+ * rejection is kept in `failed` and passed to `onError`. `load()` asks
+ * again.
  *
  * Each row comes with its key: `rowKey()` (a property name or a function),
  * else its `id`, else its place (in `rows`, or `<page>:<index>` for a
@@ -17,11 +18,19 @@
  *
  * `perPage` resolves to the option, or 20 with `fetch`; `currentPage` keeps
  * the page inside the pages there are (on the client; with fetch the
- * server's total is not known before the answer). `busy` is `loading()`,
- * or a fetch under way, or no answer yet.
+ * server's total is not known before the answer). When the latest answer
+ * has no rows and a total whose last page is before the page asked (the
+ * last row of the last page was deleted, or the rows shrank by more), the
+ * page is moved to that last page through `setPage`, which asks once more;
+ * an answer for a page that is the last, or one that is stale, moves
+ * nothing, so a server that keeps answering empty cannot make it loop. If
+ * the parent does not take the move (it binds the page one-way and keeps
+ * it), the page it keeps is not asked again with the same query: it is
+ * shown empty. Any other page, query or `load()` asks.
+ * `busy` is `loading()`, or a fetch under way, or no answer yet.
  */
-import { computed, ref, shallowRef, watch, type ComputedRef, type Ref, type ShallowRef } from 'vue'
-import { keyOf, sortRows, valueOf, type RowKey, type TableColumn, type TableFetch } from './table.ts'
+import { computed, nextTick, ref, shallowRef, watch, type ComputedRef, type Ref, type ShallowRef } from 'vue'
+import { activeFilters, keyOf, sortRows, valueOf, type RowKey, type TableColumn, type TableFetch, type TableQuery } from './table.ts'
 
 export interface TableDataOptions<T> {
   rows: () => T[] | undefined
@@ -31,6 +40,10 @@ export interface TableDataOptions<T> {
   sort: Readonly<Ref<string | null>>
   page: Readonly<Ref<number>>
   perPage: () => number | undefined
+  /** The search text sent as `q`. */
+  search?: () => string | undefined
+  /** The filters sent as `filter[key]=value`. */
+  filters?: () => Record<string, string> | undefined
   loading: () => boolean
   active: () => boolean
   /** Rows can be chosen, so they need keys of their own. */
@@ -38,6 +51,8 @@ export interface TableDataOptions<T> {
   /** The locale text sorts in (a WeftProvider's); default en-US. */
   locale?: () => string
   onError?: (error: unknown) => void
+  /** Moves to another page, as choosing it in the Pagination does. */
+  setPage?: (page: number) => void
 }
 
 export interface TableEntry<T> {
@@ -66,16 +81,49 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
   const perPage = computed(() => opts.perPage() ?? (opts.fetch() ? 20 : undefined))
 
   let asked = 0
-  async function load() {
+  // A move to the last page the parent has not taken: the page answered as
+  // past the end, the total and the rest of the query, so that the same
+  // question is not asked again.
+  let moved: { from: number; total: number; rest: string } | null = null
+  async function ask() {
     const fetch = opts.fetch()
     if (!fetch) return
     const mine = ++asked
-    fetching.value = true
     failed.value = null
-    const query = { page: opts.page.value, perPage: perPage.value!, ...(opts.sort.value ? { sort: opts.sort.value } : {}) }
+    const q = opts.search?.()
+    const filters = activeFilters(opts.filters?.())
+    const query: TableQuery = {
+      page: opts.page.value,
+      per_page: perPage.value!,
+      ...(opts.sort.value ? { sort: opts.sort.value } : {}),
+      ...(q ? { q } : {}),
+      ...(filters ? { filter: filters } : {}),
+    }
+    const rest = JSON.stringify({ ...query, page: undefined })
+    if (moved?.rest !== rest) moved = null
+    if (moved && query.page === moved.from) {
+      // The parent kept a page past the last: show it empty, ask nothing.
+      remote.value = { items: [], total: moved.total }
+      moved = null
+      fetching.value = false
+      return
+    }
+    fetching.value = true
     try {
       const answer = await fetch(query)
       if (mine !== asked) return
+      const last = Math.max(1, Math.ceil(answer.total / Math.max(1, query.per_page)))
+      if (answer.items.length === 0 && answer.total > 0 && query.page > last && opts.setPage) {
+        const kept = (moved = { from: query.page, total: answer.total, rest })
+        opts.setPage(last) // the watcher asks for it, once
+        // A parent that took the move has the page by the next tick; one that
+        // keeps its own has put it back by then.
+        void nextTick(() => {
+          if (moved === kept && opts.page.value === last) moved = null
+        })
+        return
+      }
+      if (moved?.total !== answer.total) moved = null
       remote.value = { items: answer.items, total: answer.total }
     } catch (error) {
       if (mine !== asked) return
@@ -85,11 +133,16 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
       if (mine === asked) fetching.value = false
     }
   }
+  /** Asks again, whatever was learned of the last page. */
+  function load() {
+    moved = null
+    return ask()
+  }
   // Primitive sources: asking again only when a value of the query changes.
   watch(
-    [opts.active, () => opts.page.value, () => perPage.value, () => opts.sort.value, opts.fetch],
+    [opts.active, () => opts.page.value, () => perPage.value, () => opts.sort.value, () => opts.search?.(), () => JSON.stringify(activeFilters(opts.filters?.()) ?? {}), opts.fetch],
     ([on]) => {
-      if (on) void load()
+      if (on) void ask()
     },
     { immediate: true },
   )

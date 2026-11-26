@@ -38,21 +38,67 @@ type Stopper interface {
 	Stop(ctx context.Context) error
 }
 
-// Route describes one registered route. Path has /api in front; In and Out
-// are nil for a route registered with Handle.
+// Route describes one registered route. Module is the name of the module
+// whose Register added it, empty for a route added outside one. Name is the
+// one Name gave, or one made from the method and path. Path has /api in
+// front; In and Out are nil for a route registered with Handle. Permission
+// is the one Permission recorded.
 type Route struct {
-	Method, Path string
-	In, Out      reflect.Type
-	Status       int
+	Module, Name, Method, Path string
+	In, Out                    reflect.Type
+	Status                     int
+	Permission                 string
 }
 
 // RouteOption changes one route.
 type RouteOption func(*routeConfig)
 
 type routeConfig struct {
-	status    int
-	statusSet bool // Status was given
-	wraps     []func(http.Handler) http.Handler
+	status     int
+	statusSet  bool // Status was given
+	name       string
+	nameSet    bool // Name was given
+	permission string
+	wraps      []func(http.Handler) http.Handler
+	requires   []required
+}
+
+// required is a module a route needs, and what makes it, for the sentence.
+type required struct{ module, constructor string }
+
+// Requires records that the route needs the module named module, made by
+// constructor (as "auth.Module()"), for an option that guards a route with a
+// module's help, such as auth.Can, which is made before any app exists. An
+// app that lists no module of that name, when Err is asked, has a mistake:
+// route "GET /x" needs the "auth" module; list auth.Module() in
+// app/modules.go.
+func Requires(module, constructor string) RouteOption {
+	return func(c *routeConfig) { c.requires = append(c.requires, required{module, constructor}) }
+}
+
+// Name names the route within its module, in place of the name made from its
+// method and path. Two routes of one module with one name are a mistake,
+// reported by Err; routes added outside a module are not checked.
+func Name(name string) RouteOption {
+	return func(c *routeConfig) { c.name, c.nameSet = name, true }
+}
+
+// Permission records the permission the route needs, for Routes to report.
+// It does not guard the route: the module that enforces permissions supplies
+// an option that does, built with Options.
+func Permission(permission string) RouteOption {
+	return func(c *routeConfig) { c.permission = permission }
+}
+
+// Options makes one route option out of several, applied in the order given,
+// so a package can write an option that, say, records a permission and
+// guards the route with With.
+func Options(opts ...RouteOption) RouteOption {
+	return func(c *routeConfig) {
+		for _, opt := range opts {
+			opt(c)
+		}
+	}
 }
 
 // With puts mw around this route alone, inside every Wrap. The first With
@@ -73,33 +119,58 @@ func Status(code int) RouteOption {
 type App struct {
 	cfg Config
 	mux *http.ServeMux
+	xo  *http.CrossOriginProtection // shared by every request
 
-	mu       sync.Mutex
-	modules  []Module
-	names    map[string]bool
-	routes   []Route
-	wraps    []func(http.Handler) http.Handler
-	mistakes []error
-	started  bool
+	mu         sync.Mutex
+	modules    []Module
+	names      map[string]bool
+	current    string               // the module whose Register is running
+	routeNames map[string]routeName // a module's name and a route's name to the route
+	needs      []routeNeed          // the modules routes need, by Requires
+	routes     []Route
+	plans      []*plan // each route's binding plan, beside routes; nil for Handle
+	wraps      []func(http.Handler) http.Handler
+	provided   map[reflect.Type]any
+	badConfig  []error // the configuration's problems New found, beside cfg.Err
+	mistakes   []error // the registration mistakes
+	started    bool
+	running    []Module // the modules Start started, which Stop stops
 }
 
 // New returns an app configured by cfg, with no modules. A mistake in cfg is
 // reported by Err, and by Run.
 func New(cfg Config) *App {
-	return &App{cfg: cfg.withDefaults(), mux: http.NewServeMux(), names: map[string]bool{}}
+	xo, bad := cfg.xo, []string(nil)
+	if xo == nil || !slices.Equal(cfg.TrustedOrigins, cfg.xoFor) {
+		xo, bad = newOriginProtection(cfg.TrustedOrigins) // a Config made by hand, or changed since
+	}
+	a := &App{
+		cfg:        cfg.withDefaults(),
+		mux:        http.NewServeMux(),
+		xo:         xo,
+		names:      map[string]bool{},
+		routeNames: map[string]routeName{},
+		provided:   map[reflect.Type]any{},
+	}
+	for _, o := range bad {
+		a.badConfig = append(a.badConfig, fmt.Errorf("warp: TrustedOrigins has %q; write each origin like https://admin.example.com.", o))
+	}
+	return a
 }
 
 // Config returns the app's configuration, with its defaults filled in.
 func (a *App) Config() Config { return a.cfg }
 
-// Use registers each module at once, in order. A mistake is reported by Err.
+// Use registers each module at once, in order. A module's Register may call
+// Use itself; while the inner module registers, its routes are its own. A
+// mistake is reported by Err.
 func (a *App) Use(modules ...Module) {
 	for _, m := range modules {
 		name := m.Name()
 		a.mu.Lock()
 		if a.started {
 			a.mu.Unlock()
-			a.fail("Use was called after the app started serving; list every module before Serve.")
+			a.fail("Use was called after the app started; list every module before Serve or Start.")
 			return
 		}
 		if a.names[name] {
@@ -110,10 +181,103 @@ func (a *App) Use(modules ...Module) {
 		a.names[name] = true
 		a.modules = append(a.modules, m)
 		a.mu.Unlock()
-		if err := m.Register(a); err != nil {
+		if err := a.register(m); err != nil {
 			a.fail("module %q could not register: %w", name, err)
 		}
 	}
+}
+
+// routeNeed is a module a route needs.
+type routeNeed struct {
+	route string
+	required
+}
+
+// needsMissing returns a mistake for each module a route needs that the app
+// does not list. a.mu is held.
+func (a *App) needsMissing() []error {
+	var errs []error
+	for _, n := range a.needs {
+		if !a.names[n.module] {
+			errs = append(errs, fmt.Errorf("warp: route %q needs the %q module; list %s in app/modules.go.", n.route, n.module, n.constructor))
+		}
+	}
+	return errs
+}
+
+// routeName is the route a module's route name was given to, and whether it
+// was given with Name.
+type routeName struct {
+	route string
+	named bool
+}
+
+// Module returns the name of the module whose Register is running, or "" when
+// none is: the module a route added now belongs to. A package that registers
+// routes for a module, as data.Resource does, reads it to name them.
+func (a *App) Module() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.current
+}
+
+// register runs m's Register with m as the current module.
+func (a *App) register(m Module) error {
+	a.mu.Lock()
+	outer := a.current
+	a.current = m.Name()
+	a.mu.Unlock()
+	defer func() {
+		a.mu.Lock()
+		a.current = outer
+		a.mu.Unlock()
+	}()
+	return m.Register(a)
+}
+
+// Provide stores value as the one value of its Go type T, for a later module
+// to get with Need. A module calls it from its Register. A second value of
+// one type, or a Provide after the app started, is a mistake, reported by
+// Err.
+func Provide[T any](app *App, value T) {
+	t := reflect.TypeFor[T]()
+	app.mu.Lock()
+	_, taken := app.provided[t]
+	started := app.started
+	if !started && !taken {
+		app.provided[t] = value
+	}
+	app.mu.Unlock()
+	switch {
+	case started:
+		app.fail("Provide was called after the app started; provide every value in a module's Register.")
+	case taken:
+		app.fail("two modules provide a %s; list only one of them.", t)
+	}
+}
+
+// Need returns the value of type T that the module named module provided.
+// When there is none it returns the zero T and records a mistake, reported
+// by Err, that says to list that module first; after the app started it is
+// also logged. A module wraps it in a typed function of its own, such as
+// data.For(app).
+func Need[T any](app *App, module string) T {
+	t := reflect.TypeFor[T]()
+	app.mu.Lock()
+	v, ok := app.provided[t]
+	current := app.current
+	app.mu.Unlock()
+	if !ok {
+		if current != "" {
+			app.fail("module %q needs the %q module; list %s.Module() before it in app/modules.go.", current, module, module)
+		} else {
+			app.fail("the app needs the %q module; list %s.Module() in app/modules.go.", module, module)
+		}
+		var zero T
+		return zero
+	}
+	value, _ := v.(T) // a nil interface value is stored as nil
+	return value
 }
 
 // Handle registers h at pattern, which is a method, a space and a path
@@ -124,23 +288,24 @@ func (a *App) Handle(pattern string, h http.Handler, opts ...RouteOption) {
 	if i := strings.IndexAny(pattern, " \t"); i >= 0 {
 		method, path = pattern[:i], strings.TrimLeft(pattern[i:], " \t")
 	}
-	a.route(method, path, nil, nil, 0, func(int) http.Handler { return h }, opts, nil)
+	a.route(method, path, nil, nil, nil, 0, func(int) http.Handler { return h }, opts, nil)
 }
 
 // route registers the handler mk makes at /api plus path, for method or, when
 // method is empty, for every method. Handle and the typed routes register
-// through it. mk is given the status the route answers with: status, unless a
-// Status option changes it, and 204 when out is None. mistakes are the ones
-// the caller found in the route's input; each is reported, after the route's
-// own, and any mistake leaves the route unregistered. A route registered
-// after the app started reports that alone.
-func (a *App) route(method, path string, in, out reflect.Type, status int, mk func(status int) http.Handler, opts []RouteOption, mistakes []string) {
+// through it; p is a typed route's binding plan, kept for Describe, and nil
+// for Handle. mk is given the status the route answers with: status, unless
+// a Status option changes it, and 204 when out is None. mistakes are the
+// ones the caller found in the route's input; each is reported, after the
+// route's own, and any mistake leaves the route unregistered. A route
+// registered after the app started reports that alone.
+func (a *App) route(method, path string, in, out reflect.Type, p *plan, status int, mk func(status int) http.Handler, opts []RouteOption, mistakes []string) {
 	name := strings.TrimSpace(method + " " + path)
 	a.mu.Lock()
 	started := a.started
 	a.mu.Unlock()
 	if started {
-		a.fail("route %q was registered after the app started serving; register every route before Serve.", name)
+		a.fail("route %q was registered after the app started; register every route before Serve or Start.", name)
 		return
 	}
 	ok := true
@@ -160,11 +325,33 @@ func (a *App) route(method, path string, in, out reflect.Type, status int, mk fu
 		a.fail("%s: Status(%d) is not a status a route can answer with; use one from 200 to 599.", name, rc.status)
 		ok = false
 	}
+	if rc.nameSet && rc.name == "" {
+		a.fail(`Name("") is empty; give the route a name.`)
+		ok = false
+	}
 	for _, m := range mistakes {
 		a.fail("%s: %s", name, m)
 		ok = false
 	}
 	if !ok {
+		return
+	}
+	if !rc.nameSet {
+		rc.name = defaultName(method, path)
+	}
+	// Names are unique within a module. The same pattern twice is left to the
+	// mux, whose reason says more.
+	a.mu.Lock()
+	module := a.current
+	key := module + "\x00" + rc.name
+	other, clash := a.routeNames[key]
+	a.mu.Unlock()
+	if module != "" && clash && other.route != name {
+		if other.named && rc.nameSet {
+			a.fail("module %q has two routes named %q (%s and %s); give them different names.", module, rc.name, other.route, name)
+		} else {
+			a.fail("module %q has two routes named %q (%s and %s); give one a warp.Name.", module, rc.name, other.route, name)
+		}
 		return
 	}
 	if out == noneType {
@@ -176,12 +363,50 @@ func (a *App) route(method, path string, in, out reflect.Type, status int, mk fu
 	}
 	pattern := strings.TrimSpace(method + " /api" + path)
 	if err := register(a.mux, pattern, h); err != nil {
-		a.fail("route %q cannot be registered: %v", name, err)
+		if m := conflictWith.FindStringSubmatch(err.Error()); m != nil {
+			a.fail("route %q conflicts with %s, registered before it; give one of them another path.", name, strings.Replace(m[1], " /api/", " /", 1))
+		} else {
+			a.fail("route %q cannot be registered: %v", name, err)
+		}
 		return
 	}
 	a.mu.Lock()
-	a.routes = append(a.routes, Route{Method: method, Path: "/api" + path, In: in, Out: out, Status: rc.status})
+	if module != "" {
+		a.routeNames[key] = routeName{name, rc.nameSet}
+	}
+	for _, req := range rc.requires {
+		a.needs = append(a.needs, routeNeed{name, req})
+	}
+	if len(a.routes) == 0 {
+		appsWithRoutes.Add(1) // the package-level Serve cannot describe it
+	}
+	a.routes = append(a.routes, Route{
+		Module: module, Name: rc.name, Method: method, Path: "/api" + path,
+		In: in, Out: out, Status: rc.status, Permission: rc.permission,
+	})
+	a.plans = append(a.plans, p)
 	a.mu.Unlock()
+}
+
+// defaultName is the name of a route given no Name: the static segments of
+// its path joined by _, in lower case with - turned to _, and the method and
+// _ in front unless the method is GET or empty. Wildcards are left out; a path
+// of wildcards alone is index under GET, and the method alone otherwise.
+func defaultName(method, path string) string {
+	var parts []string
+	for seg := range strings.SplitSeq(path, "/") {
+		if seg == "" || strings.HasPrefix(seg, "{") {
+			continue
+		}
+		parts = append(parts, strings.ReplaceAll(strings.ToLower(seg), "-", "_"))
+	}
+	if method != "" && method != http.MethodGet {
+		parts = append([]string{strings.ToLower(method)}, parts...)
+	}
+	if len(parts) == 0 {
+		return "index"
+	}
+	return strings.Join(parts, "_")
 }
 
 // registeredAt is where the mux says a pattern was registered, which is
@@ -190,6 +415,10 @@ var registeredAt = regexp.MustCompile(` \(registered at [^)]*\)`)
 
 // register adds pattern to mux, turning the mux's panic into an error of one
 // line.
+// conflictWith reads the other pattern from the mux's reason for refusing
+// one that answers some of the same requests.
+var conflictWith = regexp.MustCompile(`conflicts with pattern "([^"]+)"`)
+
 func register(mux *http.ServeMux, pattern string, h http.Handler) (err error) {
 	defer func() {
 		if v := recover(); v != nil {
@@ -207,12 +436,19 @@ func (a *App) Wrap(mw func(http.Handler) http.Handler) {
 	a.mu.Lock()
 	if a.started {
 		a.mu.Unlock()
-		a.fail("Wrap was called after the app started serving; wrap before Serve.")
+		a.fail("Wrap was called after the app started; wrap before Serve or Start.")
 		return
 	}
 	defer a.mu.Unlock()
 	a.wraps = append(a.wraps, mw)
 }
+
+// Mistake records a registration mistake found by a package outside the core,
+// such as a module that checks its own types: one sentence that names the
+// thing and says what to do. It is reported with the others by Err, Start and
+// Serve, with "warp: " in front. A mistake recorded after the app started is
+// also logged, since nothing reads Err then.
+func (a *App) Mistake(format string, args ...any) { a.fail(format, args...) }
 
 // fail records a registration mistake, with warp: in front. One recorded
 // after the app started is logged too, since Run has checked Err by then.
@@ -231,7 +467,16 @@ func (a *App) fail(format string, args ...any) {
 func (a *App) Err() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return errors.Join(append([]error{a.cfg.Err()}, a.mistakes...)...)
+	all := append([]error{a.cfg.Err()}, a.badConfig...)
+	return errors.Join(append(append(all, a.mistakes...), a.needsMissing()...)...)
+}
+
+// registrationErr returns the registration mistakes alone, joined, leaving
+// out the configuration's problems; nil when there is none.
+func (a *App) registrationErr() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return errors.Join(append(slices.Clone(a.mistakes), a.needsMissing()...)...)
 }
 
 // Routes returns every route, in the order registered.
@@ -242,8 +487,13 @@ func (a *App) Routes() []Route {
 }
 
 // Handler returns the API alone, at /api/..., inside every Wrap given so far.
+// A state-changing request from another site is a 403 before any Wrap runs.
 // A path no route has is a 404 and a method a route does not take is a 405,
-// both in the error shape; a panic is logged and answered as a 500.
+// both in the error shape, and so is the redirect of a path that is not clean
+// (/api/a//b, a {rest...} route asked without its tail) to the clean one,
+// with its status and Location. A panic is logged and answered as a 500.
+// Every answer carries Cache-Control: no-store, so no cache keeps what a
+// session sees, unless the handler sets a Cache-Control of its own.
 func (a *App) Handler() http.Handler {
 	a.mu.Lock()
 	wraps := slices.Clone(a.wraps)
@@ -252,14 +502,25 @@ func (a *App) Handler() http.Handler {
 	for i := len(wraps) - 1; i >= 0; i-- {
 		h = wraps[i](h)
 	}
-	return recoverPanics(h)
+	return noStore(recoverPanics(refuseCrossSite(a.xo, h)))
+}
+
+// noStore sets Cache-Control: no-store on the answer before h runs, which h
+// may replace.
+func noStore(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if w.Header().Get("Cache-Control") == "" {
+			w.Header().Set("Cache-Control", "no-store")
+		}
+		h.ServeHTTP(w, r)
+	})
 }
 
 // dispatch serves a request through the mux, answering its own 404 and 405
 // in the error shape.
 func (a *App) dispatch(w http.ResponseWriter, r *http.Request) {
 	h, pattern := a.mux.Handler(r)
-	if pattern != "" {
+	if pattern != "" && !muxRedirect(h) {
 		a.mux.ServeHTTP(w, r)
 		return
 	}
@@ -276,10 +537,25 @@ func (a *App) dispatch(w http.ResponseWriter, r *http.Request) {
 		})
 	case http.StatusNotFound:
 		WriteError(w, r, NotFound(fmt.Sprintf("Nothing is at %s.", r.URL.Path)))
+	case http.StatusMovedPermanently, http.StatusTemporaryRedirect, http.StatusPermanentRedirect, http.StatusFound:
+		// The mux's redirect to the clean path, with its body in the error
+		// shape.
+		to := p.header.Get("Location")
+		w.Header().Set("Location", to)
+		WriteJSON(w, p.status, errorBody{&Error{Status: p.status, Code: "moved", Message: fmt.Sprintf("This is at %s; ask there.", to)}})
 	default:
-		h.ServeHTTP(w, r) // a redirect to the clean path
+		h.ServeHTTP(w, r)
 	}
 }
+
+// redirectType is the type of the handler http.ServeMux returns to send a
+// path that is not clean, or a {rest...} or folder route asked without its
+// last slash, to the one it serves: http.RedirectHandler's.
+var redirectType = reflect.TypeOf(http.RedirectHandler("/", http.StatusMovedPermanently))
+
+// muxRedirect reports whether h is that redirect, which runs no route, so
+// dispatch may run it on a probe and answer it in the error shape.
+func muxRedirect(h http.Handler) bool { return reflect.TypeOf(h) == redirectType }
 
 // allowedList writes the mux's Allow header as words: "GET, HEAD, POST" is
 // "GET or POST". HEAD and OPTIONS are left out when another method is there.

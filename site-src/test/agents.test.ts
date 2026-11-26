@@ -185,7 +185,7 @@ describe('index.md', () => {
     const listed = commandsNotYet(comingNext)
     const step = section('6. What is not built yet')
     expect(step).toContain(`${SITE}/docs/coming-next`)
-    expect(step).toContain("- Storing data is the app's own code today: `database/sql` and a driver, in a module in `app/`.")
+    expect(step).toContain('- The app template has no database or login: add `data.Module()` and `auth.Module()` yourself.')
     expect(step).toContain(`- The commands ${listed.slice(0, -1).join(', ')} and ${listed.at(-1)}.`)
     for (const c of listed) expect(commands, c).not.toContain(c.replace(/`/g, '').split(' ')[1])
     const names = new Set(catalog.components.map((c) => c.name))

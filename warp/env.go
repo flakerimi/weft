@@ -4,22 +4,33 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/http"
+	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
 
 // Config is what an app is configured with: the listening address, the body
-// limit, and any other key the app reads with Get or On. The zero Config
-// works: every interface, port 8080, 1 MiB.
+// limit, what it knows of a proxy in front of it, and any other key the app
+// reads with Get or On. The zero Config works: every interface, port 8080,
+// 1 MiB, no proxy, opened at http://localhost:8080.
 type Config struct {
-	Host         string // HOST; empty is every interface
-	Port         string // PORT; default "8080"
-	MaxBodyBytes int64  // MAX_BODY_MB x 1 MiB; default 1 MiB
+	Host           string   // HOST; empty is every interface
+	Port           string   // PORT; default "8080"
+	MaxBodyBytes   int64    // MAX_BODY_MB x 1 MiB; default 1 MiB
+	TrustProxy     bool     // TRUST_PROXY on: believe X-Forwarded-For and X-Forwarded-Proto
+	URL            string   // APP_URL, the address people open the app at, without a trailing slash; default "http://localhost:" + Port
+	TrustedOrigins []string // TRUSTED_ORIGINS, comma-separated: other sites whose browsers may make state-changing API requests
 
 	vars map[string]string
 	err  error
+	// xo is the protection ConfigFrom made from TrustedOrigins, which it
+	// held when xoFor was taken; New uses it while they are the same.
+	xo    *http.CrossOriginProtection
+	xoFor []string
 }
 
 const (
@@ -73,7 +84,7 @@ func (c Config) On(key string) bool {
 // Err reports every problem found while reading the configuration, or nil.
 func (c Config) Err() error { return c.err }
 
-// withDefaults returns c with the port and the body limit filled in.
+// withDefaults returns c with the port, the body limit and the URL filled in.
 func (c Config) withDefaults() Config {
 	if c.Port == "" {
 		c.Port = defaultPort
@@ -81,11 +92,22 @@ func (c Config) withDefaults() Config {
 	if c.MaxBodyBytes <= 0 {
 		c.MaxBodyBytes = defaultMaxBodyBytes
 	}
+	if c.URL == "" {
+		c.URL = "http://localhost:" + c.Port
+	}
 	return c
 }
 
 func build(vars map[string]string, problems []error) Config {
 	c := Config{Host: vars["HOST"], vars: vars}
+	c.TrustProxy = c.On("TRUST_PROXY")
+	if v := vars["APP_URL"]; v != "" {
+		if u, ok := appURL(v); ok {
+			c.URL = u
+		} else {
+			problems = append(problems, fmt.Errorf("APP_URL is %q; set it to an address like https://shop.example.com.", v))
+		}
+	}
 	if p := vars["PORT"]; p != "" {
 		if n, err := strconv.Atoi(p); err == nil && n >= 1 && n <= 65535 {
 			c.Port = p
@@ -100,8 +122,25 @@ func build(vars map[string]string, problems []error) Config {
 			problems = append(problems, fmt.Errorf("MAX_BODY_MB is %q; set it to a whole number of megabytes, 1 or more, in .env or the environment.", m))
 		}
 	}
+	xo, origins, bad := trustedOrigins(vars["TRUSTED_ORIGINS"])
+	c.TrustedOrigins, c.xo, c.xoFor = origins, xo, slices.Clone(origins)
+	for _, o := range bad {
+		problems = append(problems, fmt.Errorf("TRUSTED_ORIGINS has %q; write each origin like https://admin.example.com.", o))
+	}
 	c.err = errors.Join(problems...)
 	return c
+}
+
+// appURL reads APP_URL: an http or https address with a host name (not a
+// port alone) and no path beyond /, query or fragment. It returns the
+// address without a trailing slash.
+func appURL(v string) (string, bool) {
+	u, err := url.Parse(v)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.Opaque != "" || u.User != nil ||
+		(u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.HasSuffix(v, "#") {
+		return "", false
+	}
+	return u.Scheme + "://" + u.Host, true
 }
 
 // parseDotEnv reads the lines of a .env file into vars and returns one error

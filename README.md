@@ -136,8 +136,8 @@ stylesheet, not a fork. Want Tailwind for your own components? Import
 
 Pre-alpha. What exists today:
 
-- `weft` CLI (`create`, `dev`, `build`, `upgrade`, `catalog`, `version`,
-  `update`), which carries Weft's packages, and the curl installer
+- `weft` CLI (`create`, `dev`, `build`, `gen`, `routes`, `unpack`,
+  `upgrade`, `catalog`, `version`, `update`), which carries Weft's packages, and the curl installer
 - tokens and the `neutral`, `lisa` and `weft` themes
 - the adaptive core: `useWeft`, `WeftProvider`, `useWidth`
 - the Vapor components of `@weft/ui`, from layout and forms to dates,
@@ -147,19 +147,28 @@ Pre-alpha. What exists today:
   and a dev server
 - Warp, the Go side (`github.com/flakerimi/weft/warp`): an app of modules,
   typed routes with validation, one error shape, `.env` configuration, and
-  `warp.Serve` for the embedded pages; and a playground that uses all of it
+  `warp.Serve` for the embedded pages; records in SQLite (`warp/data`), a
+  login with one owner (`warp/auth`) and a test kit (`warp/warptest`); and a
+  playground that uses all of it
+- `weft gen`, which writes the TypeScript types, a typed client and the form
+  rules from the app's Go types, and `weft routes`
+- `examples/shop`, a back office with a login, a products table and a page
+  per product, which `scripts/shop.sh` runs and the suite drives
 - weft.base.al: the docs, the component gallery, the skills, and the files
   for agents, `/index.md` (the page to point an agent at, from the next
   release) and `/llms.txt`
 
-Next: Warp's phases W2 to W7 (TypeScript types from the Go types, data on
-`database/sql`, login and permissions, `weft scaffold` with app blocks,
-attachments and live data, and more modules), app routes, the rest of the
+Next: widening the Warp slice (more database engines and relations;
+registration, reset, roles and mail; `weft scaffold` with app blocks; the app
+template taking the shop's shape), then Warp's W6 and W7 (attachments, live
+data and more modules), app routes, the rest of the
 agent kit (lint rules, `weft check`, MCP), site features, and landing blocks.
 The designs are
 [`docs/superpowers/specs/2026-11-20-weft-design.md`](docs/superpowers/specs/2026-11-20-weft-design.md)
 and, for the Go side,
-[`docs/superpowers/specs/2026-11-23-warp-design.md`](docs/superpowers/specs/2026-11-23-warp-design.md).
+[`docs/superpowers/specs/2026-11-23-warp-design.md`](docs/superpowers/specs/2026-11-23-warp-design.md)
+and
+[`docs/superpowers/specs/2026-11-25-warp-slice-design.md`](docs/superpowers/specs/2026-11-25-warp-slice-design.md).
 
 ## Develop
 

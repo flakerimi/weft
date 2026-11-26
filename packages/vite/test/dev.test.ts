@@ -5,7 +5,7 @@
 // name has a space and a non-ASCII letter (Review Focus 1).
 import { spawn, type ChildProcess } from 'node:child_process'
 import { cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { createServer as createHTTPServer, type Server } from 'node:http'
+import { createServer as createHTTPServer, request, type Server } from 'node:http'
 import { createServer as createNetServer, type AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -44,6 +44,20 @@ async function start(root: string, opts: Partial<Parameters<typeof devSite>[0]> 
 async function get(url: string) {
   const res = await fetch(url)
   return { status: res.status, type: res.headers.get('content-type'), body: await res.text() }
+}
+
+/** A GET of `path` exactly as written, dot segments kept, as a tool sends it: fetch would clean it. */
+function getRaw(base: string, path: string): Promise<{ status: number; body: string }> {
+  return new Promise((done, fail) => {
+    const req = request(base, { path, method: 'GET' }, (res) => {
+      let body = ''
+      res.setEncoding('utf8')
+      res.on('data', (c: string) => (body += c))
+      res.on('end', () => done({ status: res.statusCode ?? 0, body }))
+    })
+    req.on('error', fail)
+    req.end()
+  })
 }
 
 /** The body's text, without its tags. */
@@ -120,6 +134,65 @@ describe('devSite', { timeout: 30_000 }, () => {
     expect(text((await get(dev.url + 'blog/second/')).body)).toContain('Post second')
   })
 
+  it('dev serves a runtime page for any id', async () => {
+    const dev = await start(site('dev-site'))
+    for (const path of ['products/42', 'products/999', 'products/42/']) {
+      const page = await get(dev.url + path)
+      expect(page.status, path).toBe(200)
+      // The shell, as the build writes it: the pattern on <html>, and every param empty.
+      expect(page.body, path).toContain('<html lang="en" data-weft-route="/products/:id">')
+      expect(text(page.body), path).toContain('Product []')
+    }
+    for (const path of ['products', 'products/1/extra', 'product/1']) {
+      const page = await get(dev.url + path)
+      expect(page.status, path).toBe(404)
+      expect(text(page.body), path).toContain('Nothing here')
+    }
+    // No other page carries the pattern.
+    expect((await get(dev.url)).body).toContain('<html lang="en">')
+    // As warp.Serve answers them: an escape that is not UTF-8 is a param like
+    // any other, and a path that starts with // is a path, not a host.
+    const odd = await get(dev.url + 'products/%FF')
+    expect(odd.status).toBe(200)
+    expect(odd.body).toContain('data-weft-route="/products/:id"')
+    const doubled = await get(dev.url.replace(/\/$/, '') + '//api/products')
+    expect(doubled.status).toBe(404)
+    expect(text(doubled.body)).toContain('Nothing here')
+  })
+
+  it('cleans dot segments as warp.Serve does', async () => {
+    const dev = await start(site('dev-site'))
+    // The rows of TestDotSegments in warp/manifest_test.go.
+    for (const [path, status, has] of [
+      ['/products/../counter', 200, 'n is 2'],
+      ['/products/%2e%2e/counter', 200, 'n is 2'],
+      ['/products/./42', 200, 'Product []'],
+      ['/blog/../products/42/', 200, 'Product []'],
+      ['/products/42/..', 404, 'Nothing here'],
+      ['/..', 200, 'Hello from dev'],
+    ] as const) {
+      const page = await getRaw(dev.url, path)
+      expect(page.status, path).toBe(status)
+      expect(text(page.body), path).toContain(has)
+    }
+  })
+
+  it('refuses two runtime pages of one shape, as the build does', async () => {
+    const root = site('dev-site')
+    mkdirSync(join(root, 'pages/a'))
+    for (const name of ['x', 'y']) writeFileSync(join(root, `pages/a/[${name}].vue`), '<script lang="ts">\nexport const runtime = true\n</script>\n\n<template><p>a</p></template>\n')
+    const dev = await start(root)
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const page = await get(dev.url + 'a/1')
+    expect(page.status).toBe(500)
+    expect(page.body).toContain('pages &quot;a/[x].vue&quot; and &quot;a/[y].vue&quot; both match paths like /a/1; keep one.')
+    // As the build fails, so does every path that reaches the patterns.
+    expect((await get(dev.url + 'products/42')).status).toBe(500)
+    // A path an exact page has does not.
+    expect((await get(dev.url)).status).toBe(200)
+    error.mockRestore()
+  })
+
   it('serves the files a page wrote with useFile, once it has rendered', async () => {
     const dev = await start(site('dev-site'))
     expect((await get(dev.url + 'feed.json')).status).toBe(404)
@@ -178,6 +251,21 @@ describe('devSite', { timeout: 30_000 }, () => {
     const other = await get(dev.url + 'apiary')
     expect(other.status).toBe(404)
     expect(text(other.body)).toContain('Nothing here')
+  })
+
+  it('sends to /api what warp.Serve sends there, and refuses an escape net/http refuses', async () => {
+    const api = createHTTPServer((req, res) => res.end(`api got ${req.method} ${req.url}`))
+    await new Promise<void>((done) => api.listen(0, '127.0.0.1', done))
+    closers.push(() => new Promise((done) => api.close(done)))
+    const dev = await start(site('dev-site'), { api: `http://127.0.0.1:${(api.address() as AddressInfo).port}` })
+    // The path as decoded, before any cleaning, is under /api: the API gets it as sent.
+    for (const path of ['/api/../login', '/api/./auth/me', '/api/auth/../auth/me', '/%61pi/auth/me']) {
+      expect(await getRaw(dev.url, path), path).toEqual({ status: 200, body: `api got GET ${path}` })
+    }
+    // A % that starts no escape is net/http's 400, as built.
+    for (const path of ['/login%', '/a%2', '/%zz']) {
+      expect((await getRaw(dev.url, path)).status, path).toBe(400)
+    }
   })
 
   it('a render error is a 500 that names the file, and the next request works', async () => {

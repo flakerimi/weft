@@ -4,10 +4,12 @@ import { useSSRContext } from 'vue'
  * Register a pre-paint snippet: a few lines of script the page build writes
  * inline at the top of the `<head>` of every page that renders the calling
  * component, and of no other page, so they run before the first paint (a
- * blocking inline script, before the CSS). Use it only to copy a little
- * state the server cannot know onto `document.documentElement` (a stored
- * preference) for CSS to read until the component mounts; the server's
- * markup must not depend on it, so hydration still matches.
+ * blocking inline script, before the CSS). Use it only for what must hold
+ * before the component mounts: to copy a little state the server cannot
+ * know onto `document.documentElement` (a stored preference) for CSS to
+ * read, or, as Form does, to stop a native action (a submit) the server's
+ * markup would allow; the server's markup must not depend on it, so
+ * hydration still matches.
  *
  * `id` names the snippet: a page carries each id once, whatever renders it
  * how often (the first registration wins). The code must be a script on its

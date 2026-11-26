@@ -1,0 +1,910 @@
+{
+  "routes": [
+    {
+      "module": "",
+      "name": "health",
+      "method": "GET",
+      "path": "/api/health",
+      "status": 200,
+      "permission": "",
+      "typed": true,
+      "path_params": [],
+      "query": [],
+      "body": "",
+      "partial": false,
+      "output": {
+        "ts": "Health",
+        "list": false
+      }
+    },
+    {
+      "module": "hello",
+      "name": "hello",
+      "method": "GET",
+      "path": "/api/hello",
+      "status": 200,
+      "permission": "",
+      "typed": true,
+      "path_params": [],
+      "query": [],
+      "body": "",
+      "partial": false,
+      "output": {
+        "ts": "Message",
+        "list": false
+      }
+    },
+    {
+      "module": "hello",
+      "name": "post_hello_greet",
+      "method": "POST",
+      "path": "/api/hello/greet",
+      "status": 201,
+      "permission": "",
+      "typed": true,
+      "path_params": [],
+      "query": [],
+      "body": "Greeting",
+      "partial": false,
+      "output": {
+        "ts": "Message",
+        "list": false
+      }
+    },
+    {
+      "module": "hello",
+      "name": "file",
+      "method": "GET",
+      "path": "/api/hello/{slug}/files/{rest...}",
+      "status": 200,
+      "permission": "",
+      "typed": true,
+      "path_params": [
+        {
+          "name": "slug",
+          "ts": "string",
+          "optional": false,
+          "style": "value",
+          "rules": []
+        },
+        {
+          "name": "rest",
+          "ts": "string",
+          "optional": false,
+          "style": "value",
+          "rules": []
+        }
+      ],
+      "query": [
+        {
+          "name": "loud",
+          "ts": "boolean",
+          "optional": true,
+          "style": "value",
+          "rules": []
+        }
+      ],
+      "body": "",
+      "partial": false,
+      "output": {
+        "ts": "Message",
+        "list": false
+      }
+    },
+    {
+      "module": "hello",
+      "name": "delete",
+      "method": "DELETE",
+      "path": "/api/hello/{slug}",
+      "status": 204,
+      "permission": "",
+      "typed": true,
+      "path_params": [
+        {
+          "name": "slug",
+          "ts": "string",
+          "optional": false,
+          "style": "value",
+          "rules": []
+        }
+      ],
+      "query": [],
+      "body": "",
+      "partial": false,
+      "output": null
+    },
+    {
+      "module": "products",
+      "name": "list",
+      "method": "GET",
+      "path": "/api/products",
+      "status": 200,
+      "permission": "products:read",
+      "typed": true,
+      "path_params": [],
+      "query": [
+        {
+          "name": "page",
+          "ts": "number",
+          "optional": true,
+          "style": "value",
+          "rules": [
+            {
+              "name": "min",
+              "arg": "1"
+            }
+          ]
+        },
+        {
+          "name": "per_page",
+          "ts": "number",
+          "optional": true,
+          "style": "value",
+          "rules": [
+            {
+              "name": "max",
+              "arg": "100"
+            }
+          ]
+        },
+        {
+          "name": "sort",
+          "ts": "string",
+          "optional": true,
+          "style": "value",
+          "rules": []
+        },
+        {
+          "name": "q",
+          "ts": "string",
+          "optional": true,
+          "style": "value",
+          "rules": []
+        },
+        {
+          "name": "fields",
+          "ts": "string[]",
+          "optional": true,
+          "style": "list",
+          "rules": []
+        },
+        {
+          "name": "full",
+          "ts": "boolean",
+          "optional": true,
+          "style": "value",
+          "rules": []
+        },
+        {
+          "name": "filter",
+          "ts": "Record<string, string>",
+          "optional": true,
+          "style": "filter",
+          "rules": []
+        }
+      ],
+      "body": "",
+      "partial": false,
+      "output": {
+        "ts": "ListProduct",
+        "list": false
+      }
+    },
+    {
+      "module": "products",
+      "name": "show",
+      "method": "GET",
+      "path": "/api/products/{id}",
+      "status": 200,
+      "permission": "products:read",
+      "typed": true,
+      "path_params": [
+        {
+          "name": "id",
+          "ts": "number",
+          "optional": false,
+          "style": "value",
+          "rules": []
+        }
+      ],
+      "query": [],
+      "body": "",
+      "partial": false,
+      "output": {
+        "ts": "Product",
+        "list": false
+      }
+    },
+    {
+      "module": "products",
+      "name": "create",
+      "method": "POST",
+      "path": "/api/products",
+      "status": 201,
+      "permission": "products:create",
+      "typed": true,
+      "path_params": [],
+      "query": [],
+      "body": "ProductInput",
+      "partial": false,
+      "output": {
+        "ts": "Product",
+        "list": false
+      }
+    },
+    {
+      "module": "products",
+      "name": "update",
+      "method": "PATCH",
+      "path": "/api/products/{id}",
+      "status": 200,
+      "permission": "products:edit",
+      "typed": true,
+      "path_params": [
+        {
+          "name": "id",
+          "ts": "number",
+          "optional": false,
+          "style": "value",
+          "rules": []
+        }
+      ],
+      "query": [],
+      "body": "ProductInput",
+      "partial": true,
+      "output": {
+        "ts": "Product",
+        "list": false
+      }
+    },
+    {
+      "module": "products",
+      "name": "remove",
+      "method": "DELETE",
+      "path": "/api/products/{id}",
+      "status": 204,
+      "permission": "products:delete",
+      "typed": true,
+      "path_params": [
+        {
+          "name": "id",
+          "ts": "number",
+          "optional": false,
+          "style": "value",
+          "rules": []
+        }
+      ],
+      "query": [],
+      "body": "",
+      "partial": false,
+      "output": null
+    },
+    {
+      "module": "products",
+      "name": "products_parts",
+      "method": "GET",
+      "path": "/api/products/{id}/parts",
+      "status": 200,
+      "permission": "",
+      "typed": true,
+      "path_params": [
+        {
+          "name": "id",
+          "ts": "number",
+          "optional": false,
+          "style": "value",
+          "rules": []
+        }
+      ],
+      "query": [],
+      "body": "",
+      "partial": false,
+      "output": {
+        "ts": "Part",
+        "list": true
+      }
+    },
+    {
+      "module": "products",
+      "name": "post_products_notes",
+      "method": "POST",
+      "path": "/api/products/{id}/notes",
+      "status": 204,
+      "permission": "",
+      "typed": true,
+      "path_params": [
+        {
+          "name": "id",
+          "ts": "number",
+          "optional": false,
+          "style": "value",
+          "rules": []
+        }
+      ],
+      "query": [],
+      "body": "Note",
+      "partial": false,
+      "output": null
+    },
+    {
+      "module": "products",
+      "name": "products_export.csv",
+      "method": "GET",
+      "path": "/api/products/export.csv",
+      "status": 0,
+      "permission": "products:read",
+      "typed": false,
+      "path_params": [],
+      "query": [],
+      "body": "",
+      "partial": false,
+      "output": null
+    }
+  ],
+  "types": [
+    {
+      "name": "Health",
+      "go": "main.Health",
+      "fields": [
+        {
+          "name": "ok",
+          "ts": "boolean",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "version",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "note",
+          "ts": "string",
+          "optional": true,
+          "readonly": false,
+          "rules": []
+        }
+      ]
+    },
+    {
+      "name": "Message",
+      "go": "main.Message",
+      "fields": [
+        {
+          "name": "message",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        }
+      ]
+    },
+    {
+      "name": "Greeting",
+      "go": "main.Greeting",
+      "fields": [
+        {
+          "name": "name",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "required",
+              "arg": ""
+            }
+          ]
+        },
+        {
+          "name": "times",
+          "ts": "number | null",
+          "optional": true,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "min",
+              "arg": "1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ListProduct",
+      "go": "main.List[main.Product]",
+      "fields": [
+        {
+          "name": "items",
+          "ts": "Product[]",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "total",
+          "ts": "number",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "page",
+          "ts": "number",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "per_page",
+          "ts": "number",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        }
+      ]
+    },
+    {
+      "name": "Product",
+      "go": "main.Product",
+      "fields": [
+        {
+          "name": "id",
+          "ts": "number",
+          "optional": false,
+          "readonly": true,
+          "rules": []
+        },
+        {
+          "name": "created_at",
+          "ts": "string",
+          "optional": false,
+          "readonly": true,
+          "rules": []
+        },
+        {
+          "name": "updated_at",
+          "ts": "string",
+          "optional": false,
+          "readonly": true,
+          "rules": []
+        },
+        {
+          "name": "name",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "required",
+              "arg": ""
+            },
+            {
+              "name": "max",
+              "arg": "120"
+            },
+            {
+              "name": "unique",
+              "arg": ""
+            }
+          ]
+        },
+        {
+          "name": "price",
+          "ts": "number",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "min",
+              "arg": "0"
+            }
+          ]
+        },
+        {
+          "name": "stock",
+          "ts": "number",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "min",
+              "arg": "0"
+            },
+            {
+              "name": "max",
+              "arg": "10000"
+            }
+          ]
+        },
+        {
+          "name": "status",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "required",
+              "arg": ""
+            },
+            {
+              "name": "enum",
+              "arg": "draft|live"
+            }
+          ]
+        },
+        {
+          "name": "live",
+          "ts": "boolean",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "site",
+          "ts": "string | null",
+          "optional": true,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "url",
+              "arg": ""
+            }
+          ]
+        },
+        {
+          "name": "contact",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "email",
+              "arg": ""
+            }
+          ]
+        },
+        {
+          "name": "tags",
+          "ts": "string[]",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "max",
+              "arg": "5"
+            }
+          ]
+        },
+        {
+          "name": "labels",
+          "ts": "Record<string, string>",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "extra",
+          "ts": "unknown",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "photo",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "maker",
+          "ts": "Maker | null",
+          "optional": true,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "parts",
+          "ts": "Part[]",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "summary",
+          "ts": "string",
+          "optional": true,
+          "readonly": false,
+          "rules": []
+        }
+      ]
+    },
+    {
+      "name": "ProductInput",
+      "go": "main.Product",
+      "fields": [
+        {
+          "name": "name",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "required",
+              "arg": ""
+            },
+            {
+              "name": "max",
+              "arg": "120"
+            },
+            {
+              "name": "unique",
+              "arg": ""
+            }
+          ]
+        },
+        {
+          "name": "price",
+          "ts": "number",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "min",
+              "arg": "0"
+            }
+          ]
+        },
+        {
+          "name": "stock",
+          "ts": "number",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "min",
+              "arg": "0"
+            },
+            {
+              "name": "max",
+              "arg": "10000"
+            }
+          ]
+        },
+        {
+          "name": "status",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "required",
+              "arg": ""
+            },
+            {
+              "name": "enum",
+              "arg": "draft|live"
+            }
+          ]
+        },
+        {
+          "name": "live",
+          "ts": "boolean",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "site",
+          "ts": "string | null",
+          "optional": true,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "url",
+              "arg": ""
+            }
+          ]
+        },
+        {
+          "name": "contact",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "email",
+              "arg": ""
+            }
+          ]
+        },
+        {
+          "name": "tags",
+          "ts": "string[]",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "max",
+              "arg": "5"
+            }
+          ]
+        },
+        {
+          "name": "labels",
+          "ts": "Record<string, string>",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "extra",
+          "ts": "unknown",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "photo",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "maker",
+          "ts": "Maker | null",
+          "optional": true,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "parts",
+          "ts": "PartInput[]",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "summary",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        }
+      ]
+    },
+    {
+      "name": "Maker",
+      "go": "main.Maker",
+      "fields": [
+        {
+          "name": "name",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "required",
+              "arg": ""
+            }
+          ]
+        },
+        {
+          "name": "parent",
+          "ts": "Maker | null",
+          "optional": true,
+          "readonly": false,
+          "rules": []
+        },
+        {
+          "name": "partners",
+          "ts": "(Maker | null)[]",
+          "optional": false,
+          "readonly": false,
+          "rules": []
+        }
+      ]
+    },
+    {
+      "name": "Part",
+      "go": "main.Part",
+      "fields": [
+        {
+          "name": "id",
+          "ts": "number",
+          "optional": false,
+          "readonly": true,
+          "rules": []
+        },
+        {
+          "name": "sku",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "required",
+              "arg": ""
+            },
+            {
+              "name": "min",
+              "arg": "3"
+            }
+          ]
+        },
+        {
+          "name": "count",
+          "ts": "number",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "min",
+              "arg": "1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "PartInput",
+      "go": "main.Part",
+      "fields": [
+        {
+          "name": "sku",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "required",
+              "arg": ""
+            },
+            {
+              "name": "min",
+              "arg": "3"
+            }
+          ]
+        },
+        {
+          "name": "count",
+          "ts": "number",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "min",
+              "arg": "1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Note",
+      "go": "main.Note",
+      "fields": [
+        {
+          "name": "text",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "required",
+              "arg": ""
+            },
+            {
+              "name": "max",
+              "arg": "500"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

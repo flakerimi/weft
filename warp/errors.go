@@ -1,12 +1,14 @@
 package warp
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"reflect"
+	"strings"
 )
 
 // Error is the one error shape every API answer goes through. A handler that
@@ -71,15 +73,28 @@ func TooMany(message string) *Error {
 	return &Error{Status: http.StatusTooManyRequests, Code: "rate_limited", Message: message}
 }
 
-// WriteJSON answers with v as JSON. A nil slice is written as [], and a 204
-// has no body. A value that cannot be written as JSON, such as a NaN or a
-// channel, is logged and answered as a 500.
+// Unavailable is a 503 answer, for a server that cannot answer now and may
+// in a moment, such as a database another connection holds.
+func Unavailable(message string) *Error {
+	return &Error{Status: http.StatusServiceUnavailable, Code: "unavailable", Message: message}
+}
+
+// WriteJSON answers with v as JSON. A nil slice at the top, or one v points
+// to, is written as [], and a 204 has no body. Inside v it writes what encoding/json writes, so a
+// nil slice, map or []byte there is null; a typed route's answer has none
+// (see Get), and a plain handler that wants the same writes empty values. A
+// value that cannot be written as JSON, such as a NaN or a channel, is
+// logged and answered as a 500.
 func WriteJSON(w http.ResponseWriter, status int, v any) {
 	if status == http.StatusNoContent {
 		w.WriteHeader(status)
 		return
 	}
-	if rv := reflect.ValueOf(v); rv.Kind() == reflect.Slice && rv.IsNil() {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Pointer && !rv.IsNil() && rv.Elem().Kind() == reflect.Slice {
+		rv = rv.Elem()
+	}
+	if rv.Kind() == reflect.Slice && rv.IsNil() {
 		v = []any{}
 	}
 	b, err := json.Marshal(v)
@@ -92,6 +107,28 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	w.Write(b)
+}
+
+// statusCode is the code of an error answer made from its status alone: the
+// status's text in snake case, as teapot for 418 ("I'm a teapot"), the
+// words the error shape's codes are written in.
+func statusCode(status int) string {
+	words := strings.Fields(strings.Map(func(r rune) rune {
+		if r >= 'A' && r <= 'Z' {
+			return r + 'a' - 'A'
+		}
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			return r
+		}
+		return ' '
+	}, http.StatusText(status)))
+	if status == http.StatusTeapot {
+		return "teapot"
+	}
+	if len(words) == 0 {
+		return "error"
+	}
+	return strings.Join(words, "_")
 }
 
 // internal is the answer to an error the client is not told about.
@@ -116,12 +153,24 @@ type errorBody struct {
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	var e *Error
 	switch {
+	case errors.Is(err, context.Canceled) && r.Context().Err() != nil:
+		return // the client went away: there is no one to answer, and nothing went wrong
 	case !errors.As(err, &e):
 		slog.Error("api error", "method", r.Method, "path", r.URL.Path, "error", err)
 		e = internal()
 	case e.Status < 400 || e.Status > 599:
 		slog.Error("api error with a status that is not an error status", "method", r.Method, "path", r.URL.Path, "status", e.Status, "error", err)
 		e = internal()
+	case e.Code == "" || e.Message == "":
+		// An Error with its status alone: the status's own words.
+		filled := *e
+		if filled.Code == "" {
+			filled.Code = statusCode(e.Status)
+		}
+		if filled.Message == "" {
+			filled.Message = http.StatusText(e.Status) + "."
+		}
+		e = &filled
 	}
 	WriteJSON(w, e.Status, errorBody{e})
 }

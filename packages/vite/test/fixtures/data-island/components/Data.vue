@@ -41,7 +41,7 @@ const asked = ref(0)
 async function load(query: TableQuery) {
   asked.value++
   const sorted = [...rows].sort((a, b) => (query.sort === 'name' ? a.name.localeCompare(b.name) : a.id - b.id))
-  return { items: sorted.slice((query.page - 1) * query.perPage, query.page * query.perPage), total: rows.length }
+  return { items: sorted.slice((query.page - 1) * query.per_page, query.page * query.per_page), total: rows.length }
 }
 const bold = ref(false)
 const align = ref<string | number | null | (string | number)[]>('left')

@@ -213,14 +213,9 @@ func prerequisites() error {
 	return nil
 }
 
-// ensure is the gate every command that runs an app passes. It refuses an app
-// recorded at another Weft version (pointing an older one at weft upgrade),
-// checks the prerequisites, unpacks the bundle into .weft/ when that holds
-// another version or nothing (a fresh clone), runs pnpm install when it
-// unpacked or node_modules/ is missing, and writes the components'
-// declaration file when it installed or the file is missing.
-// Its errors carry no "weft <command>: " prefix; the command adds it.
-func ensure(appDir string, stdout, stderr io.Writer) (appConfig, error) {
+// checkedApp reads the app and refuses one recorded at another Weft version,
+// pointing an older one at weft upgrade.
+func checkedApp(appDir string) (appConfig, error) {
 	cfg, err := readApp(appDir)
 	if err != nil {
 		return cfg, err
@@ -232,19 +227,54 @@ func ensure(appDir string, stdout, stderr io.Writer) (appConfig, error) {
 	if cfg.Version != weft.Version {
 		return cfg, fmt.Errorf("this app is on Weft %s and this weft is %s; run weft upgrade to move the app, or weft update --version %s to match it", cfg.Version, weft.Version, cfg.Version)
 	}
+	return cfg, nil
+}
+
+// unpackCmd makes sure .weft/ is there and current, as ensure does before it
+// installs, so that go and an editor can resolve the Weft Go module in a fresh
+// clone before any weft dev or weft build has run pnpm install.
+func unpackCmd(args []string, stdout, stderr io.Writer) int {
+	_, code, ok := appCommandWith("unpack", args, stdout, stderr, func(appDir string) error {
+		cfg, err := checkedApp(appDir)
+		if err != nil {
+			return err
+		}
+		did, err := refreshWeft(appDir, cfg.Version)
+		switch {
+		case err != nil:
+			return err
+		case did:
+			fmt.Fprintf(stdout, "Unpacked .weft (Weft %s)\n", cfg.Version)
+		default:
+			fmt.Fprintf(stdout, ".weft is current (Weft %s)\n", cfg.Version)
+		}
+		return nil
+	})
+	if !ok {
+		return code
+	}
+	return 0
+}
+
+// ensure is the gate every command that runs an app passes. It refuses an app
+// recorded at another Weft version (pointing an older one at weft upgrade),
+// checks the prerequisites, unpacks the bundle into .weft/ when that holds
+// another version or nothing (a fresh clone), or, for a development weft,
+// another bundle (refreshWeft), runs pnpm install when it
+// unpacked or node_modules/ is missing, and writes the components'
+// declaration file when it installed or the file is missing.
+// Its errors carry no "weft <command>: " prefix; the command adds it.
+func ensure(appDir string, stdout, stderr io.Writer) (appConfig, error) {
+	cfg, err := checkedApp(appDir)
+	if err != nil {
+		return cfg, err
+	}
 	if err := prerequisites(); err != nil {
 		return cfg, err
 	}
-	install := false
-	if unpacked(appDir) != cfg.Version {
-		bundle, err := openBundle()
-		if err != nil {
-			return cfg, err
-		}
-		if err := unpack(bundle, appDir, cfg.Version); err != nil {
-			return cfg, err
-		}
-		install = true
+	install, err := refreshWeft(appDir, cfg.Version)
+	if err != nil {
+		return cfg, err
 	}
 	if info, err := os.Stat(filepath.Join(appDir, "node_modules")); err != nil || !info.IsDir() {
 		install = true

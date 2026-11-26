@@ -109,5 +109,5 @@ weft build
 
 ## Next
 
-- [Warp, the Go side](../guides/warp.md): modules, every tag and rule, the errors, and `.env`.
+- [Warp, the Go side](../guides/warp.md): modules, `.env`, a proxy and tests; [Typed routes](../guides/routes.md): every tag and rule, and the errors.
 - [Pages and islands](../guides/pages-and-islands.md): the parts of a page that run in the browser, which can call this route.

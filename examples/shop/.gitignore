@@ -1,0 +1,11 @@
+.weft/
+.weft.lock
+node_modules/
+web/dist/
+web/.weft-types/
+/shop
+.env
+# The database, which DB_URL in .env names.
+data/
+# pnpm writes it on the first weft dev or weft build; the packages it pins come from .weft/, which changes with Weft.
+pnpm-lock.yaml

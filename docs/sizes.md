@@ -48,7 +48,7 @@ component uses. Neither is counted in the rows below.
 | Chip | 1.55 | — | 1.08 | 2.63 |
 | CloseButton | 0.62 | — | 0.54 | 1.16 |
 | Collapsible | 1.33 | — | 0.48 | 1.81 |
-| Combobox | 22.09 | — | 2.67 | 24.76 |
+| Combobox | 22.07 | — | 2.67 | 24.75 |
 | CommandPalette | 11.55 | — | 1.90 | 13.45 |
 | ConfirmDialog | 6.55 | — | 1.96 | 8.51 |
 | Container | 0.77 | — | 0.14 | 0.91 |
@@ -64,13 +64,13 @@ component uses. Neither is counted in the rows below.
 | FieldGroup | 2.47 | — | 1.63 | 4.09 |
 | FileUpload | 6.32 | — | 2.23 | 8.55 |
 | Footer | 1.29 | — | 0.55 | 1.84 |
-| Form | 6.41 | — | 2.13 | 8.54 |
+| Form | 6.65 | — | 2.13 | 8.78 |
 | FormField | 2.64 | — | 1.13 | 3.77 |
 | Grid | 0.86 | — | 0.41 | 1.26 |
 | Header | 16.98 | — | 3.38 | 20.35 |
 | Icon | 0.67 | — | 0.33 | 1.00 |
 | Input | 2.43 | — | 0.97 | 3.40 |
-| InputNumber | 2.82 | — | 1.00 | 3.82 |
+| InputNumber | 2.83 | — | 1.00 | 3.83 |
 | InputTags | 4.39 | — | 1.24 | 5.63 |
 | InputTime | 6.10 | — | 0.95 | 7.06 |
 | Island | 0.78 | — | 0.25 | 1.03 |
@@ -97,7 +97,7 @@ component uses. Neither is counted in the rows below.
 | StatCard | 2.39 | — | 1.01 | 3.40 |
 | Stepper | 2.97 | — | 1.00 | 3.97 |
 | Switch | 1.96 | — | 1.42 | 3.38 |
-| Table | 10.79 | — | 2.75 | 13.54 |
+| Table | 11.11 | — | 2.75 | 13.86 |
 | Tabs | 3.74 | — | 1.28 | 5.02 |
 | Textarea | 2.12 | — | 0.54 | 2.66 |
 | Timeline | 1.83 | — | 0.90 | 2.73 |
@@ -109,7 +109,7 @@ component uses. Neither is counted in the rows below.
 | Tree | 3.95 | — | 0.74 | 4.69 |
 | WeftProvider | 0.97 | — | 0.27 | 1.25 |
 
-The five heaviest: DateRangePicker (28.18 KB), Combobox (24.76 KB), Select (22.47 KB), AppShell (22.29 KB), Header (20.35 KB).
+The five heaviest: DateRangePicker (28.18 KB), Combobox (24.75 KB), Select (22.47 KB), AppShell (22.29 KB), Header (20.35 KB).
 
 ## Tree-shaking
 

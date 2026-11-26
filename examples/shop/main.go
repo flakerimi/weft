@@ -1,0 +1,27 @@
+// Command shop serves the app: the Go API and the built pages, in one binary.
+package main
+
+import (
+	"io/fs"
+	"log"
+
+	"github.com/flakerimi/weft/warp"
+
+	// The SQLite driver, which warp/data opens by the name DB_DRIVER gives.
+	_ "modernc.org/sqlite"
+
+	"shop/app"
+)
+
+// dist is the built pages. It is nil under the dev tag, which weft dev uses so
+// the program compiles before any build; weft dev serves the pages itself.
+var dist fs.FS
+
+func main() {
+	server := warp.New(warp.FromEnv())
+	server.Use(app.Modules()...)
+	// Serve returns nil once it was asked to stop: that is a clean exit.
+	if err := server.Serve(dist); err != nil {
+		log.Fatal(err)
+	}
+}

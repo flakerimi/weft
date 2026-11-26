@@ -3,9 +3,8 @@ package warp
 import (
 	"fmt"
 	"math"
-	"net/mail"
-	"net/url"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -23,11 +22,15 @@ type rule struct {
 }
 
 // fieldSpec is a validated field of a struct type: its key, where it sits, its
-// rules and the mistakes found in them.
+// rules and the mistakes found in them. A readonly field has no rules and is
+// never validated; json says the key is the field's json name, so a body
+// can send it.
 type fieldSpec struct {
 	key      string
 	index    []int
 	rules    []rule
+	readonly bool
+	json     bool
 	problems []string
 }
 
@@ -36,7 +39,7 @@ var (
 	timeType  = reflect.TypeOf(time.Time{})
 )
 
-const ruleList = "required, email, url, min=, max=, enum= or unique"
+const ruleList = "required, email, url, min=, max=, enum=, unique or readonly"
 
 // The limits on what a 422 lists, so that a small body cannot make a huge
 // answer: at most maxListed fields, at most maxKeyBytes of key bytes in all,
@@ -55,11 +58,19 @@ const (
 // Fields are listed in a fixed order: struct fields as declared, list entries
 // by index, map entries by key. A value with a pointer cycle is not supported.
 func Validate(v any) error {
-	rv := derefValue(reflect.ValueOf(v))
+	return validate(reflect.ValueOf(v), false, nil)
+}
+
+// validate is Validate on rv. When partial, a json field of the struct
+// itself is checked only when its key is in sent, the keys the body had; its
+// query and path fields, and everything inside a field that is checked, are
+// checked as Validate checks them.
+func validate(rv reflect.Value, partial bool, sent []string) error {
+	rv = derefValue(rv)
 	if !rv.IsValid() || rv.Kind() != reflect.Struct {
 		return nil
 	}
-	var w walker
+	w := walker{partial: partial, sent: sent}
 	w.validateStruct(rv)
 	if len(w.fields) == 0 && !w.left {
 		return nil
@@ -117,6 +128,9 @@ type walker struct {
 	left   bool // a failing field was not listed
 	done   bool // stop walking: the limits are spent or, probing, a field failed
 	probe  bool // only find whether anything fails, listing nothing
+	// partial checks only the json fields in sent at the top, for PATCH.
+	partial bool
+	sent    []string
 }
 
 // push makes the step name, or the list index when index is not negative,
@@ -166,6 +180,9 @@ func (w *walker) validateStruct(rv reflect.Value) {
 	for _, spec := range specsOf(rv.Type()) {
 		if w.done {
 			return
+		}
+		if spec.readonly || depth == 0 && w.partial && spec.json && !slices.Contains(w.sent, spec.key) {
+			continue
 		}
 		fv, ok := fieldByIndex(rv, spec.index)
 		if !ok {
@@ -405,6 +422,75 @@ func checkField(fv reflect.Value, rules []rule) string {
 	return ""
 }
 
+// emailAddress is the email rule, the one browsers apply to type="email"
+// (WHATWG's valid email address), written as the browser's EMAIL is (in
+// packages/ui, src/forms/schema.ts), so a form and the server agree: the
+// whole text is a local part of one or more ASCII letters, digits and
+// .!#$%&'*+/=?^_`{|}~-, then @, then one or more labels joined by dots, each
+// of 1 to 63 ASCII letters, digits and hyphens that neither starts nor ends
+// with a hyphen. Nothing is trimmed, so spaces around it are refused.
+var emailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+
+// isWebAddress is the url rule, written as the browser's isWebAddress (in
+// packages/ui, src/forms/schema.ts) is, so a form and the server agree: no
+// whitespace, control character or backslash anywhere; http:// or https://
+// in any case; then the authority, up to the first /, ? or #, which with
+// anything up to its last @ dropped is host or host:port, the host not empty
+// (an IPv6 host in brackets is one) and the port one to five digits.
+func isWebAddress(s string) bool {
+	for _, r := range s {
+		if r <= 0x1f || r == 0x7f || r == '\\' || isJSSpace(r) {
+			return false
+		}
+	}
+	rest, ok := cutPrefixFold(s, "http://")
+	if !ok {
+		if rest, ok = cutPrefixFold(s, "https://"); !ok {
+			return false
+		}
+	}
+	authority := rest
+	if i := strings.IndexAny(rest, "/?#"); i >= 0 {
+		authority = rest[:i]
+	}
+	authority = authority[strings.LastIndexByte(authority, '@')+1:]
+	host, port := authority, ""
+	// A port is what follows the last colon when no colon or ] comes after
+	// it, as the browser's /:([^:\]]*)$/ reads it.
+	if i := strings.LastIndexByte(authority, ':'); i >= 0 && !strings.ContainsRune(authority[i+1:], ']') {
+		host, port = authority[:i], authority[i+1:]
+		if len(port) < 1 || len(port) > 5 || strings.Trim(port, "0123456789") != "" {
+			return false
+		}
+	}
+	return host != ""
+}
+
+// cutPrefixFold is strings.CutPrefix with the prefix, which is in lower
+// case, in any ASCII case, as a JavaScript regular expression's i flag takes
+// it (so "ſ" is not "s").
+func cutPrefixFold(s, prefix string) (string, bool) {
+	if len(s) < len(prefix) {
+		return s, false
+	}
+	for i := range len(prefix) {
+		if c := s[i]; c != prefix[i] && c+'a'-'A' != prefix[i] {
+			return s, false
+		}
+	}
+	return s[len(prefix):], true
+}
+
+// isJSSpace reports whether r is whitespace as JavaScript's \s has it (the
+// space characters below U+0020 are control characters, refused already).
+func isJSSpace(r rune) bool {
+	switch r {
+	case ' ', 0xa0, 0x1680, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000, 0xfeff:
+		return true
+	}
+	return r >= 0x2000 && r <= 0x200a
+}
+
 func checkRule(v reflect.Value, r rule) string {
 	k := v.Kind()
 	switch r.name {
@@ -412,16 +498,14 @@ func checkRule(v reflect.Value, r rule) string {
 		if k != reflect.String {
 			return ""
 		}
-		a, err := mail.ParseAddress(v.String())
-		if err != nil || a.Name != "" {
+		if !emailAddress.MatchString(v.String()) {
 			return "Enter an email address."
 		}
 	case "url":
 		if k != reflect.String {
 			return ""
 		}
-		u, err := url.Parse(v.String())
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		if !isWebAddress(v.String()) {
 			return "Enter a web address that starts with http:// or https://."
 		}
 	case "enum":
@@ -441,6 +525,9 @@ func checkRule(v reflect.Value, r rule) string {
 		case k == reflect.String:
 			size = float64(utf8.RuneCountInString(v.String()))
 			low, high = "Use at least %s characters.", "Use at most %s characters."
+			if r.num == 1 { // as the browser's schema says it
+				low, high = "Use at least %s character.", "Use at most %s character."
+			}
 		case isNumberKind(k):
 			size = toFloat(v)
 			low, high = "Enter %s or more.", "Enter %s or less."
@@ -493,13 +580,20 @@ func collectSpecs(t reflect.Type, prefix []int, seen map[reflect.Type]bool) []fi
 		if !f.IsExported() {
 			continue
 		}
+		// A body field's fields are keyed as the input's own, as an embedded
+		// struct's are.
+		if _, ok := f.Tag.Lookup("body"); ok && f.Type.Kind() == reflect.Struct && f.Type != timeType {
+			specs = append(specs, collectSpecs(f.Type, index, seen)...)
+			continue
+		}
 		key := fieldKey(f)
 		if key == "" {
 			continue
 		}
-		spec := fieldSpec{key: key, index: index}
+		jsonKey, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		spec := fieldSpec{key: key, index: index, json: jsonKey == key}
 		if tag := f.Tag.Get("warp"); tag != "" {
-			spec.rules, spec.problems = parseRules(t, f, tag)
+			spec.rules, spec.readonly, spec.problems = parseRules(t, f, tag)
 		}
 		specs = append(specs, spec)
 	}
@@ -519,7 +613,20 @@ func fieldKey(f reflect.StructField) string {
 	return ""
 }
 
-func parseRules(owner reflect.Type, f reflect.StructField, tag string) ([]rule, []string) {
+// isReadonly reports whether f's warp tag has the rule readonly.
+func isReadonly(f reflect.StructField) bool {
+	for part := range strings.SplitSeq(f.Tag.Get("warp"), ",") {
+		if strings.TrimSpace(part) == "readonly" {
+			return true
+		}
+	}
+	return false
+}
+
+// parseRules reads the rules of f's warp tag, and whether it has readonly,
+// which no other rule may go beside: a readonly field is answered and never
+// read, so it has no rules.
+func parseRules(owner reflect.Type, f reflect.StructField, tag string) ([]rule, bool, []string) {
 	at := owner.Name()
 	if at == "" {
 		at = owner.String()
@@ -534,6 +641,14 @@ func parseRules(owner reflect.Type, f reflect.StructField, tag string) ([]rule, 
 	isNumber := isNumberKind(k)
 	isList := k == reflect.Slice || k == reflect.Array
 
+	if isReadonly(f) {
+		for part := range strings.SplitSeq(tag, ",") {
+			if part = strings.TrimSpace(part); part != "" && part != "readonly" {
+				return nil, true, []string{fmt.Sprintf("%s has the rule \"readonly\" beside other rules; a readonly field is never read, so remove them.", at)}
+			}
+		}
+		return nil, true, nil
+	}
 	var rules []rule
 	var problems []string
 	for _, part := range strings.Split(tag, ",") {
@@ -592,7 +707,7 @@ func parseRules(owner reflect.Type, f reflect.StructField, tag string) ([]rule, 
 		}
 		rules = append(rules, r)
 	}
-	return rules, problems
+	return rules, false, problems
 }
 
 // checkRules returns every mistake in the warp tags of t, a struct type, and of
