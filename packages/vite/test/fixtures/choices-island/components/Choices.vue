@@ -3,7 +3,9 @@
 // hydrates (keep-typed.test.ts), in the orders and defaults that matter: a
 // radio group whose default comes first, one with no default, a select whose
 // model matches none of its options (the browser shows the first), one whose
-// model matches, a multiple select, and a Weft RadioGroup whose default is first.
+// model matches, a multiple select, one whose model matches none and whose
+// first option is in a disabled optgroup (the browser shows the first option
+// outside it), and a Weft RadioGroup whose default is first.
 import { ref } from 'vue'
 import { RadioGroup } from '@weft/ui'
 
@@ -12,6 +14,7 @@ const none = ref<string | null>(null)
 const blank = ref('')
 const pick = ref('b')
 const many = ref<string[]>(['y'])
+const grouped = ref('')
 const plan = ref<string | number | null>('free')
 </script>
 
@@ -22,7 +25,8 @@ const plan = ref<string | number | null>('free')
     <select class="blank" v-model="blank"><option value="x">x</option><option value="y">y</option></select>
     <select class="pick" v-model="pick"><option value="a">a</option><option value="b">b</option><option value="c">c</option></select>
     <select class="many" multiple v-model="many"><option value="x">x</option><option value="y">y</option><option value="z">z</option></select>
+    <select class="grouped" v-model="grouped"><optgroup label="old" disabled><option value="p">p</option></optgroup><option value="q">q</option><option value="r">r</option></select>
     <RadioGroup v-model="plan" :items="['free', 'pro', 'team']" aria-label="Plan" />
-    <output>{{ first }}|{{ none }}|{{ blank }}|{{ pick }}|{{ many.join(',') }}|{{ plan }}</output>
+    <output>{{ first }}|{{ none }}|{{ blank }}|{{ pick }}|{{ many.join(',') }}|{{ plan }}|{{ grouped }}</output>
   </div>
 </template>

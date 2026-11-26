@@ -158,19 +158,23 @@ describe('radios and selects, whatever their order and defaults', () => {
     expect([radio(after, 'first', 'a').checked, radio(after, 'first', 'c').checked]).toEqual([false, true])
     expect(radio(after, 'none', 'b').checked).toBe(true)
     expect(after.querySelectorAll<HTMLInputElement>('.weft-radio__input')[2]!.checked).toBe(true)
-    expect(output(after)).toBe('c|b||b|y|team')
+    expect(output(after)).toBe('c|b||b|y|team|')
     document.body.innerHTML = ''
     const before = await choices((island) => {
       radio(island, 'first', 'b').checked = true
       radio(island, 'none', 'a').checked = true
     })
     expect(radio(before, 'first', 'b').checked).toBe(true)
-    expect(output(before)).toBe('b|a||b|y|free')
+    expect(output(before)).toBe('b|a||b|y|free|')
   })
 
   it('leaves a select nobody touched with its model, matching an option or none', async () => {
     const island = await choices(() => {})
-    expect(output(island)).toBe('a|||b|y|free')
+    // Its first option is in a disabled optgroup, so before hydration the
+    // browser shows the next; that is no choice of the person's, so the model
+    // stays '' and, matching no option, the select shows none.
+    expect(chosen(select(island, 'grouped'))).toEqual([])
+    expect(output(island)).toBe('a|||b|y|free|')
     expect(chosen(select(island, 'pick'))).toEqual(['b'])
     expect(chosen(select(island, 'many'))).toEqual(['y'])
   })
@@ -182,7 +186,7 @@ describe('radios and selects, whatever their order and defaults', () => {
       for (const o of select(island, 'many').options) o.selected = o.value !== 'y'
     })
     expect([chosen(select(island, 'blank')), chosen(select(island, 'pick')), chosen(select(island, 'many'))]).toEqual([['y'], ['c'], ['x', 'z']])
-    expect(output(island)).toBe('a||y|c|x,z|free')
+    expect(output(island)).toBe('a||y|c|x,z|free|')
   })
 
   it('cannot tell the option the browser already showed from a choice of it, so the model keeps its value', async () => {
@@ -190,7 +194,7 @@ describe('radios and selects, whatever their order and defaults', () => {
       // The person chose x, the first option, which the browser was showing for the model '' already.
       select(island, 'blank').value = 'x'
     })
-    expect(output(island)).toBe('a|||b|y|free')
+    expect(output(island)).toBe('a|||b|y|free|')
   })
 })
 

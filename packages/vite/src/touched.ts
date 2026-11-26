@@ -23,8 +23,8 @@
  *   a reset checks (the last with the `checked` attribute, or none).
  * - A select: its options' selectedness against `defaultSelected` (the
  *   `selected` attribute), where a single drop-down select with no
- *   `selected` option resets to its first option that is not disabled, as
- *   the browser shows it. So a select whose model matches none of its
+ *   `selected` option resets to its first option that is not disabled (nor
+ *   in a disabled optgroup), as the browser shows it. So a select whose model matches none of its
  *   options is untouched while it shows that first option; a person who
  *   chose that very option cannot be told apart, and the model keeps its
  *   value.
@@ -120,8 +120,17 @@ function resetOf(el: HTMLSelectElement): boolean[] {
   // drop-down) the first that is not disabled.
   const last = on.lastIndexOf(true)
   const dropDown = Number(el.getAttribute('size') ?? 0) <= 1
-  const pick = last >= 0 ? last : dropDown ? [...el.options].findIndex((o) => !o.disabled) : -1
+  const pick = last >= 0 ? last : dropDown ? [...el.options].findIndex((o) => !optionDisabled(o)) : -1
   return on.map((_, i) => i === pick)
+}
+
+/**
+ * Whether an option is disabled as HTML defines it, which is what `:disabled`
+ * matches in a browser: its own attribute, or a disabled optgroup around it.
+ * Written out, since not every DOM a test runs in matches it so.
+ */
+function optionDisabled(o: HTMLOptionElement): boolean {
+  return o.disabled || (o.parentElement?.tagName === 'OPTGROUP' && o.parentElement.hasAttribute('disabled'))
 }
 
 /** The events a person's change fires, for an element the hydration left in the page. */
