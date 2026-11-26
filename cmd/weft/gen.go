@@ -68,6 +68,9 @@ var (
 	// errDescribeTimeout is an app still running after describeWithin, as
 	// one whose main.go serves without a warp.App does.
 	errDescribeTimeout = errors.New("the app did not describe itself in time")
+	// errSilent is an app that printed nothing and exited 0; it is
+	// errNoDescription to weft gen.
+	errSilent = fmt.Errorf("the app printed nothing: %w", errNoDescription)
 )
 
 // description is what an app built on warp prints when run with
@@ -251,15 +254,17 @@ func regenerate(ctx context.Context, appDir, bin string, within time.Duration, s
 
 // describeApp runs bin in the app's folder with the environment and
 // WARP_DESCRIBE=1, for at most within, and reads the description from its
-// standard output, at most describeMax of it. Its standard error passes
-// through; of a standard output that is not a description, the first
+// standard output, at most describeMax of it. PORT=0 and HOST=127.0.0.1 are
+// set too, so an app that ignores WARP_DESCRIBE and listens takes neither
+// its real port nor a public address while weft waits. Its standard error
+// passes through; of a standard output that is not a description, the first
 // shownMax bytes do too, so the app's own words come before weft's sentence.
 func describeApp(ctx context.Context, appDir, bin string, within time.Duration, stderr io.Writer) (description, error) {
 	run, cancel := context.WithTimeout(ctx, within)
 	defer cancel()
 	cmd := exec.CommandContext(run, bin)
 	cmd.Dir = appDir
-	cmd.Env = append(os.Environ(), "WARP_DESCRIBE=1")
+	cmd.Env = append(os.Environ(), "WARP_DESCRIBE=1", "PORT=0", "HOST=127.0.0.1")
 	out := &cappedBuffer{max: describeMax, over: cancel}
 	cmd.Stdout, cmd.Stderr = out, stderr
 	cmd.WaitDelay = time.Second
@@ -285,7 +290,7 @@ func describeApp(ctx context.Context, appDir, bin string, within time.Duration, 
 		show()
 		return description{}, errNoDescription
 	case out.buf.Len() == 0:
-		return description{}, errNoDescription
+		return description{}, errSilent
 	}
 	d, err := parseDescription(out.buf.Bytes())
 	if err != nil {

@@ -874,3 +874,82 @@ func TestBuildRunsGen(t *testing.T) {
 		t.Error("the pages were built")
 	}
 }
+
+// An app that does not describe itself does not stop weft build: one that
+// serves without a warp.App through warp.Serve, as Weft 0.0.7 made them,
+// describes itself as having no routes at once; one that never describes is
+// given PORT=0 and HOST=127.0.0.1, stopped when its time is up, and the build
+// goes on; one that prints something else is said and the build goes on.
+func TestBuildGoesOnWithoutDescription(t *testing.T) {
+	app := genApp(t)
+	file := filepath.Join(app, "web", ".weft-types", "api.ts")
+	main := filepath.Join(app, "main.go")
+	was := describeWithin
+	describeWithin = 3 * time.Second
+	t.Cleanup(func() { describeWithin = was })
+
+	serves := "package main\n\nimport (\n\t\"io/fs\"\n\t\"log\"\n\t\"net/http\"\n\t\"os\"\n\n\t\"github.com/flakerimi/weft/warp\"\n)\n\nvar dist fs.FS\n\nfunc main() {\n\tif dist == nil {\n\t\tdist = os.DirFS(\".\")\n\t}\n\tlog.Fatal(http.ListenAndServe(\"127.0.0.1:\"+os.Getenv(\"PORT\"), warp.Serve(dist, http.NotFoundHandler())))\n}\n"
+	os.WriteFile(main, []byte(serves), 0o644)
+	start := time.Now()
+	code, out, errs := build(t)
+	if code != 0 || strings.Contains(errs, "describe") {
+		t.Fatalf("warp.Serve without an App: exit %d: %s%s", code, out, errs)
+	}
+	if took := time.Since(start); took > time.Minute {
+		t.Errorf("the build took %v", took)
+	}
+	src, err := os.ReadFile(file)
+	if err != nil || strings.Contains(string(src), "hello") || !strings.Contains(string(src), "export const schema = {}") {
+		t.Fatalf("weft build wrote no empty client: %v\n%s", err, src)
+	}
+	os.Remove(filepath.Join(app, "myapp"))
+
+	never := "package main\n\nimport (\n\t\"io/fs\"\n\t\"log\"\n\t\"net\"\n\t\"net/http\"\n\t\"os\"\n)\n\nvar dist fs.FS\n\nfunc main() {\n\tos.WriteFile(\"describe-env.txt\", []byte(os.Getenv(\"PORT\")+\" \"+os.Getenv(\"HOST\")), 0o644)\n\tln, err := net.Listen(\"tcp\", net.JoinHostPort(os.Getenv(\"HOST\"), os.Getenv(\"PORT\")))\n\tif err != nil {\n\t\tlog.Fatal(err)\n\t}\n\tlog.Fatal(http.Serve(ln, nil))\n}\n"
+	os.WriteFile(main, []byte(never), 0o644)
+	before, _ := os.ReadFile(file)
+	code, out, errs = build(t)
+	want := "weft build: the app did not describe itself within 3 s, so web/.weft-types/api.ts is as it was; make sure main.go calls Serve before doing other work.\n"
+	if code != 0 || !strings.Contains(errs, want) || !exists(t, filepath.Join(app, "myapp")) {
+		t.Fatalf("never describes: exit %d, stdout %q, stderr %q, want %q and a binary", code, out, errs, want)
+	}
+	if env, _ := os.ReadFile(filepath.Join(app, "describe-env.txt")); string(env) != "0 127.0.0.1" {
+		t.Errorf("the describing run had PORT and HOST %q, want \"0 127.0.0.1\"", env)
+	}
+	if after, _ := os.ReadFile(file); !bytes.Equal(after, before) {
+		t.Error("api.ts changed")
+	}
+	os.Remove(filepath.Join(app, "myapp"))
+
+	text := "package main\n\nimport (\n\t\"fmt\"\n\t\"io/fs\"\n)\n\nvar dist fs.FS\n\nfunc main() { fmt.Println(\"just text\") }\n"
+	os.WriteFile(main, []byte(text), 0o644)
+	code, out, errs = build(t)
+	want = "weft build: the app's standard output was not its description (it starts with \"just text\\n\"); make sure nothing else prints there when WARP_DESCRIBE is set.\nweft build: the app did not describe itself, so web/.weft-types/api.ts is as it was; fix what its output above says.\n"
+	if code != 0 || !strings.Contains(errs, want) || !exists(t, filepath.Join(app, "myapp")) {
+		t.Fatalf("prints text: exit %d, stdout %q, stderr %q, want %q and a binary", code, out, errs, want)
+	}
+}
+
+// weft build type-checks the pages against the client it has just written, so
+// a page reading a Go field that was renamed stops the build.
+func TestBuildTypeChecks(t *testing.T) {
+	app := genApp(t)
+	page := "<script setup vapor lang=\"ts\">\nimport { api } from '../.weft-types/api.ts'\n\nasync function text(): Promise<string> {\n  return (await api.hello.hello()).message\n}\n</script>\n\n<template>\n  <p @click=\"text\">typed</p>\n</template>\n"
+	if err := os.WriteFile(filepath.Join(app, "web", "pages", "typed.vue"), []byte(page), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, errs := build(t); code != 0 {
+		t.Fatalf("exit %d: %s%s", code, out, errs)
+	}
+	os.Remove(filepath.Join(app, "myapp"))
+	routes := filepath.Join(app, "app", "hello", "routes.go")
+	goSrc, _ := os.ReadFile(routes)
+	os.WriteFile(routes, []byte(strings.Replace(string(goSrc), "`json:\"message\"`", "`json:\"text\"`", 1)), 0o644)
+	code, out, errs := build(t)
+	want := "weft build: the pages do not type-check; fix what vue-tsc says above and run weft build again.\n"
+	if code != 1 || !strings.HasSuffix(errs, want) || !strings.Contains(out+errs, "typed.vue") {
+		t.Errorf("exit %d, stdout %q, stderr %q, want it to end %q", code, out, errs, want)
+	}
+	if exists(t, filepath.Join(app, "myapp")) {
+		t.Error("the binary was built")
+	}
+}
