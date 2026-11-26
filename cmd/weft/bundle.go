@@ -294,7 +294,7 @@ func unpackHashed(bundle fs.FS, appDir, version, hash string) (err error) {
 		os.Remove(hold)
 		return err
 	}
-	return os.RemoveAll(hold)
+	return retryBusy(func() error { return os.RemoveAll(hold) })
 }
 
 // leftOver is the name of a folder an unpack makes beside .weft, with
@@ -317,8 +317,31 @@ func removeLeftOver(appDir string) {
 	}
 }
 
-// renameDir renames a folder; a test makes it fail.
-var renameDir = os.Rename
+// renameDir renames a folder, trying again while the system says it is busy
+// (retryBusy); a test makes it fail.
+var renameDir = func(from, to string) error {
+	return retryBusy(func() error { return os.Rename(from, to) })
+}
+
+// busyWait is how long retryBusy tries again: longer than another weft
+// command reads a file or a virus scanner looks at one.
+var busyWait = 5 * time.Second
+
+// retryBusy runs op, and again while it fails with an error busy says is the
+// system's refusal to rename or remove a folder another process has a file
+// in open, which on Windows ends once that process closes it; such as
+// another weft command reading .weft/VERSION before it waits for the lock,
+// or a virus scanner reading what was just written. Elsewhere busy is false.
+func retryBusy(op func() error) error {
+	began := time.Now()
+	for pause := 10 * time.Millisecond; ; pause = min(2*pause, 200*time.Millisecond) {
+		err := op()
+		if err == nil || !busy(err) || time.Since(began) >= busyWait {
+			return err
+		}
+		time.Sleep(pause)
+	}
+}
 
 // unpacked returns the version recorded in appDir/.weft/VERSION, or "".
 func unpacked(appDir string) string {
