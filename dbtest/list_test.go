@@ -131,14 +131,17 @@ func TestListDefaults(t *testing.T) {
 	for query, field := range map[string]string{
 		"per_page=101":                  "per_page",
 		"page=-1":                       "page",
-		"q=" + strings.Repeat("a", 201): "q",
 	} {
 		e := c.Get("/api/products?" + query).Want(422).Error()
 		if _, ok := e.Fields[field]; !ok || len(e.Fields) != 1 {
 			t.Errorf("%s: %v", query, e.Fields)
 		}
 	}
-	c.Get("/api/products?q=" + strings.Repeat("a", 200)).Want(200)
+	c.Get("/api/products?q=" + strings.Repeat("é", 200)).Want(200)
+	// A search too long is refused as a sort or a filter value too long is.
+	if e := c.Get("/api/products?q=" + strings.Repeat("a", 201)).Want(400).Error(); e.Fields["q"] != "The search text is longer than 200 characters." {
+		t.Errorf("q of 201: %+v", e)
+	}
 	if e := c.Get("/api/products?page=two").Want(400).Error(); e.Fields["page"] != "Send a whole number." {
 		t.Errorf("page=two: %+v", e)
 	}
@@ -210,6 +213,7 @@ func TestListLimits(t *testing.T) {
 		{data.Query{Sort: "-" + strings.Repeat("s", 64)}, long},
 		{data.Query{Filter: map[string]string{"status": strings.Repeat("v", 201)}}, map[string]string{"filter[status]": "A filter value is longer than 200 bytes."}},
 		{data.Query{Q: "lamp\x00"}, map[string]string{"q": "The search text has a character that cannot be searched for."}},
+		{data.Query{Q: strings.Repeat("a", 201)}, map[string]string{"q": "The search text is longer than 200 characters."}},
 		{data.Query{Q: "\x00"}, map[string]string{"q": "The search text has a character that cannot be searched for."}},
 		{data.Query{Filter: map[string]string{"status": "live\x00"}}, map[string]string{"filter[status]": "The value has a character that cannot be filtered on."}},
 		// An unknown key is named as such, whatever its value.

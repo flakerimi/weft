@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/flakerimi/weft/warp"
 )
@@ -36,13 +37,14 @@ import (
 //
 // A field that cannot be sorted, filtered or searched by, a filter value of
 // the wrong kind, a sort longer than 64 bytes, a filter value longer than 200
-// bytes, and a NUL byte in Q or a filter value are each a 400 naming the
-// query's key.
+// bytes, a Q longer than 200 characters, and a NUL byte in Q or a filter
+// value are each a 400 naming the query's key; a page or per_page out of its
+// range is a 422, as any rule is.
 type Query struct {
 	Page    int               `query:"page" warp:"min=1"`
 	PerPage int               `query:"per_page" warp:"min=1,max=100"`
 	Sort    string            `query:"sort"`
-	Q       string            `query:"q" warp:"max=200"`
+	Q       string            `query:"q"`
 	Filter  map[string]string `query:"filter"`
 }
 
@@ -63,6 +65,7 @@ const (
 	maxPerPage     = 100
 	maxSort        = 64
 	maxFilterValue = 200
+	maxSearch      = 200 // characters
 )
 
 // listTag reads the data tag of the field f, whose column is c. The record's
@@ -175,6 +178,8 @@ func (t *table) list(d dialect, q Query) (*listing, error) {
 		switch {
 		case len(ors) == 0:
 			problems["q"] = fmt.Sprintf("%s cannot be searched; no field of %s is tagged data:\"search\".", t.name, t.model)
+		case utf8.RuneCountInString(q.Q) > maxSearch:
+			problems["q"] = fmt.Sprintf("The search text is longer than %d characters.", maxSearch)
 		case strings.ContainsRune(q.Q, 0): // LIKE ends a pattern at a NUL, which would match every row
 			problems["q"] = "The search text has a character that cannot be searched for."
 		default:
