@@ -955,13 +955,14 @@ func refusedIn(t reflect.Type, data []byte) *refusal {
 // escaped text or a []byte is read into one buffer.
 type refusal struct {
 	bodyScan
-	objects map[reflect.Type]*keyed
-	values  map[reflect.Type]reflect.Value
-	buf     []byte
-	tried   int // values handed to their own decoder, which tests bound
-	found   bool
-	at      int // path[:at] is the refused value's path
-	says    string
+	objects  map[reflect.Type]*keyed
+	values   map[reflect.Type]reflect.Value
+	buf      []byte
+	tried    int // values handed to their own decoder, which tests bound
+	confirms int // values decoded again by encoding/json, which tests bound
+	found    bool
+	at       int // path[:at] is the refused value's path
+	says     string
 }
 
 // keyed is a struct type's object, for match, and its fields' types.
@@ -1076,7 +1077,7 @@ func (r *refusal) objectOf(t reflect.Type) *keyed {
 // encoding/json v1 does (literalStore, indirect): null to a pointer sets it
 // to nil; a type that reads its own JSON is handed raw, null included; one
 // that reads itself from text, and a []byte, take a string, its text
-// unquoted, and leave null alone.
+// unquoted, and leave null alone; a []byte takes a list of numbers too.
 func (r *refusal) refuses(t reflect.Type, raw []byte) bool {
 	base := t
 	for base.Kind() == reflect.Pointer {
@@ -1085,6 +1086,12 @@ func (r *refusal) refuses(t reflect.Type, raw []byte) bool {
 	isNull := raw[0] == 'n'
 	if base != t && isNull {
 		return false
+	}
+	if raw[0] == '[' && isBytes(base) && !decodesItself(base) {
+		return false // a list of numbers, which encoding/json takes for a []byte: a wrong one is a type error
+	}
+	if base == rawMessageType {
+		return false // it keeps any value, and would copy each one
 	}
 	v, ok := r.values[base]
 	if !ok {
@@ -1112,8 +1119,14 @@ func (r *refusal) refuses(t reflect.Type, raw []byte) bool {
 	} else if u, ok := v.Interface().(encoding.TextUnmarshaler); ok {
 		err = u.UnmarshalText(text)
 	}
-	return err != nil && decodeStrict(raw, reflect.New(t).Interface()) != nil
+	if err == nil {
+		return false
+	}
+	r.confirms++
+	return decodeStrict(raw, reflect.New(t).Interface()) != nil
 }
+
+var rawMessageType = reflect.TypeFor[json.RawMessage]()
 
 // errNotText is what refuses says of anything but a string or null for a
 // type that reads itself from text, or a []byte.

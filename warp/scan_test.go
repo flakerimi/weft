@@ -822,6 +822,9 @@ func TestScanNullsCost(t *testing.T) {
 		if s.joins != len(c.paths) || s.recorded.looks > 2*nulls+maxNesting {
 			t.Errorf("%s: the path was joined %d times and %d keys looked up for %d nulls, want %d and at most %d", c.name, s.joins, s.recorded.looks, nulls, len(c.paths), 2*nulls+maxNesting)
 		}
+		if raceDetector {
+			continue // it changes what allocates; the steps above still hold
+		}
 		bigAllocs := testing.AllocsPerRun(3, func() { p.walk(big) })
 		smallAllocs := testing.AllocsPerRun(3, func() { p.walk(small) })
 		if bigAllocs > smallAllocs {

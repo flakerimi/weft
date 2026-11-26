@@ -2028,6 +2028,14 @@ type stampsIn struct {
 	Body stampNode `body:"json"`
 }
 
+type bytesIn struct {
+	Body struct {
+		Lists [][]byte          `json:"lists"`
+		ByKey map[string][]byte `json:"by_key"`
+		At    time.Time         `json:"at"`
+	} `body:"json"`
+}
+
 // refusedBodies are the two bodies that once made the search for a refused
 // value cost hundreds of megabytes: n text values then one their decoder
 // refuses, in a 1 MiB body for n = 262 000; and n times then a text that is
@@ -2040,18 +2048,33 @@ var refusedBodies = []struct {
 	body       func(n int) []byte
 	n          int
 	path, says string
+	tries      func(n int) int // the values handed to their own decoder
 }{
 	{
 		"codes", reflect.TypeFor[codesIn](), func(a *App) { Post(a, "/x", func(context.Context, codesIn) (None, error) { return None{}, nil }) },
 		func(n int) []byte { return []byte(`{"codes":[` + strings.Repeat(`"a",`, n) + `"bad"]}`) },
-		262_000, "codes", "Send a value this field takes.",
+		262_000, "codes", "Send a value this field takes.", func(n int) int { return n + 1 },
 	},
 	{
 		"stamps", reflect.TypeFor[stampsIn](), func(a *App) { Post(a, "/x", func(context.Context, stampsIn) (None, error) { return None{}, nil }) },
 		func(n int) []byte {
 			return []byte(strings.Repeat(`{"n":`, 61) + `{"t":[` + strings.Repeat(`"2026-11-25T10:00:00Z",`, n) + `"bad"]}` + strings.Repeat("}", 61))
 		},
-		100_000, strings.Repeat("n.", 61) + "t", "Send a time like 2026-11-25T10:00:00Z.",
+		100_000, strings.Repeat("n.", 61) + "t", "Send a time like 2026-11-25T10:00:00Z.", func(n int) int { return n + 1 },
+	},
+	// A []byte sent as a list of numbers, which encoding/json takes, in a
+	// list and in a map, before a time that is refused.
+	{
+		"byte lists", reflect.TypeFor[bytesIn](), func(a *App) { Post(a, "/x", func(context.Context, bytesIn) (None, error) { return None{}, nil }) },
+		func(n int) []byte { return []byte(`{"lists":[` + strings.Repeat(`[1],`, n) + `[1]],"at":"bad"}`) },
+		262_000, "at", "Send a time like 2026-11-25T10:00:00Z.", func(int) int { return 1 },
+	},
+	{
+		"byte lists in a map", reflect.TypeFor[bytesIn](), func(a *App) { Post(a, "/x", func(context.Context, bytesIn) (None, error) { return None{}, nil }) },
+		func(n int) []byte {
+			return []byte(`{"by_key":{` + strings.Repeat(`"k":[1],`, n) + `"k":[1]},"at":"bad"}`)
+		},
+		131_000, "at", "Send a time like 2026-11-25T10:00:00Z.", func(int) int { return 1 },
 	},
 }
 
@@ -2070,18 +2093,22 @@ func TestBodyRefusedValueCost(t *testing.T) {
 		if err := p.refused(big); !errors.As(err, &e) || !reflect.DeepEqual(e.Fields, map[string]string{c.path: c.says}) {
 			t.Fatalf("%s: %v, want %s: %s", c.name, err, c.path, c.says)
 		}
-		bigAllocs := testing.AllocsPerRun(1, func() { p.refused(big) })
-		smallAllocs := testing.AllocsPerRun(1, func() { p.refused(small) })
-		if bigAllocs > smallAllocs || bigAllocs > 64 {
-			t.Errorf("%s: the search cost %.0f allocations after %d values and %.0f after %d; want the same, at most 64", c.name, bigAllocs, c.n, smallAllocs, c.n/1000)
-		}
-		if b := allocated(func() { p.refused(big) }); b > 64<<10 {
-			t.Errorf("%s: the search allocated %d bytes, want at most 64 KiB", c.name, b)
+		// The race detector changes what allocates: the counts below hold
+		// without it, the steps after them with it too.
+		if !raceDetector {
+			bigAllocs := testing.AllocsPerRun(1, func() { p.refused(big) })
+			smallAllocs := testing.AllocsPerRun(1, func() { p.refused(small) })
+			if bigAllocs > smallAllocs || bigAllocs > 64 {
+				t.Errorf("%s: the search cost %.0f allocations after %d values and %.0f after %d; want the same, at most 64", c.name, bigAllocs, c.n, smallAllocs, c.n/1000)
+			}
+			if b := allocated(func() { p.refused(big) }); b > 64<<10 {
+				t.Errorf("%s: the search allocated %d bytes, want at most 64 KiB", c.name, b)
+			}
 		}
 		// Each value with a decoder of its own is tried once, and each key
 		// looked up at most twice.
-		if r := refusedIn(p.view, big); r.tried != c.n+1 || r.compares > 2*62 {
-			t.Errorf("%s: %d values tried and %d looks of a key, want %d and at most %d", c.name, r.tried, r.compares, c.n+1, 2*62)
+		if r := refusedIn(p.view, big); r.tried != c.tries(c.n) || r.confirms != 1 || r.compares > 2*62 {
+			t.Errorf("%s: %d values tried, %d decoded again and %d looks of a key, want %d, 1 and at most %d", c.name, r.tried, r.confirms, r.compares, c.tries(c.n), 2*62)
 		}
 		app := New(Config{MaxBodyBytes: 4 << 20})
 		c.post(app)
@@ -2093,9 +2120,9 @@ func TestBodyRefusedValueCost(t *testing.T) {
 			t.Fatalf("%s: %d %s", c.name, w.Code, w.Body)
 		}
 		// The request reads the body and decodes it once, as it did before
-		// the search: 27 MB and 25 MB then, for these two.
+		// the search: 27 MB and 25 MB then, for the first two.
 		once := allocated(func() { decodeStrict(big, reflect.New(p.view).Interface()) })
-		if limit := once + 3*uint64(len(big)); request > limit {
+		if limit := once + 3*uint64(len(big)); request > limit && !raceDetector {
 			t.Errorf("%s: the request allocated %d bytes, want at most %d (decoding the body once, %d, and three times its size)", c.name, request, limit, once)
 		}
 	}
@@ -2135,6 +2162,94 @@ func TestBodyRefusedValueFound(t *testing.T) {
 	}
 	if w := send(t, h, "POST", "/api/x", `{"codes":["A"],"opt":[null],"when":null,"data":["YWI="],"deep":{"k":null}}`); w.Code != 204 {
 		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+}
+
+// namedBytes is a []byte of another name, with no decoder of its own.
+type namedBytes []byte
+
+// keyText is a map key that reads itself from text.
+type keyText string
+
+func (k *keyText) UnmarshalText(b []byte) error { *k = keyText(b); return nil }
+
+// ownJSON reads its own JSON, any value.
+type ownJSON struct{ n int }
+
+func (o *ownJSON) UnmarshalJSON(b []byte) error { o.n = len(b); return nil }
+
+// Every kind of value the search can meet before the refused one is read
+// once and never decoded again: only the refused time is, and the search
+// costs as many allocations after a thousand such values as after ten.
+func TestBodyRefusedSearchKinds(t *testing.T) {
+	type In struct {
+		Bytes  [][]byte           `json:"bytes"`
+		Named  []namedBytes       `json:"named"`
+		Ptr    []*[]byte          `json:"ptr"`
+		Arrays [][2]byte          `json:"arrays"`
+		Raw    []json.RawMessage  `json:"raw"`
+		Any    []any              `json:"any"`
+		Keys   map[keyText]int    `json:"keys"`
+		Times  []time.Time        `json:"times"`
+		Codes  []refusedCode      `json:"codes"`
+		Own    []ownJSON          `json:"own"`
+		ByKey  map[string]ownJSON `json:"by_key"`
+		At     time.Time          `json:"at"`
+	}
+	p, mistakes := planFor(reflect.TypeFor[In](), "POST", "/x")
+	if mistakes != nil {
+		t.Fatal(mistakes)
+	}
+	list := func(key, value string) func(n int) []byte {
+		return func(n int) []byte {
+			return []byte(`{"` + key + `":[` + strings.Repeat(value+",", n) + value + `],"at":"bad"}`)
+		}
+	}
+	object := func(key string, entry func(i int) string) func(n int) []byte {
+		return func(n int) []byte {
+			var b strings.Builder
+			b.WriteString(`{"` + key + `":{`)
+			for i := range n + 1 {
+				if i > 0 {
+					b.WriteByte(',')
+				}
+				b.WriteString(entry(i))
+			}
+			b.WriteString(`},"at":"bad"}`)
+			return []byte(b.String())
+		}
+	}
+	for name, body := range map[string]func(n int) []byte{
+		"[]byte as numbers":          list("bytes", "[1,2]"),
+		"[]byte as base64":           list("bytes", `"YWI="`),
+		"[]byte with an escape":      list("bytes", `"YW\nI="`),
+		"a named []byte as numbers":  list("named", "[1]"),
+		"a named []byte as base64":   list("named", `"YQ=="`),
+		"a pointer to []byte":        list("ptr", "[1]"),
+		"[2]byte":                    list("arrays", "[1,2]"),
+		"json.RawMessage":            list("raw", `{"a":[1]}`),
+		"any":                        list("any", `{"a":[1]}`),
+		"a key that reads itself":    object("keys", func(i int) string { return fmt.Sprintf(`"k%d":1`, i) }),
+		"times with an offset":       list("times", `"2026-11-25T10:00:00.5+01:00"`),
+		"text with an escape":        list("codes", `"\u0061"`),
+		"a type that reads its JSON": list("own", `{"a":1}`),
+		"its JSON in a map":          object("by_key", func(i int) string { return fmt.Sprintf(`"k%d":[%d]`, i, i) }),
+	} {
+		big, small := body(1000), body(10)
+		var e *Error
+		if err := p.refused(big); !errors.As(err, &e) || !reflect.DeepEqual(e.Fields, map[string]string{"at": "Send a time like 2026-11-25T10:00:00Z."}) {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if r := refusedIn(p.view, big); r.confirms != 1 {
+			t.Errorf("%s: %d values decoded again, want 1, the refused one", name, r.confirms)
+		}
+		if raceDetector {
+			continue
+		}
+		if bigAllocs, smallAllocs := testing.AllocsPerRun(10, func() { p.refused(big) }), testing.AllocsPerRun(10, func() { p.refused(small) }); bigAllocs > smallAllocs {
+			t.Errorf("%s: the search cost %.0f allocations after 1000 values and %.0f after 10; want the same", name, bigAllocs, smallAllocs)
+		}
 	}
 }
 
