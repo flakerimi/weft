@@ -22,8 +22,11 @@ import (
 // the modules to stop, once the app is told to stop.
 const stopLimit = 10 * time.Second
 
-// Serve listens on the configured host and port and runs the app until
-// SIGINT or SIGTERM. dist is the page build, or nil to serve the API alone.
+// Serve starts the app, as Start does, then listens on the configured host
+// and port, logs listening on http://localhost:<port>, and runs the app until
+// SIGINT or SIGTERM, as Run does. dist is the page build, or nil to serve the
+// API alone. Nothing listens while the modules migrate and start; a port that
+// is taken stops the modules it started.
 //
 // Under weft dev (WEFT_DEV_PARENT=1) it logs nothing, and it also stops when
 // standard input closes, which is when weft dev is gone.
@@ -40,14 +43,6 @@ func (a *App) Serve(dist fs.FS, opts ...ServeOption) error {
 	if err := a.Err(); err != nil {
 		return err
 	}
-	addr := net.JoinHostPort(a.cfg.Host, a.cfg.Port)
-	ln, err := net.Listen("tcp", addr)
-	if errors.Is(err, syscall.EADDRINUSE) {
-		return fmt.Errorf("warp: port %s is taken; stop what uses it or set PORT in .env.", a.cfg.Port)
-	}
-	if err != nil {
-		return fmt.Errorf("warp: cannot listen on %s (%w); set HOST and PORT in .env.", addr, err)
-	}
 	ctx, stop := notifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	// Once the first signal ends ctx, the signals are no longer taken, so a
@@ -57,10 +52,26 @@ func (a *App) Serve(dist fs.FS, opts ...ServeOption) error {
 		var cancel context.CancelFunc
 		ctx, cancel = untilEOF(ctx, os.Stdin)
 		defer cancel()
-	} else {
+	}
+	// The app starts before it listens, so nothing answers on the port while
+	// the modules migrate, and a start that fails never says it listens.
+	if err := a.Start(ctx); err != nil {
+		return err
+	}
+	addr := net.JoinHostPort(a.cfg.Host, a.cfg.Port)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		if errors.Is(err, syscall.EADDRINUSE) {
+			err = fmt.Errorf("warp: port %s is taken; stop what uses it or set PORT in .env.", a.cfg.Port)
+		} else {
+			err = fmt.Errorf("warp: cannot listen on %s (%w); set HOST and PORT in .env.", addr, err)
+		}
+		return errors.Join(append([]error{err}, a.stop(context.WithoutCancel(ctx))...)...)
+	}
+	if os.Getenv("WEFT_DEV_PARENT") != "1" {
 		log.Printf("listening on http://localhost:%d", ln.Addr().(*net.TCPAddr).Port)
 	}
-	return a.Run(ctx, ln, dist, opts...)
+	return a.serve(ctx, ln, dist, opts...)
 }
 
 // notifyContext is signal.NotifyContext; a test puts another in its place.
@@ -127,7 +138,11 @@ func (a *App) Run(ctx context.Context, ln net.Listener, dist fs.FS, opts ...Serv
 		ln.Close()
 		return err
 	}
+	return a.serve(ctx, ln, dist, opts...)
+}
 
+// serve is Run once the app has started.
+func (a *App) serve(ctx context.Context, ln net.Listener, dist fs.FS, opts ...ServeOption) error {
 	h := a.Handler()
 	if dist != nil {
 		h = serveBuild(dist, h, opts...)
@@ -233,17 +248,31 @@ func drain(srv *http.Server) []error {
 }
 
 // stopAll stops every Stopper in modules, last first, within 10 seconds of
-// ctx, and returns what failed.
+// ctx, and returns what failed. A Stop that has not returned when the time
+// is up is left running, and said so; each module after it still gets a
+// second to stop, with the context that has ended.
 func stopAll(ctx context.Context, modules []Module) []error {
 	ctx, cancel := context.WithTimeout(ctx, stopLimit)
 	defer cancel()
+	deadline, _ := ctx.Deadline()
 	var errs []error
 	for _, m := range slices.Backward(modules) {
-		if s, ok := m.(Stopper); ok {
-			if err := s.Stop(ctx); err != nil {
+		s, ok := m.(Stopper)
+		if !ok {
+			continue
+		}
+		done := make(chan error, 1)
+		go func() { done <- s.Stop(ctx) }()
+		limit := time.NewTimer(max(time.Until(deadline), time.Second))
+		select {
+		case err := <-done:
+			if err != nil {
 				errs = append(errs, fmt.Errorf("warp: module %q could not stop: %w", m.Name(), err))
 			}
+		case <-limit.C:
+			errs = append(errs, fmt.Errorf("warp: module %q did not stop before the app's time to stop ran out, so the app went on without it; make its Stop return when its context ends.", m.Name()))
 		}
+		limit.Stop()
 	}
 	return errs
 }

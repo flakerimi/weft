@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -610,3 +611,82 @@ type stopOnly struct {
 func (m *stopOnly) Name() string               { return m.name }
 func (m *stopOnly) Register(*App) error        { return nil }
 func (m *stopOnly) Stop(context.Context) error { note(m.log, "stop:"+m.name); return nil }
+
+// Serve listens once the app has started: nothing answers on the port while
+// the modules migrate, and a start that fails never says it is listening.
+func TestServeListensOnceStarted(t *testing.T) {
+	logs := captureLog(t)
+	ln := listenLocal(t)
+	_, port, _ := net.SplitHostPort(ln.Addr().String())
+	ln.Close()
+	var log []string
+	m := mod("probe", &log)
+	answered := make(chan bool, 1)
+	m.migrateErr = errors.New("stop here")
+	m.register = func(app *App) {}
+	probe := &dialAtMigrate{testMod: m, addr: net.JoinHostPort("127.0.0.1", port), answered: answered}
+	app := New(ConfigFrom(map[string]string{"HOST": "127.0.0.1", "PORT": port}))
+	app.Use(probe)
+	err := app.Serve(nil)
+	if err == nil || !strings.Contains(err.Error(), "stop here") {
+		t.Fatalf("Serve = %v", err)
+	}
+	if <-answered {
+		t.Error("the port answered while the modules migrated")
+	}
+	if strings.Contains(logs.String(), "listening on") {
+		t.Errorf("a start that failed said it was listening: %s", logs)
+	}
+}
+
+// dialAtMigrate dials addr as it migrates, and says whether anything answered.
+type dialAtMigrate struct {
+	*testMod
+	addr     string
+	answered chan bool
+}
+
+func (m *dialAtMigrate) Migrate(ctx context.Context) error {
+	c, err := net.DialTimeout("tcp", m.addr, 200*time.Millisecond)
+	if err == nil {
+		c.Close()
+	}
+	m.answered <- err == nil
+	return m.testMod.Migrate(ctx)
+}
+
+// A module whose Stop ignores its context does not hold the app past its
+// time: Stop says which one it left, and the modules before it still stop.
+func TestStopGoesOnPastAModuleThatDoesNotStop(t *testing.T) {
+	var log []string
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	app := New(Config{})
+	app.Use(mod("first", &log), stuckStop{release})
+	if err := app.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	began := time.Now()
+	err := app.Stop(ctx)
+	if took := time.Since(began); took > 3*time.Second {
+		t.Fatalf("Stop took %v", took)
+	}
+	want := `warp: module "stuck" did not stop before the app's time to stop ran out, so the app went on without it; make its Stop return when its context ends.`
+	if errText(err) != want {
+		t.Errorf("Stop = %q, want %q", errText(err), want)
+	}
+	if !slices.Contains(notes(&log), "stop:first") {
+		t.Errorf("steps %v: the module before it was not stopped", notes(&log))
+	}
+}
+
+type stuckStop struct{ release chan struct{} }
+
+func (stuckStop) Name() string            { return "stuck" }
+func (stuckStop) Register(app *App) error { return nil }
+func (m stuckStop) Stop(context.Context) error {
+	<-m.release
+	return nil
+}
