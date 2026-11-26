@@ -738,12 +738,14 @@ func genericName(s string) string {
 }
 
 // argName is the name of a type argument written as Go writes it, such as
-// github.com/shop/app.Product, []*Product or map[string]int.
+// github.com/shop/app.Product, []*Product or map[string]int. A pointer is
+// its type's name with OrNull after it, so Page[*Address] is PageAddressOrNull
+// and never meets Page[Address].
 func argName(a string) string {
 	a = strings.TrimSpace(a)
 	switch {
-	case strings.HasPrefix(a, "*"):
-		return argName(a[1:])
+	case strings.HasPrefix(a, "*"): // may be null, so not the name of the type itself
+		return argName(a[1:]) + "OrNull"
 	case strings.HasPrefix(a, "["):
 		end := closing(a, 0)
 		return argName(a[end+1:]) + "List"
