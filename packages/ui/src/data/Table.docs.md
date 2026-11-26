@@ -61,7 +61,10 @@ and development builds warn once.
 (`v-model:page`), shown when there is more than one page; with `fetch` it
 defaults to 20. A fetched page past the last one, as after the last row of
 the last page is deleted, moves the page to the last one there is, which it
-then asks for, once.
+then asks for, once. The move goes through `update:page`, so a parent that binds the
+page one way (`:page` with no handler) and keeps it gets that page shown
+empty, with the server's total, and no request until the page, the query or
+a refresh changes.
 
 **States.** `loading` makes it `aria-busy` and draws skeleton rows (hidden
 from assistive technology, a status saying Loading) until there are rows;

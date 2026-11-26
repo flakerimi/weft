@@ -130,6 +130,7 @@ try {
 | `""` for a pointer field with `min`, `email` or `enum` | empty, so it passes | sent, so it is checked and fails |
 | an empty object, or a zero time, for `required` | filled in | empty, so it fails |
 | `pattern` | checked | no such rule |
+| `null` for a number that is not a pointer, sent by the app itself (a `Form` leaves an empty number out) | empty, so it passes | refused, `Send a value, not null.` |
 
 `email` and `url` are one rule on both sides, tested on the same rows. A model that accepts 0 does not mark the field `required`; one that must tell 0 from nothing uses a pointer.
 

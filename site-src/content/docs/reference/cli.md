@@ -104,7 +104,7 @@ go build -trimpath -ldflags "-s -w" -o <file> .
 It prints the build's output, then `Built <file>`. First it checks the app:
 
 - An app recorded at another Weft version is refused: `weft build: this app is on Weft <a> and this weft is <b>; run weft upgrade to move the app, or weft update --version <a> to match it.` For an app on a newer Weft than this `weft`, which `weft upgrade` would refuse, the sentence ends `run weft update --version <a> to match it.` alone. An app whose `"weft"` object has no `version` is refused with a sentence that says what to add.
-- When `.weft/` is missing or holds another version, as in a fresh clone, it unpacks the packages into it and runs `pnpm install`. A `weft` built from the repository (`0.0.0-dev`) also unpacks again when the bundle's files changed, which `.weft/VERSION` records as a hash on its second line; a release is the version it says. It runs `pnpm install` too when `node_modules/` is missing. A `.weft/` without the `VERSION` file `weft` writes is not its own and is left alone, with a sentence saying to move it out of the app folder. Beside `.weft/` only `.weft.lock` is made, while it unpacks; a second `weft` waits for it.
+- When `.weft/` is missing or holds another version, as in a fresh clone, it unpacks the packages into it and runs `pnpm install`. A `weft` built from the repository (`0.0.0-dev`) also unpacks again when the bundle's files changed, which `.weft/VERSION` records as a hash on its second line; a release is the version it says. It runs `pnpm install` too when `node_modules/` is missing. A `.weft/` without the `VERSION` file `weft` writes is not its own and is left alone, with a sentence saying to move it out of the app folder. Beside `.weft/` only `.weft.lock` is made, while it unpacks; a second `weft` waits for it, and takes over at once one a killed `weft` left.
 - After an install, or when `web/.weft-types/components.d.ts` is missing, it writes that file with [weft-types](#weft-types), so `pnpm typecheck` checks the components' props before any build.
 
 Outside an app it says `weft build: no Weft app here; run it in a folder made by weft create.` Any failure is one sentence on standard error, with exit status 1; wrong usage exits with status 2.
@@ -115,13 +115,13 @@ Makes `.weft/` present and current as `weft build` does first, with no `pnpm ins
 
 ### weft gen
 
-Writes `web/.weft-types/api.ts` from the app's Go code. It builds the app with the `dev` tag, as `weft dev` does, and runs it with `WARP_DESCRIBE=1`, a free `PORT` and `HOST=127.0.0.1`, so warp's `Serve` prints the routes and types as JSON. From that it writes an interface per Go type, `api.<module>.<name>()` per typed route (`api.app` for routes outside a module), the `ApiError` every failed call rejects with, and `schema`, the rules of each body type for a form to check before it sends; `unique` and the rules of nested types are checked by the server only, and arrive as its field errors. It prints `Wrote web/.weft-types/api.ts`, or `web/.weft-types/api.ts is up to date` and leaves the file alone. `weft dev` runs it after each Go build that succeeds, and `weft build` before the page build. Never edit the file.
+Writes `web/.weft-types/api.ts` from the app's Go code. It builds the app with the `dev` tag, as `weft dev` does, and runs it with `WARP_DESCRIBE=1`, a free `PORT` and `HOST=127.0.0.1`, so warp's `Serve` prints the routes and types as JSON. From that it writes an interface per Go type, `api.<module>.<name>()` per typed route (`api.app` for routes outside a module), the `ApiError` every failed call rejects with, and `schema`, the rules of each body type for a form to check before it sends; `unique` and the rules of nested types are checked by the server only, and arrive as its field errors. It prints `Wrote web/.weft-types/api.ts`, or `web/.weft-types/api.ts is up to date` and leaves the file alone. `weft dev` runs it after each Go build that succeeds, and `weft build` before the page build. Never edit the file. An app none of whose Go files (tests aside) calls `warp.New` is not run: it gets the client of an app with no routes, which `weft gen` says.
 
 A compile error ends `weft gen: go build failed; fix what its output above says and run weft gen again.`; an app that exits with an error, or prints something else or nothing, its own output and `weft gen: the app did not describe itself; fix what its output above says and run weft gen again.`; one still running after 30 s is stopped. Each exits 1 and leaves the file as it was. `weft build` stops on the first two only; on the others it says so, as `weft dev` does, and goes on. A name the file cannot use (two routes that become one in camelCase, a type named as TypeScript reserves, an optional field, or any field of a partial body's type, named `constructor` or `toString`) is a sentence that says what to rename.
 
 ### weft routes
 
-Builds and describes the app as `weft gen` does, and prints its routes in the order registered. A route that takes every method is `ANY`; no module or no permission is `-`.
+Builds and describes the app as `weft gen` does, and prints its routes in the order registered; an app with no `warp.App` gets a sentence saying so. A route that takes every method is `ANY`; no module or no permission is `-`.
 
 ```text
 METHOD  PATH        MODULE  NAME   PERMISSION
@@ -146,7 +146,7 @@ An app made by Weft 0.0.6 or before calls `weft.Serve` in `main.go`, which is no
 		return warp.Serve(dist, api.Handler())
 ```
 
-The `listen` function stays as it is. Under the `dev` tag it never calls `warp.Serve`, so `weft gen` gives up after 30 s; `weft build` goes on. To use modules and typed routes, build a `warp.App` as the `main.go` of a new app does (see [Warp, the Go side](../guides/warp.md)).
+The `listen` function stays as it is. Such an app, as 0.0.7 made, has no `warp.App`, so `weft build` and `weft gen` give it a client with no routes at once. To use modules and typed routes, build a `warp.App` and serve it with its own `Serve`, as a new app's `main.go` does (see [Warp, the Go side](../guides/warp.md)); then they write its routes. An App passed to `warp.Serve` stops them, saying to call its own `Serve`.
 
 ### weft catalog
 
@@ -178,25 +178,14 @@ Use: In help text, menus and tooltips, one Kbd per key of a shortcut.
 Avoid: For code or a value to copy, use a code element.
 
 Adapts:
-- input: Nothing changes; show shortcuts only where a keyboard is likely, which the page decides.
-- surface: Nothing changes; text follows the surface's type scale.
 - width: Nothing changes.
 
 Props:
 - value: string — The key: a character (`K`) or a name with a symbol (`command`, `shift`, `option`, `enter`, `backspace`, `tab`, `arrowup`…). The default slot replaces it.
-- size: 'sm' | 'md' | 'lg' = 'md' — `sm`, `md` or `lg`.
 
 Slots: default
 
-Notes:
-`value` is a character (`K`) or a key name. Names with a symbol draw the
-symbol and say the name to assistive technology… (the rest of the notes)
-
-Example: Basic
-
-```vue
-<Kbd value="command" /> <Kbd value="K" />… (the rest of the example)
-```
+Notes: … (the notes, then Example: Basic and its code)
 ````
 
 | Flag | What it does |
