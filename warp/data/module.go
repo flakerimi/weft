@@ -201,32 +201,35 @@ func (db *DB) close() error {
 	return nil
 }
 
-// pingTries and pingWait are how often, and how far apart, ping tries a
-// database that another connection holds: about a second in all.
-const (
-	pingTries = 10
-	pingWait  = 100 * time.Millisecond
-)
+// pingFor is how long after the first try ping may start another, and
+// pingWait the pause between tries. A test may shorten pingFor.
+var pingFor = time.Second
+
+const pingWait = 100 * time.Millisecond
 
 // ping opens the first connection, which sets the journal mode. A fresh file
 // opened by several processes at once can be busy for a moment while one of
-// them switches it, beyond what the busy timeout waits for, so a busy answer
-// is tried again.
+// them switches it, beyond what the busy timeout waits for, so a busy or
+// locked answer is tried again, until pingFor has passed since the first try
+// or ctx ends. The bound is time, not a count: when the driver has already
+// waited its busy timeout (5 s by Warp's settings) in one try, no other try
+// starts, and a database another process holds is named after that one wait.
 func ping(ctx context.Context, conn *sql.DB, d dialect) error {
-	var err error
-	for try := range pingTries {
-		if err = conn.PingContext(ctx); err == nil || !d.busy(err) {
+	began := time.Now()
+	for {
+		err := conn.PingContext(ctx)
+		if err == nil || !d.busy(err) || time.Since(began) >= pingFor {
 			return err
 		}
-		if try < pingTries-1 {
-			select {
-			case <-ctx.Done():
-				return err
-			case <-time.After(pingWait):
-			}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(pingWait):
+		}
+		if time.Since(began) >= pingFor {
+			return err
 		}
 	}
-	return err
 }
 
 // txKey is where a DB keeps its transaction on a context; one key per DB, so
