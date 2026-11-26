@@ -678,6 +678,26 @@ describe('Table', () => {
       expect(names()[0]).toBe('P45')
     })
 
+    it('goes back to the last page when a refresh finds the page past it, and shows its rows', async () => {
+      let count = 11
+      const calls: number[] = []
+      const fetch = vi.fn(async (q: TableQuery): Promise<TableResult<Person>> => {
+        calls.push(q.page)
+        const all: Person[] = Array.from({ length: count }, (_, i) => ({ id: i + 1, name: `P${String(i + 1).padStart(2, '0')}`, age: i, city: 'X' }))
+        return { items: all.slice((q.page - 1) * q.per_page, q.page * q.per_page), total: count }
+      })
+      const m = await cases({ rows: undefined, fetch: fn(fetch), perPage: 10 })
+      click($('.weft-table [aria-label="Page 2"]'))
+      await settle()
+      expect(names()).toEqual(['P11'])
+      count = 10
+      await (m.exposed.table as { refresh(): Promise<void> }).refresh()
+      await settle()
+      expect(m.exposed.page).toBe(1)
+      expect(calls).toEqual([1, 2, 2, 1])
+      expect(names()).toHaveLength(10)
+    })
+
     it('asks exactly once for a sort pressed on page 2 under a bound page', async () => {
       const { fetch, calls } = server()
       const m = await cases({ rows: undefined, fetch: fn(fetch), perPage: 10 })

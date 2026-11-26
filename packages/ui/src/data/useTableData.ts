@@ -18,8 +18,13 @@
  *
  * `perPage` resolves to the option, or 20 with `fetch`; `currentPage` keeps
  * the page inside the pages there are (on the client; with fetch the
- * server's total is not known before the answer). `busy` is `loading()`,
- * or a fetch under way, or no answer yet.
+ * server's total is not known before the answer). When the latest answer
+ * has no rows and a total whose last page is before the page asked (the
+ * last row of the last page was deleted, or the rows shrank by more), the
+ * page is moved to that last page through `setPage`, which asks once more;
+ * an answer for a page that is the last, or one that is stale, moves
+ * nothing, so a server that keeps answering empty cannot make it loop.
+ * `busy` is `loading()`, or a fetch under way, or no answer yet.
  */
 import { computed, ref, shallowRef, watch, type ComputedRef, type Ref, type ShallowRef } from 'vue'
 import { activeFilters, keyOf, sortRows, valueOf, type RowKey, type TableColumn, type TableFetch, type TableQuery } from './table.ts'
@@ -43,6 +48,8 @@ export interface TableDataOptions<T> {
   /** The locale text sorts in (a WeftProvider's); default en-US. */
   locale?: () => string
   onError?: (error: unknown) => void
+  /** Moves to another page, as choosing it in the Pagination does. */
+  setPage?: (page: number) => void
 }
 
 export interface TableEntry<T> {
@@ -89,6 +96,11 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
     try {
       const answer = await fetch(query)
       if (mine !== asked) return
+      const last = Math.max(1, Math.ceil(answer.total / Math.max(1, query.per_page)))
+      if (answer.items.length === 0 && answer.total > 0 && query.page > last && opts.setPage) {
+        opts.setPage(last) // the watcher asks for it, once
+        return
+      }
       remote.value = { items: answer.items, total: answer.total }
     } catch (error) {
       if (mine !== asked) return

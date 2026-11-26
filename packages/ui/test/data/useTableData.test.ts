@@ -51,6 +51,9 @@ function setup(over: Partial<{ rows: P[]; fetch: TableFetch<P>; perPage: number;
     active: () => active.value,
     needKeys: () => !!over.needKeys,
     onError: (e) => errors.push(e),
+    setPage: (p) => {
+      page.value = p
+    },
   }
   const scope = effectScope()
   const data = scope.run(() => useTableData(opts))!
@@ -178,6 +181,83 @@ describe('useTableData', () => {
       sort.value = 'name'
       await flush()
       expect(names(data.shown.value)).toEqual(['Grace', 'Ada', 'Linus', 'Barbara', 'Alan'])
+    })
+
+    // A server whose rows can be removed, as a table's Delete does.
+    function shrinking(count: number) {
+      const rows = { count }
+      const calls: number[] = []
+      const fetch = vi.fn(async (q: TableQuery): Promise<TableResult<P>> => {
+        calls.push(q.page)
+        const all = Array.from({ length: rows.count }, (_, i) => ({ id: i + 1, name: `R${i + 1}` }))
+        return { items: all.slice((q.page - 1) * q.per_page, q.page * q.per_page), total: rows.count }
+      })
+      return { fetch, calls, rows }
+    }
+
+    it('moves to the last page when the page asked is past it, as after deleting the last row of the last page', async () => {
+      const { fetch, calls, rows } = shrinking(11)
+      const { data, page } = setup({ fetch, perPage: 10 })
+      await flush()
+      page.value = 2
+      await flush()
+      expect(names(data.shown.value)).toEqual(['R11'])
+      rows.count = 10
+      await data.load()
+      await flush()
+      expect(page.value).toBe(1)
+      expect(calls).toEqual([1, 2, 2, 1])
+      expect(names(data.shown.value)).toHaveLength(10)
+      expect(data.pageCount.value).toBe(1)
+    })
+
+    it('moves to the last page when the total shrinks by more than a page', async () => {
+      const { fetch, calls, rows } = shrinking(35)
+      const { data, page } = setup({ fetch, perPage: 10 })
+      await flush()
+      page.value = 4
+      await flush()
+      rows.count = 12
+      await data.load()
+      await flush()
+      expect(page.value).toBe(2)
+      expect(calls).toEqual([1, 4, 4, 2])
+      expect(names(data.shown.value)).toEqual(['R11', 'R12'])
+    })
+
+    it('does not loop when the server answers empty with a total on every page', async () => {
+      const calls: number[] = []
+      const fetch = async (q: TableQuery): Promise<TableResult<P>> => {
+        calls.push(q.page)
+        return { items: [], total: 25 }
+      }
+      const { page } = setup({ fetch, perPage: 10 })
+      await flush()
+      page.value = 5
+      await flush()
+      await flush()
+      expect(page.value).toBe(3)
+      expect(calls).toEqual([1, 5, 3])
+    })
+
+    it('does not move the page for an answer that is no longer the latest', async () => {
+      const answers: ((r: TableResult<P>) => void)[] = []
+      const fetch = (_q: TableQuery) => new Promise<TableResult<P>>((resolve) => answers.push(resolve))
+      const { page } = setup({ fetch, perPage: 10 })
+      await flush()
+      page.value = 4
+      await flush()
+      answers[1]!({ items: [], total: 5 })
+      answers[0]!({ items: [], total: 5 }) // the first page's, stale
+      await flush()
+      expect(page.value).toBe(1)
+      page.value = 3
+      await flush()
+      page.value = 2
+      await flush()
+      answers.at(-2)!({ items: [], total: 5 }) // page 3's, stale
+      await flush()
+      expect(page.value).toBe(2)
     })
 
     it('warns once when rows to be chosen have no key of their own', async () => {

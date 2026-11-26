@@ -165,6 +165,9 @@ const data = useTableData<T>({
   needKeys: () => !!props.selectable,
   locale: () => locale.value,
   onError: (error) => emit('error', error),
+  setPage: (p) => {
+    page.value = p
+  },
 })
 const { shown, total, perPage, pageCount, currentPage, busy, failed, load } = data
 
