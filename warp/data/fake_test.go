@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -232,4 +233,12 @@ func TestPingRetriesUntilItsDeadline(t *testing.T) {
 			t.Fatalf("ping = %v, want it to wait for the lock", err)
 		}
 	})
+}
+
+// A call that got past the check just as its Tx ended gets database/sql's
+// ErrTxDone, which is answered with the same sentence.
+func TestTxDoneIsWarpsSentence(t *testing.T) {
+	if err := unavailable(context.Background(), sqlite{}, fmt.Errorf("exec: %w", sql.ErrTxDone)); err != errTxDone {
+		t.Fatalf("unavailable(ErrTxDone) = %v", err)
+	}
 }
