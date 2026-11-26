@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
@@ -19,17 +20,21 @@ import (
 // releaseTree writes a fake release under dir/releases/<version> for the host platform.
 func releaseTree(t *testing.T, dir, version string, badSum bool) string {
 	t.Helper()
-	name := fmt.Sprintf("weft_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+	name := archiveName(runtime.GOOS, runtime.GOARCH)
 	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gz)
 	body := []byte("#!/bin/sh\necho fake weft\n")
-	if err := tw.WriteHeader(&tar.Header{Name: "weft", Mode: 0o755, Size: int64(len(body))}); err != nil {
-		t.Fatal(err)
+	if runtime.GOOS == "windows" {
+		buf.Write(zipOf(t, "weft.exe", body))
+	} else {
+		gz := gzip.NewWriter(&buf)
+		tw := tar.NewWriter(gz)
+		if err := tw.WriteHeader(&tar.Header{Name: "weft", Mode: 0o755, Size: int64(len(body))}); err != nil {
+			t.Fatal(err)
+		}
+		tw.Write(body)
+		tw.Close()
+		gz.Close()
 	}
-	tw.Write(body)
-	tw.Close()
-	gz.Close()
 	rel := filepath.Join(dir, "releases", version)
 	os.MkdirAll(rel, 0o755)
 	os.WriteFile(filepath.Join(rel, name), buf.Bytes(), 0o644)
@@ -41,6 +46,22 @@ func releaseTree(t *testing.T, dir, version string, badSum bool) string {
 	os.WriteFile(filepath.Join(rel, "SHA256SUMS"), []byte(hex+"  "+name+"\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "releases", "latest"), []byte(version+"\n"), 0o644)
 	return name
+}
+
+// zipOf is a zip holding body as name, as scripts/release.sh zips weft.exe.
+func zipOf(t *testing.T, name string, body []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.Create(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Write(body)
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
 }
 
 func runInstaller(t *testing.T, base, bin string, extra ...string) (int, string, string) {

@@ -53,3 +53,12 @@ func groupGone(pgid int, within time.Duration) bool {
 		}
 	}
 }
+
+// interrupt sends p SIGINT, as a Ctrl-C would.
+func interrupt(p *os.Process) error {
+	return p.Signal(os.Interrupt)
+}
+
+// setAside does nothing: on Unix a build replaces a running binary's file,
+// and the running one keeps its own.
+func setAside(string) {}

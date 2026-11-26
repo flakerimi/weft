@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bufio"
 	"bytes"
 	"compress/gzip"
@@ -13,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -79,7 +81,7 @@ func update(stdout io.Writer, check bool, pinned string) error {
 	}
 
 	platform := runtime.GOOS + "/" + runtime.GOARCH
-	name := fmt.Sprintf("weft_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+	name := archiveName(runtime.GOOS, runtime.GOARCH)
 	url := fmt.Sprintf("%s/releases/%s", base, target)
 	archive, err := fetch(url + "/" + name)
 	if err != nil {
@@ -92,7 +94,7 @@ func update(stdout io.Writer, check bool, pinned string) error {
 	if !checksumMatches(sums, name, archive) {
 		return updateError(fmt.Sprintf("checksum mismatch for %s.", name))
 	}
-	binary, err := extractBinary(archive)
+	binary, err := extract(name, archive)
 	if err != nil {
 		return updateError(fmt.Sprintf("could not unpack %s: %v.", name, err))
 	}
@@ -125,6 +127,38 @@ func checksumMatches(sums []byte, name string, data []byte) bool {
 		}
 	}
 	return false
+}
+
+// archiveName is the name of the release archive for goos and goarch, as
+// scripts/release.sh writes it: weft_<os>_<arch>.tar.gz, or .zip for Windows.
+func archiveName(goos, goarch string) string {
+	if goos == "windows" {
+		return fmt.Sprintf("weft_%s_%s.zip", goos, goarch)
+	}
+	return fmt.Sprintf("weft_%s_%s.tar.gz", goos, goarch)
+}
+
+// extract returns the binary in the archive called name: weft.exe from a
+// .zip, weft from a .tar.gz.
+func extract(name string, archive []byte) ([]byte, error) {
+	if !strings.HasSuffix(name, ".zip") {
+		return extractBinary(archive)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range zr.File {
+		if path.Base(f.Name) == "weft.exe" && f.Mode().IsRegular() {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, err
+			}
+			defer rc.Close()
+			return io.ReadAll(rc)
+		}
+	}
+	return nil, errors.New("no weft.exe inside")
 }
 
 func extractBinary(archive []byte) ([]byte, error) {
@@ -179,9 +213,28 @@ func replaceExecutable(binary []byte) error {
 	if err := os.Chmod(tmpName, 0o755); err != nil {
 		return updateError(fmt.Sprintf("could not make the new weft executable: %v.", err))
 	}
-	if err := os.Rename(tmpName, exe); err != nil {
+	if err := swapIn(tmpName, exe, runtime.GOOS == "windows"); err != nil {
 		return updateError(fmt.Sprintf("could not replace %s: %v.", exe, err))
 	}
 	ok = true
+	return nil
+}
+
+// swapIn renames tmp to exe. With aside, as on Windows, where a running
+// binary may be renamed but not written over, exe is first renamed to
+// exe.old, replacing the one an earlier update left, and is put back if tmp
+// cannot take its place.
+func swapIn(tmp, exe string, aside bool) error {
+	if !aside {
+		return os.Rename(tmp, exe)
+	}
+	old := exe + ".old"
+	if err := os.Rename(exe, old); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, exe); err != nil {
+		os.Rename(old, exe)
+		return err
+	}
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 )
@@ -82,10 +83,14 @@ func buildCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// -o is relative to where weft build runs; the default is the app's name
-	// in the app's folder.
+	// in the app's folder, with .exe for Windows.
 	shown, target := *out, *out
 	if target == "" {
-		target = filepath.Join(appDir, binaryName(cfg, appDir))
+		goos := os.Getenv("GOOS")
+		if goos == "" {
+			goos = runtime.GOOS
+		}
+		target = filepath.Join(appDir, binaryName(cfg, appDir)+exeSuffix(goos))
 		shown = target
 		if wd, err := os.Getwd(); err == nil {
 			if rel, err := filepath.Rel(wd, target); err == nil {
@@ -136,6 +141,15 @@ func binaryName(cfg appConfig, appDir string) string {
 		return cfg.Name
 	}
 	return filepath.Base(appDir)
+}
+
+// exeSuffix is ".exe" for a binary built for goos windows, where a program
+// runs by that name only, and "" for any other system.
+func exeSuffix(goos string) string {
+	if goos == "windows" {
+		return ".exe"
+	}
+	return ""
 }
 
 // runIn runs name with args in dir, passing its output through. There is no

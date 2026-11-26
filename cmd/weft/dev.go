@@ -372,11 +372,14 @@ func goBuild(ctx context.Context, command, appDir, bin string, stderr io.Writer)
 		fmt.Fprintf(stderr, "weft %s: cannot make %s (%v); make the app's folder writable.\n", command, filepath.Dir(bin), err)
 		return false
 	}
+	// A running binary cannot be written over on Windows, where weft dev's
+	// Go server runs from bin while the next build is made.
+	setAside(bin)
 	cmd := exec.CommandContext(ctx, "go", "build", "-tags", "dev", "-o", bin, ".")
 	cmd.Dir, cmd.Env = appDir, hostBuildEnv(os.Environ())
 	cmd.Stdout, cmd.Stderr = stderr, stderr
 	// Stopped as a Ctrl-C would, so go stops the compilers it started.
-	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
+	cmd.Cancel = func() error { return interrupt(cmd.Process) }
 	cmd.WaitDelay = 3 * time.Second
 	return cmd.Run() == nil
 }
@@ -458,7 +461,7 @@ func portFree(port int) bool {
 		l, err := net.Listen("tcp", addr)
 		if err == nil {
 			l.Close()
-		} else if errors.Is(err, syscall.EADDRINUSE) {
+		} else if addrInUse(err) {
 			return false
 		}
 		if c, err := net.DialTimeout("tcp", addr, 500*time.Millisecond); err == nil {
@@ -467,6 +470,12 @@ func portFree(port int) bool {
 		}
 	}
 	return true
+}
+
+// addrInUse says whether err is a listen on an address in use: EADDRINUSE,
+// or on Windows WSAEADDRINUSE (10048), which syscall does not take for it.
+func addrInUse(err error) bool {
+	return errors.Is(err, syscall.EADDRINUSE) || runtime.GOOS == "windows" && errors.Is(err, syscall.Errno(10048))
 }
 
 // portFreeAt is portFree; a test puts another in its place.

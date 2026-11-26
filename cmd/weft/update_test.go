@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -63,7 +64,8 @@ func TestUpdateInstallsNewer(t *testing.T) {
 	if !strings.Contains(contents(t, target), "fake weft") {
 		t.Fatal("binary not replaced")
 	}
-	if fi, _ := os.Stat(target); fi.Mode()&0o111 == 0 {
+	// Windows has no mode bits for running a file; its name says.
+	if fi, _ := os.Stat(target); runtime.GOOS != "windows" && fi.Mode()&0o111 == 0 {
 		t.Fatal("not executable")
 	}
 	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(target), ".weft*")); len(left) != 0 {
@@ -140,5 +142,45 @@ func TestUpdateListedInHelp(t *testing.T) {
 	_, out, _ := runCmd("help")
 	if !strings.Contains(out, "update") {
 		t.Fatalf("help %q", out)
+	}
+}
+
+// The Windows release is a zip holding weft.exe, as scripts/release.sh makes
+// it; the others are tarballs holding weft.
+func TestUpdateArchiveForEachSystem(t *testing.T) {
+	for goos, want := range map[string]string{"windows": "weft_windows_arm64.zip", "linux": "weft_linux_arm64.tar.gz", "darwin": "weft_darwin_arm64.tar.gz"} {
+		if got := archiveName(goos, "arm64"); got != want {
+			t.Errorf("archiveName(%q, arm64) = %q, want %q", goos, got, want)
+		}
+	}
+	got, err := extract("weft_windows_amd64.zip", zipOf(t, "weft.exe", []byte("windows weft")))
+	if err != nil || string(got) != "windows weft" {
+		t.Errorf("extract of a zip = %q, %v; want windows weft", got, err)
+	}
+	if _, err := extract("weft_windows_amd64.zip", zipOf(t, "weft", []byte("no exe"))); err == nil || err.Error() != "no weft.exe inside" {
+		t.Errorf("extract of a zip without weft.exe = %v, want no weft.exe inside", err)
+	}
+}
+
+// On Windows the running binary is renamed to weft.old, which may be done to
+// a running one, before the new one takes its name; an older weft.old is
+// replaced, and a failure puts the running one back.
+func TestUpdateSwapsAside(t *testing.T) {
+	dir := t.TempDir()
+	exe, tmp := filepath.Join(dir, "weft.exe"), filepath.Join(dir, ".weft.new-1")
+	os.WriteFile(exe, []byte("running"), 0o755)
+	os.WriteFile(exe+".old", []byte("older"), 0o755)
+	os.WriteFile(tmp, []byte("new"), 0o755)
+	if err := swapIn(tmp, exe, true); err != nil {
+		t.Fatal(err)
+	}
+	if contents(t, exe) != "new" || contents(t, exe+".old") != "running" {
+		t.Errorf("after swapIn: weft.exe %q, weft.exe.old %q; want new and running", contents(t, exe), contents(t, exe+".old"))
+	}
+	if err := swapIn(filepath.Join(dir, "missing"), exe, true); err == nil {
+		t.Error("swapIn of a missing file succeeded")
+	}
+	if contents(t, exe) != "new" {
+		t.Errorf("a failed swapIn left weft.exe %q, want it put back as new", contents(t, exe))
 	}
 }
