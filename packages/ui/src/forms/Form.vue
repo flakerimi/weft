@@ -38,6 +38,7 @@
 // The native form keeps `novalidate`: Weft shows the errors, not the browser.
 import { computed, isProxy, nextTick, ref, toRaw, useTemplateRef, watch } from 'vue'
 import { usePrePaint } from '../head/usePrePaint.ts'
+import { formGuard } from './guard.ts'
 import { tabbables } from '../headless/dom.ts'
 import { provideForm } from './field.ts'
 import { validateField, validateFields, type FieldSchema } from './schema.ts'
@@ -73,10 +74,7 @@ defineSlots<{
 }>()
 
 // Before the body is parsed: once hydrated, onSubmit stops the submit as well.
-usePrePaint(
-  'form:submit',
-  'window.addEventListener("submit",function(e){var t=e.target;if(t&&t.classList&&t.classList.contains("weft-form"))e.preventDefault()},true)',
-)
+usePrePaint('form:submit', import.meta.env.SSR ? formGuard(import.meta.env.DEV) : '')
 
 const errors = ref<Record<string, string>>({})
 const submitted = ref(false)

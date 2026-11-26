@@ -59,12 +59,24 @@ function clean(path: string): string[] {
  * `''` when there is none. It is `{}` on any other page, on an address the
  * pattern does not match, and on the server, which renders the page once
  * with every param empty. It is not reactive: the page loads once
- * per address.
+ * per address. In development, called in the browser on a page built ahead
+ * (with getPaths, or no params at all), it says once in the console that
+ * such a page has no params there.
  */
+let warnedBuiltAhead = false
+
 export function useParams(): Record<string, string> {
   if (typeof document === 'undefined') return {}
   const pattern = document.documentElement.dataset.weftRoute
-  if (!pattern) return {}
+  if (!pattern) {
+    if (import.meta.env.DEV && !warnedBuiltAhead) {
+      warnedBuiltAhead = true
+      console.warn(
+        'useParams: this page was built ahead, so it has no params in the browser; export runtime = true from the page to read them here, or pass them to the island as props from getPaths.',
+      )
+    }
+    return {}
+  }
   const want = pattern.split('/').filter(Boolean)
   const got = clean(decode(location.pathname))
   const params: Record<string, string> = {}

@@ -85,3 +85,14 @@ it('is empty on the server, where there is no document', () => {
   vi.stubGlobal('document', undefined)
   expect(useParams()).toEqual({})
 })
+
+it('in development, says once that a page built ahead has no params in the browser', async () => {
+  vi.resetModules() // a copy that has not said it yet
+  const fresh = (await import('../src/head/useParams.ts')).useParams
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  open(undefined, '/about')
+  expect(fresh()).toEqual({})
+  expect(fresh()).toEqual({})
+  expect(warn).toHaveBeenCalledTimes(1)
+  expect(String(warn.mock.calls[0]![0])).toContain('runtime = true')
+})
