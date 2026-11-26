@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -315,7 +316,7 @@ func main() {
 `
 	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module helper\n\ngo 1.26\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "main.go"), []byte(src), 0o644)
-	bin := filepath.Join(dir, "helper")
+	bin := filepath.Join(dir, "helper"+exeSuffix(runtime.GOOS))
 	cmd := exec.Command("go", "build", "-o", bin, ".")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {

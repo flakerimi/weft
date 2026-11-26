@@ -324,7 +324,7 @@ func TestDevServerReadsStdinOnlyUnderWeftDev(t *testing.T) {
 	if code, _, errs := create(t, "myapp", "--no-install"); code != 0 {
 		t.Fatalf("exit %d: %s", code, errs)
 	}
-	bin := filepath.Join(t.TempDir(), "app")
+	bin := filepath.Join(t.TempDir(), "app"+exeSuffix(runtime.GOOS))
 	build := exec.Command("go", "build", "-tags", "dev", "-o", bin, ".")
 	build.Dir = "myapp"
 	if out, err := build.CombinedOutput(); err != nil {
@@ -457,7 +457,18 @@ func TestWriteAppVersionRenames(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "package.json")
 	os.WriteFile(file, []byte(`{"weft":{"version":"0.0.5"}}`), 0o600)
-	before, _ := os.Stat(file)
+	// From the open file, not os.Stat: on Windows a FileInfo from os.Stat
+	// reads the file's identity only when os.SameFile asks, from the path,
+	// which by then names the new file.
+	f, err := os.Open(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := f.Stat()
+	f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := writeAppVersion(dir, "0.0.6"); err != nil {
 		t.Fatal(err)
 	}
@@ -468,7 +479,8 @@ func TestWriteAppVersionRenames(t *testing.T) {
 	if os.SameFile(before, after) {
 		t.Error("package.json was rewritten in place, not replaced by a renamed temp file")
 	}
-	if after.Mode().Perm() != 0o600 {
+	// Windows keeps no permission bits but read-only, so 0600 reads as 0666.
+	if runtime.GOOS != "windows" && after.Mode().Perm() != 0o600 {
 		t.Errorf("mode %v, want 0600", after.Mode().Perm())
 	}
 	entries, _ := os.ReadDir(dir)
