@@ -15,7 +15,7 @@ import { contentType, CSS_MODULE, dropStaticComments } from './build.ts'
 import { siteConfig } from './config.ts'
 import { escapeHTML, iconTags, pageHTML, readStyles, THEMES, VIEW_TRANSITION, type Theme } from './document.ts'
 import { renderPage } from './render.ts'
-import { discoverRoutes, expandRoutes, type ExpandedRoute, type PageModule, type Route } from './routes.ts'
+import { byPattern, discoverRoutes, expandRoutes, matchPattern, type ExpandedRoute, type PageModule, type Route } from './routes.ts'
 
 export interface DevOptions {
   /** The site's folder, which holds `pages/`. Its `package.json` may be in a folder above. */
@@ -46,8 +46,9 @@ const RESOLVED_ISLANDS = '\0' + ISLANDS
 
 /**
  * Start the dev server for the site at `root`. It renders a page whose path
- * is requested then (a dynamic page's `getPaths()` is called each time), an
- * unknown path as `pages/404.vue` with status 404 or a plain 404, and a page
+ * is requested then (a dynamic page's `getPaths()` is called each time), a
+ * path a runtime page's pattern matches as that page's shell, as the build
+ * writes it, an unknown path as `pages/404.vue` with status 404 or a plain 404, and a page
  * that fails as a 500 that names its file; serves the files the pages it has
  * rendered wrote with `useFile`; proxies `/api` to `api`; and
  * sends a full reload to the browser when a file under `root` changes.
@@ -158,17 +159,27 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
 
   const load = (file: string) => server.ssrLoadModule(`/pages/${file}`) as Promise<PageModule>
 
-  /** The page at `path`: a static one, else the first dynamic page whose getPaths() gives it. */
-  async function find(routes: Route[], path: string, failing: { file: string }): Promise<ExpandedRoute | null> {
+  /**
+   * The page at `path`: a static one, else the first dynamic page whose
+   * getPaths() gives it. Without one, the runtime pages too, in the order
+   * warp.Serve tries them, for the caller to try after the files pages wrote.
+   */
+  async function find(routes: Route[], path: string, failing: { file: string }): Promise<{ route: ExpandedRoute | null; runtime: ExpandedRoute[] }> {
     const pages = routes.filter((r) => r.file !== '404.vue')
     const page = pages.find((r) => !r.dynamic && r.path === path)
-    if (page) return { path, file: page.file, params: {} }
+    if (page) return { route: { path, file: page.file, params: {} }, runtime: [] }
+    const runtime: ExpandedRoute[] = []
     for (const r of pages.filter((r) => r.dynamic)) {
       failing.file = r.file
-      const found = (await expandRoutes([r], load)).find((e) => e.path === path)
-      if (found) return found
+      const expanded = await expandRoutes([r], load)
+      const found = expanded.find((e) => !e.runtime && e.path === path)
+      if (found) return { route: found, runtime: [] }
+      runtime.push(...expanded.filter((e) => e.runtime))
     }
-    return null
+    // Refused as the build refuses them: two runtime pages of one shape.
+    failing.file = ''
+    if (runtime.length > 1) await expandRoutes(routes.filter((r) => runtime.some((e) => e.file === r.file)), load)
+    return { route: null, runtime: runtime.sort(byPattern) }
   }
 
   async function render(route: ExpandedRoute): Promise<string> {
@@ -186,6 +197,7 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
       fonts: [],
       css: [baseCSS, page.css, VIEW_TRANSITION].filter(Boolean).join('\n') + '\n',
       stylesheet: null,
+      route: route.runtime ? route.path : undefined,
       tags: [
         '<script type="module" src="/@vite/client"></script>',
         ...(page.islands.length ? [`<script type="module" src="/@id/__x00__${ISLANDS}?i=${islands}"></script>`] : []),
@@ -200,9 +212,12 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
     try {
       await freshen()
       const routes = await discoverRoutes(pagesDir)
-      let route = await find(routes, path, failing)
+      const found = await find(routes, path, failing)
+      let route = found.route
       const file = written.get(exact)
       if (!route && file !== undefined) return { status: 200, type: contentType(exact), body: file }
+      // A runtime page's shell, rendered as the build renders it: every param empty.
+      route ??= found.runtime.find((r) => matchPattern(r.path, path) !== null) ?? null
       const status = route ? 200 : 404
       if (!route && routes.some((r) => r.file === '404.vue')) route = { path, file: '404.vue', params: {} }
       if (!route) return { status: 404, type: 'text/plain; charset=utf-8', body: '404 page not found\n' }

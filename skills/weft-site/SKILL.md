@@ -76,6 +76,8 @@ const props = defineProps<{ slug: string }>()
 </script>
 ```
 
+A page for records made after the build exports `runtime = true` instead: it is built once, as a shell served for every path its pattern matches that no other page has, and reads its params with `useParams()`.
+
 `useHead({ title, description, image })` writes the `<title>`, the description and the Open Graph tags. Every page also gets speculation rules and view transitions.
 
 ## Islands: the only JavaScript
@@ -139,7 +141,7 @@ The path starts with `/` and may not be under `/pages/` or `/assets/`. Two pages
 
 The build stops with one sentence naming the file, and often the line, when:
 
-- two files make the same route, or a dynamic page has no `getPaths()`;
+- two files make the same route, or a dynamic page has neither `getPaths()` nor `runtime`, or both;
 - an island's prop is not JSON, or an island is not a `.vue` file the page imports;
 - an island imports `virtual:weft/content` or `virtual:weft/files`, which exist only on the server;
 - Markdown frontmatter is not valid YAML, misses a field, or has one of the wrong type or one the schema lacks;

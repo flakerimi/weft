@@ -29,8 +29,9 @@ type manifestFile struct {
 // The build's routes.json. Its file names are relative to dist.
 type buildRoutes struct {
 	Pages []struct {
-		Path string `json:"path"`
-		HTML string `json:"html"`
+		Path    string `json:"path"`
+		HTML    string `json:"html"`
+		Runtime bool   `json:"runtime"`
 	} `json:"pages"`
 	NotFound *string `json:"notFound"`
 	App      *struct {
@@ -42,10 +43,40 @@ type buildRoutes struct {
 // A site is a page build held in memory: nothing is read from dist once it is made.
 type site struct {
 	pages     map[string]*resource
+	runtime   []runtimePage // tried in routes.json's order, after everything but the not-found page
 	files     map[string]*resource
 	notFound  *resource // nil: a plain 404
 	appPrefix string    // "" when there is no app
 	app       *resource
+}
+
+// A runtime page is a page whose paths are known only at run time: one shell,
+// served for every path its pattern matches.
+type runtimePage struct {
+	pattern []string // the pattern's segments: "products", ":id", ":...rest"
+	res     *resource
+}
+
+// match reports whether the cleaned path p has the pattern's shape: a
+// segment equals a static one byte for byte, ":name" takes one segment, and
+// ":...name" the rest of the path, or none of it. It allocates nothing.
+func (rp *runtimePage) match(p string) bool {
+	rest := p[1:]
+	for _, want := range rp.pattern {
+		if strings.HasPrefix(want, ":...") {
+			return true
+		}
+		// A cleaned path has no empty segment: "" is the end of it.
+		if rest == "" {
+			return false
+		}
+		var got string
+		got, rest, _ = strings.Cut(rest, "/")
+		if !strings.HasPrefix(want, ":") && got != want {
+			return false
+		}
+	}
+	return rest == ""
 }
 
 // A resource is what one route serves: a file in up to three encodings, and
@@ -131,11 +162,18 @@ func loadSite(dist fs.FS, raw []byte) *site {
 		}
 		return &resource{identity: res.identity, br: res.br, gzip: res.gzip, links: links}
 	}
+	runtime := map[string]bool{}
 	for _, p := range routes.Pages {
-		if s.pages[p.Path] != nil {
+		if s.pages[p.Path] != nil || runtime[p.Path] {
 			panic(fmt.Sprintf("warp.Serve: routes.json lists the page %s twice.", p.Path))
 		}
-		s.pages[p.Path] = route(p.Path, p.HTML, m.Hints[p.Path])
+		res := route(p.Path, p.HTML, m.Hints[p.Path])
+		if !p.Runtime {
+			s.pages[p.Path] = res
+			continue
+		}
+		runtime[p.Path] = true
+		s.runtime = append(s.runtime, runtimePage{pattern: strings.Split(strings.TrimPrefix(p.Path, "/"), "/"), res: res})
 	}
 	if routes.NotFound != nil {
 		s.notFound = route("the not-found page", *routes.NotFound, m.Hints["404"])
@@ -207,7 +245,7 @@ func (s *site) serves(p string) string {
 }
 
 // ServeHTTP serves a request that is not for the API: a page, a listed file,
-// the app, or the not-found page.
+// the app, the first runtime page whose pattern matches, or the not-found page.
 func (s *site) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		h := w.Header()
@@ -236,6 +274,12 @@ func (s *site) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if s.app != nil && (p == s.appPrefix || strings.HasPrefix(p, s.appPrefix+"/")) && !strings.HasPrefix(p, s.appPrefix+"/assets/") {
 		s.app.serve(w, r, http.StatusOK)
 		return
+	}
+	for i := range s.runtime {
+		if rp := &s.runtime[i]; rp.match(p) {
+			rp.res.serve(w, r, http.StatusOK)
+			return
+		}
 	}
 	if s.notFound != nil {
 		s.notFound.serve(w, r, http.StatusNotFound)

@@ -120,6 +120,24 @@ describe('devSite', { timeout: 30_000 }, () => {
     expect(text((await get(dev.url + 'blog/second/')).body)).toContain('Post second')
   })
 
+  it('dev serves a runtime page for any id', async () => {
+    const dev = await start(site('dev-site'))
+    for (const path of ['products/42', 'products/999', 'products/42/']) {
+      const page = await get(dev.url + path)
+      expect(page.status, path).toBe(200)
+      // The shell, as the build writes it: the pattern on <html>, and every param empty.
+      expect(page.body, path).toContain('<html lang="en" data-weft-route="/products/:id">')
+      expect(text(page.body), path).toContain('Product []')
+    }
+    for (const path of ['products', 'products/1/extra', 'product/1']) {
+      const page = await get(dev.url + path)
+      expect(page.status, path).toBe(404)
+      expect(text(page.body), path).toContain('Nothing here')
+    }
+    // No other page carries the pattern.
+    expect((await get(dev.url)).body).toContain('<html lang="en">')
+  })
+
   it('serves the files a page wrote with useFile, once it has rendered', async () => {
     const dev = await start(site('dev-site'))
     expect((await get(dev.url + 'feed.json')).status).toBe(404)

@@ -137,10 +137,12 @@ export function pageHTML(p: {
   tags: string[]
   /** Who starts the sentence of an error. */
   who?: string
+  /** A runtime page's pattern (`/products/:id`), written on `<html>` as data-weft-route for useParams(). */
+  route?: string
 }): string {
   return [
     '<!doctype html>',
-    '<html lang="en">',
+    p.route === undefined ? '<html lang="en">' : `<html lang="en" data-weft-route="${escapeHTML(p.route)}">`,
     '<head>',
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',

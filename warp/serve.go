@@ -22,6 +22,11 @@ const (
 //   - a file the manifest lists, at its path;
 //   - a path under the app's prefix, except under its assets/, gets the
 //     app's index.html;
+//   - a path that a runtime page's pattern matches (routes.json lists it as
+//     "/products/:id" with "runtime": true) gets that page's one shell, with
+//     status 200: the first such page in routes.json's order. ":name" matches
+//     one segment, ":...name" the rest of the path or none of it, and a
+//     segment of the pattern is compared byte for byte;
 //   - anything else gets the not-found page with status 404, or a plain 404.
 //
 // Each answer is the stored brotli or gzip variant the client accepts best,

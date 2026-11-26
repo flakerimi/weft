@@ -11,7 +11,7 @@ import { weft } from './plugin.ts'
 import type { ContentAsset } from './content.ts'
 import { iconTags, pageHTML, readStyles, THEMES, VIEW_TRANSITION, type Theme } from './document.ts'
 import { createRenderServer, renderPage, type RenderResult } from './render.ts'
-import { discoverRoutes, expandRoutes, type ExpandedRoute, type PageModule, type RoutesJson } from './routes.ts'
+import { byPattern, discoverRoutes, expandRoutes, type ExpandedRoute, type PageModule, type RoutesJson } from './routes.ts'
 
 export type { Theme } from './document.ts'
 
@@ -535,6 +535,8 @@ async function writeBuild(
 
   const hints: Manifest['hints'] = {}
   const routesJson: RoutesJson = { pages: [], notFound: null, app }
+  // After every exact page, in the order the server tries them.
+  const runtimePages: RoutesJson['pages'] = []
   const rules = speculationRules(app)
   const sentSize = sentSizes()
   const minify = minifier(cssTarget)
@@ -578,8 +580,9 @@ async function writeBuild(
           ]
         : []),
     ]
-    const file = htmlFile(page.path)
-    await write(file, pageHTML({ body: dropStaticComments(page.html), head: page.head, prePaint: page.prePaint, icons, fonts, css, stylesheet, tags }))
+    const file = page.runtime ? shellFile(page.path) : htmlFile(page.path)
+    const route = page.runtime ? page.path : undefined
+    await write(file, pageHTML({ body: dropStaticComments(page.html), head: page.head, prePaint: page.prePaint, icons, fonts, css, stylesheet, tags, route }))
 
     const links = [
       ...fonts.map((f) => `<${f}>; rel=preload; as=font; type="font/woff2"; crossorigin`),
@@ -589,8 +592,10 @@ async function writeBuild(
     const notFound = page.file === '404.vue'
     if (links.length) hints[notFound ? '404' : page.path] = links
     if (notFound) routesJson.notFound = file
+    else if (page.runtime) runtimePages.push({ path: page.path, html: file, islands: page.islands, runtime: true })
     else routesJson.pages.push({ path: page.path, html: file, islands: page.islands })
   }
+  routesJson.pages.push(...runtimePages.sort(byPattern))
   // The files the pages wrote with useFile, each once.
   const given = new Map<string, { path: string; body: string; page: string }>()
   for (const page of pages) {
@@ -1077,6 +1082,16 @@ function htmlFile(path: string): string {
   if (segments.some((s) => s === '' || s === '.' || s === '..' || s.includes('\\'))) {
     throw new Error(`buildSite: page path ${path} has an empty, "." or ".." segment.`)
   }
+  return `pages/${segments.join('/')}/index.html`
+}
+
+/**
+ * A runtime page's shell, in a folder named as its file is, brackets kept
+ * (a colon is no safe file name): `/products/:id` → `pages/products/[id]/index.html`,
+ * `/docs/:...rest` → `pages/docs/[...rest]/index.html`.
+ */
+function shellFile(pattern: string): string {
+  const segments = pattern.slice(1).split('/').map((s) => s.replace(/^:(.+)$/, '[$1]'))
   return `pages/${segments.join('/')}/index.html`
 }
 

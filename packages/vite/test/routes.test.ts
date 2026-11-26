@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
-import { discoverRoutes, expandRoutes } from '../src/routes.ts'
+import { byPattern, discoverRoutes, expandRoutes, matchPattern } from '../src/routes.ts'
 
 const dir = (n: string) => fileURLToPath(new URL(`./fixtures/${n}`, import.meta.url))
 
@@ -161,6 +161,82 @@ describe('expandRoutes', () => {
           `getPaths() of "[slug].vue" returned ${JSON.stringify(slug)} for slug, which is not one path segment; a page named [...slug].vue takes several.`,
         ),
       )
+    }
+  })
+})
+
+describe('runtime pages', () => {
+  it('expands a page that exports runtime = true to one shell, its params empty', async () => {
+    const routes = await discoverRoutes(pagesWith('products/[id].vue', 'products/new.vue', 'docs/[...rest].vue'))
+    const out = await expandRoutes(routes, async () => ({ runtime: true }))
+    expect(out).toEqual([
+      { path: '/products/new', file: 'products/new.vue', params: {} },
+      { path: '/docs/:...rest', file: 'docs/[...rest].vue', params: { rest: '' }, runtime: true },
+      { path: '/products/:id', file: 'products/[id].vue', params: { id: '' }, runtime: true },
+    ])
+  })
+
+  it('takes any other value of runtime for no export', async () => {
+    const routes = await discoverRoutes(pagesWith('products/[id].vue'))
+    for (const runtime of [false, 'true', 1, null]) {
+      expect(await expandRoutes(routes, async () => ({ runtime, getPaths: async () => [{ id: 'a' }] }))).toEqual([
+        { path: '/products/a', file: 'products/[id].vue', params: { id: 'a' } },
+      ])
+    }
+  })
+
+  it('runtime and getPaths together fail', async () => {
+    const routes = await discoverRoutes(pagesWith('products/[id].vue'))
+    await expect(expandRoutes(routes, async () => ({ runtime: true, getPaths: async () => [] }))).rejects.toThrow(
+      new Error('page "products/[id].vue" exports both runtime and getPaths; keep one.'),
+    )
+  })
+
+  it('neither fails as before', async () => {
+    const routes = await discoverRoutes(pagesWith('products/[id].vue'))
+    for (const mod of [{}, { runtime: false }]) {
+      await expect(expandRoutes(routes, async () => mod)).rejects.toThrow(
+        new Error('page "products/[id].vue" is dynamic but does not export getPaths()'),
+      )
+    }
+  })
+
+  it('refuses two runtime pages of the same shape, and allows one an exact page overlaps', async () => {
+    const routes = await discoverRoutes(pagesWith('a/[x].vue', 'a/[y].vue'))
+    await expect(expandRoutes(routes, async () => ({ runtime: true }))).rejects.toThrow(
+      new Error('pages "a/[x].vue" and "a/[y].vue" both match paths like /a/1; keep one.'),
+    )
+    const rest = await discoverRoutes(pagesWith('docs/[...a].vue', 'docs/[...b]/index.vue'))
+    await expect(expandRoutes(rest, async () => ({ runtime: true }))).rejects.toThrow(
+      new Error('pages "docs/[...a].vue" and "docs/[...b]/index.vue" both match paths like /docs/1; keep one.'),
+    )
+    // Of another shape, or a page with getPaths, is allowed: the order, and then the exact page, decide.
+    const other = await discoverRoutes(pagesWith('a/[x].vue', 'a/[...y].vue', '[s]/[t].vue', 'a/b.vue'))
+    expect((await expandRoutes(other, async () => ({ runtime: true }))).map((r) => r.path)).toEqual(['/a/b', '/:s/:t', '/a/:...y', '/a/:x'])
+  })
+
+  it('orders patterns by more static segments, then fewer params, then a catch-all last, then by path', () => {
+    const paths = ['/:a', '/:section/:id', '/docs/:...rest', '/products/:id', '/products/:id/edit', '/blog/:slug', '/a/b/:...c', '/:...all']
+    expect(paths.map((path) => ({ path })).sort(byPattern).map((r) => r.path)).toEqual([
+      '/products/:id/edit',
+      '/a/b/:...c',
+      '/blog/:slug',
+      '/products/:id',
+      '/docs/:...rest',
+      '/:a',
+      '/:...all',
+      '/:section/:id',
+    ])
+  })
+
+  it('matches a path against a pattern as warp.Serve does', () => {
+    expect(matchPattern('/products/:id', '/products/42')).toEqual({ id: '42' })
+    expect(matchPattern('/:section/:id', '/a/b')).toEqual({ section: 'a', id: 'b' })
+    expect(matchPattern('/docs/:...rest', '/docs')).toEqual({ rest: '' })
+    expect(matchPattern('/docs/:...rest', '/docs/a/b')).toEqual({ rest: 'a/b' })
+    expect(matchPattern('/:...rest', '/')).toEqual({ rest: '' })
+    for (const path of ['/products', '/products/', '/products/1/x', '/Products/1', '/product/1', '/']) {
+      expect(matchPattern('/products/:id', path), path).toBeNull()
     }
   })
 })

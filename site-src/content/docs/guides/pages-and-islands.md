@@ -43,6 +43,31 @@ const props = defineProps<{ slug: string }>()
 
 The build makes `/notes/first` and `/notes/second`. A `[name]` value is one path segment; a `[...name]` value may hold several, and `''` is the folder itself.
 
+### Pages for records made after the build
+
+A page for a record that is made later, such as `/products/42`, cannot list its paths at build. It exports `runtime = true` in place of `getPaths()`, and reads its params in the browser with `useParams()`:
+
+```vue
+<script lang="ts">
+export const runtime = true
+</script>
+
+<script setup vapor lang="ts">
+import { useParams } from '@weft/ui'
+
+const { id } = useParams()
+</script>
+```
+
+The build makes the page once, as a shell, with every param the empty string, and writes it to `pages/products/[id]/index.html`. The Go server answers every path that matches `/products/:id` with that shell and status 200, when no other page and no file has the path: `/products/new` from `pages/products/new.vue` wins. `[id]` matches one segment that is not empty, and `[...rest]` the rest of the path, or none of it. A record that does not exist is the API's 404, which the page shows; the page itself is always 200. `weft dev` serves the page the same way.
+
+The build writes the pattern on the page's `<html>` as `data-weft-route="/products/:id"`. `useParams()` reads `location.pathname` against it, and returns each param decoded, or `{}` on another page and on the server. It is not reactive: the page loads once per address. Some things fail the build:
+
+- a dynamic page that exports both `runtime` and `getPaths()`, or neither;
+- two runtime pages that match the same paths, such as `a/[x].vue` and `a/[y].vue`.
+
+When two patterns match one path, the one with more fixed segments wins, then the one with fewer params, then the one without a `[...name]`.
+
 ## The head
 
 `useHead` sets the `<title>`, the description and the Open Graph image:

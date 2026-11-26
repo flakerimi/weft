@@ -4,6 +4,10 @@ import (
 	"encoding/json"
 	"io/fs"
 	"maps"
+	"net/http"
+	"net/http/httptest"
+	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -271,5 +275,193 @@ func TestManifestReadsEverythingAtConstruction(t *testing.T) {
 	}
 	if after := opens.Load(); after != before {
 		t.Fatalf("requests opened dist %d times", after-before)
+	}
+}
+
+// runtimeFiles are the shells of pages whose paths are known only at run
+// time, beside an exact page that one of their patterns also matches.
+var runtimeFiles = append(slices.Clone(siteFiles),
+	siteFile{"/pages/products/[id]/index.html", "<p>product shell</p>", `"product"`, "text/html; charset=utf-8", true, false},
+	siteFile{"/pages/products/new/index.html", "<p>new product</p>", `"newproduct"`, "text/html; charset=utf-8", true, false},
+	siteFile{"/pages/docs/[...rest]/index.html", "<p>docs shell</p>", `"docs"`, "text/html; charset=utf-8", true, false},
+	siteFile{"/pages/[section]/[id]/index.html", "<p>section shell</p>", `"section"`, "text/html; charset=utf-8", true, false},
+)
+
+// runtimeRoutes lists the runtime pages after the exact ones, as the build
+// orders them.
+const runtimeRoutes = `{
+  "pages": [
+    {"path": "/", "html": "pages/index/index.html", "islands": []},
+    {"path": "/about", "html": "pages/about/index.html", "islands": []},
+    {"path": "/counter", "html": "pages/counter/index.html", "islands": ["Counter"]},
+    {"path": "/products/new", "html": "pages/products/new/index.html", "islands": []},
+    {"path": "/products/:id", "html": "pages/products/[id]/index.html", "islands": [], "runtime": true},
+    {"path": "/docs/:...rest", "html": "pages/docs/[...rest]/index.html", "islands": [], "runtime": true}
+  ],
+  "notFound": "pages/404/index.html",
+  "app": {"prefix": "/app", "index": "app/index.html"}
+}
+`
+
+var productHints = []string{"</assets/client-abc.js>; rel=modulepreload"}
+
+// runtimeBuild returns a build with runtime pages; the product page has Early Hints.
+func runtimeBuild(t testing.TB, routes string) fstest.MapFS {
+	t.Helper()
+	dist := buildOf(t, runtimeFiles, routes)
+	var m map[string]any
+	if err := json.Unmarshal(dist["manifest.json"].Data, &m); err != nil {
+		t.Fatal(err)
+	}
+	m["hints"].(map[string]any)["/products/:id"] = productHints
+	b, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dist["manifest.json"] = &fstest.MapFile{Data: b}
+	return dist
+}
+
+func TestRuntimePage(t *testing.T) {
+	h := Serve(runtimeBuild(t, runtimeRoutes), nil)
+	const shell = "<p>product shell</p>"
+	// Any id, made after the build or never made: the record's 404 is the API's (Review Focus 5).
+	for _, p := range []string{"/products/42", "/products/999", "/products/42/", "/products/a%20b"} {
+		r := do(t, h, "GET", p, "Accept-Encoding", "br")
+		if r.StatusCode != 200 || r.body != "br:"+shell || r.Header.Get("Content-Encoding") != "br" || r.Header.Get("ETag") != `"product-br"` {
+			t.Errorf("%s: status %d body %q encoding %q etag %s", p, r.StatusCode, r.body, r.Header.Get("Content-Encoding"), r.Header.Get("ETag"))
+		}
+		if ct, cc := r.Header.Get("Content-Type"), r.Header.Get("Cache-Control"); ct != "text/html; charset=utf-8" || cc != "no-cache" {
+			t.Errorf("%s: content-type %q cache-control %q", p, ct, cc)
+		}
+		if len(r.early) != 1 || !slices.Equal(r.early[0].Values("Link"), productHints) || !slices.Equal(r.Header.Values("Link"), productHints) {
+			t.Errorf("%s: 103s %v, Link %q", p, r.early, r.Header.Values("Link"))
+		}
+	}
+	if r := do(t, h, "GET", "/products/42"); r.body != shell || r.Header.Get("ETag") != `"product"` {
+		t.Errorf("identity: body %q etag %s", r.body, r.Header.Get("ETag"))
+	}
+	if r := do(t, h, "GET", "/products/42", "Accept-Encoding", "gzip", "If-None-Match", `"product-gz"`); r.StatusCode != http.StatusNotModified || r.body != "" {
+		t.Errorf("If-None-Match: status %d body %q", r.StatusCode, r.body)
+	}
+	if r := do(t, h, "HEAD", "/products/7", "Accept-Encoding", "br"); r.StatusCode != 200 || r.body != "" || r.Header.Get("Content-Length") != strconv.Itoa(len("br:"+shell)) {
+		t.Errorf("HEAD: status %d body %q length %q", r.StatusCode, r.body, r.Header.Get("Content-Length"))
+	}
+	if r := do(t, h, "POST", "/products/7"); r.StatusCode != http.StatusMethodNotAllowed || r.Header.Get("Allow") != "GET, HEAD" {
+		t.Errorf("POST: status %d allow %q", r.StatusCode, r.Header.Get("Allow"))
+	}
+}
+
+func TestRuntimePageDoesNotOvermatch(t *testing.T) {
+	h := Serve(runtimeBuild(t, runtimeRoutes), nil)
+	// :id is one non-empty segment, compared byte for byte.
+	for _, p := range []string{"/products", "/products/", "/products/1/extra", "/product/1", "/PRODUCTS/1", "/xproducts/1", "/doc", "/docsy/a"} {
+		if r := do(t, h, "GET", p); r.StatusCode != 404 || r.body != "<p>not here</p>" {
+			t.Errorf("%s: status %d body %q", p, r.StatusCode, r.body)
+		}
+	}
+}
+
+func TestExactPageWinsOverPattern(t *testing.T) {
+	h := Serve(runtimeBuild(t, runtimeRoutes), nil)
+	if r := do(t, h, "GET", "/products/new"); r.StatusCode != 200 || r.body != "<p>new product</p>" {
+		t.Errorf("/products/new: status %d body %q", r.StatusCode, r.body)
+	}
+	// A pattern that would match every path of two segments is tried after the
+	// exact pages, the files and the app.
+	routes := strings.Replace(runtimeRoutes, `"islands": [], "runtime": true}
+  ]`, `"islands": [], "runtime": true},
+    {"path": "/:section/:id", "html": "pages/[section]/[id]/index.html", "islands": [], "runtime": true}
+  ]`, 1)
+	h = Serve(runtimeBuild(t, routes), nil)
+	for _, c := range []struct{ path, body string }{
+		{"/products/new", "<p>new product</p>"},
+		{"/products/1", "<p>product shell</p>"},
+		{"/assets/client-abc.js", "export const a=1"},
+		{"/app/x", `<div id="app"></div>`},
+		{"/about/us", "<p>section shell</p>"},
+	} {
+		if r := do(t, h, "GET", c.path); r.StatusCode != 200 || r.body != c.body {
+			t.Errorf("%s: status %d body %q", c.path, r.StatusCode, r.body)
+		}
+	}
+	// A path under /pages/ is never a build file, but a pattern may still match it: it gets the shell.
+	if r := do(t, h, "GET", "/pages/about"); r.body != "<p>section shell</p>" {
+		t.Errorf("/pages/about: body %q", r.body)
+	}
+}
+
+// Patterns are tried in the order routes.json lists them.
+func TestRuntimePagesInOrder(t *testing.T) {
+	routes := `{"pages":[
+    {"path": "/:section/:id", "html": "pages/[section]/[id]/index.html", "islands": [], "runtime": true},
+    {"path": "/products/:id", "html": "pages/products/[id]/index.html", "islands": [], "runtime": true}
+  ],"notFound":null,"app":null}`
+	if r := do(t, Serve(runtimeBuild(t, routes), nil), "GET", "/products/1"); r.body != "<p>section shell</p>" {
+		t.Errorf("first listed: body %q", r.body)
+	}
+}
+
+func TestCatchAllRuntimePage(t *testing.T) {
+	h := Serve(runtimeBuild(t, runtimeRoutes), nil)
+	for _, p := range []string{"/docs", "/docs/", "/docs/a", "/docs/guides/islands/more"} {
+		if r := do(t, h, "GET", p); r.StatusCode != 200 || r.body != "<p>docs shell</p>" {
+			t.Errorf("%s: status %d body %q", p, r.StatusCode, r.body)
+		}
+	}
+	// One at the root takes every path no other page, file or pattern has, "/" among them.
+	routes := `{"pages":[
+    {"path": "/about", "html": "pages/about/index.html", "islands": []},
+    {"path": "/:...rest", "html": "pages/docs/[...rest]/index.html", "islands": [], "runtime": true}
+  ],"notFound":"pages/404/index.html","app":null}`
+	h = Serve(runtimeBuild(t, routes), nil)
+	for _, c := range []struct{ path, body string }{
+		{"/", "<p>docs shell</p>"},
+		{"/a/b", "<p>docs shell</p>"},
+		{"/about", "<p>about us</p>"},
+		{"/robots.txt", "User-agent: *"},
+	} {
+		if r := do(t, h, "GET", c.path); r.StatusCode != 200 || r.body != c.body {
+			t.Errorf("%s: status %d body %q", c.path, r.StatusCode, r.body)
+		}
+	}
+}
+
+func TestRuntimePageMissingHTMLPanics(t *testing.T) {
+	dist := editManifest(t, runtimeBuild(t, runtimeRoutes), func(m map[string]any) {
+		delete(m["files"].(map[string]any), "/pages/products/[id]/index.html")
+	})
+	wantPanic(t, "warp.Serve: routes.json serves /products/:id from pages/products/[id]/index.html, which manifest.json does not list.", func() {
+		Serve(dist, nil)
+	})
+	twice := strings.Replace(runtimeRoutes, `"/docs/:...rest"`, `"/products/:id"`, 1)
+	wantPanic(t, "warp.Serve: routes.json lists the page /products/:id twice.", func() {
+		Serve(runtimeBuild(t, twice), nil)
+	})
+}
+
+// allocsOf returns the allocations of one GET of path from h.
+func allocsOf(t *testing.T, h http.Handler, path string) float64 {
+	t.Helper()
+	req := httptest.NewRequest("GET", path, nil)
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br;q=0.9")
+	w := &discard{h: http.Header{}}
+	return testing.AllocsPerRun(100, func() {
+		clear(w.h)
+		h.ServeHTTP(w, req)
+	})
+}
+
+// Runtime pages cost an exact page, and a path no pattern matches, nothing.
+func TestStaticPagesPayNothing(t *testing.T) {
+	without := Serve(buildOf(t, runtimeFiles, siteRoutes), nil)
+	with := Serve(runtimeBuild(t, runtimeRoutes), nil)
+	for _, p := range []string{"/about", "/counter/", "/nope", "/products/1/extra", "/docsy"} {
+		if a, b := allocsOf(t, without, p), allocsOf(t, with, p); a != b {
+			t.Errorf("%s: %v allocs with runtime pages, %v without", p, b, a)
+		}
+	}
+	if a, b := allocsOf(t, with, "/about"), allocsOf(t, with, "/products/1"); a != b {
+		t.Errorf("a runtime page: %v allocs, an exact page %v", b, a)
 	}
 }

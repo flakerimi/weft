@@ -3,14 +3,24 @@ import { join } from 'node:path'
 
 export type Route = { path: string; file: string; dynamic: boolean }
 
-/** The shape of `routes.json`, written by the build. */
+/**
+ * The shape of `routes.json`, written by the build. A runtime page's entry has
+ * its pattern as its path (`/products/:id`) and `runtime: true`; the others
+ * have no `runtime`. Runtime pages come after every other page, in the order
+ * `byPattern` gives, which is the order the server tries them in.
+ */
 export type RoutesJson = {
-  pages: { path: string; html: string; islands: string[] }[]
+  pages: { path: string; html: string; islands: string[]; runtime?: true }[]
   notFound: string | null
   app: { prefix: string; index: string } | null
 }
 
-export type PageModule = { getPaths?: () => Promise<Record<string, string>[]> }
+/**
+ * What a page's plain `<script>` may export: `getPaths()`, or `runtime = true`
+ * for a dynamic page built once as a shell whose paths are known only at run
+ * time. Any other value of `runtime` is the same as none.
+ */
+export type PageModule = { getPaths?: () => Promise<Record<string, string>[]>; runtime?: unknown }
 
 const collision = (a: string, b: string, path: string) =>
   new Error(`pages "${a}" and "${b}" both make ${path}`)
@@ -77,10 +87,70 @@ export async function discoverRoutes(pagesDir: string): Promise<Route[]> {
   return routes.sort(byOrder)
 }
 
-/** A concrete page: its path, its file, and the params that made the path (the page's props). */
-export type ExpandedRoute = { path: string; file: string; params: Record<string, string> }
+/**
+ * A concrete page: its path, its file, and the params that made the path (the
+ * page's props). A runtime page is one shell: its path is its pattern, and
+ * every param is the empty string.
+ */
+export type ExpandedRoute = { path: string; file: string; params: Record<string, string>; runtime?: true }
 
-/** Turns routes into concrete paths, calling each dynamic page's `getPaths()`. */
+/** The pattern's segments: `/products/:id` → ['products', ':id']. */
+const segmentsOf = (pattern: string) => pattern.slice(1).split('/').filter(Boolean)
+const isParam = (segment: string) => segment.startsWith(':')
+const isRest = (segment: string) => segment.startsWith(':...')
+
+/**
+ * The order the server tries runtime pages in: more static segments first,
+ * then fewer params, then a pattern without a catch-all before one with (so
+ * `/docs/:slug` is tried before `/docs/:...rest`), then by path.
+ */
+export function byPattern(a: { path: string }, b: { path: string }): number {
+  const [x, y] = [segmentsOf(a.path), segmentsOf(b.path)]
+  const statics = (s: string[]) => s.filter((p) => !isParam(p)).length
+  const params = (s: string[]) => s.filter(isParam).length
+  const rest = (s: string[]) => Number(s.some(isRest))
+  return (
+    statics(y) - statics(x) ||
+    params(x) - params(y) ||
+    rest(x) - rest(y) ||
+    (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)
+  )
+}
+
+/**
+ * The params of `path` against a runtime page's `pattern`, or null when it
+ * does not match, as warp.Serve matches: `:name` takes one segment, `:...name`
+ * the rest of the path (joined by `/`) or none of it (`''`), and a static
+ * segment is compared exactly. `path` is cleaned as the server cleans it: a
+ * trailing slash and empty segments are dropped.
+ */
+export function matchPattern(pattern: string, path: string): Record<string, string> | null {
+  const want = segmentsOf(pattern)
+  const got = path.split('/').filter(Boolean)
+  const params: Record<string, string> = {}
+  for (let i = 0; i < want.length; i++) {
+    const w = want[i]!
+    if (isRest(w)) {
+      params[w.slice(4)] = got.slice(i).join('/')
+      return params
+    }
+    const g = got[i]
+    if (g === undefined) return null
+    if (isParam(w)) params[w.slice(1)] = g
+    else if (g !== w) return null
+  }
+  return got.length === want.length ? params : null
+}
+
+/** A runtime page's shape, the same for patterns that match the same paths: `/a/:x` and `/a/:y` are `/a/:`. */
+const shapeOf = (pattern: string) => pattern.replace(/\/:(\.\.\.)?[^/]+/g, (_, rest: string | undefined) => (rest ? '/:...' : '/:'))
+
+/**
+ * Turns routes into concrete paths, calling each dynamic page's `getPaths()`;
+ * a dynamic page that exports `runtime = true` is one shell instead. Two
+ * runtime pages of the same shape are refused; an exact page a runtime page's
+ * pattern also matches is allowed, and wins at run time.
+ */
 export async function expandRoutes(
   routes: Route[],
   loadPage: (file: string) => Promise<PageModule>,
@@ -94,9 +164,22 @@ export async function expandRoutes(
     out.push({ path, file, params })
   }
   for (const r of routes) if (!r.dynamic) add(r.path, r.file, {})
+  const shapes = new Map<string, string>()
   for (const r of routes) {
     if (!r.dynamic) continue
-    const { getPaths } = await loadPage(r.file)
+    const { getPaths, runtime } = await loadPage(r.file)
+    if (runtime === true) {
+      if (getPaths !== undefined) throw new Error(`page "${r.file}" exports both runtime and getPaths; keep one.`)
+      const shape = shapeOf(r.path)
+      const other = shapes.get(shape)
+      if (other !== undefined) {
+        throw new Error(`pages "${other}" and "${r.file}" both match paths like ${shape.replace(/:(\.\.\.)?/g, '1')}; keep one.`)
+      }
+      shapes.set(shape, r.file)
+      const params = Object.fromEntries(segmentsOf(r.path).filter(isParam).map((p) => [p.replace(/^:(\.\.\.)?/, ''), '']))
+      out.push({ path: r.path, file: r.file, params, runtime: true })
+      continue
+    }
     if (typeof getPaths !== 'function') {
       throw new Error(`page "${r.file}" is dynamic but does not export getPaths()`)
     }
