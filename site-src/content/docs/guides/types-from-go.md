@@ -116,7 +116,7 @@ try {
 }
 ```
 
-`unique`, and every rule of a type nested in a body, are checked by the server only, and arrive the same way, as `This is already taken.` under the name field. A `Form` sends only from its island, so put it in one ([Islands](pages-and-islands.md#islands)); in development, a submit of one in no island says so in the console.
+A field that is a pointer in Go is `nullable` in `schema`, so a `Form` given it sends the field as `null` when the person empties it, which clears it; without the schema, an emptied number, date or choice is left out, and the server keeps what it had. `unique`, and every rule of a type nested in a body, are checked by the server only, and arrive the same way, as `This is already taken.` under the name field. A `Form` sends only from its island, so put it in one ([Islands](pages-and-islands.md#islands)); in development, a submit of one in no island says so in the console.
 
 ### Where the browser and Go differ
 
@@ -130,7 +130,7 @@ try {
 | `""` for a pointer field with `min`, `email` or `enum` | empty, so it passes | sent, so it is checked and fails |
 | an empty object, or a zero time, for `required` | filled in | empty, so it fails |
 | `pattern` | checked | no such rule |
-| `null` for a number that is not a pointer, sent by the app itself (a `Form` leaves an empty number out) | empty, so it passes | refused, `Send a value, not null.` |
+| `null` for a field that is not a pointer, sent by the app itself (a `Form` leaves it out) | empty, so it passes | refused, `Send a value, not null.` |
 
 `email` and `url` are one rule on both sides, tested on the same rows. A model that accepts 0 does not mark the field `required`; one that must tell 0 from nothing uses a pointer.
 

@@ -8,9 +8,9 @@
 // the value. The mouse wheel changes it only with `wheel`, and only while it
 // has focus. The steppers stay out of the tab order (the keys do their work)
 // and keep focus where it is; on touch they are --weft-hit-min (44 px) wide.
-import { computed, onScopeDispose, ref, useTemplateRef, watch } from 'vue'
+import { computed, ref, useTemplateRef, watch } from 'vue'
 import { useControllable } from '../headless/useControllable.ts'
-import { useControlAttrs, useField, useForm } from './field.ts'
+import { useControlAttrs, useField } from './field.ts'
 import { pressFocuses } from './dom.ts'
 import { clamp, tidy } from './numbers.ts'
 import type { Size } from '../types.ts'
@@ -66,9 +66,6 @@ const emit = defineEmits<{
 }>()
 
 const f = useField(props)
-// In a Form, an empty number is left out of what it submits (see Form.vue).
-const forget = useForm()?.absentWhenEmpty?.(() => f.name.value)
-if (forget) onScopeDispose(forget)
 const { own, box, describedBy } = useControlAttrs(f)
 const model = useControllable(props, 'modelValue', emit, () => props.defaultValue)
 const input = useTemplateRef<HTMLInputElement>('input')

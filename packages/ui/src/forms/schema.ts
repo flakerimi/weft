@@ -21,6 +21,8 @@
  *   with a host.
  * - `enum`: the text must be one of these values (`enum: ['draft', 'live']`).
  * - `message`: one sentence to show in place of any of the sentences below.
+ * - `nullable`: not a check: null is the field's empty value, so a Form sends
+ *   an emptied one (null, or '') as null; every other null it leaves out.
  *
  * By the value's type at run time:
  *
@@ -52,6 +54,11 @@ export interface FieldRule {
   /** The text must be one of these values. */
   enum?: string[]
   message?: string
+  /**
+   * null is the field's empty value (a pointer in Go, as weft gen's schema
+   * says): a Form sends an emptied one as null, which clears it. Not checked.
+   */
+  nullable?: boolean
 }
 
 /** Rules by field name. */

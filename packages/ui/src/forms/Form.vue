@@ -35,12 +35,13 @@
 //   fill while the script loads (the island runtime keeps what they hold
 //   through the hydration); with scripts off, `method="post"` keeps the
 //   values out of the address.
-// - A number field left empty (an InputNumber's null) is left out of the
-//   values the handler gets, so the server reads it as not sent: Go refuses
-//   null for a number that is not a pointer, and a sentence meant for the
-//   developer would reach the person. A required one is stopped first, by
-//   its own `required` rule. Any other null in the values is the app's, and
-//   is passed as it is.
+// - An emptied field the schema marks `nullable` (a pointer in Go, as weft
+//   gen's schema says) is sent as null, '' too, so the person's clear
+//   reaches the server and clears it. Any other null (an emptied number,
+//   date or choice) is left out of the values the handler gets, so the
+//   server reads it as not sent, as Go refuses null for a field that is not a
+//   pointer; with no schema every null is left out. A required field is
+//   stopped first, by its own `required` rule.
 // The native form keeps `novalidate`: Weft shows the errors, not the browser.
 import { computed, isProxy, nextTick, ref, toRaw, useTemplateRef, watch } from 'vue'
 import { usePrePaint } from '../head/usePrePaint.ts'
@@ -110,15 +111,15 @@ watch(
   { flush: 'post' },
 )
 
-/** The names of the number fields in it, each read when the form submits. */
-const numbers = new Set<() => string | undefined>()
-
-/** The values the handler gets: a copy, without the number fields left empty. */
+/** The values the handler gets: a copy, an emptied nullable field as null, and no other null. */
 function valuesToSend(): T {
   const values = copy(props.state) as Record<string, unknown>
-  for (const name of numbers) {
-    const n = name()
-    if (n !== undefined && values[n] === null) delete values[n]
+  for (const [name, value] of Object.entries(values)) {
+    if (ruleOf(name)?.nullable) {
+      if (value === undefined || value === '') values[name] = null
+    } else if (value === null || value === undefined) {
+      delete values[name]
+    }
   }
   return values as T
 }
@@ -143,10 +144,6 @@ provideForm({
   },
   input(name) {
     if (name in errors.value) check(name)
-  },
-  absentWhenEmpty(name) {
-    numbers.add(name)
-    return () => numbers.delete(name)
   },
 })
 

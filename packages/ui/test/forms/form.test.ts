@@ -93,7 +93,7 @@ describe('Form', () => {
     expect(typeof (f.exposed.submitted as { age: unknown }[])[0]!.age).toBe('number')
   })
 
-  it('leaves a cleared optional number out of what it submits, and stops a cleared required one', async () => {
+  it('sends null for an emptied nullable field, leaves other nulls out, and stops an emptied required one', async () => {
     const m = mount(NumberForm)
     mounted.push(m)
     const q = (sel: string) => m.el.querySelector<HTMLInputElement>(sel)!
@@ -107,28 +107,45 @@ describe('Form', () => {
       input.blur()
       await settle()
     }
-    // Cleared, the optional number is not sent at all, which the server reads
-    // as not sent; a null no number field holds is the app's, and is kept.
-    await clear(q('.price input'))
-    expect((m.exposed.state as { price: unknown }).price).toBeNull()
+    // Emptied: a nullable field (a pointer in Go) is sent as null, which
+    // clears it; a number that is not nullable is not sent at all, which the
+    // server reads as not sent; text that is not nullable is sent empty; a
+    // null no nullable field holds is left out too.
+    for (const field of ['.price', '.sale', '.memo', '.nick']) await clear(q(`${field} input`))
     await submit()
     expect(m.exposed.failed).toEqual([])
     const [first] = m.exposed.submitted as Record<string, unknown>[]
-    expect(first).toEqual({ stock: 1, note: null })
-    expect('price' in first!).toBe(false)
-    expect('weight' in first!).toBe(false)
-    // Typed again, it is sent.
-    q('.price input').focus()
-    type(q('.price input'), '7')
-    q('.price input').blur()
-    await settle()
+    expect(first).toEqual({ stock: 1, sale: null, memo: null, nick: '' })
+    for (const gone of ['price', 'weight', 'note']) expect(gone in first!, gone).toBe(false)
+    // Typed again, each is sent.
+    for (const [field, text] of [['.price', '7'], ['.sale', '2'], ['.memo', 'x']] as const) {
+      q(`${field} input`).focus()
+      type(q(`${field} input`), text)
+      q(`${field} input`).blur()
+      await settle()
+    }
     await submit()
-    expect((m.exposed.submitted as Record<string, unknown>[])[1]).toEqual({ price: 7, stock: 1, note: null })
-    // Cleared, a required number is the form's own error, and nothing is sent.
+    expect((m.exposed.submitted as Record<string, unknown>[])[1]).toEqual({ price: 7, stock: 1, sale: 2, memo: 'x', nick: '' })
+    // Emptied, a required number is the form's own error, and nothing is sent.
     await clear(q('.stock input'))
     await submit()
     expect(m.exposed.failed).toEqual([{ stock: 'This is required.' }])
     expect(m.exposed.submitted).toHaveLength(2)
+  })
+
+  it('without a schema, leaves every null out and sends empty text as it is', async () => {
+    const m = mount(NumberForm, { noSchema: true })
+    mounted.push(m)
+    for (const field of ['.sale', '.memo']) {
+      const input = m.el.querySelector<HTMLInputElement>(`${field} input`)!
+      input.focus()
+      type(input, '')
+      input.blur()
+    }
+    await settle()
+    m.el.querySelector<HTMLButtonElement>('button[type="submit"]')!.click()
+    await settle()
+    expect(m.exposed.submitted).toEqual([{ price: 5, stock: 1, memo: '', nick: 'ada' }])
   })
 
   it('submits when its submit button is pressed with Enter', async () => {

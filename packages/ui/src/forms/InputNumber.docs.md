@@ -8,7 +8,7 @@ adapts:
   surface: Nothing changes in behaviour; text follows the surface's type scale.
   width: It fills the width of its container.
 ---
-Bind the number with `v-model`; it is `null` when the field is empty, and a Form leaves an empty one out of what it submits.
+Bind the number with `v-model`; it is `null` when the field is empty, which a Form sends as `null` for a field its schema marks `nullable` and leaves out otherwise.
 
 **Keyboard** (the WAI-ARIA spinbutton pattern): Up and Down step by `step`,
 Page Up and Page Down by ten steps, Home and End go to `min` and `max`.
