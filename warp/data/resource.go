@@ -105,6 +105,9 @@ func Resource[T any](app *warp.App, path string, store *Store[T], opts ...Resour
 		app.Mistake("data.Resource was given a nil store for %s; make one with data.NewStore in the module's Register.", path)
 		return
 	}
+	if store.t == nil {
+		return // the store reported its own mistake, which the routes would repeat
+	}
 	var cfg resourceConfig
 	for _, opt := range opts {
 		if opt != nil {

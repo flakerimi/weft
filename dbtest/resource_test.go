@@ -584,3 +584,20 @@ func patchesDoNotRace(t *testing.T, query string) {
 		}
 	}
 }
+
+// A model field with no json tag is one sentence, the store's, not one more
+// for each route that reads the model.
+func TestResourceUntaggedFieldIsOneSentence(t *testing.T) {
+	type Loose struct {
+		data.Record
+		Name string
+	}
+	app := warp.New(warp.ConfigFrom(nil))
+	app.Use(data.Module(), moduleFunc{"loose", func(app *warp.App) {
+		data.Resource(app, "/loose", data.NewStore[Loose](data.For(app), "loose"))
+	}})
+	lines := strings.Split(app.Err().Error(), "\n")
+	if len(lines) != 1 {
+		t.Errorf("%d sentences:\n%s", len(lines), strings.Join(lines, "\n"))
+	}
+}
