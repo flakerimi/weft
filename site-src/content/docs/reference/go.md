@@ -1,10 +1,10 @@
 ---
 title: Go package
-description: Everything the warp package exports, with its signature, the signatures of data, auth and warptest, and the root package's Version.
+description: Everything the warp package exports, with its signature, and the root package's Version.
 order: 36
 ---
 
-Look up here everything the `warp` Go package exports today, with its signature and what it does, and the signatures of the packages beside it. Import it as `github.com/flakerimi/weft/warp`. It uses only the standard library. [Warp, the Go side](../guides/warp.md) explains the app and [Typed routes](../guides/routes.md) its routes and errors, and [Serving from Go](../guides/go-serving.md) what `Serve` sends.
+Look up here everything the `warp` Go package exports today, with its signature and what it does. The packages beside it list theirs at the end of their guides: [data](../guides/data.md#everything-it-exports), [auth and authtest](../guides/login.md#everything-it-exports) and [warptest](../guides/warp.md#everything-warptest-exports). Import it as `github.com/flakerimi/weft/warp`. It uses only the standard library. [Warp, the Go side](../guides/warp.md) explains the app and [Typed routes](../guides/routes.md) its routes and errors, and [Serving from Go](../guides/go-serving.md) what `Serve` sends.
 
 ## App
 
@@ -34,7 +34,55 @@ func (a *App) IsHTTPS(r *http.Request) bool
 - `Handle` mounts `h` at `pattern`: a method, a space and a path without `/api` (`"GET /export.csv"`), or a path alone for every method.
 - `Wrap` puts `mw` around every API request; the first given is the outermost.
 - `Err` returns every mistake so far, the configuration's first, joined; nil when there is none. Each is one sentence; a registration mistake starts `warp: `, a configuration one does not.
-- `Routes` returns every route, in the order registered. `Describe` returns them with every struct type they take and answer, each field with its JSON name, TypeScript type and rules, which `weft gen` reads; a type it cannot write as TypeScript, such as two types of one name, is a mistake it returns.
+- `Routes` returns every route, in the order registered. `Describe` returns them with every struct type they take and answer, each field with its JSON name, TypeScript type and rules, which `weft gen` reads; a type it cannot write as TypeScript, such as two types of one name, is a mistake it returns. Its types:
+
+```go
+type Description struct {
+	Routes []RouteInfo `json:"routes"`
+	Types  []TypeInfo  `json:"types"`
+}
+type RouteInfo struct {
+	Module     string      `json:"module"`
+	Name       string      `json:"name"`
+	Method     string      `json:"method"`
+	Path       string      `json:"path"` // with /api in front, as registered: /api/products/{id}
+	Status     int         `json:"status"`
+	Permission string      `json:"permission"`
+	Typed      bool        `json:"typed"`
+	PathParams []ParamInfo `json:"path_params"`
+	Query      []ParamInfo `json:"query"`
+	Body       string      `json:"body"`
+	Partial    bool        `json:"partial"`
+	Output     *OutputInfo `json:"output"`
+}
+type ParamInfo struct {
+	Name     string     `json:"name"`
+	TS       string     `json:"ts"`
+	Optional bool       `json:"optional"`
+	Style    string     `json:"style"`
+	Rules    []RuleInfo `json:"rules"`
+}
+type OutputInfo struct {
+	TS   string `json:"ts"`
+	List bool   `json:"list"`
+}
+type TypeInfo struct {
+	Name   string      `json:"name"`
+	Go     string      `json:"go"`
+	Fields []FieldInfo `json:"fields"`
+}
+type FieldInfo struct {
+	Name     string     `json:"name"`
+	TS       string     `json:"ts"`
+	Optional bool       `json:"optional"`
+	Readonly bool       `json:"readonly"`
+	Rules    []RuleInfo `json:"rules"`
+}
+type RuleInfo struct {
+	Name string `json:"name"`
+	Arg  string `json:"arg"`
+}
+```
 - `Handler` is the API alone, at `/api/...`: a path no route has is a 404, a method a route does not take a 405 with `Allow`, and a panic a 500, all in the error shape.
 - `Serve` returns `Err()` if there is a mistake. With `WARP_DESCRIBE=1` it prints `Describe` as JSON and returns, without migrating, starting or listening. Otherwise it listens on `Host` and `Port`, logs `listening on http://localhost:<port>`, and calls `Run` until SIGINT or SIGTERM. It returns nil after a clean stop. A taken port is `warp: port 8080 is taken; stop what uses it or set PORT in .env.` Once the first signal comes it stops taking them, so a second Ctrl-C ends the process at once. Under `weft dev` (`WEFT_DEV_PARENT=1`) it logs nothing and also stops when standard input closes.
 - `Run` does the same on `ln` until `ctx` ends: `Migrate` on every `Migrator`, then `Start` on every `Starter`, in order; it serves `dist` and the API through `Serve` (the API alone when `dist` is nil); when `ctx` ends it lets the requests in flight finish, for up to 10 seconds, then calls `Stop` on every `Stopper`, last first, with 10 seconds more. When a step fails, every module already migrated or started is stopped. A client has 10 seconds to send a request's headers. A nil `ln` is `warp: Run needs a listener; call Serve, or pass one from net.Listen.`
@@ -86,7 +134,7 @@ func SentKeys(ctx context.Context) []string
 - `Request` returns the request a typed handler is answering, or nil outside one. On `POST`, `PUT` and `PATCH` its body has already been read.
 - `ResponseHeader` returns the headers its answer is sent with, whether it succeeds or fails.
 - `Sent` reports whether the JSON body had a top-level key, and `SentKeys` lists them in the body's order. On `Patch` the rules run only on the fields sent, and the body type's own `Validate` method does not run.
-- A field with the rule `readonly` is answered and never read; an input or body type with a method `Validate(ctx context.Context) error` has it called once the tag rules pass. A `map[string]string` query field takes `key[name]=value`. An answer holds no `null` list, map or bytes.
+- A field with the rule `readonly` is answered and never read, and zero after decoding whatever was sent; on an embedded struct, or inside a type that decodes itself, it is a mistake, and so are two keys of one object that differ only in case; an input or body type with a method `Validate(ctx context.Context) error` has it called once the tag rules pass. A `map[string]string` query field takes `key[name]=value`. An answer holds no `null` list, map or bytes.
 
 ## RouteOption
 
@@ -216,96 +264,6 @@ Serves the files of `dir`, a folder that does not change while the server runs, 
 - Serve panics, naming the file, if `dir` holds a symlink or a name starting with `.`, or if a path is also served by the build, by another folder, or is under `/api/`.
 
 Give it `os.OpenRoot(path)`'s `FS()`, so nothing put in the folder later leads out of it.
-
-## data, auth and warptest
-
-The packages beside `warp`, each explained in its guide: [Data](../guides/data.md), [Login](../guides/login.md) and [testing](../guides/warp.md#testing-a-module).
-
-```go
-package data // github.com/flakerimi/weft/warp/data
-
-func Module() warp.Module
-func For(app *warp.App) *DB
-func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context) error) error
-func (db *DB) Exec(ctx context.Context, query string, args ...any) (sql.Result, error)
-func (db *DB) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-func (db *DB) QueryRow(ctx context.Context, query string, args ...any) *Row
-func (db *DB) SQL() *sql.DB
-func (db *DB) SetClock(now func() time.Time)
-
-type Record struct {
-	ID        int64     `json:"id" warp:"readonly"`
-	CreatedAt time.Time `json:"created_at" warp:"readonly"`
-	UpdatedAt time.Time `json:"updated_at" warp:"readonly"`
-}
-type ID struct{ ID int64 `path:"id"` }
-type Query struct {
-	Page    int               `query:"page" warp:"min=1"`
-	PerPage int               `query:"per_page" warp:"min=1,max=100"`
-	Sort    string            `query:"sort"`
-	Q       string            `query:"q" warp:"max=200"`
-	Filter  map[string]string `query:"filter"`
-}
-type List[T any] struct {
-	Items   []T `json:"items"`
-	Total   int `json:"total"`
-	Page    int `json:"page"`
-	PerPage int `json:"per_page"`
-}
-
-func NewStore[T any](db *DB, table string) *Store[T]
-func (s *Store[T]) List(ctx context.Context, q Query) (List[T], error)
-func (s *Store[T]) Get(ctx context.Context, id int64) (T, error)
-func (s *Store[T]) First(ctx context.Context, field string, value any) (v T, ok bool, err error)
-func (s *Store[T]) Count(ctx context.Context) (int, error)
-func (s *Store[T]) Create(ctx context.Context, v *T) error
-func (s *Store[T]) Update(ctx context.Context, id int64, v *T, fields []string) (T, error)
-func (s *Store[T]) Delete(ctx context.Context, id int64) error
-
-func Resource[T any](app *warp.App, path string, store *Store[T], opts ...ResourceOption)
-func Each(opts ...warp.RouteOption) ResourceOption
-func PerAction(fn func(action string) []warp.RouteOption) ResourceOption
-```
-
-```go
-package auth // github.com/flakerimi/weft/warp/auth
-
-func Module() warp.Module
-func Can(permission string) warp.RouteOption
-func Per(resource string) func(action string) []warp.RouteOption
-func UserOf(ctx context.Context) (User, bool)
-func AddUser(ctx context.Context, app *warp.App, email, password, role string) (User, error)
-func RemoveUser(ctx context.Context, app *warp.App, id int64) error
-func SetupToken(app *warp.App) string
-
-type User struct {
-	data.Record
-	Email string `json:"email" warp:"required,email,unique"`
-	Role  string `json:"role"`
-}
-
-package authtest // github.com/flakerimi/weft/warp/auth/authtest
-
-const Password = "the owner's password, for tests"
-func Owner(t testing.TB, c *warptest.Client) auth.User
-```
-
-```go
-package warptest // github.com/flakerimi/weft/warp/warptest
-
-func New(t testing.TB, vars map[string]string, modules ...warp.Module) *Client
-func (c *Client) Get(path string) *Response
-func (c *Client) Post(path string, body any) *Response
-func (c *Client) Patch(path string, body any) *Response
-func (c *Client) Delete(path string) *Response
-func (c *Client) Do(r *http.Request) *Response
-func (c *Client) Fork() *Client
-func (r *Response) Want(status int) *Response
-func (r *Response) JSON(v any)
-func (r *Response) Error() *warp.Error
-```
-
-`SetupToken` is the started app's setup token, for tools that cannot read the log; `""` once a user exists.
 
 ## Version
 

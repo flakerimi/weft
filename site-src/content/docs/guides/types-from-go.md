@@ -63,7 +63,7 @@ Then `api`, a function for each typed route, under its module's name and the rou
 
 Path parameters come first, in the path's order, then the body, then the query, which may be left out: `api.products.list({ page: 2, sort: '-price', filter: { status: 'live' } })`. A `PATCH` takes a `Partial` body. A route that answers `warp.None` resolves to `undefined`.
 
-Text and times are `string`, numbers `number`, a pointer `T | null`, a list `T[]` and a map `Record<string, T>`. A pointer field may be left out, `name?:`, and so may an answered field tagged `omitempty`. A list, a map or bytes is never `null` on the wire, since [the server never answers one so](routes.md#a-route), except in a field typed `any`.
+Text and times are `string`, numbers `number`, a pointer `T | null`, a list `T[]` and a map `Record<string, T>`. A pointer field may be left out, `name?:`, and so may an answered field tagged `omitempty` or `omitzero`. A list, a map or bytes is never `null` on the wire, since [the server never answers one so](routes.md#a-route), except in a field typed `any`.
 
 ## Calling the API
 
@@ -123,9 +123,10 @@ try {
 | `"a b"@example.com` for `email` | refused (the rule browsers use for `type="email"`) | taken (`net/mail`) |
 | `a..b@example.com` for `email` | taken | refused |
 | `pattern` | checked | no such rule |
+| `ab` for text with `max=1` | `Use at most 1 character.` | `Use at most 1 characters.` |
 
 A model that accepts 0 does not mark the field `required`; one that must tell 0 from nothing uses a pointer.
 
 ## A renamed field
 
-Rename `json:"price"` to `json:"cost"` in the shop's `Product`, save, and `weft dev` writes the file again; `pnpm typecheck` then fails in each `.vue` file that reads `price`. The suite does exactly that to a copy of the shop on every run.
+Rename `json:"price"` to `json:"cost"` in the shop's `Product`, save, and `weft dev` writes the file again; `pnpm typecheck` then fails in each `.vue` file that reads `price`. The full `go test ./cmd/weft` does the same to a copy of the shop, with `weft gen` and the type check (`-short` skips it).

@@ -15,6 +15,14 @@ The driver is the app's dependency, not Warp's: `main.go` imports it, as `databa
 	_ "modernc.org/sqlite"
 ```
 
+Then add it to `go.mod`, from the app's folder once `.weft/` is there (`weft create` and `weft unpack` make it):
+
+```sh
+go mod tidy
+```
+
+Without that step the build stops with `no required module provides package modernc.org/sqlite`.
+
 `app/modules.go` lists `data.Module()` before every module that keeps records, and `.env` names the database:
 
 ```sh
@@ -96,7 +104,20 @@ An empty table answers `{"items":[],"total":0,"page":1,"per_page":20}`. Anything
 {"error":{"code":"bad_request","message":"2 fields have a problem.","fields":{"filter[size]":"products cannot be filtered by \"size\"; use one of: status.","sort":"products cannot be sorted by \"cost\"; use one of: created_at, id, name, price, updated_at."}}}
 ```
 
-A `sort` longer than 64 bytes, a filter value longer than 200 bytes, and a NUL byte in `q` or a filter value are 400s too. A `page` below 1, a `per_page` above 100 and a `q` longer than 200 characters fail `data.Query`'s own rules, a 422.
+A `sort` longer than 64 bytes, a filter value longer than 200 bytes, and a NUL byte in `q` or a filter value are 400s too. `page` and `per_page` are read as [query fields](routes.md#where-each-field-comes-from) and checked by `data.Query`'s rules, `min=1` and `max=100`, which pass a 0:
+
+| Query | Answer |
+| --- | --- |
+| `page=0`, `page=`, or none | 200, page 1 |
+| `page=-1` | 422, `page: Enter 1 or more.` |
+| `page=two`, `page=1.5` | 400, `page: Send a whole number.` |
+| a page past the last | 200, with no items and the total |
+| `per_page=0`, `per_page=`, or none | 200, 20 a page |
+| `per_page=-1` | 422, `per_page: Enter 1 or more.` |
+| `per_page=101` | 422, `per_page: Enter 100 or less.` |
+| `per_page=x` | 400, `per_page: Send a whole number.` |
+
+A `q` longer than 200 characters is a 422 too.
 
 ## Your own routes
 
@@ -112,7 +133,7 @@ A store's methods are for routes the five do not cover, called with the handler'
 | `Update(ctx, id, &v, fields)` | Writes the fields named, and `updated_at`, and returns the record as it is now |
 | `Delete(ctx, id)` | Removes it, or a `warp.NotFound` |
 
-`db.Tx(ctx, fn)` runs `fn` in a transaction, which it commits when `fn` returns nil and rolls back otherwise. Store calls made with `fn`'s context run in it, and a `Tx` inside a `Tx` joins the outer one. A `PATCH` of your own lays the sent fields over the stored record and checks it there, since the core checks only what was sent ([Typed routes](routes.md#one-struct-for-create-and-update)). For a model `Good` with a `Validate` method that compares its price and its sale price:
+`db.Tx(ctx, fn)` runs `fn` in a transaction, which it commits when `fn` returns nil and rolls back otherwise. Store calls made with `fn`'s context run in it, and a `Tx` inside a `Tx` joins the outer one. Only `Tx` ends the transaction: when the request ends, the statement running is interrupted and the transaction rolled back, but an `fn` that does not pass its context on holds the write lock until it returns. A failed commit is rolled back and the connection kept for the next request. A `PATCH` of your own lays the sent fields over the stored record and checks it there, since the core checks only what was sent ([Typed routes](routes.md#one-struct-for-create-and-update)). For a model `Good` with a `Validate` method that compares its price and its sale price:
 
 ```go
 // PriceIn is the input of PATCH /api/goods/{id}/price.
@@ -155,10 +176,64 @@ _, err := m.db.Exec(ctx, `UPDATE "goods" SET "price" = "price" * 0.9 WHERE "stat
 
 ## SQLite's settings
 
-Warp sets these on every connection, whatever `DB_URL` says: foreign keys on, the WAL journal, and transactions that take the write lock when they begin. It waits 5 seconds for a lock; a `DB_URL` may raise that with `_busy_timeout`, never lower it. Each setting of the URL it replaces is logged at start, such as `data: DB_URL sets _busy_timeout=0, below Warp's 5000; 5000 is used, since the app's own writers wait on it.`
+Warp sets these on every connection, whatever `DB_URL` says: foreign keys on, the WAL journal, and transactions that take the write lock when they begin. It waits 5 seconds for a lock; a `DB_URL` may raise that, never lower it. Every spelling is read (`_busy_timeout`, `_timeout`, `_pragma=busy_timeout(N)`, escaped or repeated) and the largest of Warp's and the URL's is used. Each setting of the URL it replaces is logged at start, such as `data: DB_URL sets _busy_timeout=0, below Warp's 5000; 5000 is used, since the app's own writers wait on it.`, and a value it cannot read as `data: DB_URL sets _busy_timeout=x, which is not a busy timeout SQLite keeps; Warp's 5000 is used.`
+
+A `_pragma` that names `journal_mode` or `locking_mode` stops the start: `warp: module "data" could not migrate: DB_URL sets journal_mode in _pragma=journal_mode(DELETE), and the store needs Warp's own; remove it from DB_URL.` Then the store reads its settings back from the database, and stops the start when one is still not what it needs, with a sentence that names it and `DB_URL`, such as `DB_URL sets busy_timeout to 0, and the store needs at least 5000; remove it from DB_URL.`
 
 A call that still finds the database held by another connection after that wait is answered 503 `unavailable`, `The database is busy; try again in a moment.`, and logged at warn level, `data: the database was busy, so the request was answered 503`, with the method and the path.
 
 ## Testing
 
 A test imports the driver too, and gives each test a database file of its own in `t.TempDir()`, as the shop's test in [Warp, the Go side](warp.md#testing-a-module) does. `db.SetClock(now)` replaces the clock the stores read the times from.
+
+## Everything it exports
+
+```go
+package data // github.com/flakerimi/weft/warp/data
+
+func Module() warp.Module
+func For(app *warp.App) *DB
+func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context) error) error
+func (db *DB) Exec(ctx context.Context, query string, args ...any) (sql.Result, error)
+func (db *DB) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+func (db *DB) QueryRow(ctx context.Context, query string, args ...any) *Row
+func (r *Row) Scan(dest ...any) error
+func (r *Row) Err() error
+func (db *DB) SQL() *sql.DB
+func (db *DB) SetClock(now func() time.Time)
+
+type Record struct {
+	ID        int64     `json:"id" warp:"readonly"`
+	CreatedAt time.Time `json:"created_at" warp:"readonly"`
+	UpdatedAt time.Time `json:"updated_at" warp:"readonly"`
+}
+type ID struct{ ID int64 `path:"id"` }
+type Query struct {
+	Page    int               `query:"page" warp:"min=1"`
+	PerPage int               `query:"per_page" warp:"min=1,max=100"`
+	Sort    string            `query:"sort"`
+	Q       string            `query:"q" warp:"max=200"`
+	Filter  map[string]string `query:"filter"`
+}
+type List[T any] struct {
+	Items   []T `json:"items"`
+	Total   int `json:"total"`
+	Page    int `json:"page"`
+	PerPage int `json:"per_page"`
+}
+
+func NewStore[T any](db *DB, table string) *Store[T]
+func (s *Store[T]) List(ctx context.Context, q Query) (List[T], error)
+func (s *Store[T]) Get(ctx context.Context, id int64) (T, error)
+func (s *Store[T]) First(ctx context.Context, field string, value any) (v T, ok bool, err error)
+func (s *Store[T]) Count(ctx context.Context) (int, error)
+func (s *Store[T]) Create(ctx context.Context, v *T) error
+func (s *Store[T]) Update(ctx context.Context, id int64, v *T, fields []string) (T, error)
+func (s *Store[T]) Delete(ctx context.Context, id int64) error
+
+func Resource[T any](app *warp.App, path string, store *Store[T], opts ...ResourceOption)
+func Each(opts ...warp.RouteOption) ResourceOption
+func PerAction(fn func(action string) []warp.RouteOption) ResourceOption
+```
+
+The sections above say what each does; the [Go package reference](../reference/go.md) has `warp`'s.

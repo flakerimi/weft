@@ -61,13 +61,99 @@ For tools and tests, `auth.AddUser(ctx, app, email, password, role)` makes a use
 
 Each login try is counted before anything is looked up or hashed: 5 tries a minute for one email from one address, and 30 a minute from one address across every email. Past either, the answer is 429 `Too many tries; wait a minute and try again.`, until a minute after the first of those tries. A success clears the email's count. The address is [`ClientKey`](warp.md#behind-a-proxy): an IPv4 address, or the /64 an IPv6 one is in.
 
-At most as many hashes run at once as Go has processors (`GOMAXPROCS`). A login that finds none free within 3 seconds is answered 503 `unavailable`, `The server is busy signing people in; try again in a moment.`, and costs no try.
+At most as many hashes run at once as Go has processors (`GOMAXPROCS`). A login that finds none free within 3 seconds is answered 503 `unavailable`, `The server is busy signing people in; try again in a moment.`, and costs no try; nor does one whose user could not be looked up, such as on a busy database. A try is given back only when no hash ran.
 
 ## The pages
 
-Pages are built with no session, so whatever depends on who is signed in asks in the browser, from an island. The shop's sign-in form is an island on `/login` that calls the [generated client](types-from-go.md) and checks the generated rules before it sends:
+The app writes its own `/setup` and `/login` pages; without them the link in the log opens the 404 page. Pages are built with no session, so each form is an island that calls the [generated client](types-from-go.md) and checks the generated rules before it sends. The smallest that work, cut down from the shop's and checked in a browser, `web/pages/setup.vue`:
 
 ```vue
+<script setup vapor lang="ts">
+import { useHead } from '@weft/ui'
+import SetupForm from '../components/SetupForm.vue'
+
+useHead({ title: 'Set up the owner', description: 'Choose the owner’s password.' })
+</script>
+
+<template>
+  <Page title="Set up the owner">
+    <Section>
+      <Island when="load" :component="SetupForm" />
+    </Section>
+  </Page>
+</template>
+```
+
+and `web/components/SetupForm.vue`, which takes the token from the address and sends it with the password:
+
+```vue
+<script setup vapor lang="ts">
+// The owner's password, with the token from the link the app logs (/setup#token=…).
+import { onMounted, reactive, ref, useTemplateRef } from 'vue'
+import type { FormApi } from '@weft/ui'
+import { api, ApiError, schema, type SetupInput } from '../.weft-types/api.ts'
+
+const state = reactive<SetupInput>({ token: '', password: '' })
+const problem = ref('')
+const form = useTemplateRef<FormApi>('form')
+
+onMounted(() => {
+  state.token = new URLSearchParams(location.hash.slice(1)).get('token') ?? ''
+  history.replaceState(history.state, '', location.pathname) // the token leaves the address
+})
+
+async function setUp(values: SetupInput) {
+  problem.value = ''
+  try {
+    await api.auth.setup(values)
+    location.assign('/items')
+  } catch (e) {
+    if (!(e instanceof ApiError)) throw e
+    const { token, ...fields } = e.fields
+    form.value?.setErrors(fields)
+    problem.value = token ?? e.message
+  }
+}
+</script>
+
+<template>
+  <Form ref="form" :state="state" :schema="schema.SetupInput" @submit="setUp">
+    <Stack :gap="4">
+      <Alert v-if="problem" tone="danger" :title="problem" />
+      <FormField label="Password" name="password" description="At least 8 characters.">
+        <Input v-model="state.password" type="password" autocomplete="new-password" />
+      </FormField>
+      <Button type="submit" label="Set up the owner" />
+    </Stack>
+  </Form>
+</template>
+```
+
+`/login` is the same shape: `web/pages/login.vue` holds `<Island when="load" :component="LoginForm" />`, and `web/components/LoginForm.vue` is:
+
+```vue
+<script setup vapor lang="ts">
+import { reactive, ref, useTemplateRef } from 'vue'
+import type { FormApi } from '@weft/ui'
+import { api, ApiError, schema, type LoginInput } from '../.weft-types/api.ts'
+
+const state = reactive<LoginInput>({ email: '', password: '' })
+const problem = ref('')
+const form = useTemplateRef<FormApi>('form')
+
+async function signIn(values: LoginInput) {
+  problem.value = ''
+  try {
+    await api.auth.login(values)
+    location.assign('/items')
+  } catch (e) {
+    if (!(e instanceof ApiError)) throw e
+    form.value?.setErrors(e.fields)
+    problem.value = e.message
+  }
+}
+</script>
+
 <template>
   <Form ref="form" :state="state" :schema="schema.LoginInput" @submit="signIn">
     <Stack :gap="4">
@@ -84,11 +170,46 @@ Pages are built with no session, so whatever depends on who is signed in asks in
 </template>
 ```
 
-`signIn` calls `api.auth.login(values)`. Its `web/session.ts` asks `api.auth.me()` once per page load for every island that wants the user, and sends a visitor with no session to `/login?next=…`. That code is the app's own for now: see [Coming next](../coming-next.md#login-and-permissions).
+`/items` here is the page the app lands on. An island on a guarded page asks `api.auth.me()` when it mounts, and sends a visitor it answers 401 to `/login`. The shop's `web/session.ts` does that once per page for every island, and checks a `?next=` to come back to; that code is the app's own for now (see [Coming next](../coming-next.md#login-and-permissions)).
 
 ## Testing
 
 `authtest.Owner(t, c)`, from `github.com/flakerimi/weft/warp/auth/authtest`, sets up the owner of a [warptest](warp.md#testing-a-module) app through `setup`, with the password `authtest.Password`, and leaves the client signed in.
+
+## Everything it exports
+
+```go
+package auth // github.com/flakerimi/weft/warp/auth
+
+func Module() warp.Module
+func Can(permission string) warp.RouteOption
+func Per(resource string) func(action string) []warp.RouteOption
+func UserOf(ctx context.Context) (User, bool)
+func AddUser(ctx context.Context, app *warp.App, email, password, role string) (User, error)
+func RemoveUser(ctx context.Context, app *warp.App, id int64) error
+func SetupToken(app *warp.App) string
+
+type User struct {
+	data.Record
+	Email string `json:"email" warp:"required,email,unique"`
+	Role  string `json:"role"`
+}
+type LoginInput struct {
+	Email    string `json:"email" warp:"required,max=254"`
+	Password string `json:"password" warp:"required,max=200"`
+}
+type SetupInput struct {
+	Token    string `json:"token" warp:"required,max=64"`
+	Password string `json:"password" warp:"required,min=8,max=200"`
+}
+
+package authtest // github.com/flakerimi/weft/warp/auth/authtest
+
+const Password = "the owner's password, for tests"
+func Owner(t testing.TB, c *warptest.Client) auth.User
+```
+
+`SetupToken` is the started app's setup token, for tools that cannot read the log; `""` once a user exists.
 
 ## What it does not protect against
 

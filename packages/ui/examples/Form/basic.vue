@@ -3,7 +3,7 @@ import { reactive, ref } from 'vue'
 import { Button, Checkbox, Form, FormField, Input, InputNumber, type FieldSchema } from '@weft/ui'
 
 const state = reactive({ email: '', age: null as number | null, terms: false })
-// The same rules the server checks; the Go contract can generate this object.
+// The same rules the server checks; weft gen writes this object from the Go types.
 const schema: FieldSchema<keyof typeof state> = {
   email: { required: true, email: true },
   age: { min: 18, message: 'You must be 18 or over.' },

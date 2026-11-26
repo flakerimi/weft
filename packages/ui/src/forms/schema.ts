@@ -1,7 +1,7 @@
 /**
  * The Weft field schema: what a Form checks before it submits. It is plain
- * JSON, so a server can send the same rules it enforces (the Go contract will
- * generate it), keyed by field name:
+ * JSON, so a server can send the same rules it enforces (weft gen writes it
+ * from the Go types, as schema), keyed by field name:
  *
  *     { email: { required: true, email: true }, age: { min: 18 } }
  *

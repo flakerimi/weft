@@ -1,6 +1,6 @@
 ---
 name: weft-go
-description: Use when writing the Go side of a Weft app or shipping it - the warp.App in main.go and its modules in app/modules.go, typed routes with warp.Get and warp.Post, their tags and validation rules, the one error shape, .env configuration, records with warp/data, the login with warp/auth, the client weft gen writes, testing with warptest, serving the page build with warp.Serve and a folder with warp.WithFiles, building the binary with weft build for another system or a scratch image, and installing or updating weft.
+description: Use when writing the Go side of a Weft app or shipping it - the warp.App in main.go and its modules in app/modules.go, typed routes with warp.Get and warp.Post, their tags and validation rules, the one error shape, .env configuration, records with warp/data, the login with warp/auth, the client weft gen writes, testing with warptest, serving the page build with warp.Serve and a folder with warp.WithFiles, and building the binary with weft build for another system or a scratch image.
 ---
 
 # The Go side of a Weft app, and shipping it
@@ -44,9 +44,9 @@ func (module) Register(app *warp.App) error {
 ```
 
 - Paths have no `/api`. 200, `Post` 201, `warp.Status(200)` to change it; `warp.None` reads nothing, or answers 204.
-- Each exported input field has exactly one tag: `json` (the body: POST, PUT, PATCH only), `query` (text, bool, numbers, a pointer to one, `[]string`) or `path` (a `{name}` wildcard).
+- Each exported input field has exactly one tag: `json` (the body: POST, PUT, PATCH only), `body:"json"` (the whole body, on one struct field), `query` (text, bool, numbers, a pointer to one, `[]string`, `map[string]string` for `filter[k]`) or `path` (a `{name}` wildcard).
 - A body is `application/json` (else 415), with no field the input lacks (400).
-- `body:"json"` on one struct field takes the whole body; a `readonly` field is never read. On `Patch` rules run only on sent fields (`warp.Sent`).
+- A `readonly` field is never read. On `Patch` rules run only on sent fields (`warp.Sent`).
 - Rules: `required`, `email`, `url`, `min=N`, `max=N`, `enum=a|b`, `unique` (a `data` store checks it), `readonly`. Every rule but `required` passes an empty value; a non-nil pointer was sent. A failure is 422. A `Validate(ctx) error` method checks across fields.
 - `GET /products` and `GET /products/{id}` are both named `products`: give each a `warp.Name`. A mistake is one sentence from `app.Err()`, and `Serve` refuses to start.
 - `warp.Request(ctx)` is the request, `warp.ResponseHeader(ctx)` the answer's headers. `app.Handle("GET /export.csv", h)` mounts a plain handler; `app.Wrap(mw)` wraps every API request, `warp.With(mw)` one route.
@@ -59,8 +59,8 @@ Errors are `{"error":{"code":"…","message":"…","fields":{…}}}`. Return `wa
 
 ## Data, login and types
 
-- `data.Module()` first in `app/modules.go`, `DB_DRIVER=sqlite` and `DB_URL=file:data/app.db` in `.env`, `_ "modernc.org/sqlite"` in `main.go`. A model embeds `data.Record`; `data.Resource(app, "/products", data.NewStore[Product](data.For(app), "products"), data.PerAction(auth.Per("products")))` gives five routes. `data:"sort,filter,search"` opens fields to `?sort=-price&q=lamp&filter[status]=live`.
-- `auth.Module()` after data: `AUTH_SECRET` (32+ bytes), `AUTH_OWNER_EMAIL`; the log prints the owner's one-time setup link. `auth.Can("x:edit")` guards a route; `auth.UserOf(ctx)`.
+- `data.Module()` first in `app/modules.go`, `DB_DRIVER=sqlite` and `DB_URL=file:data/app.db` in `.env`, `_ "modernc.org/sqlite"` in `main.go`, then `go mod tidy` to add the driver to `go.mod`. A model embeds `data.Record`; `data.Resource(app, "/products", data.NewStore[Product](data.For(app), "products"), data.PerAction(auth.Per("products")))` gives five routes. `data:"sort,filter,search"` opens fields to `?sort=-price&q=lamp&filter[status]=live`.
+- `auth.Module()` after data: `AUTH_SECRET` (32+ bytes), `AUTH_OWNER_EMAIL`; the log prints `<APP_URL>/setup#token=…`, a 404 until the app writes `web/pages/setup.vue` and a `/login`: copy both from [the login guide](https://weft.base.al/docs/guides/login#the-pages). `auth.Can("x:edit")` guards a route; `auth.UserOf(ctx)`.
 - `weft dev` and `weft build` run `weft gen`, which writes `web/.weft-types/api.ts`: `api.<module>.<name>()`, `ApiError`, and `schema` for `Form`.
 
 ## Testing a module
@@ -105,10 +105,6 @@ ENTRYPOINT ["/myapp"]
 ```
 
 Build it for the image's system, with a `.dockerignore` of `*` and `!myapp`.
-
-## The weft command
-
-`curl -fsSL https://weft.base.al/install | sh` installs it (`WEFT_VERSION`, `WEFT_BIN_DIR`, `WEFT_BASE`). `weft update` moves to the latest release; `--check` only looks, `--version 0.0.2` picks one.
 
 ## Do not
 

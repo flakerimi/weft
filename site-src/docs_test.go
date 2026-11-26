@@ -124,11 +124,14 @@ func TestDocsCoverTheSlice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// What Coming next says is not built: its Commands table, and the lines
-	// of each section that are not a pointer to what works today.
+	// What Coming next lists as not built: the rows of its tables and the
+	// items of its lists. Its prose may name what works today.
 	for _, line := range strings.Split(string(coming), "\n") {
-		for _, built := range []string{"`weft gen`", "`weft routes`", "`warp/data`", "`warp/describe`", "`auth.Can`", "`warp.Resource`"} {
-			if strings.Contains(line, built) && !strings.Contains(line, "work today") && !strings.Contains(line, "works today") {
+		if !strings.HasPrefix(line, "| ") && !strings.HasPrefix(line, "- ") {
+			continue
+		}
+		for _, built := range []string{"`weft gen`", "`weft routes`", "`warp/data`", "`warp/describe`", "`warp/auth`", "`auth.Module`", "`auth.Can`", "`auth.Per`", "`data.Resource`", "`warp.Resource`", "`data.Store`", "`Store`", "`runtime`"} {
+			if strings.Contains(line, built) {
 				t.Errorf("content/docs/coming-next.md lists %s as not built: %q; it is built, so say so or take it out", built, line)
 			}
 		}

@@ -42,7 +42,7 @@ The [CLI](reference/cli.md) and [Go package](reference/go.md) references list ev
 
 ## An example app
 
-The repository's `examples/shop` is a small back office built the way these docs say: a login, a products table with search, a filter and a dialog to make and change one, and a page per product, with no fetch or HTTP handler written by hand. `scripts/shop.sh` runs it with the repository's Weft (`scripts/shop.sh build` builds it, `scripts/shop.sh test` runs its tests), and the suite builds and drives it on every run.
+The repository's `examples/shop` is a small back office built the way these docs say: a login, a products table with search, a filter and a dialog to make and change one, and a page per product, with no fetch or HTTP handler written by hand. `scripts/shop.sh` runs it with the repository's Weft (`scripts/shop.sh build` builds it, `scripts/shop.sh test` runs its tests), and the full `go test ./cmd/weft` builds a copy, runs its tests and type check, and requests its pages and API (`-short` skips it).
 
 ## This site
 

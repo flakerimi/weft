@@ -92,7 +92,7 @@ In the query, a pointer stays nil when the key is absent, and a `[]string` gets 
 
 ### One struct for create and update
 
-A field tagged `body:"json"` takes the whole body, so a route can take a record and an id from the path. Its fields are keyed as the input's own, `name` and not `body.name`, in errors and in `warp.Sent`. An input with a body field has no `json` fields of its own. A field with the rule `readonly`, at any depth, is answered and never read: a body that sends it, by its key or by a key that differs from it only in case, is a 400, and the handler gets it as zero whatever was sent.
+A field tagged `body:"json"` takes the whole body, so a route can take a record and an id from the path. Its fields are keyed as the input's own, `name` and not `body.name`, in errors and in `warp.Sent`. An input with a body field has no `json` fields of its own. A field with the rule `readonly`, at any depth, is answered and never read: a body that sends it, by its key or by a key that differs from it only in case, is a 400, and after decoding every readonly field is zero whatever was sent. `readonly` goes on a field, not on an embedded struct, and not inside a type that decodes itself (`UnmarshalJSON` or `UnmarshalText`), where Warp cannot see what it sets: both are registration mistakes.
 
 ```go
 // Item is a record: its id is answered and never read.
@@ -110,12 +110,19 @@ type UpdateIn struct {
 }
 
 func update(ctx context.Context, in UpdateIn) (Item, error) {
-	item := Item{ID: in.ID, Name: "Lamp", Price: 30}
+	item := Item{ID: in.ID, Name: "Lamp", Price: 30} // as stored
 	if warp.Sent(ctx, "name") {
 		item.Name = in.Body.Name
 	}
 	if warp.Sent(ctx, "price") {
 		item.Price = in.Body.Price
+	}
+	if warp.Sent(ctx, "sale") {
+		item.Sale = in.Body.Sale
+	}
+	// The record as it would be stored, checked whole.
+	if err := item.Validate(ctx); err != nil {
+		return Item{}, err
 	}
 	return item, nil
 }
@@ -123,7 +130,7 @@ func update(ctx context.Context, in UpdateIn) (Item, error) {
 
 `POST` with `{"id":3,"name":"Lamp"}` to a route that takes an `Item` is a 400: `The body has the field "id", which this route does not take.`
 
-On a route registered with `warp.Patch`, the rules run only on the `json` fields the body sent: `{"price":5}` leaves `name` alone, and `{"name":""}` still fails `required`. `warp.Sent(ctx, "price")` says whether the body had a key, and `warp.SentKeys(ctx)` lists them in the body's order. Query and path fields are checked as on every route. The input's own `Validate` method (below) runs, but the body type's does not, since the body holds zero for every field left out. So a `Patch` route of your own that checks fields against each other lays what was sent over the stored record and checks that, as [Data](data.md#your-own-routes)'s `data.Resource` does for you.
+On a route registered with `warp.Patch`, the rules run only on the `json` fields the body sent: `{"price":5}` leaves `name` alone, and `{"name":""}` still fails `required`. `warp.Sent(ctx, "price")` says whether the body had a key, and `warp.SentKeys(ctx)` lists them in the body's order. Query and path fields are checked as on every route. The input's own `Validate` method (below) runs, and sees zero for every `json` field the body left out, as the handler does; the body field's type's `Validate` does not run. So a `PATCH` route that checks fields against each other lays what was sent over the stored record and checks that, as `update` above does with `Item`'s `Validate` (below), and as [Data](data.md#your-own-routes)'s `data.Resource` does for you.
 
 ### JSON bodies only
 
@@ -171,6 +178,14 @@ A mistake in a route is found when it is registered, before any request: `warp.G
 warp: GET /products/{id}: BadIn.Name has no json, query, path or body tag; add one.
 warp: GET /products/{id}: BadIn.Email is tagged json, and GET reads no body; tag it query or path.
 warp: GET /products/{id}: BadIn.Email has the rule "emial", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.
+```
+
+Two keys of one object that differ only in case, at any depth, are refused too, since `encoding/json` would take either for the other; `readonly` on an embedded struct or inside a type that decodes itself likewise:
+
+```text
+warp: POST /x: In has the fields Ab and AB, whose keys differ only in case; rename one.
+warp: POST /x: zSelf decodes itself, so Warp cannot see what it sets, and zSelf.ID is tagged readonly; drop the tag or the type's own decoding.
+warp: POST /x: In embeds FoldBase tagged readonly; tag the fields inside it, or give the field a name.
 ```
 
 Besides those, a registration is refused when a field has two of the tags, a `json` tag has no name or a name that is not letters, digits, `_`, `-` and `.`, two fields have the same key, a `path` tag names no wildcard of the path or a wildcard has no field, a query or path field has a type it cannot be filled into, an input has two body fields or a body field and `json` fields, a struct inside a body field has a field without a `json` tag or with a `query`, `path` or `body` tag, the input embeds a pointer to a struct, or a struct with a `json` name or `json:"-"`, a rule does not fit its field, `warp.Status` is given a code outside 200 to 599, a path starts with `/api/`, or the same route is registered twice.

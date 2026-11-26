@@ -135,12 +135,12 @@ A module reads its own keys with `app.Config().Get("KEY")`, which is `""` when i
 
 ## Behind a proxy
 
-A proxy that ends TLS in front of the app, such as a load balancer or Caddy, sends every request on as plain HTTP from its own address. Without `TRUST_PROXY=on` the app does not know a request was HTTPS, so the login's cookie is not `Secure` and not named `__Host-session`, and the cross-site check compares the wrong origin; and it sees the proxy's address as every client's, so one client's wrong passwords count against everyone. With `TRUST_PROXY=on` it believes `X-Forwarded-Proto` and the last address of `X-Forwarded-For`. It is off by default, since a client can send both: turn it on only behind a proxy that sets them.
+A proxy that ends TLS in front of the app, such as a load balancer or Caddy, sends every request on as plain HTTP from its own address. Without `TRUST_PROXY=on` the app does not know a request was HTTPS, so the login's cookie is not `Secure` and not named `__Host-session`; and it sees the proxy's address as every client's, so the login's limits count every client's wrong passwords together. Those are the two things it changes: the [cross-site check](#cross-site-requests) reads neither header and works the same either way. With `TRUST_PROXY=on` it believes `X-Forwarded-Proto` and the last address of `X-Forwarded-For`. It is off by default, since a client can send both: turn it on only behind a proxy that sets them.
 
 Three methods give the answer either way:
 
 - `app.ClientIP(r)` is the client's address, without its port: the last of `X-Forwarded-For` with `TRUST_PROXY` on, the connection's otherwise.
-- `app.IsHTTPS(r)` is true for a TLS connection, or with `TRUST_PROXY` on when `X-Forwarded-Proto` ends in `https`.
+- `app.IsHTTPS(r)` is true for a TLS connection, or with `TRUST_PROXY` on when the last entry of `X-Forwarded-Proto` is `https`.
 - `app.ClientKey(r)` is what a limit counts a client by: the address for IPv4, and the /64 it is in for IPv6 (`2001:db8:1:2::/64`), since one client is commonly given a whole /64.
 
 ## Cross-site requests
@@ -224,3 +224,29 @@ if e := c.Fork().Get("/api/products").Want(http.StatusUnauthorized).Error(); e.C
 ```
 
 `Get`, `Post`, `Patch` and `Delete` send a path with `/api` in front, as the app sees it, from the app's own origin; `Do` sends a request as it is, so a test can send a cross-site one. `Want(status)` fails the test with the body when the status differs; `JSON(&v)` decodes a 2xx answer, and `Error()` returns the error shape as a `*warp.Error`. `Fork()` is a client with no cookies.
+
+### Everything warptest exports
+
+```go
+package warptest // github.com/flakerimi/weft/warp/warptest
+
+type Client struct {
+	App *warp.App
+}
+type Response struct {
+	Status int
+	Header http.Header
+	Body   []byte
+}
+
+func New(t testing.TB, vars map[string]string, modules ...warp.Module) *Client
+func (c *Client) Get(path string) *Response
+func (c *Client) Post(path string, body any) *Response
+func (c *Client) Patch(path string, body any) *Response
+func (c *Client) Delete(path string) *Response
+func (c *Client) Do(r *http.Request) *Response
+func (c *Client) Fork() *Client
+func (r *Response) Want(status int) *Response
+func (r *Response) JSON(v any)
+func (r *Response) Error() *warp.Error
+```
