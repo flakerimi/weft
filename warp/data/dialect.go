@@ -311,10 +311,7 @@ func (sqlite) settingsProblem(ctx context.Context, pool *sql.DB, url string, mem
 	for i := range n {
 		c, err := pool.Conn(ctx)
 		if err != nil {
-			if i > 0 && sqlite.busy(sqlite{}, err) {
-				return fmt.Errorf("DB_URL's _pragma sets journal_mode on each new connection, which cannot open while another reads, and the store needs wal; remove journal_mode from DB_URL.")
-			}
-			return fmt.Errorf("connection %d to the database cannot be opened (%v); check the settings in DB_URL.", i+1, err)
+			return openProblem(i, err, url)
 		}
 		conns = append(conns, c)
 		var wait, fk int
@@ -358,6 +355,32 @@ func (sqlite) settingsProblem(ctx context.Context, pool *sql.DB, url string, mem
 		}
 	}
 	return nil
+}
+
+// openProblem is the sentence for connection i of settingsProblem, which
+// could not be opened. One after the first that is busy while the first
+// reads is a _pragma turning the journal out of WAL, when DB_URL has one;
+// anything else names the connection.
+func openProblem(i int, err error, url string) error {
+	if i > 0 && (sqlite{}).busy(err) && hasPragma(url) {
+		return errors.New("DB_URL's _pragma sets journal_mode on each new connection, which cannot open while another reads, and the store needs wal; remove journal_mode from DB_URL.")
+	}
+	return fmt.Errorf("connection %d to the database cannot be opened (%v); check the settings in DB_URL.", i+1, err)
+}
+
+// hasPragma says whether url's query has a _pragma key, in any escape.
+func hasPragma(url string) bool {
+	_, query, _ := strings.Cut(url, "?")
+	for part := range strings.SplitSeq(query, "&") {
+		key, _, _ := strings.Cut(part, "=")
+		if unescaped, err := neturl.QueryUnescape(key); err == nil {
+			key = unescaped
+		}
+		if key == "_pragma" {
+			return true
+		}
+	}
+	return false
 }
 
 // pragmaJournal is the refusal of a _pragma value (SQL run after PRAGMA)
