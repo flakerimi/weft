@@ -119,7 +119,7 @@ func TestMigrateRefusesChangedType(t *testing.T) {
 	app = warp.New(warp.ConfigFrom(env(file)))
 	app.Use(data.Module(), stores{"products", func(db *data.DB) { data.NewStore[Product](db, "products") }})
 	err := app.Start(ctx)
-	want := `warp: module "data" could not migrate: warp: table products has column price as TEXT, and Product.Price needs REAL; change the field back, or alter the column yourself, since Warp never changes or drops a column.`
+	want := `warp: module "data" could not migrate: table products has column price as TEXT, and Product.Price needs REAL; change the field back, or alter the column yourself, since Warp never changes or drops a column.`
 	if err == nil || err.Error() != want {
 		t.Fatalf("Start = %v\nwant %s", err, want)
 	}
@@ -188,8 +188,103 @@ func TestMigrateUniqueOnRepeatedValues(t *testing.T) {
 	app := warp.New(warp.ConfigFrom(env(file)))
 	app.Use(data.Module(), stores{"products", func(db *data.DB) { data.NewStore[V2](db, "products") }})
 	err := app.Start(ctx)
-	want := `warp: module "data" could not migrate: warp: table products has the same name twice or more, so V2.Name cannot be unique; make the values differ, make the field a pointer so that rows without a value hold NULL, or remove the rule.`
+	want := `warp: module "data" could not migrate: table products has the same name twice or more, so V2.Name cannot be unique; make the values differ, make the field a pointer so that rows without a value hold NULL, or remove the rule.`
 	if err == nil || err.Error() != want {
 		t.Fatalf("Start = %v\nwant %s", err, want)
+	}
+}
+
+// A pointer field may be empty, which a NOT NULL column cannot hold; the
+// reverse, a plain field over a column that may be NULL, is fine.
+func TestMigrateRefusesPointerOverNotNull(t *testing.T) {
+	file := dbFile(t)
+	type V1 struct {
+		data.Record
+		Code  string  `json:"code"`
+		Label *string `json:"label"`
+	}
+	c, _ := shop[V1](t, file)
+	c.App.Stop(ctx)
+
+	type Product struct {
+		data.Record
+		Code  *string `json:"code"`
+		Label string  `json:"label"`
+	}
+	app := warp.New(warp.ConfigFrom(env(file)))
+	app.Use(data.Module(), stores{"products", func(db *data.DB) { data.NewStore[Product](db, "products") }})
+	err := app.Start(ctx)
+	want := `warp: module "data" could not migrate: table products has column code as NOT NULL, and Product.Code may be empty (it is a pointer); make the field a plain value, or alter the column yourself.`
+	if err == nil || err.Error() != want {
+		t.Fatalf("Start = %v\nwant %s", err, want)
+	}
+
+	type V3 struct {
+		data.Record
+		Code  string `json:"code"`
+		Label string `json:"label"`
+	}
+	shop[V3](t, file) // a plain field over a nullable column starts
+}
+
+// An index with the name Warp would give is used only when it is a unique
+// index on exactly that column of that table; anything else stops the start,
+// and Warp neither changes nor drops it.
+func TestMigrateChecksIndexOfThatName(t *testing.T) {
+	type V1 struct {
+		data.Record
+		Name  string  `json:"name"`
+		Price float64 `json:"price"`
+	}
+	type V2 struct {
+		data.Record
+		Name  string  `json:"name" warp:"unique"`
+		Price float64 `json:"price"`
+	}
+	for _, c := range []struct{ what, index string }{
+		{"another column", `CREATE UNIQUE INDEX "products_name_unique" ON "products" ("price")`},
+		{"not unique", `CREATE INDEX "products_name_unique" ON "products" ("name")`},
+		{"two columns", `CREATE UNIQUE INDEX "products_name_unique" ON "products" ("name", "price")`},
+		{"partial", `CREATE UNIQUE INDEX "products_name_unique" ON "products" ("name") WHERE "price" > 0`},
+		{"another table", `CREATE UNIQUE INDEX "products_name_unique" ON "brands" ("name")`},
+	} {
+		t.Run(c.what, func(t *testing.T) {
+			file := dbFile(t)
+			cl, _ := shop[V1](t, file)
+			db := data.For(cl.App).SQL()
+			if _, err := db.Exec(`CREATE TABLE "brands" ("name" TEXT)`); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(c.index); err != nil {
+				t.Fatal(err)
+			}
+			cl.App.Stop(ctx)
+
+			app := warp.New(warp.ConfigFrom(env(file)))
+			app.Use(data.Module(), stores{"products", func(db *data.DB) { data.NewStore[V2](db, "products") }})
+			err := app.Start(ctx)
+			want := `warp: module "data" could not migrate: table products has an index products_name_unique that does not cover column name; rename or drop that index yourself, since Warp never changes one.`
+			if err == nil || err.Error() != want {
+				t.Fatalf("Start = %v\nwant %s", err, want)
+			}
+			// The index is as it was.
+			cl, _ = shop[V1](t, file)
+			var sqlText string
+			if err := data.For(cl.App).SQL().QueryRow(`SELECT "sql" FROM "sqlite_master" WHERE "name" = 'products_name_unique'`).Scan(&sqlText); err != nil || sqlText != c.index {
+				t.Fatalf("index %q, %v", sqlText, err)
+			}
+		})
+	}
+
+	// Its own index, from an earlier start, is taken as it is.
+	file := dbFile(t)
+	cl, s := shop[V2](t, file)
+	if err := s.Create(ctx, &V2{Name: "Lamp"}); err != nil {
+		t.Fatal(err)
+	}
+	cl.App.Stop(ctx)
+	_, s = shop[V2](t, file)
+	if err := s.Create(ctx, &V2{Name: "Lamp"}); err == nil {
+		t.Fatal("a second Lamp was taken after a restart")
 	}
 }

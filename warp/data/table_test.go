@@ -214,6 +214,51 @@ func TestStoreMistakes(t *testing.T) {
 	}
 }
 
+// Index names join the table and the column with _, which either may hold,
+// so two stores can ask for one name; the second is a mistake, never an
+// index silently left unmade.
+func TestIndexNameClash(t *testing.T) {
+	type A_B struct {
+		Record
+		C string `json:"c" warp:"unique"`
+	}
+	type A struct {
+		Record
+		BC string `json:"b_c" warp:"unique"`
+	}
+	type Plain struct {
+		Record
+		BC string `json:"b_c"`
+	}
+	got := stores(t, func(db *DB) {
+		NewStore[A_B](db, "a_b")
+		NewStore[A](db, "a")
+		NewStore[Plain](db, "a_x") // not unique: no index, no clash
+	})
+	want := []string{
+		`warp: a: the unique index for A.BC would be named a_b_c_unique, which the a_b store's A_B.C already uses; rename one field or table.`,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("mistakes\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func TestBusy(t *testing.T) {
+	var d sqlite
+	for text, want := range map[string]bool{
+		"database is locked (5) (SQLITE_BUSY)":                              true,
+		"database is locked (517) (SQLITE_BUSY_SNAPSHOT)":                   true,
+		"database table is locked (6) (SQLITE_LOCKED)":                      true,
+		"database is locked":                                                true,
+		"unable to open database file (14)":                                 false,
+		"constraint failed: UNIQUE constraint failed: products.name (2067)": false,
+	} {
+		if got := d.busy(errString(text)); got != want {
+			t.Errorf("busy(%q) = %v, want %v", text, got, want)
+		}
+	}
+}
+
 // Without data.Module, NewStore is given nil, and the app reports the module
 // it needs; the store does not panic.
 func TestStoreWithoutModule(t *testing.T) {
@@ -245,15 +290,16 @@ func TestRegisterDoesNoWork(t *testing.T) {
 // The driver is the app's import, so here there is none.
 func TestStartWithoutDriver(t *testing.T) {
 	cases := map[string]string{
-		"sqlite": `warp: no database driver is named "sqlite"; import one in main.go, such as _ "modernc.org/sqlite".`,
-		"":       `warp: DB_DRIVER is not set; add DB_DRIVER=sqlite and DB_URL=file:data/app.db to .env.`,
-		"oracle": `warp: DB_DRIVER is "oracle"; this version of Warp speaks sqlite.`,
+		"sqlite": `no database driver is named "sqlite"; import one in main.go, such as _ "modernc.org/sqlite".`,
+		"":       `DB_DRIVER is not set; add DB_DRIVER=sqlite and DB_URL=file:data/app.db to .env.`,
+		"oracle": `DB_DRIVER is "oracle"; this version of Warp speaks sqlite.`,
 	}
 	for driver, want := range cases {
 		app := warp.New(warp.ConfigFrom(map[string]string{"DB_DRIVER": driver, "DB_URL": "file:" + t.TempDir() + "/app.db"}))
 		app.Use(Module())
 		err := app.Start(context.Background())
-		if err == nil || !strings.HasSuffix(err.Error(), ": "+want) {
+		// The core puts warp: and the module in front.
+		if want = `warp: module "data" could not migrate: ` + want; err == nil || err.Error() != want {
 			t.Errorf("DB_DRIVER=%q: Start = %v, want %q", driver, err, want)
 		}
 	}
@@ -283,7 +329,7 @@ func TestCreateTableSQL(t *testing.T) {
 			`"name" TEXT NOT NULL DEFAULT '', "price" REAL NOT NULL DEFAULT 0, "note" TEXT, ` +
 			`"live" INTEGER NOT NULL DEFAULT 0, "data" BLOB NOT NULL DEFAULT X'', "odd""name" TEXT NOT NULL DEFAULT '', "count" INTEGER)`},
 		{tb.addColumnSQL(d, tb.col("price")), `ALTER TABLE "gadgets" ADD COLUMN "price" REAL NOT NULL DEFAULT 0`},
-		{strings.Join(tb.indexSQL(d), "; "), `CREATE UNIQUE INDEX IF NOT EXISTS "gadgets_name_unique" ON "gadgets" ("name")`},
+		{tb.uniqueIndexSQL(d, tb.col("name")), `CREATE UNIQUE INDEX IF NOT EXISTS "gadgets_name_unique" ON "gadgets" ("name")`},
 		{tb.selectSQL(d), `SELECT "id", "created_at", "updated_at", "name", "price", "note", "live", "data", "odd""name", "count" FROM "gadgets" WHERE "id" = ?`},
 		{tb.insertSQL(d), `INSERT INTO "gadgets" ("created_at", "updated_at", "name", "price", "note", "live", "data", "odd""name", "count") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING "id"`},
 		{tb.updateSQL(d, []*column{tb.col("price"), tb.col("name")}), `UPDATE "gadgets" SET "price" = ?, "name" = ?, "updated_at" = ? WHERE "id" = ? ` +

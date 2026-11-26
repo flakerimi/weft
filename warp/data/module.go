@@ -28,7 +28,7 @@ type dataModule struct{ db *DB }
 func (m *dataModule) Name() string { return "data" }
 
 func (m *dataModule) Register(app *warp.App) error {
-	m.db = &DB{app: app, names: map[string]bool{}}
+	m.db = &DB{app: app, names: map[string]bool{}, indexes: map[string]*indexOwner{}}
 	warp.Provide(app, m.db)
 	return nil
 }
@@ -49,8 +49,9 @@ type DB struct {
 	sql     *sql.DB
 	dialect dialect
 	tables  []*table
-	names   map[string]bool // the tables stores keep
-	started bool            // Migrate ran: no store may be made now
+	names   map[string]bool        // the tables stores keep
+	indexes map[string]*indexOwner // the unique indexes they need, by name
+	started bool                   // Migrate ran: no store may be made now
 	clock   func() time.Time
 }
 
@@ -92,9 +93,28 @@ func (db *DB) handle() (*sql.DB, dialect) {
 func (db *DB) add(t *table) bool {
 	db.mu.Lock()
 	started, taken := db.started, db.names[t.name]
-	if !started && !taken {
+	// Index names join the table and the column with _, which either may
+	// hold, so two stores can ask for one name.
+	var clashes []string
+	for _, c := range t.cols {
+		if !c.unique {
+			continue
+		}
+		name := t.indexName(c)
+		if other := db.indexes[name]; other != nil {
+			clashes = append(clashes, fmt.Sprintf("%s: the unique index for %s would be named %s, which the %s store's %s already uses; rename one field or table.",
+				t.name, c.field, name, other.table, other.col.field))
+		}
+	}
+	ok := !started && !taken && len(clashes) == 0
+	if ok {
 		db.names[t.name] = true
 		db.tables = append(db.tables, t)
+		for _, c := range t.cols {
+			if c.unique {
+				db.indexes[t.indexName(c)] = &indexOwner{t.name, c}
+			}
+		}
 	}
 	db.mu.Unlock()
 	switch {
@@ -102,8 +122,18 @@ func (db *DB) add(t *table) bool {
 		db.app.Mistake("the %s store was made after the app started; make it in a module's Register.", t.name)
 	case taken:
 		db.app.Mistake("two stores keep the table %s; make one and share it.", t.name)
+	default:
+		for _, m := range clashes {
+			db.app.Mistake("%s", m)
+		}
 	}
-	return !started && !taken
+	return ok
+}
+
+// indexOwner is the store whose unique index has a name.
+type indexOwner struct {
+	table string
+	col   *column
 }
 
 // open reads DB_DRIVER and DB_URL, opens the database and migrates every
@@ -118,17 +148,17 @@ func (db *DB) open(ctx context.Context) error {
 	driver, url := cfg.Get("DB_DRIVER"), cfg.Get("DB_URL")
 	switch {
 	case driver == "":
-		return errors.New("warp: DB_DRIVER is not set; add DB_DRIVER=sqlite and DB_URL=file:data/app.db to .env.")
+		return errors.New("DB_DRIVER is not set; add DB_DRIVER=sqlite and DB_URL=file:data/app.db to .env.")
 	case driver != "sqlite":
-		return fmt.Errorf("warp: DB_DRIVER is %q; this version of Warp speaks sqlite.", driver)
+		return fmt.Errorf("DB_DRIVER is %q; this version of Warp speaks sqlite.", driver)
 	case !slices.Contains(sql.Drivers(), driver):
-		return fmt.Errorf("warp: no database driver is named %q; import one in main.go, such as _ \"modernc.org/sqlite\".", driver)
+		return fmt.Errorf("no database driver is named %q; import one in main.go, such as _ \"modernc.org/sqlite\".", driver)
 	case url == "":
-		return errors.New("warp: DB_URL is not set; add DB_URL=file:data/app.db to .env.")
+		return errors.New("DB_URL is not set; add DB_URL=file:data/app.db to .env.")
 	}
 	var d dialect = sqlite{}
 	cannot := func(err error) error {
-		return fmt.Errorf("warp: the database at %s cannot be opened (%v); check DB_URL in .env.", url, err)
+		return fmt.Errorf("the database at %s cannot be opened (%v); check DB_URL in .env.", url, err)
 	}
 	dsn, dir, memory := d.dsn(url)
 	if dir != "" {
@@ -143,11 +173,14 @@ func (db *DB) open(ctx context.Context) error {
 	if memory { // each connection would have a database of its own
 		conn.SetMaxOpenConns(1)
 	}
-	if err := conn.PingContext(ctx); err != nil {
+	if err := ping(ctx, conn, d); err != nil {
 		conn.Close()
+		if d.busy(err) {
+			return fmt.Errorf("the database at %s is locked by another process; stop that process, or wait and start again.", url)
+		}
 		return cannot(err)
 	}
-	if err := migrate(ctx, conn, d, tables); err != nil {
+	if err := migrate(ctx, conn, d, tables, url); err != nil {
 		conn.Close()
 		return err
 	}
@@ -168,6 +201,34 @@ func (db *DB) close() error {
 	return nil
 }
 
+// pingTries and pingWait are how often, and how far apart, ping tries a
+// database that another connection holds: about a second in all.
+const (
+	pingTries = 10
+	pingWait  = 100 * time.Millisecond
+)
+
+// ping opens the first connection, which sets the journal mode. A fresh file
+// opened by several processes at once can be busy for a moment while one of
+// them switches it, beyond what the busy timeout waits for, so a busy answer
+// is tried again.
+func ping(ctx context.Context, conn *sql.DB, d dialect) error {
+	var err error
+	for try := range pingTries {
+		if err = conn.PingContext(ctx); err == nil || !d.busy(err) {
+			return err
+		}
+		if try < pingTries-1 {
+			select {
+			case <-ctx.Done():
+				return err
+			case <-time.After(pingWait):
+			}
+		}
+	}
+	return err
+}
+
 // txKey is where a DB keeps its transaction on a context; one key per DB, so
 // two databases' transactions never mix.
 type txKey struct{ db *DB }
@@ -183,8 +244,12 @@ func (db *DB) q(ctx context.Context, conn *sql.DB) querier {
 
 // Tx runs fn in a transaction, which it commits when fn returns nil and rolls
 // back otherwise, or when fn panics, which it then panics with again. A store
-// call made with fn's context runs in the transaction. A Tx inside another
-// one runs fn in the outer transaction, which alone commits or rolls back.
+// call made with fn's context runs in the transaction.
+//
+// A Tx inside another one joins it: it runs fn in the outer transaction and
+// returns fn's error, and only the outer Tx commits or rolls back. So when an
+// inner fn fails and the outer fn swallows that error and returns nil, the
+// outer Tx commits, with whatever the inner fn wrote before it failed.
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context) error) error {
 	if _, ok := ctx.Value(txKey{db}).(*sql.Tx); ok {
 		return fn(ctx)
@@ -195,7 +260,7 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context) error) error 
 	}
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("data: cannot begin a transaction: %w", err)
 	}
 	committing := false
 	defer func() {
@@ -207,5 +272,8 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context) error) error 
 		return err
 	}
 	committing = true
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("data: cannot commit the transaction: %w", err)
+	}
+	return nil
 }

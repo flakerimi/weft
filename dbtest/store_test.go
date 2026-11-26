@@ -256,10 +256,10 @@ func TestStartMistakes(t *testing.T) {
 		vars map[string]string
 		want string
 	}{
-		{map[string]string{"DB_URL": "file:x.db"}, `warp: DB_DRIVER is not set; add DB_DRIVER=sqlite and DB_URL=file:data/app.db to .env.`},
-		{map[string]string{"DB_DRIVER": "oracle", "DB_URL": "file:x.db"}, `warp: DB_DRIVER is "oracle"; this version of Warp speaks sqlite.`},
-		{map[string]string{"DB_DRIVER": "sqlite"}, `warp: DB_URL is not set; add DB_URL=file:data/app.db to .env.`},
-		{map[string]string{"DB_DRIVER": "sqlite", "DB_URL": "file:" + blocked + "?mode=ro"}, `warp: the database at file:` + blocked + `?mode=ro cannot be opened (`},
+		{map[string]string{"DB_URL": "file:x.db"}, `DB_DRIVER is not set; add DB_DRIVER=sqlite and DB_URL=file:data/app.db to .env.`},
+		{map[string]string{"DB_DRIVER": "oracle", "DB_URL": "file:x.db"}, `DB_DRIVER is "oracle"; this version of Warp speaks sqlite.`},
+		{map[string]string{"DB_DRIVER": "sqlite"}, `DB_URL is not set; add DB_URL=file:data/app.db to .env.`},
+		{map[string]string{"DB_DRIVER": "sqlite", "DB_URL": "file:" + blocked + "?mode=ro"}, `the database at file:` + blocked + `?mode=ro cannot be opened (`},
 	}
 	for _, c := range cases {
 		app := warp.New(warp.ConfigFrom(c.vars))
@@ -268,6 +268,7 @@ func TestStartMistakes(t *testing.T) {
 			t.Fatalf("Err = %v: the environment is checked at start, not while registering", err)
 		}
 		err := app.Start(ctx)
+		// The core alone puts warp: in front.
 		prefix := `warp: module "data" could not migrate: `
 		if err == nil || !strings.HasPrefix(err.Error(), prefix+c.want) {
 			t.Errorf("Start = %v, want %q", err, prefix+c.want)
@@ -278,6 +279,98 @@ func TestStartMistakes(t *testing.T) {
 		if data.For(app).SQL() != nil {
 			t.Errorf("SQL() is not nil after a failed start")
 		}
+	}
+}
+
+// lock holds an exclusive lock on the database file until the returned
+// function is called.
+func lock(t *testing.T, file string) (release func()) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	holder, err := sql.Open("sqlite", "file:"+file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { holder.Close() })
+	conn, err := holder.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{"BEGIN EXCLUSIVE", `CREATE TABLE "held" ("x" INTEGER)`} {
+		if _, err := conn.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var once sync.Once
+	release = func() {
+		once.Do(func() {
+			conn.ExecContext(ctx, "COMMIT")
+			conn.Close()
+		})
+	}
+	t.Cleanup(release)
+	return release
+}
+
+// Another process holding the file while the journal mode is set is waited
+// for, about a second, and then named; it is not a wrong DB_URL. The busy
+// timeout is set to 0 in DB_URL, which wins over Warp's, so the test does not
+// wait 5 s for each try.
+func TestStartWhileLocked(t *testing.T) {
+	file := dbFile(t)
+	lock(t, file)
+	url := "file:" + file + "?_busy_timeout=0"
+	app := warp.New(warp.ConfigFrom(map[string]string{"DB_DRIVER": "sqlite", "DB_URL": url}))
+	app.Use(data.Module(), stores{"products", func(db *data.DB) { data.NewStore[Product](db, "products") }})
+	began := time.Now()
+	err := app.Start(ctx)
+	want := `warp: module "data" could not migrate: the database at ` + url + ` is locked by another process; stop that process, or wait and start again.`
+	if err == nil || err.Error() != want {
+		t.Fatalf("Start = %v\nwant %s", err, want)
+	}
+	if waited := time.Since(began); waited < 500*time.Millisecond {
+		t.Fatalf("Start gave up after %v, want about a second of tries", waited)
+	}
+
+	// A lock let go while it tries is waited out.
+	file = dbFile(t)
+	release := lock(t, file)
+	url = "file:" + file + "?_busy_timeout=0"
+	app = warp.New(warp.ConfigFrom(map[string]string{"DB_DRIVER": "sqlite", "DB_URL": url}))
+	app.Use(data.Module(), stores{"products", func(db *data.DB) { data.NewStore[Product](db, "products") }})
+	time.AfterFunc(300*time.Millisecond, release)
+	if err := app.Start(ctx); err != nil {
+		t.Fatalf("Start = %v, want it to wait for the lock", err)
+	}
+	app.Stop(ctx)
+}
+
+// readonly is about what a request may send: server code writes such a field
+// through Update. Only the three times and the id the store sets are refused.
+func TestUpdateWritesOwnReadonlyField(t *testing.T) {
+	type Page struct {
+		data.Record
+		Title string `json:"title"`
+		Slug  string `json:"slug" warp:"readonly"`
+	}
+	_, s := shop[Page](t, dbFile(t))
+	p := Page{Title: "Hello", Slug: "hello"}
+	if err := s.Create(ctx, &p); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Update(ctx, p.ID, &Page{Title: "ignored", Slug: "hello-world"}, []string{"slug"})
+	if err != nil || got.Slug != "hello-world" || got.Title != "Hello" {
+		t.Fatalf("Update slug = %+v, %v", got, err)
+	}
+	for _, field := range []string{"id", "created_at", "updated_at", "cost"} {
+		if _, err := s.Update(ctx, p.ID, &Page{Slug: "other"}, []string{"slug", field}); err == nil {
+			t.Errorf("Update of %s was taken", field)
+		}
+	}
+	if stored, _ := s.Get(ctx, p.ID); stored.Slug != "hello-world" {
+		t.Fatalf("a refused Update wrote: %+v", stored)
 	}
 }
 

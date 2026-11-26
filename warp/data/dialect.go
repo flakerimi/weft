@@ -2,6 +2,8 @@ package data
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	neturl "net/url"
 	"path/filepath"
@@ -26,12 +28,17 @@ type dialect interface {
 	// timeValue is how a time is written; scanTime reads it back, in UTC.
 	timeValue(t time.Time) any
 	scanTime(src any) (time.Time, error)
-	// columns reads the table's columns, name to declared type; none when the
-	// table does not exist.
-	columns(ctx context.Context, q querier, table string) (map[string]string, error)
+	// columns reads the table's columns by name; none when the table does
+	// not exist.
+	columns(ctx context.Context, q querier, table string) (map[string]columnInfo, error)
+	// index reads the index named name, wherever it is; ok is false when
+	// there is none.
+	index(ctx context.Context, q querier, name string) (info indexInfo, ok bool, err error)
 	// uniqueColumn reports the column of table whose unique index err
 	// violates.
 	uniqueColumn(err error, table string) (string, bool)
+	// busy reports whether err says another connection holds the database.
+	busy(err error) bool
 	// dsn is the driver's name for url with the settings every connection
 	// needs, the folder to make for the file (none for memory), and whether
 	// the database lives in memory, where one connection must hold it.
@@ -42,6 +49,19 @@ type dialect interface {
 	// containsText is the value contains takes for the text s, every wildcard
 	// in s escaped so that it is taken literally.
 	containsText(s string) string
+}
+
+// columnInfo is what the database says of one column.
+type columnInfo struct {
+	typ     string // the declared type
+	notNull bool
+}
+
+// indexInfo is what the database says of one index.
+type indexInfo struct {
+	table           string
+	unique, partial bool
+	columns         []string // in order; "" for an expression
 }
 
 // sqlite is the dialect of SQLite.
@@ -102,21 +122,48 @@ func (sqlite) scanTime(src any) (time.Time, error) {
 	return t.UTC(), nil
 }
 
-func (sqlite) columns(ctx context.Context, q querier, table string) (map[string]string, error) {
-	rows, err := q.QueryContext(ctx, `SELECT "name", "type" FROM pragma_table_info(?)`, table)
+func (sqlite) columns(ctx context.Context, q querier, table string) (map[string]columnInfo, error) {
+	rows, err := q.QueryContext(ctx, `SELECT "name", "type", "notnull" FROM pragma_table_info(?)`, table)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	cols := map[string]string{}
+	cols := map[string]columnInfo{}
 	for rows.Next() {
-		var name, typ string
-		if err := rows.Scan(&name, &typ); err != nil {
+		var name string
+		var info columnInfo
+		if err := rows.Scan(&name, &info.typ, &info.notNull); err != nil {
 			return nil, err
 		}
-		cols[name] = typ
+		cols[name] = info
 	}
 	return cols, rows.Err()
+}
+
+func (sqlite) index(ctx context.Context, q querier, name string) (indexInfo, bool, error) {
+	var info indexInfo
+	err := q.QueryRowContext(ctx, `SELECT m."tbl_name", l."unique", l."partial" FROM "sqlite_master" AS m `+
+		`JOIN pragma_index_list(m."tbl_name") AS l ON l."name" = m."name" WHERE m."type" = 'index' AND m."name" = ?`, name).
+		Scan(&info.table, &info.unique, &info.partial)
+	if errors.Is(err, sql.ErrNoRows) {
+		return info, false, nil
+	}
+	if err != nil {
+		return info, false, err
+	}
+	rows, err := q.QueryContext(ctx, `SELECT "name" FROM pragma_index_info(?) ORDER BY "seqno"`, name)
+	if err != nil {
+		return info, false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var col sql.NullString // NULL for an expression
+		if err := rows.Scan(&col); err != nil {
+			return info, false, err
+		}
+		info.columns = append(info.columns, col.String)
+	}
+	return info, true, rows.Err()
 }
 
 // uniqueColumn reads SQLite's own words, "UNIQUE constraint failed:
@@ -134,6 +181,15 @@ func (sqlite) uniqueColumn(err error, table string) (string, bool) {
 		return "", false
 	}
 	return rest, true
+}
+
+// busy reads SQLite's words for a database another connection holds, which
+// modernc.org/sqlite writes as "database is locked (5) (SQLITE_BUSY)"; dbtest
+// fails if they change.
+func (sqlite) busy(err error) bool {
+	text := err.Error()
+	return strings.Contains(text, "database is locked") || strings.Contains(text, "database table is locked") ||
+		strings.Contains(text, "SQLITE_BUSY") || strings.Contains(text, "SQLITE_LOCKED")
 }
 
 // settings are set on every connection the pool opens, through the DSN, which

@@ -233,14 +233,10 @@ func (t *table) addColumnSQL(d dialect, c *column) string {
 // indexName is the name of the unique index on c.
 func (t *table) indexName(c *column) string { return t.name + "_" + c.name + "_unique" }
 
-func (t *table) indexSQL(d dialect) []string {
-	var out []string
-	for _, c := range t.cols {
-		if c.unique {
-			out = append(out, "CREATE UNIQUE INDEX IF NOT EXISTS "+d.quote(t.indexName(c))+" ON "+d.quote(t.name)+" ("+d.quote(c.name)+")")
-		}
-	}
-	return out
+// uniqueIndexSQL makes the unique index on c, unless one of its name exists,
+// which migrate has checked is this one.
+func (t *table) uniqueIndexSQL(d dialect, c *column) string {
+	return "CREATE UNIQUE INDEX IF NOT EXISTS " + d.quote(t.indexName(c)) + " ON " + d.quote(t.name) + " (" + d.quote(c.name) + ")"
 }
 
 // names is every column, quoted, for a SELECT or a RETURNING.
@@ -360,7 +356,9 @@ func (t *table) set(d dialect, c *column, fv reflect.Value, src any) error {
 	if fv.Kind() == reflect.Pointer {
 		e = reflect.New(fv.Type().Elem()).Elem()
 	}
-	wrong := fmt.Errorf("data: column %s.%s holds %v, which %s cannot take; check what wrote it", t.name, c.name, src, c.field)
+	wrong := func() error {
+		return fmt.Errorf("data: column %s.%s holds %v, which %s cannot take; check what wrote it", t.name, c.name, src, c.field)
+	}
 	switch c.kind {
 	case kindText:
 		switch s := src.(type) {
@@ -369,7 +367,7 @@ func (t *table) set(d dialect, c *column, fv reflect.Value, src any) error {
 		case []byte:
 			e.SetString(string(s))
 		default:
-			return wrong
+			return wrong()
 		}
 	case kindBool:
 		switch b := src.(type) {
@@ -378,7 +376,7 @@ func (t *table) set(d dialect, c *column, fv reflect.Value, src any) error {
 		case int64:
 			e.SetBool(b != 0)
 		default:
-			return wrong
+			return wrong()
 		}
 	case kindReal:
 		switch n := src.(type) {
@@ -387,7 +385,7 @@ func (t *table) set(d dialect, c *column, fv reflect.Value, src any) error {
 		case int64:
 			e.SetFloat(float64(n))
 		default:
-			return wrong
+			return wrong()
 		}
 	case kindTime:
 		at, err := d.scanTime(src)
@@ -400,7 +398,7 @@ func (t *table) set(d dialect, c *column, fv reflect.Value, src any) error {
 		if !ok {
 			s, isText := src.(string)
 			if !isText {
-				return wrong
+				return wrong()
 			}
 			b = []byte(s)
 		}
@@ -408,17 +406,17 @@ func (t *table) set(d dialect, c *column, fv reflect.Value, src any) error {
 	case kindInteger:
 		n, ok := src.(int64)
 		if !ok {
-			return wrong
+			return wrong()
 		}
 		switch {
 		case e.CanUint():
 			if n < 0 || e.OverflowUint(uint64(n)) {
-				return wrong
+				return wrong()
 			}
 			e.SetUint(uint64(n))
 		default:
 			if e.OverflowInt(n) {
-				return wrong
+				return wrong()
 			}
 			e.SetInt(n)
 		}
@@ -436,45 +434,77 @@ type querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// migrate brings every table up to date, in one transaction: a missing
-// table is made, a missing column is added, and a column of another type
-// stops it all. Nothing is dropped or changed.
-func migrate(ctx context.Context, db *sql.DB, d dialect, tables []*table) error {
+// migrate brings every table up to date, in one transaction. It checks every
+// table first: a column of another type, a pointer field over a NOT NULL
+// column, or an index with a unique index's name that is not that index stops
+// it before anything is changed. Then it makes the missing tables, columns and
+// unique indexes. Nothing is dropped or changed. url names the database in
+// its sentences.
+func migrate(ctx context.Context, db *sql.DB, d dialect, tables []*table, url string) error {
+	raw := func(err error) error {
+		return fmt.Errorf("the database at %s could not be brought up to date (%v); look at the error in brackets and start again.", url, err)
+	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return raw(err)
 	}
 	defer tx.Rollback()
+
+	type step struct {
+		t   *table
+		sql string
+	}
+	var steps []step
 	for _, t := range tables {
 		have, err := d.columns(ctx, tx, t.name)
 		if err != nil {
-			return err
+			return raw(err)
 		}
-		var steps []string
 		if len(have) == 0 {
-			steps = append(steps, t.createSQL(d))
+			steps = append(steps, step{t, t.createSQL(d)})
 		}
 		for _, c := range t.cols {
-			typ, ok := have[c.name]
+			info, ok := have[c.name]
 			switch {
 			case len(have) == 0:
 			case !ok:
-				steps = append(steps, t.addColumnSQL(d, c))
-			case !strings.EqualFold(typ, d.columnType(c.kind)):
-				return fmt.Errorf("warp: table %s has column %s as %s, and %s needs %s; change the field back, or alter the column yourself, since Warp never changes or drops a column.",
-					t.name, c.name, typ, c.field, d.columnType(c.kind))
+				steps = append(steps, step{t, t.addColumnSQL(d, c)})
+			case !strings.EqualFold(info.typ, d.columnType(c.kind)):
+				return fmt.Errorf("table %s has column %s as %s, and %s needs %s; change the field back, or alter the column yourself, since Warp never changes or drops a column.",
+					t.name, c.name, info.typ, c.field, d.columnType(c.kind))
+			case c.null && info.notNull:
+				return fmt.Errorf("table %s has column %s as NOT NULL, and %s may be empty (it is a pointer); make the field a plain value, or alter the column yourself.",
+					t.name, c.name, c.field)
 			}
 		}
-		for _, step := range append(steps, t.indexSQL(d)...) {
-			if _, err := tx.ExecContext(ctx, step); err != nil {
-				if name, ok := d.uniqueColumn(err, t.name); ok {
-					if c := t.col(name); c != nil {
-						return fmt.Errorf("warp: table %s has the same %s twice or more, so %s cannot be unique; make the values differ, make the field a pointer so that rows without a value hold NULL, or remove the rule.", t.name, c.name, c.field)
-					}
-				}
-				return fmt.Errorf("warp: table %s cannot be brought up to date (%w); check the database DB_URL names.", t.name, err)
+		for _, c := range t.cols {
+			if !c.unique {
+				continue
+			}
+			name := t.indexName(c)
+			info, ok, err := d.index(ctx, tx, name)
+			switch {
+			case err != nil:
+				return raw(err)
+			case !ok:
+				steps = append(steps, step{t, t.uniqueIndexSQL(d, c)})
+			case info.table != t.name || !info.unique || info.partial || !slices.Equal(info.columns, []string{c.name}):
+				return fmt.Errorf("table %s has an index %s that does not cover column %s; rename or drop that index yourself, since Warp never changes one.", t.name, name, c.name)
 			}
 		}
 	}
-	return tx.Commit()
+	for _, st := range steps {
+		if _, err := tx.ExecContext(ctx, st.sql); err != nil {
+			if name, ok := d.uniqueColumn(err, st.t.name); ok {
+				if c := st.t.col(name); c != nil {
+					return fmt.Errorf("table %s has the same %s twice or more, so %s cannot be unique; make the values differ, make the field a pointer so that rows without a value hold NULL, or remove the rule.", st.t.name, c.name, c.field)
+				}
+			}
+			return raw(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return raw(err)
+	}
+	return nil
 }

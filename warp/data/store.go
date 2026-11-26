@@ -142,7 +142,9 @@ func (s *Store[T]) Create(ctx context.Context, v *T) error {
 // updated_at, to the record with the id, and returns the record as it is
 // now; v itself is not changed. With no fields it writes nothing, not even
 // updated_at, and returns the record. A name T does not have, or id,
-// created_at or updated_at, is an error, and nothing is written. A missing
+// created_at or updated_at, which the store sets, is an error, and nothing
+// is written. A field of T's own tagged warp:"readonly" is written: readonly
+// is about what a request may send, and server code may set such a field. A missing
 // record is a warp.NotFound; a value another record has in a unique field is
 // a warp.Invalid on that field.
 func (s *Store[T]) Update(ctx context.Context, id int64, v *T, fields []string) (T, error) {
