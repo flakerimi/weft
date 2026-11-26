@@ -846,7 +846,7 @@ func TestGenReportsAppMistake(t *testing.T) {
 		name, file, src, output, sentence string
 	}{
 		{"a registration mistake", routes, strings.Replace(string(goSrc), `"/hello"`, `"hello"`, 1), `has a path that does not start with /`, sentence},
-		{"a compile error", routes, string(goSrc) + "\nfunc broken( {\n", "routes.go:", sentence},
+		{"a compile error", routes, string(goSrc) + "\nfunc broken( {\n", "routes.go:", "weft gen: go build failed; fix what its output above says and run weft gen again.\n"},
 		{"no warp.App", main, "package main\n\nimport \"fmt\"\n\nfunc main() { fmt.Println(\"just text\") }\n", "just text\n",
 			"weft gen: the app's standard output was not its description (it starts with \"just text\\n\"); make sure nothing else prints there when WARP_DESCRIBE is set.\n"},
 		{"nothing printed", main, "package main\n\nfunc main() {}\n", "", sentence},

@@ -68,6 +68,9 @@ var (
 	// errDescribeTimeout is an app still running after describeWithin, as
 	// one whose main.go serves without a warp.App does.
 	errDescribeTimeout = errors.New("the app did not describe itself in time")
+	// errBuildFailed is an app whose Go does not build; go build's output
+	// says why.
+	errBuildFailed = errors.New("go build failed")
 	// errSilent is an app that printed nothing and exited 0; it is
 	// errNoDescription to weft gen.
 	errSilent = fmt.Errorf("the app printed nothing: %w", errNoDescription)
@@ -208,6 +211,8 @@ func genFailed(stderr io.Writer, command string, err error) int {
 		return 130
 	case errors.Is(err, errDescribeTimeout):
 		fmt.Fprintf(stderr, "weft %s: the app did not describe itself within %d s; check that main.go serves a warp.App, whose Serve prints the description under WARP_DESCRIBE=1, and run weft %s again.\n", command, int(describeWithin.Seconds()), command)
+	case errors.Is(err, errBuildFailed):
+		fmt.Fprintf(stderr, "weft %s: go build failed; fix what its output above says and run weft %s again.\n", command, command)
 	case errors.Is(err, errNoDescription):
 		fmt.Fprintf(stderr, "weft %s: the app did not describe itself; fix what its output above says and run weft %s again.\n", command, command)
 	default:
@@ -237,7 +242,7 @@ func buildAndDescribe(ctx context.Context, command, appDir string, stderr io.Wri
 		if ctx.Err() != nil {
 			return description{}, ctx.Err()
 		}
-		return description{}, errNoDescription
+		return description{}, errBuildFailed
 	}
 	return describeApp(ctx, appDir, bin, describeWithin, stderr)
 }
