@@ -38,7 +38,9 @@ The build stored each text file three times: as it is, brotli and gzip. Serve pi
 
 ### Early Hints
 
-When a page has a linked stylesheet, fonts or island scripts, Serve first sends `103 Early Hints` with their `Link` headers, so the browser starts fetching them while the page is on its way. The island scripts hinted are the loader, and the runtime too only on a page with an island that starts on `load`.
+When a page has a linked stylesheet, fonts or island scripts, its response carries their `Link` headers. The island scripts hinted are the loader, and the runtime too only on a page with an island that starts on `load`.
+
+Serve can also send those `Link` headers ahead of the page, in a `103 Early Hints`, so the browser starts fetching them while the page is on its way. Chrome acts on a 103 over HTTP/2 or later and ignores one over HTTP/1.1, so sent straight to a browser over HTTP/1.1 it would be a wasted write on every page. Serve sends it when the request is a browser's navigation (`Sec-Fetch-Mode: navigate`) and either came over HTTP/2 or later, or came through a proxy (it has a `Forwarded`, `X-Forwarded-For` or `Via` header): a proxy that speaks HTTP/2 to the browser and passes 1xx responses on forwards the 103 to it. A proxy that adds none of those headers and speaks HTTP/1.1 to the binary gets no 103, so set one at the proxy (with nginx, `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`); a request over HTTP/1.0 never gets one. This only decides whether to send the extra response, so `TRUST_PROXY` does not change it, and the page's own response is the same either way.
 
 ### Methods
 

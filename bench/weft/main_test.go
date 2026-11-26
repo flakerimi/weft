@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-// get asks a real server, so the 103 Early Hints a page gets first is read
-// as the client reads it, before the final response.
+// get asks a real server, so any 103 Early Hints is read as the client reads
+// it, before the final response.
 func get(t *testing.T, srv *httptest.Server, path, encoding string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequest("GET", srv.URL+path, nil)
