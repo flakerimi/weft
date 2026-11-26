@@ -192,6 +192,51 @@ func TestListRefusesUnknownSortAndFilter(t *testing.T) {
 	}
 }
 
+// Nothing read from the query is unbounded, and a long sort is not echoed.
+func TestListLimits(t *testing.T) {
+	_, s := shop[Item](t, dbFile(t))
+	makeItems(t, s)
+	unknownSort := func(name string) map[string]string {
+		return map[string]string{"sort": fmt.Sprintf(`products cannot be sorted by %q; use one of: created_at, id, name, price, updated_at.`, name)}
+	}
+	long := map[string]string{"sort": "The sort field is longer than 64 bytes."}
+	for _, c := range []struct {
+		q      data.Query
+		fields map[string]string
+	}{
+		{data.Query{Sort: strings.Repeat("s", 64)}, unknownSort(strings.Repeat("s", 64))},
+		{data.Query{Sort: "-" + strings.Repeat("s", 63)}, unknownSort(strings.Repeat("s", 63))},
+		{data.Query{Sort: strings.Repeat("s", 65)}, long},
+		{data.Query{Sort: "-" + strings.Repeat("s", 64)}, long},
+		{data.Query{Filter: map[string]string{"status": strings.Repeat("v", 201)}}, map[string]string{"filter[status]": "A filter value is longer than 200 bytes."}},
+		{data.Query{Q: "lamp\x00"}, map[string]string{"q": "The search text has a character that cannot be searched for."}},
+		{data.Query{Q: "\x00"}, map[string]string{"q": "The search text has a character that cannot be searched for."}},
+		{data.Query{Filter: map[string]string{"status": "live\x00"}}, map[string]string{"filter[status]": "The value has a character that cannot be filtered on."}},
+		// An unknown key is named as such, whatever its value.
+		{data.Query{Filter: map[string]string{"size": strings.Repeat("v", 201) + "\x00"}}, map[string]string{"filter[size]": `products cannot be filtered by "size"; use one of: status.`}},
+	} {
+		_, err := s.List(ctx, c.q)
+		wantBadRequest(t, fmt.Sprintf("sort %d bytes, q %q, filter %d", len(c.q.Sort), c.q.Q, len(c.q.Filter["status"])), err, c.fields)
+	}
+	// 200 bytes is a value like any other, and matches nothing here.
+	if l := listOf(t, s, data.Query{Filter: map[string]string{"status": strings.Repeat("v", 200)}}); l.Total != 0 {
+		t.Fatalf("a 200-byte filter: total %d", l.Total)
+	}
+
+	// Over HTTP: a 100 KB sort is answered in less than 1 KB.
+	c, _ := withResource[Item](t)
+	res := c.Get("/api/products?sort=" + strings.Repeat("%3C", 100<<10)).Want(400)
+	if len(res.Body) >= 1<<10 || res.Error().Fields["sort"] != long["sort"] {
+		t.Fatalf("a 100 KB sort answered %d bytes: %.200s", len(res.Body), res.Body)
+	}
+	if e := c.Get("/api/products?q=%00").Want(400).Error(); e.Fields["q"] == "" {
+		t.Fatalf("q=%%00: %+v", e)
+	}
+	if e := c.Get("/api/products?filter[status]=%00").Want(400).Error(); e.Fields["filter[status]"] == "" {
+		t.Fatalf("filter[status]=%%00: %+v", e)
+	}
+}
+
 // wantBadRequest fails unless err is the 400 naming fields.
 func wantBadRequest(t *testing.T, what string, err error, fields map[string]string) {
 	t.Helper()

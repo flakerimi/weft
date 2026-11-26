@@ -16,12 +16,17 @@ func TestDataTagMistakes(t *testing.T) {
 		Live  bool    `json:"live" data:"filter,search"`
 		Code  *string `json:"code" data:"search"`
 		Note  string  `json:"note" data:" sort , filter ,"`
+		Photo []byte  `json:"photo" data:"filter"`
+		Thumb []byte  `json:"thumb" data:"sort,search"`
+		Raw   []byte  `json:"raw" data:""`
 	}
 	got := stores(t, func(db *DB) { NewStore[Product](db, "products") })
 	want := []string{
 		`warp: products: Product.Price is tagged data:"search", and search is for text; use sort or filter.`,
 		`warp: products: Product.Stock is tagged data:"sort, rank", and rank is none of sort, filter and search; use those, comma-separated.`,
 		`warp: products: Product.Live is tagged data:"filter,search", and search is for text; use sort or filter.`,
+		`warp: products: Product.Photo is tagged data:"filter", and bytes cannot be filtered, sorted or searched; remove the tag.`,
+		`warp: products: Product.Thumb is tagged data:"sort,search", and bytes cannot be filtered, sorted or searched; remove the tag.`,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("mistakes\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

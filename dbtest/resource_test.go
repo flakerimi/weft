@@ -1,8 +1,11 @@
 package dbtest
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"reflect"
 	"slices"
@@ -287,7 +290,8 @@ func TestResourceOptions(t *testing.T) {
 	c.Get("/api/products/1").Want(200)
 }
 
-// Priced checks itself across fields.
+// Priced checks itself across fields, with a value receiver, and says in a
+// header each time it does.
 type Priced struct {
 	data.Record
 	Name  string  `json:"name" warp:"required"`
@@ -296,37 +300,109 @@ type Priced struct {
 }
 
 func (p Priced) Validate(ctx context.Context) error {
-	if p.Sale > p.Price {
+	warp.ResponseHeader(ctx).Add("X-Checked", fmt.Sprintf("price %g, sale %g", p.Price, p.Sale))
+	switch {
+	case p.Name == "boom":
+		return errors.New("the price list is down")
+	case p.Name == "held":
+		return warp.Conflict("That product is held.")
+	case p.Sale > p.Price:
 		return warp.Invalid(map[string]string{"sale": "Make the sale price no more than the price."})
+	}
+	return nil
+}
+
+// Stocked checks itself with a pointer receiver.
+type Stocked struct {
+	data.Record
+	Stock    int `json:"stock"`
+	Reserved int `json:"reserved"`
+}
+
+func (s *Stocked) Validate(ctx context.Context) error {
+	if s.Reserved > s.Stock {
+		return warp.Invalid(map[string]string{"reserved": "Reserve no more than the stock."})
 	}
 	return nil
 }
 
 func TestResourceValidates(t *testing.T) {
 	c, s := withResource[Priced](t)
+	tooHigh := map[string]string{"sale": "Make the sale price no more than the price."}
 	if e := c.Post("/api/products", map[string]any{"price": 3}).Want(422).Error(); !reflect.DeepEqual(e.Fields, map[string]string{"name": "This is required."}) {
 		t.Fatalf("create without a name: %+v", e)
 	}
-	if e := c.Post("/api/products", map[string]any{"name": "Lamp", "price": 3, "sale": 5}).Want(422).Error(); !reflect.DeepEqual(e.Fields, map[string]string{"sale": "Make the sale price no more than the price."}) {
-		t.Fatalf("create with a sale above the price: %+v", e)
+	// Create runs the model's own check, once.
+	res := c.Post("/api/products", map[string]any{"name": "Lamp", "price": 3, "sale": 5}).Want(422)
+	if e := res.Error(); !reflect.DeepEqual(e.Fields, tooHigh) || len(res.Header.Values("X-Checked")) != 1 {
+		t.Fatalf("create with a sale above the price: %+v, checked %q", e, res.Header.Values("X-Checked"))
 	}
 	if e := c.Post("/api/products", map[string]any{"name": "Lamp", "id": 4}).Want(400).Error(); e.Message != `The body has the field "id", which this route does not take.` {
 		t.Fatalf("create with an id: %+v", e)
 	}
 	var lamp Priced
-	c.Post("/api/products", map[string]any{"name": "Lamp", "price": 5, "sale": 3}).Want(201).JSON(&lamp)
+	c.Post("/api/products", map[string]any{"name": "Lamp", "price": 10, "sale": 5}).Want(201).JSON(&lamp)
+	unchanged := func() {
+		t.Helper()
+		if got, _ := s.Get(ctx, lamp.ID); !reflect.DeepEqual(got, lamp) {
+			t.Fatalf("a refused update wrote %+v, want %+v", got, lamp)
+		}
+	}
 
-	if e := c.Patch("/api/products/1", map[string]any{"price": 10, "sale": 20}).Want(422).Error(); !reflect.DeepEqual(e.Fields, map[string]string{"sale": "Make the sale price no more than the price."}) {
-		t.Fatalf("update with a sale above the price: %+v", e)
-	}
-	if got, _ := s.Get(ctx, 1); !reflect.DeepEqual(got, lamp) {
-		t.Fatalf("a refused update wrote %+v", got)
-	}
+	// Update checks the stored record with what was sent laid over it, once.
 	var got Priced
-	c.Patch("/api/products/1", map[string]any{"price": 10, "sale": 4}).Want(200).JSON(&got)
-	if got.Price != 10 || got.Sale != 4 || got.Name != "Lamp" {
-		t.Fatalf("update answered %+v", got)
+	res = c.Patch("/api/products/1", map[string]any{"sale": 4}).Want(200)
+	res.JSON(&got)
+	if got.Price != 10 || got.Sale != 4 || got.Name != "Lamp" || !reflect.DeepEqual(res.Header.Values("X-Checked"), []string{"price 10, sale 4"}) {
+		t.Fatalf("PATCH sale 4 answered %+v, checked %q", got, res.Header.Values("X-Checked"))
 	}
+	lamp = got
+	res = c.Patch("/api/products/1", map[string]any{"sale": 11}).Want(422)
+	if e := res.Error(); !reflect.DeepEqual(e.Fields, tooHigh) || !reflect.DeepEqual(res.Header.Values("X-Checked"), []string{"price 10, sale 11"}) {
+		t.Fatalf("PATCH sale 11: %+v, checked %q", e, res.Header.Values("X-Checked"))
+	}
+	unchanged()
+	if e := c.Patch("/api/products/1", map[string]any{"price": 1}).Want(422).Error(); !reflect.DeepEqual(e.Fields, tooHigh) {
+		t.Fatalf("PATCH price 1 under a stored sale of 4: %+v", e)
+	}
+	unchanged()
+	c.Patch("/api/products/1", map[string]any{"price": 1, "sale": 1}).Want(200).JSON(&got)
+	if got.Price != 1 || got.Sale != 1 {
+		t.Fatalf("PATCH price 1, sale 1 answered %+v", got)
+	}
+	lamp = got
+
+	// Its other errors are answered as any handler's are.
+	if e := c.Patch("/api/products/1", map[string]any{"name": "held"}).Want(409).Error(); e.Message != "That product is held." {
+		t.Fatalf("PATCH to a held name: %+v", e)
+	}
+	var logs bytes.Buffer // the 500's error is logged, not answered
+	defer slog.SetDefault(slog.Default())
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	if e := c.Patch("/api/products/1", map[string]any{"name": "boom"}).Want(500).Error(); e.Code != "internal" || strings.Contains(e.Message, "price list") {
+		t.Fatalf("PATCH to a failing check: %+v", e)
+	}
+	if !strings.Contains(logs.String(), "the price list is down") {
+		t.Fatalf("the check's error was not logged: %q", logs.String())
+	}
+	unchanged()
+
+	// Nothing sent: the stored record, not checked; a missing one is a 404.
+	res = c.Patch("/api/products/1", map[string]any{}).Want(200)
+	if res.JSON(&got); !reflect.DeepEqual(got, lamp) || len(res.Header.Values("X-Checked")) != 0 {
+		t.Fatalf("PATCH {} answered %+v, checked %q", got, res.Header.Values("X-Checked"))
+	}
+	if res = c.Patch("/api/products/9", map[string]any{"sale": 1}).Want(404); len(res.Header.Values("X-Checked")) != 0 {
+		t.Fatalf("PATCH of a missing record was checked: %q", res.Header.Values("X-Checked"))
+	}
+
+	// A pointer receiver is found too.
+	c2, _ := withResource[Stocked](t)
+	c2.Post("/api/products", map[string]any{"stock": 5, "reserved": 2}).Want(201)
+	if e := c2.Patch("/api/products/1", map[string]any{"stock": 1}).Want(422).Error(); e.Fields["reserved"] != "Reserve no more than the stock." {
+		t.Fatalf("PATCH stock under the reserved: %+v", e)
+	}
+	c2.Patch("/api/products/1", map[string]any{"reserved": 5}).Want(200)
 }
 
 func TestResourceMistakes(t *testing.T) {
@@ -341,7 +417,8 @@ func TestResourceMistakes(t *testing.T) {
 		}
 		return lines, app.Routes()
 	}
-	for _, path := range []string{"/products/", "products", "", "/", "/products/{id}", "/products/{$}", "/a//b", "/a b", "GET /products", "/a/../b", "/a/./b"} {
+	for _, path := range []string{"/products/", "products", "", "/", "/products/{id}", "/products/{$}", "/a//b", "/a b", "GET /products", "/a/../b", "/a/./b",
+		"/a?b", "/a#b", "/a%20b", "/a*", "/a:b", "/a\tb", "/a\x00b", "/caf\u00e9", "/api/products/", "/api/", "/api"} {
 		got, routes := mistakes(func(app *warp.App) {
 			data.Resource(app, path, data.NewStore[Product](data.For(app), "products"))
 		})
@@ -350,7 +427,14 @@ func TestResourceMistakes(t *testing.T) {
 			t.Errorf("path %q: %q, %d routes; want %q", path, got, len(routes), want)
 		}
 	}
-	for _, path := range []string{"/products", "/shop/order-items", "/v2/things_1"} {
+	// One sentence for /api in front, not the core's one per route.
+	got, routes := mistakes(func(app *warp.App) {
+		data.Resource(app, "/api/products", data.NewStore[Product](data.For(app), "products"))
+	})
+	if want := []string{`warp: data.Resource was given the path "/api/products"; write it without /api, as /products.`}; !reflect.DeepEqual(got, want) || len(routes) != 0 {
+		t.Errorf("/api in front: %q, %d routes", got, len(routes))
+	}
+	for _, path := range []string{"/products", "/shop/order-items", "/v2/things_1", "/v1.2/items", "/apis"} {
 		got, routes := mistakes(func(app *warp.App) {
 			data.Resource(app, path, data.NewStore[Product](data.For(app), "products"))
 		})
@@ -359,13 +443,13 @@ func TestResourceMistakes(t *testing.T) {
 		}
 	}
 
-	got, _ := mistakes(func(app *warp.App) { data.Resource(app, "/products", (*data.Store[Product])(nil)) })
+	got, _ = mistakes(func(app *warp.App) { data.Resource(app, "/products", (*data.Store[Product])(nil)) })
 	if want := []string{`warp: data.Resource was given a nil store for /products; make one with data.NewStore in the module's Register.`}; !reflect.DeepEqual(got, want) {
 		t.Errorf("nil store: %q", got)
 	}
 
 	// Twice on one path: the core's own sentences, no panic, none of data's.
-	got, routes := mistakes(func(app *warp.App) {
+	got, routes = mistakes(func(app *warp.App) {
 		s := data.NewStore[Product](data.For(app), "products")
 		data.Resource(app, "/products", s)
 		data.Resource(app, "/products", s)

@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -41,9 +42,21 @@ type patchInput[T any] struct {
 	Body T     `body:"json"`
 }
 
-// resourcePath is a path of static segments, such as /products or
-// /shop/order-items.
-var resourcePath = regexp.MustCompile(`^(/[^/{}\s]+)+$`)
+// resourcePath is a path of static segments of letters, digits, -, _ and .,
+// such as /products or /shop/order-items.
+var resourcePath = regexp.MustCompile(`^(/[A-Za-z0-9._-]+)+$`)
+
+// goodPath reports whether path is one Resource takes, leaving /api aside:
+// static segments, none of them . or .. alone.
+func goodPath(path string) bool {
+	return resourcePath.MatchString(path) &&
+		!slices.ContainsFunc(strings.Split(path, "/"), func(s string) bool { return s == "." || s == ".." })
+}
+
+// selfChecker is a model with a check across its fields.
+type selfChecker interface {
+	Validate(ctx context.Context) error
+}
 
 // Resource registers the five routes of the records store keeps, under path,
 // which is written like /products, named list, show, create, update and
@@ -55,14 +68,26 @@ var resourcePath = regexp.MustCompile(`^(/[^/{}\s]+)+$`)
 //     201. Its rules and its own Validate method, when it has one, are
 //     checked; id, created_at and updated_at are never read.
 //   - update: PATCH path/{id} takes a record as its body and writes only the
-//     fields the body sent, checking only them; with none sent it answers the
-//     record as it is.
+//     fields the body sent, checking their rules alone. When the model has a
+//     method Validate(ctx context.Context) error, it is called on the stored
+//     record with the sent fields laid over it, in the transaction that then
+//     writes them, and its error is answered as a handler's is. With no field
+//     sent it answers the record as it is, unchecked.
 //   - remove: DELETE path/{id} answers 204, or 404.
+//
+// A PATCH or DELETE of an id no record has is a 404 only when the request is
+// otherwise well formed: the body is read and checked before the record is
+// looked for, so a PATCH with a body it refuses gets that 400 or 422 first.
 //
 // A value another record has in a unique field is a 422 on that field. Call
 // it from a module's Register; a mistake is reported by the app.
 func Resource[T any](app *warp.App, path string, store *Store[T], opts ...ResourceOption) {
-	if !resourcePath.MatchString(path) || slices.ContainsFunc(strings.Split(path, "/"), func(s string) bool { return s == "." || s == ".." }) {
+	// /api alone is refused too, since its routes would be /api/{id}.
+	if rest, ok := strings.CutPrefix(path, "/api"); ok && goodPath(rest) {
+		app.Mistake("data.Resource was given the path %q; write it without /api, as %s.", path, rest)
+		return
+	}
+	if !goodPath(path) || path == "/api" {
 		app.Mistake("data.Resource was given the path %q; write it like /products.", path)
 		return
 	}
@@ -94,10 +119,41 @@ func Resource[T any](app *warp.App, path string, store *Store[T], opts ...Resour
 		err := store.Create(ctx, &v)
 		return v, err
 	}, options("create")...)
+	checks := reflect.PointerTo(reflect.TypeFor[T]()).Implements(reflect.TypeFor[selfChecker]())
 	warp.Patch(app, one, func(ctx context.Context, in patchInput[T]) (T, error) {
-		return store.Update(ctx, in.ID, &in.Body, warp.SentKeys(ctx))
+		sent := warp.SentKeys(ctx)
+		if len(sent) == 0 || !checks {
+			return store.Update(ctx, in.ID, &in.Body, sent)
+		}
+		var out T
+		if _, _, err := store.ready(ctx); err != nil { // before Tx, which needs the database
+			return out, err
+		}
+		err := store.db.Tx(ctx, func(ctx context.Context) error {
+			merged, err := store.Get(ctx, in.ID)
+			if err != nil {
+				return err
+			}
+			store.t.copyFields(reflect.ValueOf(&merged).Elem(), reflect.ValueOf(&in.Body).Elem(), sent)
+			if err := any(&merged).(selfChecker).Validate(ctx); err != nil {
+				return err
+			}
+			out, err = store.Update(ctx, in.ID, &merged, sent)
+			return err
+		})
+		return out, err
 	}, options("update")...)
 	warp.Delete(app, one, func(ctx context.Context, in ID) (warp.None, error) {
 		return warp.None{}, store.Delete(ctx, in.ID)
 	}, options("remove")...)
+}
+
+// copyFields sets the fields of dst named by their json names to src's. A
+// name with no column is left for Store.Update to refuse.
+func (t *table) copyFields(dst, src reflect.Value, names []string) {
+	for _, name := range names {
+		if c := t.col(name); c != nil && !c.auto {
+			dst.FieldByIndex(c.index).Set(src.FieldByIndex(c.index))
+		}
+	}
 }

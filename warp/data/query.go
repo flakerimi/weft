@@ -34,8 +34,10 @@ import (
 //   - Filter keeps the records whose filter field equals the value, converted
 //     to the field's kind; filter[status]= with no value is no filter.
 //
-// A field that cannot be sorted, filtered or searched by, or a filter value
-// of the wrong kind, is a 400 naming it.
+// A field that cannot be sorted, filtered or searched by, a filter value of
+// the wrong kind, a sort longer than 64 bytes, a filter value longer than 200
+// bytes, and a NUL byte in Q or a filter value are each a 400 naming the
+// query's key.
 type Query struct {
 	Page    int               `query:"page" warp:"min=1"`
 	PerPage int               `query:"per_page" warp:"min=1,max=100"`
@@ -53,10 +55,14 @@ type List[T any] struct {
 	PerPage int `json:"per_page"`
 }
 
-// The number of records on a page when the query names none, and the most.
+// The number of records on a page when the query names none, and the most;
+// and the longest sort and filter value a query may send, in bytes. A sort
+// longer than any field name is refused without being quoted back.
 const (
 	defaultPerPage = 20
 	maxPerPage     = 100
+	maxSort        = 64
+	maxFilterValue = 200
 )
 
 // listTag reads the data tag of the field f, whose column is c. The record's
@@ -68,7 +74,13 @@ func (w *walker) listTag(c *column, f reflect.StructField) {
 		return
 	}
 	for part := range strings.SplitSeq(tag, ",") {
-		switch part = strings.TrimSpace(part); part {
+		part = strings.TrimSpace(part)
+		if c.kind == kindBlob && (part == "sort" || part == "filter" || part == "search") {
+			// The API sends bytes as base64, so no value from it compares.
+			w.fail("%s is tagged data:%q, and bytes cannot be filtered, sorted or searched; remove the tag.", c.field, tag)
+			return
+		}
+		switch part {
 		case "":
 		case "sort":
 			c.sort = true
@@ -116,7 +128,10 @@ func (t *table) list(d dialect, q Query) (*listing, error) {
 
 	sort, desc := strings.CutPrefix(cmp.Or(q.Sort, "-id"), "-")
 	by := t.col(sort)
-	if by == nil || !by.sort {
+	switch {
+	case len(q.Sort) > maxSort:
+		problems["sort"] = fmt.Sprintf("The sort field is longer than %d bytes.", maxSort)
+	case by == nil || !by.sort:
 		problems["sort"] = fmt.Sprintf("%s cannot be sorted by %q; use one of: %s.", t.name, sort, t.listed(func(c *column) bool { return c.sort }))
 	}
 
@@ -133,6 +148,12 @@ func (t *table) list(d dialect, q Query) (*listing, error) {
 			continue
 		case q.Filter[name] == "":
 			continue // no filter, as the table on the page sends an empty one
+		case len(q.Filter[name]) > maxFilterValue:
+			problems[key] = fmt.Sprintf("A filter value is longer than %d bytes.", maxFilterValue)
+			continue
+		case strings.ContainsRune(q.Filter[name], 0):
+			problems[key] = "The value has a character that cannot be filtered on."
+			continue
 		}
 		v, wrong := filterValue(d, c, q.Filter[name])
 		if wrong != "" {
@@ -151,9 +172,12 @@ func (t *table) list(d dialect, q Query) (*listing, error) {
 				l.args = append(l.args, text)
 			}
 		}
-		if len(ors) == 0 {
+		switch {
+		case len(ors) == 0:
 			problems["q"] = fmt.Sprintf("%s cannot be searched; no field of %s is tagged data:\"search\".", t.name, t.model)
-		} else {
+		case strings.ContainsRune(q.Q, 0): // LIKE ends a pattern at a NUL, which would match every row
+			problems["q"] = "The search text has a character that cannot be searched for."
+		default:
 			conds = append(conds, "("+strings.Join(ors, " OR ")+")")
 		}
 	}

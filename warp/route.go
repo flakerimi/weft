@@ -27,7 +27,8 @@ var noneType = reflect.TypeFor[None]()
 //
 // When the input, or its body field's type, has a method
 // Validate(ctx context.Context) error (on the value or the pointer), it is
-// called once the tag rules pass: the input's, then the body's. When both
+// called once the tag rules pass: the input's, then the body's (not on a
+// route registered with Patch, whose doc says why). When both
 // return Invalid, their fields are answered together, the input's first; any
 // other error is answered as fn's would be.
 func Get[In, Out any](app *App, path string, fn func(context.Context, In) (Out, error), opts ...RouteOption) {
@@ -66,7 +67,11 @@ func Put[In, Out any](app *App, path string, fn func(context.Context, In) (Out, 
 // all, required included; a field sent is checked whole, so "name": "" fails
 // required. Query and path fields are checked as on every route. Validate
 // called directly checks every field. The input's own Validate method still
-// runs, and can ask Sent what was sent.
+// runs, and can ask Sent what was sent. The Validate method of the body
+// field's type does not: on PATCH that value holds zero for every field the
+// body left out, so a check across its fields would judge a record that does
+// not exist. A handler that needs it merges what was sent over the stored
+// value and calls it there, as data.Resource does.
 func Patch[In, Out any](app *App, path string, fn func(context.Context, In) (Out, error), opts ...RouteOption) {
 	typed(app, http.MethodPatch, path, http.StatusOK, fn, opts)
 }
@@ -160,7 +165,7 @@ func typed[In, Out any](app *App, method, path string, status int, fn func(conte
 
 // check validates the filled input rv: its tag rules, all of them or, on
 // PATCH, those of the json fields in sent; then, once they pass, its own
-// Validate method and its body field's.
+// Validate method and, except on PATCH, its body field's.
 func (p *plan) check(ctx context.Context, rv reflect.Value, sent []string) error {
 	if p.none {
 		return nil
@@ -174,7 +179,7 @@ func (p *plan) check(ctx context.Context, rv reflect.Value, sent []string) error
 			return first
 		}
 	}
-	if p.checkBody == nil {
+	if p.checkBody == nil || p.partial { // on PATCH the body holds only what was sent
 		return first
 	}
 	err := rv.FieldByIndex(p.checkBody).Addr().Interface().(validator).Validate(ctx)

@@ -504,6 +504,8 @@ func TestInputValidateMethod(t *testing.T) {
 	Patch(app, "/ranges", func(ctx context.Context, in rangeIn) (Item, error) { ran = true; return Item{}, nil })
 	Post(app, "/spans/{id}", func(ctx context.Context, in spanIn) (Item, error) { ran = true; return Item{}, nil })
 	Post(app, "/only", func(ctx context.Context, in spanOnly) (Item, error) { ran = true; return Item{}, nil })
+	Patch(app, "/spans/{id}", func(ctx context.Context, in spanIn) (Item, error) { ran = true; return Item{}, nil })
+	Patch(app, "/only", func(ctx context.Context, in spanOnly) (Item, error) { ran = true; return Item{}, nil })
 	h := mustRegister(t, app)
 	for _, c := range []struct {
 		method, path, body string
@@ -525,6 +527,13 @@ func TestInputValidateMethod(t *testing.T) {
 		// The input's comes first, and the two are merged.
 		{"POST", "/api/spans/7", `{"from":3,"to":2}`, 422, "validation", "3 fields need attention.",
 			map[string]string{"id": "This one is closed.", "to": "Not this end.", "from": "Start before the end."}, []string{"input", "body"}},
+		// On PATCH the body holds only what was sent, so its type's method is
+		// not called; the input's own still is.
+		{"PATCH", "/api/only", `{"from":3,"to":2}`, 200, "", "", nil, nil},
+		{"PATCH", "/api/only", `{"to":2}`, 200, "", "", nil, nil},
+		{"PATCH", "/api/spans/1", `{"from":3,"to":2}`, 200, "", "", nil, []string{"input"}},
+		{"PATCH", "/api/spans/7", `{"from":3,"to":2}`, 422, "validation", "2 fields need attention.",
+			map[string]string{"id": "This one is closed.", "to": "Not this end."}, []string{"input"}},
 	} {
 		ran = false
 		w := send(t, h, c.method, c.path, c.body)
