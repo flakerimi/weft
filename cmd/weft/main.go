@@ -23,6 +23,7 @@ var commands = map[string]command{
 	"dev":     {"run the app, restarting Go when a .go file or .env changes (--port n)", devCmd},
 	"gen":     {"write web/.weft-types/api.ts, the typed API client and form rules, from the app's Go", genCmd},
 	"routes":  {"list the app's routes: method, path, module, name and permission", routesCmd},
+	"unpack":  {"make sure .weft/ is unpacked and current, without installing", unpackCmd},
 	"version": {"print the Weft version", versionCmd},
 	"update":  {"update weft to the latest release (--check, --version X)", updateCmd},
 	"upgrade": {"move the app to this weft's Weft version (--no-install)", upgradeCmd},

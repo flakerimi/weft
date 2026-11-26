@@ -188,7 +188,7 @@ export interface Note {
   text: string
 }
 
-/** The app's API: a function for each route, by module and name. Each throws an ApiError when the answer is not a success. */
+/** The app's API: a function for each route, by module and name. Every failure is an ApiError, including when nothing could be sent. */
 export const api = {
   app: {
     /** GET /api/health */

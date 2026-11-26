@@ -315,3 +315,151 @@ func TestBundleScriptMarksBeforeBuilding(t *testing.T) {
 		t.Error("a failed run left no .weft-bundle, so the next run would refuse the folder")
 	}
 }
+
+// folderBundle writes files (path to content) into a new folder and points
+// WEFT_BUNDLE at it.
+func folderBundle(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, content := range files {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("WEFT_BUNDLE", dir)
+	return dir
+}
+
+// A development weft is always 0.0.0-dev, so .weft/VERSION also records a
+// hash of the bundle, and the bundle changing unpacks it again; the version
+// stays the first line.
+func TestRefreshUnpacksADevelopmentBundleThatChanged(t *testing.T) {
+	app := t.TempDir()
+	bundle := folderBundle(t, map[string]string{"weft/a": "one", "weft/b": "two"})
+	if did, err := refreshWeft(app, devVersion); err != nil || !did {
+		t.Fatalf("first refresh = %v, %v; want it to unpack", did, err)
+	}
+	if got := unpacked(app); got != devVersion {
+		t.Errorf("unpacked = %q, want %q", got, devVersion)
+	}
+	b, _ := os.ReadFile(filepath.Join(app, ".weft", "VERSION"))
+	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
+	if len(lines) != 2 || lines[0] != devVersion || len(lines[1]) != 64 {
+		t.Errorf("VERSION = %q, want the version, then a 64-digit hash", b)
+	}
+	os.WriteFile(filepath.Join(app, ".weft", "marker"), []byte("x"), 0o644)
+	if did, err := refreshWeft(app, devVersion); err != nil || did {
+		t.Fatalf("same bundle: refresh = %v, %v; want no unpack", did, err)
+	}
+	if !exists(t, filepath.Join(app, ".weft", "marker")) {
+		t.Error("the same bundle was unpacked again")
+	}
+	// Changed bytes, then a file gone: each unpacks again, and the gone file
+	// is gone from .weft.
+	os.WriteFile(filepath.Join(bundle, "weft", "a"), []byte("one!"), 0o644)
+	if did, err := refreshWeft(app, devVersion); err != nil || !did {
+		t.Fatalf("changed bytes: refresh = %v, %v; want an unpack", did, err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(app, ".weft", "a")); string(got) != "one!" || exists(t, filepath.Join(app, ".weft", "marker")) {
+		t.Errorf(".weft/a = %q, or the marker is left", got)
+	}
+	if err := os.Rename(filepath.Join(bundle, "weft", "b"), filepath.Join(t.TempDir(), "b")); err != nil {
+		t.Fatal(err)
+	}
+	if did, err := refreshWeft(app, devVersion); err != nil || !did {
+		t.Fatalf("file gone: refresh = %v, %v; want an unpack", did, err)
+	}
+	if exists(t, filepath.Join(app, ".weft", "b")) {
+		t.Error(".weft/b is still there after the bundle lost it")
+	}
+}
+
+// Two bundles with the same bytes in other files, or one name moved, differ.
+func TestBundleHashSeesNamesAndBytes(t *testing.T) {
+	h := func(files ...string) string {
+		t.Helper()
+		got, err := bundleHash(testBundle(files...))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	if h("weft/ab") == h("weft/a", "weft/b") || h("weft/a") == h("weft/b") || h("weft/a") != h("weft/a", "template/x") {
+		t.Error("the hash does not tell the bundles apart by file names, or looks outside weft/")
+	}
+}
+
+// A release is the version it says: other contents under the same version
+// string are not unpacked again, and a .weft with no VERSION file stays.
+func TestRefreshLeavesAReleaseAlone(t *testing.T) {
+	app := t.TempDir()
+	bundle := folderBundle(t, map[string]string{"weft/a": "one"})
+	if did, err := refreshWeft(app, "0.1.0"); err != nil || !did {
+		t.Fatalf("first refresh = %v, %v", did, err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(app, ".weft", "VERSION")); string(b) != "0.1.0\n" {
+		t.Errorf("VERSION = %q, want the version alone", b)
+	}
+	os.WriteFile(filepath.Join(bundle, "weft", "a"), []byte("other"), 0o644)
+	os.WriteFile(filepath.Join(bundle, "weft", "c"), []byte("new"), 0o644)
+	if did, err := refreshWeft(app, "0.1.0"); err != nil || did {
+		t.Fatalf("refresh = %v, %v; want no unpack", did, err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(app, ".weft", "a")); string(got) != "one" {
+		t.Errorf(".weft/a = %q, want the first bundle's", got)
+	}
+	foreign := t.TempDir()
+	os.MkdirAll(filepath.Join(foreign, ".weft"), 0o755)
+	if _, err := refreshWeft(foreign, devVersion); err == nil || !strings.Contains(err.Error(), "has no VERSION file") {
+		t.Errorf("a .weft with no VERSION: err = %v", err)
+	}
+}
+
+// A development weft with no bundle of its own keeps the .weft that is there.
+func TestRefreshWithoutABundleKeepsTheTree(t *testing.T) {
+	app := t.TempDir()
+	folderBundle(t, map[string]string{"weft/a": "one"})
+	if _, err := refreshWeft(app, devVersion); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("WEFT_BUNDLE", "")
+	if did, err := refreshWeft(app, devVersion); err != nil || did {
+		t.Errorf("refresh = %v, %v; want it to leave .weft as it is", did, err)
+	}
+}
+
+// weft unpack makes .weft/ current and does nothing more: no pnpm install, no
+// check of node or pnpm.
+func TestUnpackCommand(t *testing.T) {
+	app := t.TempDir()
+	os.WriteFile(filepath.Join(app, "package.json"), []byte(`{"name":"a","weft":{"version":"0.0.0-dev"}}`), 0o644)
+	bundle := folderBundle(t, map[string]string{"weft/go/go.mod.bundle": "module x\n", "weft/packages/a": "one"})
+	t.Setenv("PATH", t.TempDir())
+	t.Chdir(app)
+	code, out, errs := runCmd("unpack")
+	if code != 0 || out != "Unpacked .weft (Weft 0.0.0-dev)\n" || errs != "" {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errs)
+	}
+	if !exists(t, ".weft/go/go.mod") || exists(t, "node_modules") {
+		t.Error(".weft/go/go.mod is missing, or something was installed")
+	}
+	if code, out, _ := runCmd("unpack"); code != 0 || out != ".weft is current (Weft 0.0.0-dev)\n" {
+		t.Errorf("again: exit %d, stdout %q", code, out)
+	}
+	os.WriteFile(filepath.Join(bundle, "weft", "packages", "a"), []byte("two"), 0o644)
+	if code, out, _ := runCmd("unpack"); code != 0 || out != "Unpacked .weft (Weft 0.0.0-dev)\n" {
+		t.Errorf("changed bundle: exit %d, stdout %q", code, out)
+	}
+	os.WriteFile("package.json", []byte(`{"name":"a","weft":{"version":"9.9.9"}}`), 0o644)
+	code, _, errs = runCmd("unpack")
+	if want := "weft unpack: this app is on Weft 9.9.9 and this weft is 0.0.0-dev; run weft update --version 9.9.9 to match it.\n"; code != 1 || errs != want {
+		t.Errorf("other version: exit %d, stderr %q", code, errs)
+	}
+	if code, _, errs := runCmd("unpack", "x"); code != 2 || errs != "weft unpack: \"x\" is not a flag; usage is weft unpack.\n" {
+		t.Errorf("argument: exit %d, stderr %q", code, errs)
+	}
+}

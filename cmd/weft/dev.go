@@ -41,6 +41,26 @@ const (
 // answer once started; tests shorten it.
 var devReadyWithin = 30 * time.Second
 
+// goServerEnv is the Go server's environment under weft dev: environ with its
+// own port, HOST, WEFT_DEV_PARENT and, since the pages are at the page
+// server's address whatever the app's .env says, APP_URL, unless environ has
+// one. A later entry wins, so these override the app's .env, which the app
+// reads without replacing what is set.
+func goServerEnv(environ []string, goPort, pagePort int) []string {
+	env := append(slices.Clone(environ), "PORT="+strconv.Itoa(goPort), "HOST=127.0.0.1", "WEFT_DEV_PARENT=1")
+	for _, kv := range environ {
+		if v, ok := strings.CutPrefix(kv, "APP_URL="); ok && v != "" {
+			return env
+		}
+	}
+	return append(env, "APP_URL=http://localhost:"+strconv.Itoa(pagePort))
+}
+
+// devDescribeWithin is how long the app has to describe itself under weft dev,
+// which asks at every Go build, so an app that hangs costs this much each
+// time; weft gen has describeWithin.
+var devDescribeWithin = 5 * time.Second
+
 func devCmd(args []string, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), stopSignals...)
 	defer stop()
@@ -140,13 +160,14 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	// gen writes web/.weft-types/api.ts from the build just made. An app that
 	// does not describe itself is said, and weft dev goes on with the file as
-	// it was; the Go server has devReadyWithin to describe itself, as to
-	// answer.
+	// it was; it has devDescribeWithin to describe itself.
 	gen := func() {
-		_, err := regenerate(ctx, appDir, bin, devReadyWithin, stderr)
+		_, err := regenerate(ctx, appDir, bin, devDescribeWithin, stderr)
 		switch {
 		case err == nil, ctx.Err() != nil:
-		case errors.Is(err, errNoDescription), errors.Is(err, errDescribeTimeout), errors.As(err, new(outputError)):
+		case errors.Is(err, errDescribeTimeout):
+			fmt.Fprintln(stderr, "weft dev: the app did not describe itself within 5 s, so web/.weft-types/api.ts is as it was; make sure main.go calls Serve before doing other work.")
+		case errors.Is(err, errNoDescription), errors.As(err, new(outputError)):
 			if errors.As(err, new(outputError)) {
 				fail(stderr, "dev", err)
 			}
@@ -163,7 +184,7 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	goServer := func() (*child, error) {
 		cmd := exec.Command(bin)
 		cmd.Dir = appDir
-		cmd.Env = append(os.Environ(), "PORT="+strconv.Itoa(goPort), "HOST=127.0.0.1", "WEFT_DEV_PARENT=1")
+		cmd.Env = goServerEnv(os.Environ(), goPort, *port)
 		cmd.Stdin = parentIn
 		cmd.Stdout, cmd.Stderr = stdout, stderr
 		return startChild("the Go server", cmd)

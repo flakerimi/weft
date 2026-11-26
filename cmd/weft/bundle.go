@@ -1,9 +1,13 @@
 package main
 
 import (
+	"crypto/sha256"
 	"embed"
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -35,8 +39,74 @@ func openBundle() (fs.FS, error) {
 	return sub, nil
 }
 
+// devVersion is the version of a weft built from the repository. It names no
+// release, so .weft/VERSION also records a hash of the bundle it unpacked.
+const devVersion = "0.0.0-dev"
+
+// bundleHash is the SHA-256, in hex, over the names and bytes of every file in
+// the bundle's weft/ folder, in the order fs.WalkDir visits them.
+func bundleHash(bundle fs.FS) (string, error) {
+	src, err := fs.Sub(bundle, "weft")
+	if err != nil {
+		return "", err
+	}
+	h := sha256.New()
+	err = fs.WalkDir(src, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		data, err := fs.ReadFile(src, p)
+		if err != nil {
+			return err
+		}
+		var n [8]byte
+		binary.BigEndian.PutUint64(n[:], uint64(len(p)))
+		h.Write(n[:])
+		io.WriteString(h, p)
+		binary.BigEndian.PutUint64(n[:], uint64(len(data)))
+		h.Write(n[:])
+		h.Write(data)
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// refreshWeft unpacks the bundle into appDir/.weft when .weft/VERSION holds
+// another version or there is none, and says whether it did. For devVersion
+// it also unpacks when the hash VERSION records is not the bundle's, so a
+// change to the framework reaches the app; a release is the version it says.
+// A development weft with no bundle of its own leaves a .weft that is there.
+func refreshWeft(appDir, version string) (bool, error) {
+	have, haveHash := unpackedRecord(appDir)
+	need := have != version
+	if !need && version != devVersion {
+		return false, nil
+	}
+	bundle, err := openBundle()
+	if err != nil {
+		if need {
+			return false, err
+		}
+		return false, nil
+	}
+	if !need {
+		hash, err := bundleHash(bundle)
+		if err != nil {
+			return false, fmt.Errorf("cannot read the bundle to compare it with %s (%v); run the command again, or fix the folder WEFT_BUNDLE names", filepath.Join(appDir, ".weft"), err)
+		}
+		if hash == haveHash {
+			return false, nil
+		}
+	}
+	return true, unpack(bundle, appDir, version)
+}
+
 // unpack replaces appDir/.weft with the bundle's weft/ folder and records
-// version in .weft/VERSION. It leaves a .weft that has no VERSION file alone,
+// version in .weft/VERSION, and under devVersion the bundle's hash on a second
+// line. It leaves a .weft that has no VERSION file alone,
 // since this command did not write it. It writes the new tree into a folder of
 // its own (.weft-new-*), moves the old .weft into another (.weft-old-*), and
 // renames the new tree into place; it removes only those two folders, on
@@ -77,7 +147,15 @@ func unpack(bundle fs.FS, appDir, version string) (err error) {
 	if err := os.Rename(goMod+".bundle", goMod); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(tmp, "VERSION"), []byte(version+"\n"), 0o644); err != nil {
+	record := version + "\n"
+	if version == devVersion {
+		hash, err := bundleHash(bundle)
+		if err != nil {
+			return fmt.Errorf("cannot read the bundle to hash it (%v); run the command again", err)
+		}
+		record += hash + "\n"
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "VERSION"), []byte(record), 0o644); err != nil {
 		return err
 	}
 	if !had {
@@ -109,11 +187,19 @@ var renameDir = os.Rename
 
 // unpacked returns the version recorded in appDir/.weft/VERSION, or "".
 func unpacked(appDir string) string {
+	version, _ := unpackedRecord(appDir)
+	return version
+}
+
+// unpackedRecord returns the version, the first line of appDir/.weft/VERSION,
+// and the bundle hash, its second line, or "" for each that is not there.
+func unpackedRecord(appDir string) (version, hash string) {
 	b, err := os.ReadFile(filepath.Join(appDir, ".weft", "VERSION"))
 	if err != nil {
-		return ""
+		return "", ""
 	}
-	return strings.TrimSpace(string(b))
+	version, rest, _ := strings.Cut(strings.TrimSpace(string(b)), "\n")
+	return strings.TrimSpace(version), strings.TrimSpace(rest)
 }
 
 // copyFS writes every file of src under dir, keeping executable bits.

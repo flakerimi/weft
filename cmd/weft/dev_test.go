@@ -1068,6 +1068,86 @@ func TestDevGoServerIsLocalOnly(t *testing.T) {
 	}
 }
 
+// An app that hangs when asked to describe itself costs weft dev 5 s at each
+// Go build, not the 30 s of weft gen; it says so, and goes on.
+func TestDevDescribeLimit(t *testing.T) {
+	if devDescribeWithin != 5*time.Second {
+		t.Errorf("devDescribeWithin = %v, want 5s", devDescribeWithin)
+	}
+}
+
+func TestDevAppThatHangsWhenDescribing(t *testing.T) {
+	app := devApp(t)
+	main := `package main
+
+import (
+	"net/http"
+	"os"
+	"time"
+)
+
+func main() {
+	if os.Getenv("WARP_DESCRIBE") != "" {
+		time.Sleep(time.Minute)
+	}
+	http.ListenAndServe(os.Getenv("HOST")+":"+os.Getenv("PORT"), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("up")) }))
+}
+`
+	if err := os.WriteFile(filepath.Join(app, "main.go"), []byte(main), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	was := devDescribeWithin
+	devDescribeWithin = time.Second
+	t.Cleanup(func() { devDescribeWithin = was })
+	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
+	want := "weft dev: the app did not describe itself within 5 s, so web/.weft-types/api.ts is as it was; make sure main.go calls Serve before doing other work.\n"
+	if !strings.Contains(r.stderr.String(), want) {
+		t.Errorf("stderr %q, want it to hold %q", r.stderr, want)
+	}
+	if code := r.stop(t); code != 0 {
+		t.Errorf("exit %d: %s", code, r.stderr)
+	}
+}
+
+// Under weft dev the pages are at the page server's address, so the Go
+// server is told that one as APP_URL, unless weft dev was started with its own.
+func TestGoServerEnv(t *testing.T) {
+	base := []string{"A=1", "PORT=9", "APP_URL="}
+	got := goServerEnv(base, 4000, 5173)
+	for _, want := range []string{"PORT=4000", "HOST=127.0.0.1", "WEFT_DEV_PARENT=1", "APP_URL=http://localhost:5173"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("env has no %q: %v", want, got)
+		}
+	}
+	got = goServerEnv([]string{"APP_URL=https://x.example"}, 4000, 5173)
+	if !slices.Contains(got, "APP_URL=https://x.example") || slices.Contains(got, "APP_URL=http://localhost:5173") {
+		t.Errorf("a given APP_URL is not passed on: %v", got)
+	}
+}
+
+func TestDevGoServerGetsAppURL(t *testing.T) {
+	for _, given := range []string{"", "https://shop.example"} {
+		app := devApp(t)
+		t.Setenv("APP_URL", given)
+		os.WriteFile(filepath.Join(app, ".env"), []byte("APP_URL=http://from-dotenv\n"), 0o644)
+		r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
+		want := "APP_URL=" + r.url
+		if given != "" {
+			want = "APP_URL=" + given
+		}
+		pid := goServerPID(t, app)
+		if pid == 0 {
+			t.Fatal("found no Go server")
+		}
+		if env := strings.Split(processEnv(t, pid), "\n"); !slices.Contains(env, want) {
+			t.Errorf("the Go server's environment has no %q", want)
+		}
+		if code := r.stop(t); code != 0 {
+			t.Errorf("exit %d: %s", code, r.stderr)
+		}
+	}
+}
+
 // weft dev writes web/.weft-types/api.ts before it starts the Go server, and
 // again after each Go change that builds. One that does not describe itself
 // is said, leaves the file as it was, and does not stop weft dev.

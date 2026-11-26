@@ -167,6 +167,14 @@ func gen(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 // app: it parses args, finds the app and passes ensure. When ok is false the
 // command returns code.
 func appCommand(command string, args []string, stdout, stderr io.Writer) (appDir string, code int, ok bool) {
+	return appCommandWith(command, args, stdout, stderr, func(appDir string) error {
+		_, err := ensure(appDir, stdout, stderr)
+		return err
+	})
+}
+
+// appCommandWith is appCommand with the step that gets the app ready.
+func appCommandWith(command string, args []string, stdout, stderr io.Writer, prepare func(appDir string) error) (appDir string, code int, ok bool) {
 	usage := "usage is weft " + command + "."
 	fl := flag.NewFlagSet(command, flag.ContinueOnError)
 	fl.SetOutput(io.Discard)
@@ -182,7 +190,7 @@ func appCommand(command string, args []string, stdout, stderr io.Writer) (appDir
 		fmt.Fprintf(stderr, "weft %s: %s\n", command, errNoApp)
 		return "", 1, false
 	}
-	if _, err := ensure(appDir, stdout, stderr); err != nil {
+	if err := prepare(appDir); err != nil {
 		return "", fail(stderr, command, err), false
 	}
 	return appDir, 0, true
@@ -473,7 +481,8 @@ func init() {
 
 // objectMembers are the properties every JavaScript object has. TypeScript
 // checks an optional property of one of these names against the object's
-// own, so a field or query parameter named so refuses every value.
+// own, so an optional field or a query parameter named so refuses every
+// value; a required field of that name compiles, in a type's output or a whole body; a partial body makes every field optional.
 var objectMembers = map[string]bool{
 	"constructor": true, "toString": true, "toLocaleString": true, "valueOf": true, "hasOwnProperty": true,
 	"isPrototypeOf": true, "propertyIsEnumerable": true,
@@ -508,6 +517,14 @@ type apiModule struct {
 // the same bytes. A module or route name TypeScript cannot use, two that
 // become one, and a type named as one the file uses itself are errors.
 func generate(d description) ([]byte, error) {
+	// A partial body makes every field optional, so a field named as an
+	// Object member breaks there as an optional one does.
+	partial := map[string]bool{}
+	for _, r := range d.Routes {
+		if r.Typed && r.Partial && r.Body != "" {
+			partial[r.Body] = true
+		}
+	}
 	for _, t := range d.Types {
 		if ownTypeNames[t.Name] {
 			return nil, fmt.Errorf("the type %s (%s) has a name the generated file uses itself; rename the Go type", t.Name, t.Go)
@@ -516,8 +533,11 @@ func generate(d description) ([]byte, error) {
 			return nil, fmt.Errorf("the type %s (%s) has a name TypeScript reserves; rename the Go type", t.Name, t.Go)
 		}
 		for _, f := range t.Fields {
-			if objectMembers[f.Name] {
-				return nil, fmt.Errorf("the field %s.%s has the name of a property every JavaScript object has, which TypeScript then cannot check; give it another json name", t.Name, f.Name)
+			if partial[t.Name] && objectMembers[f.Name] {
+				return nil, fmt.Errorf("the field %s.%s has the name of a property every JavaScript object has, which TypeScript then cannot check where a route takes %s as a partial body; give it another json name", t.Name, f.Name, t.Name)
+			}
+			if f.Optional && objectMembers[f.Name] {
+				return nil, fmt.Errorf("the optional field %s.%s has the name of a property every JavaScript object has, which TypeScript then cannot check; make it required or give it another json name", t.Name, f.Name)
 			}
 		}
 	}
@@ -554,7 +574,7 @@ func generate(d description) ([]byte, error) {
 		b.WriteString("}\n")
 	}
 
-	b.WriteString("\n/** The app's API: a function for each route, by module and name. Each throws an ApiError when the answer is not a success. */\n")
+	b.WriteString("\n/** The app's API: a function for each route, by module and name. Every failure is an ApiError, including when nothing could be sent. */\n")
 	if len(modules) == 0 {
 		b.WriteString("export const api = {}\n")
 	} else {

@@ -126,10 +126,14 @@ func TestGenerateNameClash(t *testing.T) {
 			`the type class (example.com/app.class) has a name TypeScript reserves; rename the Go type.`},
 		{"type named a type operator", description{Types: []typeInfo{{Name: "keyof", Go: "example.com/app.keyof", Fields: []fieldInfo{}}}},
 			`the type keyof (example.com/app.keyof) has a name TypeScript reserves; rename the Go type.`},
-		{"field named as every object's property", description{Types: []typeInfo{{Name: "Thing", Go: "example.com/app.Thing", Fields: []fieldInfo{{Name: "constructor", TS: "string"}}}}},
-			`the field Thing.constructor has the name of a property every JavaScript object has, which TypeScript then cannot check; give it another json name.`},
+		{"optional field named as every object's property", description{Types: []typeInfo{{Name: "Thing", Go: "example.com/app.Thing", Fields: []fieldInfo{{Name: "constructor", TS: "string", Optional: true}}}}},
+			`the optional field Thing.constructor has the name of a property every JavaScript object has, which TypeScript then cannot check; make it required or give it another json name.`},
 		{"query parameter named as every object's property", description{Routes: []routeInfo{{Module: "x", Name: "list", Method: "GET", Path: "/api/x", Typed: true, Query: []paramInfo{{Name: "toString", TS: "string"}}}}},
 			`route "list" of module "x" has the query parameter toString, the name of a property every JavaScript object has, which TypeScript then cannot check; give it another query name.`},
+		{"field named as every object's property in a partial body", description{
+			Routes: []routeInfo{{Module: "x", Name: "change", Method: "PATCH", Path: "/api/x", Typed: true, Body: "Thing", Partial: true}},
+			Types:  []typeInfo{{Name: "Thing", Go: "example.com/app.Thing", Fields: []fieldInfo{{Name: "toString", TS: "string"}}}}},
+			`the field Thing.toString has the name of a property every JavaScript object has, which TypeScript then cannot check where a route takes Thing as a partial body; give it another json name.`},
 		{"path parameters that become one", description{Routes: []routeInfo{{Module: "x", Name: "show", Method: "GET", Path: "/api/x/{class}/{class_}", Typed: true}}},
 			`route "show" of module "x" has the path parameters {class} and {class_}, which both become class_ in TypeScript; rename one.`},
 	} {
@@ -510,6 +514,41 @@ export async function use(t: Thing): Promise<void> {
 	if strings.Contains(src, "\n    __proto__: {") || strings.Contains(src, "\n  __proto__: {") {
 		t.Errorf("__proto__ is written as a plain key in an object, where it sets the prototype:\n%s", src)
 	}
+	tscCheck(t, tsc, map[string]string{"api.ts": src, "use.ts": use}, "api.ts", "use.ts")
+}
+
+// A required field named as an Object member compiles, in an output-only type
+// and in a body type, and is written; an optional one, and any in a type a
+// route takes as a partial body, are refused (see TestGenerateNameClash).
+func TestGenerateRequiredObjectMemberFieldsCompile(t *testing.T) {
+	tsc := repoTool(t, "tsc")
+	member := func() []fieldInfo {
+		var fs []fieldInfo
+		for _, n := range []string{"constructor", "toString", "toLocaleString", "valueOf", "hasOwnProperty", "isPrototypeOf", "propertyIsEnumerable"} {
+			fs = append(fs, fieldInfo{Name: n, TS: "string", Rules: []ruleInfo{{Name: "max", Arg: "3"}}})
+		}
+		return fs
+	}
+	d := description{
+		Routes: []routeInfo{
+			{Module: "x", Name: "show", Method: "GET", Path: "/api/x", Typed: true, Output: &outputInfo{TS: "Shown"}},
+			{Module: "x", Name: "make", Method: "POST", Path: "/api/x", Typed: true, Body: "Made"},
+		},
+		Types: []typeInfo{
+			{Name: "Shown", Go: "example.com/x.Shown", Fields: member()},
+			{Name: "Made", Go: "example.com/x.Made", Fields: member()},
+		},
+	}
+	src := mustGenerate(t, d)
+	use := `import { api, schema, type Shown } from './api.ts'
+
+export async function use(s: Shown): Promise<void> {
+  const full = { constructor: 'a', toString: 'b', toLocaleString: 'c', valueOf: 'd', hasOwnProperty: 'e', isPrototypeOf: 'f', propertyIsEnumerable: 'g' }
+  await api.x.make(full)
+  const shown = await api.x.show()
+  console.log(s.constructor, shown.valueOf, schema.Made.toString.max)
+}
+`
 	tscCheck(t, tsc, map[string]string{"api.ts": src, "use.ts": use}, "api.ts", "use.ts")
 }
 
