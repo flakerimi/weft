@@ -97,7 +97,7 @@ component uses. Neither is counted in the rows below.
 | StatCard | 2.39 | — | 1.01 | 3.40 |
 | Stepper | 2.97 | — | 1.00 | 3.97 |
 | Switch | 1.96 | — | 1.42 | 3.38 |
-| Table | 11.01 | — | 2.75 | 13.76 |
+| Table | 11.10 | — | 2.75 | 13.85 |
 | Tabs | 3.74 | — | 1.28 | 5.02 |
 | Textarea | 2.12 | — | 0.54 | 2.66 |
 | Timeline | 1.83 | — | 0.90 | 2.73 |

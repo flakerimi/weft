@@ -30,7 +30,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function setup(over: Partial<{ rows: P[]; fetch: TableFetch<P>; perPage: number; active: boolean; needKeys: boolean }> = {}) {
+function setup(over: Partial<{ rows: P[]; fetch: TableFetch<P>; perPage: number; active: boolean; needKeys: boolean; keepsPage: boolean }> = {}) {
   const rows = shallowRef(over.rows)
   const fetch = shallowRef(over.fetch)
   const sort = ref<string | null>(null)
@@ -52,7 +52,11 @@ function setup(over: Partial<{ rows: P[]; fetch: TableFetch<P>; perPage: number;
     needKeys: () => !!over.needKeys,
     onError: (e) => errors.push(e),
     setPage: (p) => {
+      // keepsPage: a parent that binds the page one-way and ignores the
+      // update, which a Table's page shows until its next tick.
+      const kept = page.value
       page.value = p
+      if (over.keepsPage) void nextTick(() => (page.value = kept))
     },
   }
   const scope = effectScope()
@@ -223,6 +227,28 @@ describe('useTableData', () => {
       expect(page.value).toBe(2)
       expect(calls).toEqual([1, 4, 4, 2])
       expect(names(data.shown.value)).toEqual(['R11', 'R12'])
+    })
+
+    it('moves once, then shows the page empty, for a parent that keeps its page', async () => {
+      const { fetch, calls, rows } = shrinking(11)
+      const { data, page } = setup({ fetch: (q) => (calls.length >= 20 ? new Promise<never>(() => {}) : fetch(q)), perPage: 10, keepsPage: true })
+      await flush()
+      page.value = 2
+      await flush()
+      expect(names(data.shown.value)).toEqual(['R11'])
+      rows.count = 10
+      await data.load()
+      for (let i = 0; i < 10; i++) await flush()
+      expect(calls).toEqual([1, 2, 2, 1])
+      expect(page.value).toBe(2)
+      expect(data.shown.value).toEqual([])
+      expect(data.total.value).toBe(10)
+      expect(data.busy.value).toBe(false)
+      // Asking again moves once more, and no more.
+      await data.load()
+      for (let i = 0; i < 10; i++) await flush()
+      expect(calls).toEqual([1, 2, 2, 1, 2, 1])
+      expect(data.shown.value).toEqual([])
     })
 
     it('does not loop when the server answers empty with a total on every page', async () => {

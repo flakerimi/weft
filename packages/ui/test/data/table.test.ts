@@ -698,6 +698,26 @@ describe('Table', () => {
       expect(names()).toHaveLength(10)
     })
 
+    it('moves once for a parent that binds the page one-way and ignores the update, then shows the page empty', async () => {
+      let count = 11
+      const calls: number[] = []
+      const fetch = vi.fn(async (q: TableQuery): Promise<TableResult<Person>> => {
+        calls.push(q.page)
+        if (calls.length > 20) return new Promise<never>(() => {}) // a loop ends here
+        const all: Person[] = Array.from({ length: count }, (_, i) => ({ id: i + 1, name: `P${String(i + 1).padStart(2, '0')}`, age: i, city: 'X' }))
+        return { items: all.slice((q.page - 1) * q.per_page, q.page * q.per_page), total: count }
+      })
+      const m = await cases({ rows: undefined, fetch: fn(fetch), perPage: 10, pinnedPage: 2 })
+      expect(names()).toEqual(['P11'])
+      count = 10
+      await (m.exposed.table as { refresh(): Promise<void> }).refresh()
+      for (let i = 0; i < 10; i++) await settle()
+      await new Promise((r) => setTimeout(r, 50))
+      await settle()
+      expect(calls).toEqual([2, 2, 1])
+      expect(bodyRows().map((r) => r.textContent!.trim())).toEqual(['Nothing to show.'])
+    })
+
     it('asks exactly once for a sort pressed on page 2 under a bound page', async () => {
       const { fetch, calls } = server()
       const m = await cases({ rows: undefined, fetch: fn(fetch), perPage: 10 })

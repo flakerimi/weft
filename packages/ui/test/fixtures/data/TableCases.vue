@@ -31,6 +31,8 @@ const props = withDefaults(
     rowHeight?: number
     height?: string
     locale?: string
+    /** A page bound one-way, whose update is ignored. */
+    pinnedPage?: number
   }>(),
   { rows: undefined, fetch: undefined, columns: undefined, caption: 'People' },
 )
@@ -57,7 +59,8 @@ defineExpose({ searchText, filterValues, sort, selected, page, errors, table })
         ref="table"
         v-model:sort="sort"
         v-model:selected="selected"
-        v-model:page="page"
+        :page="pinnedPage ?? page"
+        @update:page="pinnedPage === undefined && (page = $event)"
         :rows="rows"
         :fetch="fetch"
         :columns="columns ?? COLUMNS"

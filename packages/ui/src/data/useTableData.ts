@@ -23,7 +23,10 @@
  * last row of the last page was deleted, or the rows shrank by more), the
  * page is moved to that last page through `setPage`, which asks once more;
  * an answer for a page that is the last, or one that is stale, moves
- * nothing, so a server that keeps answering empty cannot make it loop.
+ * nothing, so a server that keeps answering empty cannot make it loop. A
+ * page past that last page asked again with the same query (a parent that
+ * binds the page one-way and keeps it) is not asked: it is shown empty,
+ * until `load()` asks again or the query changes.
  * `busy` is `loading()`, or a fetch under way, or no answer yet.
  */
 import { computed, ref, shallowRef, watch, type ComputedRef, type Ref, type ShallowRef } from 'vue'
@@ -78,11 +81,13 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
   const perPage = computed(() => opts.perPage() ?? (opts.fetch() ? 20 : undefined))
 
   let asked = 0
-  async function load() {
+  // The last move to the last page: that page, the total and the rest of the
+  // query it was learned under, so a page past it is not asked again.
+  let moved: { last: number; total: number; rest: string } | null = null
+  async function ask() {
     const fetch = opts.fetch()
     if (!fetch) return
     const mine = ++asked
-    fetching.value = true
     failed.value = null
     const q = opts.search?.()
     const filters = activeFilters(opts.filters?.())
@@ -93,14 +98,26 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
       ...(q ? { q } : {}),
       ...(filters ? { filter: filters } : {}),
     }
+    const rest = JSON.stringify({ ...query, page: undefined })
+    if (moved?.rest !== rest) moved = null
+    if (moved && query.page > moved.last) {
+      // The parent kept a page past the last: show it empty, ask nothing.
+      remote.value = { items: [], total: moved.total }
+      moved = null
+      fetching.value = false
+      return
+    }
+    fetching.value = true
     try {
       const answer = await fetch(query)
       if (mine !== asked) return
       const last = Math.max(1, Math.ceil(answer.total / Math.max(1, query.per_page)))
       if (answer.items.length === 0 && answer.total > 0 && query.page > last && opts.setPage) {
+        moved = { last, total: answer.total, rest }
         opts.setPage(last) // the watcher asks for it, once
         return
       }
+      if (moved?.total !== answer.total) moved = null
       remote.value = { items: answer.items, total: answer.total }
     } catch (error) {
       if (mine !== asked) return
@@ -110,11 +127,16 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
       if (mine === asked) fetching.value = false
     }
   }
+  /** Asks again, whatever was learned of the last page. */
+  function load() {
+    moved = null
+    return ask()
+  }
   // Primitive sources: asking again only when a value of the query changes.
   watch(
     [opts.active, () => opts.page.value, () => perPage.value, () => opts.sort.value, () => opts.search?.(), () => JSON.stringify(activeFilters(opts.filters?.()) ?? {}), opts.fetch],
     ([on]) => {
-      if (on) void load()
+      if (on) void ask()
     },
     { immediate: true },
   )
