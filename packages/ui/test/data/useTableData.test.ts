@@ -229,6 +229,25 @@ describe('useTableData', () => {
       expect(names(data.shown.value)).toEqual(['R11', 'R12'])
     })
 
+    it('asks again for a page past the old last one that a bound parent moves to after a move', async () => {
+      const { fetch, calls, rows } = shrinking(11)
+      const { data, page } = setup({ fetch, perPage: 10 })
+      await flush()
+      page.value = 2
+      await flush()
+      rows.count = 10
+      await data.load()
+      await flush()
+      expect(page.value).toBe(1)
+      expect(calls).toEqual([1, 2, 2, 1])
+      rows.count = 12 // added in another tab
+      page.value = 2 // the parent moves, as a router's Back would
+      await flush()
+      expect(calls).toEqual([1, 2, 2, 1, 2])
+      expect(names(data.shown.value)).toEqual(['R11', 'R12'])
+      expect(data.total.value).toBe(12)
+    })
+
     it('moves once, then shows the page empty, for a parent that keeps its page', async () => {
       const { fetch, calls, rows } = shrinking(11)
       const { data, page } = setup({ fetch: (q) => (calls.length >= 20 ? new Promise<never>(() => {}) : fetch(q)), perPage: 10, keepsPage: true })

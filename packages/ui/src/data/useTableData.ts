@@ -23,13 +23,13 @@
  * last row of the last page was deleted, or the rows shrank by more), the
  * page is moved to that last page through `setPage`, which asks once more;
  * an answer for a page that is the last, or one that is stale, moves
- * nothing, so a server that keeps answering empty cannot make it loop. A
- * page past that last page asked again with the same query (a parent that
- * binds the page one-way and keeps it) is not asked: it is shown empty,
- * until `load()` asks again or the query changes.
+ * nothing, so a server that keeps answering empty cannot make it loop. If
+ * the parent does not take the move (it binds the page one-way and keeps
+ * it), the page it keeps is not asked again with the same query: it is
+ * shown empty. Any other page, query or `load()` asks.
  * `busy` is `loading()`, or a fetch under way, or no answer yet.
  */
-import { computed, ref, shallowRef, watch, type ComputedRef, type Ref, type ShallowRef } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch, type ComputedRef, type Ref, type ShallowRef } from 'vue'
 import { activeFilters, keyOf, sortRows, valueOf, type RowKey, type TableColumn, type TableFetch, type TableQuery } from './table.ts'
 
 export interface TableDataOptions<T> {
@@ -81,9 +81,10 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
   const perPage = computed(() => opts.perPage() ?? (opts.fetch() ? 20 : undefined))
 
   let asked = 0
-  // The last move to the last page: that page, the total and the rest of the
-  // query it was learned under, so a page past it is not asked again.
-  let moved: { last: number; total: number; rest: string } | null = null
+  // A move to the last page the parent has not taken: the page answered as
+  // past the end, the total and the rest of the query, so that the same
+  // question is not asked again.
+  let moved: { from: number; total: number; rest: string } | null = null
   async function ask() {
     const fetch = opts.fetch()
     if (!fetch) return
@@ -100,7 +101,7 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
     }
     const rest = JSON.stringify({ ...query, page: undefined })
     if (moved?.rest !== rest) moved = null
-    if (moved && query.page > moved.last) {
+    if (moved && query.page === moved.from) {
       // The parent kept a page past the last: show it empty, ask nothing.
       remote.value = { items: [], total: moved.total }
       moved = null
@@ -113,8 +114,13 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
       if (mine !== asked) return
       const last = Math.max(1, Math.ceil(answer.total / Math.max(1, query.per_page)))
       if (answer.items.length === 0 && answer.total > 0 && query.page > last && opts.setPage) {
-        moved = { last, total: answer.total, rest }
+        const kept = (moved = { from: query.page, total: answer.total, rest })
         opts.setPage(last) // the watcher asks for it, once
+        // A parent that took the move has the page by the next tick; one that
+        // keeps its own has put it back by then.
+        void nextTick(() => {
+          if (moved === kept && opts.page.value === last) moved = null
+        })
         return
       }
       if (moved?.total !== answer.total) moved = null
