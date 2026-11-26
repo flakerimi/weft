@@ -21,9 +21,9 @@ address with a host: "Enter a web address that starts with http:// or
 https://."), `enum` (a list of the values allowed: "Choose one of: a, b."),
 and `message` in place of the default sentences. `required` counts text of
 only spaces as empty; every other rule skips only a missing or empty value
-(`undefined`, `null`, `''` or an empty list), so spaces alone fail `enum`, `url` and `email`.
-Its TypeScript type is `FieldSchema`, and `validateFields` checks values
-against one anywhere.
+(`undefined`, `null`, `''` or an empty list), so spaces alone fail `enum`,
+`url` and `email`. Its TypeScript type is `FieldSchema`, and
+`validateFields` checks values against one anywhere.
 
 **When it checks.** On submit every field is checked. With errors, `error`
 fires with them, each FormField with a matching `name` shows its error, and
@@ -38,6 +38,11 @@ taken.' })` shows errors from elsewhere. Leaving such a field keeps its error
 (the server said so, and nothing changed); changing the field checks it
 again. `validate()` checks without submitting, and `clear()` clears every
 error.
+
+**Its template ref.** `FormApi` is the ref's type:
+`useTemplateRef<FormApi>('form')` gives `setErrors(errors)`, `validate()`,
+`clear()`, `submit()` (as the submit button would), and `errors` and
+`loading` read as values.
 
 A server error on a field the schema has no rule for clears the first time
 that field changes: there is nothing to check it against.
@@ -61,3 +66,11 @@ had focus (Enter pressed in it, or focused as `loading` turned on) gets it
 back when the form is done. (`@submit` is a handler prop, as in Nuxt UI, so
 the form can wait for it.) The native form has `novalidate`: Weft shows the
 errors, not the browser.
+
+**Before it is live.** A form sends nothing until its island is live: a
+small inline script at the top of the page's `<head>` stops every submit of
+a Weft form from the first moment, while its fields stay usable, and the
+form is `method="post"`, so with scripts off a submit puts nothing in the
+address. A site with a Content-Security-Policy must allow that inline
+script, `<script data-weft-prepaint>`; without it a submit before the
+island is live is a POST to the page.

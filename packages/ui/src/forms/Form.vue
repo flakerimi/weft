@@ -27,8 +27,16 @@
 //   from `loading` or from the handler.
 // - `setErrors` on a field the schema has no rule for: the error clears the
 //   first time the field changes, as there is nothing to check it against.
+// - It sends nothing before it is live. The server renders it in full, so
+//   until its island hydrates a press on submit, or Enter in a field, would
+//   be the browser's own submit. A pre-paint script (usePrePaint, one per
+//   page) stops every submit of a `.weft-form` from the first moment, and
+//   leaves the fields usable, so a person can type and a password manager
+//   fill while the script loads; with scripts off, `method="post"` keeps the
+//   values out of the address.
 // The native form keeps `novalidate`: Weft shows the errors, not the browser.
 import { computed, isProxy, nextTick, ref, toRaw, useTemplateRef, watch } from 'vue'
+import { usePrePaint } from '../head/usePrePaint.ts'
 import { tabbables } from '../headless/dom.ts'
 import { provideForm } from './field.ts'
 import { validateField, validateFields, type FieldSchema } from './schema.ts'
@@ -62,6 +70,12 @@ defineSlots<{
   /** The fields and the submit button. */
   default?: () => unknown
 }>()
+
+// Before the body is parsed: once hydrated, onSubmit stops the submit as well.
+usePrePaint(
+  'form:submit',
+  'window.addEventListener("submit",function(e){var t=e.target;if(t&&t.classList&&t.classList.contains("weft-form"))e.preventDefault()},true)',
+)
 
 const errors = ref<Record<string, string>>({})
 const submitted = ref(false)
@@ -186,6 +200,7 @@ async function onSubmit(event: Event) {
   }
 }
 
+// Typed for apps as FormApi (form-state.ts); test/fixtures/forms/FormRef.vue checks the two agree.
 defineExpose({
   /** Show these errors (a server's answer), in place of the ones shown now; `{}` clears them. */
   setErrors(next: Record<string, string>) {
@@ -219,6 +234,7 @@ defineExpose({
   <form
     ref="form"
     class="weft-form"
+    method="post"
     novalidate
     :data-disabled="off ? 'true' : undefined"
     :aria-busy="busy ? 'true' : undefined"

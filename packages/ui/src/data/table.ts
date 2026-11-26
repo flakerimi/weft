@@ -23,17 +23,21 @@ export interface TableColumn<T = Record<string, unknown>> {
   rowHeader?: boolean
 }
 
-/** What a Table asks its `fetch` for: the wire format's query parameters. */
+/**
+ * What a Table asks its `fetch` for: the wire format's list query, in its
+ * names, so a generated list function (`api.products.list`) takes it as it is.
+ */
 export interface TableQuery {
   /** The page, from 1. */
   page: number
-  perPage: number
+  /** Rows per page. */
+  per_page: number
   /** The column key, ascending (`name`), or descending with a minus (`-since`); absent when unsorted. */
   sort?: string
-  /** The search text (`q`); absent when empty. */
+  /** The search text; absent when empty. */
   q?: string
-  /** Filters by field name (`filter[<field>]`); absent when none. */
-  filters?: Record<string, string>
+  /** Filters by field name (`filter[<field>]`), none with an empty value; absent when none. */
+  filter?: Record<string, string>
 }
 
 /** What `fetch` answers: the wire format's list (`page` and `per_page` may come back too, and are not needed). */
@@ -173,10 +177,10 @@ export function activeFilters(filters: Record<string, string | null | undefined>
 
 /** A query as URL search parameters, as the wire format reads them: `page=2&per_page=20&sort=-since&q=ada&filter[plan]=pro`. */
 export function tableSearch(query: TableQuery): URLSearchParams {
-  const params = new URLSearchParams({ page: String(query.page), per_page: String(query.perPage) })
+  const params = new URLSearchParams({ page: String(query.page), per_page: String(query.per_page) })
   if (query.sort) params.set('sort', query.sort)
   if (query.q) params.set('q', query.q)
-  for (const [field, value] of Object.entries(activeFilters(query.filters) ?? {})) params.set(`filter[${field}]`, value)
+  for (const [field, value] of Object.entries(activeFilters(query.filter) ?? {})) params.set(`filter[${field}]`, value)
   return params
 }
 

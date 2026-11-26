@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { reactive, ref, toRaw } from 'vue'
 import FormProbe from '../../src/forms/Form.vue'
+import type { FormApi } from '../../src/index.ts'
 import FormCases from '../fixtures/forms/FormCases.vue'
+import FormRef from '../fixtures/forms/FormRef.vue'
 import SearchForm from '../fixtures/forms/SearchForm.vue'
 import { actuallyDisabled, press } from '../keyboard.ts'
 import { mount } from '../mount.ts'
@@ -29,6 +31,18 @@ describe('Form', () => {
     const form = render().q<HTMLFormElement>('form')
     expect(form.className).toBe('weft-form')
     expect(form.noValidate).toBe(true)
+    // With scripts off a submit is a POST, so nothing reaches the address.
+    expect(form.getAttribute('method')).toBe('post')
+  })
+
+  it('stops the native submit once mounted, and leaves its fields enabled', async () => {
+    const f = render()
+    const form = f.q<HTMLFormElement>('form')
+    const event = new SubmitEvent('submit', { bubbles: true, cancelable: true })
+    form.dispatchEvent(event)
+    await settle()
+    expect(event.defaultPrevented).toBe(true)
+    expect(f.q('.email input').disabled).toBe(false)
   })
 
   it('marks fields the schema requires', () => {
@@ -381,5 +395,24 @@ describe('Form', () => {
     // One object reached twice is one object in the copy.
     expect([...copy!.set][0]).toBe(copy!.map.get('a'))
     expect(copy!.when).toBe(toRaw(state).when)
+  })
+})
+
+describe('FormApi', () => {
+  it('types a Form\'s template ref, and is what the ref gives', async () => {
+    const m = mount(FormRef)
+    mounted.push(m)
+    const form = m.exposed.form as FormApi
+    expect(Object.keys(form).sort()).toEqual(['clear', 'errors', 'loading', 'setErrors', 'submit', 'validate'])
+    expect((m.exposed.check as () => FormApi | null)()).not.toBeNull()
+    expect(form.validate()).toBe(false)
+    expect(form.errors).toEqual({ email: 'This is required.' })
+    expect(form.loading).toBe(false)
+    form.setErrors({ email: 'That address is taken.' })
+    await settle()
+    expect(m.el.querySelector('.email .weft-form-field__error')?.textContent?.trim()).toBe('That address is taken.')
+    form.clear()
+    await settle()
+    expect(form.errors).toEqual({})
   })
 })

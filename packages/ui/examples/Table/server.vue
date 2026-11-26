@@ -17,14 +17,18 @@ const all: Customer[] = Array.from({ length: 87 }, (_, i) => ({
   since: `2026-${String((i % 12) + 1).padStart(2, '0')}-01`,
 }))
 
-/** In an app: `fetch('/api/customers?' + tableSearch(query)).then((r) => r.json())`. */
+/**
+ * In an app the generated client's list function takes the query as it is
+ * (`:fetch="api.customers.list"`), or by hand:
+ * `fetch('/api/customers?' + tableSearch(query)).then((r) => r.json())`.
+ */
 async function load(query: TableQuery): Promise<TableResult<Customer>> {
   const params = tableSearch(query)
   const sort = params.get('sort')
   const key = (sort?.replace(/^-/, '') ?? 'id') as keyof Customer
   const sorted = [...all].sort((a, b) => String(a[key]).localeCompare(String(b[key]), undefined, { numeric: true }) * (sort?.startsWith('-') ? -1 : 1))
-  const start = (query.page - 1) * query.perPage
-  return { items: sorted.slice(start, start + query.perPage), total: all.length, page: query.page, per_page: query.perPage }
+  const start = (query.page - 1) * query.per_page
+  return { items: sorted.slice(start, start + query.per_page), total: all.length, page: query.page, per_page: query.per_page }
 }
 
 const columns: TableColumn<Customer>[] = [

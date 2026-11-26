@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import TableCases, { type Person } from '../fixtures/data/TableCases.vue'
-import { compareValues, nextSort, parseSort, selectRange, sortRows, tableSearch, type TableQuery, type TableResult } from '../../src/data/table.ts'
+import TableWire, { type ListQuery } from '../fixtures/data/TableWire.vue'
+import { compareValues, nextSort, parseSort, selectRange, sortRows, tableSearch, type TableFetch, type TableQuery, type TableResult } from '../../src/data/table.ts'
 import { mount } from '../mount.ts'
 import { installResizeObserver } from '../resize-observer.ts'
 import { loadStyles, ruleFor } from '../styles.ts'
@@ -93,16 +94,16 @@ describe('table helpers', () => {
   })
 
   it('writes a query as the wire format search parameters', () => {
-    expect(tableSearch({ page: 2, perPage: 20, sort: '-since' }).toString()).toBe('page=2&per_page=20&sort=-since')
-    expect(tableSearch({ page: 1, perPage: 10 }).toString()).toBe('page=1&per_page=10')
-    const all = tableSearch({ page: 1, perPage: 10, sort: 'name', q: 'ada lovelace', filters: { plan: 'pro', city: 'A&B' } })
+    expect(tableSearch({ page: 2, per_page: 20, sort: '-since' }).toString()).toBe('page=2&per_page=20&sort=-since')
+    expect(tableSearch({ page: 1, per_page: 10 }).toString()).toBe('page=1&per_page=10')
+    const all = tableSearch({ page: 1, per_page: 10, sort: 'name', q: 'ada lovelace', filter: { plan: 'pro', city: 'A&B' } })
     expect(all.get('q')).toBe('ada lovelace')
     expect(all.get('filter[plan]')).toBe('pro')
     expect(all.get('filter[city]')).toBe('A&B')
     expect(all.toString()).toBe('page=1&per_page=10&sort=name&q=ada+lovelace&filter%5Bplan%5D=pro&filter%5Bcity%5D=A%26B')
-    expect(tableSearch({ page: 1, perPage: 10, q: '', filters: {} }).toString()).toBe('page=1&per_page=10')
-    expect(tableSearch({ page: 1, perPage: 10, filters: { status: '', kind: 'a' } }).toString()).toBe('page=1&per_page=10&filter%5Bkind%5D=a')
-    expect(tableSearch({ page: 1, perPage: 10, filters: { status: '' } }).toString()).toBe('page=1&per_page=10')
+    expect(tableSearch({ page: 1, per_page: 10, q: '', filter: {} }).toString()).toBe('page=1&per_page=10')
+    expect(tableSearch({ page: 1, per_page: 10, filter: { status: '', kind: 'a' } }).toString()).toBe('page=1&per_page=10&filter%5Bkind%5D=a')
+    expect(tableSearch({ page: 1, per_page: 10, filter: { status: '' } }).toString()).toBe('page=1&per_page=10')
   })
 
   it('selects a range between the anchor and the target, in the order shown', () => {
@@ -577,7 +578,7 @@ describe('Table', () => {
       const fetch = vi.fn(async (q: TableQuery): Promise<TableResult<Person>> => {
         calls.push(q)
         const sorted = sortRows(all, [{ key: 'name' }, { key: 'age' }], q.sort)
-        return { items: sorted.slice((q.page - 1) * q.perPage, q.page * q.perPage), total: all.length, page: q.page, per_page: q.perPage }
+        return { items: sorted.slice((q.page - 1) * q.per_page, q.page * q.per_page), total: all.length, page: q.page, per_page: q.per_page }
       })
       return { fetch, calls }
     }
@@ -591,23 +592,23 @@ describe('Table', () => {
       expect($('table').getAttribute('aria-busy')).toBe('true')
       expect($$('tbody tr.weft-table__skeleton')).toHaveLength(20)
       await settle()
-      expect(calls).toEqual([{ page: 1, perPage: 20 }])
+      expect(calls).toEqual([{ page: 1, per_page: 20 }])
       expect($('table').hasAttribute('aria-busy')).toBe(false)
       expect(names()).toHaveLength(20)
       expect(names()[0]).toBe('P01')
       click($('.weft-table [aria-label="Page 3"]'))
       await settle()
-      expect(calls.at(-1)).toEqual({ page: 3, perPage: 20 })
+      expect(calls.at(-1)).toEqual({ page: 3, per_page: 20 })
       expect(names()).toEqual(['P41', 'P42', 'P43', 'P44', 'P45'])
     })
 
     it('sends the search and the filters, and asks again when either changes', async () => {
       const { fetch, calls } = server()
       const m = await cases({ rows: undefined, fetch: fn(fetch), perPage: 10, search: 'P0', filters: { city: 'X' } })
-      expect(calls.at(-1)).toEqual({ page: 1, perPage: 10, q: 'P0', filters: { city: 'X' } })
+      expect(calls.at(-1)).toEqual({ page: 1, per_page: 10, q: 'P0', filter: { city: 'X' } })
       m.exposed.searchText = 'P1'
       await settle()
-      expect(calls.at(-1)).toEqual({ page: 1, perPage: 10, q: 'P1', filters: { city: 'X' } })
+      expect(calls.at(-1)).toEqual({ page: 1, per_page: 10, q: 'P1', filter: { city: 'X' } })
       expect(calls).toHaveLength(2)
     })
 
@@ -622,19 +623,19 @@ describe('Table', () => {
       exposed.searchText = 'P1'
       await settle()
       expect(exposed.page).toBe(1)
-      expect(calls.slice(before)).toEqual([{ page: 1, perPage: 10, q: 'P1', filters: { city: 'X' } }])
+      expect(calls.slice(before)).toEqual([{ page: 1, per_page: 10, q: 'P1', filter: { city: 'X' } }])
       exposed.page = 3
       await settle()
       exposed.filterValues = { city: 'Y' }
       await settle()
       expect(exposed.page).toBe(1)
-      expect(calls.at(-1)).toEqual({ page: 1, perPage: 10, q: 'P1', filters: { city: 'Y' } })
+      expect(calls.at(-1)).toEqual({ page: 1, per_page: 10, q: 'P1', filter: { city: 'Y' } })
       // Together: the parent's page is kept.
       exposed.page = 2
       exposed.searchText = 'P2'
       await settle()
       expect(exposed.page).toBe(2)
-      expect(calls.at(-1)).toEqual({ page: 2, perPage: 10, q: 'P2', filters: { city: 'Y' } })
+      expect(calls.at(-1)).toEqual({ page: 2, per_page: 10, q: 'P2', filter: { city: 'Y' } })
     })
 
     it('asks again for changed filters, not for a fresh object with the same filters', async () => {
@@ -648,7 +649,7 @@ describe('Table', () => {
       exposed.filterValues = { city: 'Z' }
       await settle()
       expect(calls).toHaveLength(2)
-      expect(calls.at(-1)!.filters).toEqual({ city: 'Z' })
+      expect(calls.at(-1)!.filter).toEqual({ city: 'Z' })
     })
 
     it('sends no empty filter, and does not ask again for {} becoming { status: \'\' }', async () => {
@@ -657,10 +658,10 @@ describe('Table', () => {
       const exposed = m.exposed as { filterValues: Record<string, string> }
       exposed.filterValues = { status: '' }
       await settle()
-      expect(calls).toEqual([{ page: 1, perPage: 10 }])
+      expect(calls).toEqual([{ page: 1, per_page: 10 }])
       exposed.filterValues = { status: '', kind: 'a' }
       await settle()
-      expect(calls.at(-1)).toEqual({ page: 1, perPage: 10, filters: { kind: 'a' } })
+      expect(calls.at(-1)).toEqual({ page: 1, per_page: 10, filter: { kind: 'a' } })
     })
 
     it('sends the sort to the server, in the wire format, from page 1, and does not sort on the client', async () => {
@@ -672,7 +673,7 @@ describe('Table', () => {
       await settle()
       click(sortButton('Name'))
       await settle()
-      expect(calls.at(-1)).toEqual({ page: 1, perPage: 10, sort: '-name' })
+      expect(calls.at(-1)).toEqual({ page: 1, per_page: 10, sort: '-name' })
       expect(m.exposed.page).toBe(1)
       expect(names()[0]).toBe('P45')
     })
@@ -687,7 +688,23 @@ describe('Table', () => {
       click(sortButton('Name'))
       await settle()
       await settle()
-      expect(calls.slice(before)).toEqual([{ page: 1, perPage: 10, sort: 'name' }])
+      expect(calls.slice(before)).toEqual([{ page: 1, per_page: 10, sort: 'name' }])
+    })
+
+    it('asks in names the generated list function reads, and takes its answer (checked by the type checker)', () => {
+      // Every name the Table sends is one the list route reads, typed alike.
+      expectTypeOf<Exclude<keyof TableQuery, keyof ListQuery>>().toEqualTypeOf<never>()
+      expectTypeOf<TableQuery>().toEqualTypeOf<{ page: number; per_page: number; sort?: string; q?: string; filter?: Record<string, string> }>()
+      type List = (query?: ListQuery) => Promise<{ items: Person[]; total: number; page: number; per_page: number }>
+      expectTypeOf<List>().toExtend<TableFetch<Person>>()
+    })
+
+    it('hands a generated list function its query in the wire\'s names, with no adapter', async () => {
+      const m = mount(TableWire)
+      unmount = m.unmount
+      await settle()
+      expect(m.exposed.asked).toEqual([{ page: 1, per_page: 5, sort: '-name', q: 'tea', filter: { status: 'live' } }])
+      expect($('tbody').textContent).toContain('Tea')
     })
 
     it('ignores an answer that a newer query overtook', async () => {

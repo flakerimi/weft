@@ -3,7 +3,7 @@
  *
  * A Table's rows: from `rows()`, sorted (stably) and sliced to the page on
  * the client; or from `fetch()`, asked for the page in the wire format
- * (`{ page, perPage, sort, q, filters }`, each absent when none) whenever one of those
+ * (`{ page, per_page, sort, q, filter }`, each of the last three absent when none) whenever one of those
  * values changes while `active()` (the Table passes "mounted", so the
  * server and the first render draw a busy table and agree). Only the
  * answer to the latest question is kept; a rejection is kept in `failed`
@@ -80,10 +80,10 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
     const filters = activeFilters(opts.filters?.())
     const query: TableQuery = {
       page: opts.page.value,
-      perPage: perPage.value!,
+      per_page: perPage.value!,
       ...(opts.sort.value ? { sort: opts.sort.value } : {}),
       ...(q ? { q } : {}),
-      ...(filters ? { filters } : {}),
+      ...(filters ? { filter: filters } : {}),
     }
     try {
       const answer = await fetch(query)

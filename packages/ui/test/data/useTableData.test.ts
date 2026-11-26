@@ -99,7 +99,7 @@ describe('useTableData', () => {
       const calls: TableQuery[] = []
       const fetch = vi.fn(async (q: TableQuery): Promise<TableResult<P>> => {
         calls.push({ ...q })
-        return { items: PEOPLE.slice((q.page - 1) * q.perPage, q.page * q.perPage), total: PEOPLE.length }
+        return { items: PEOPLE.slice((q.page - 1) * q.per_page, q.page * q.per_page), total: PEOPLE.length }
       })
       return { fetch, calls }
     }
@@ -113,7 +113,7 @@ describe('useTableData', () => {
       expect(data.perPage.value).toBe(20)
       active.value = true
       await flush()
-      expect(calls).toEqual([{ page: 1, perPage: 20 }])
+      expect(calls).toEqual([{ page: 1, per_page: 20 }])
       expect(data.busy.value).toBe(false)
       expect(names(data.shown.value)).toHaveLength(5)
       expect(data.total.value).toBe(5)
@@ -129,9 +129,9 @@ describe('useTableData', () => {
       page.value = 1
       await flush()
       expect(calls).toEqual([
-        { page: 1, perPage: 2 },
-        { page: 2, perPage: 2 },
-        { page: 1, perPage: 2, sort: '-name' },
+        { page: 1, per_page: 2 },
+        { page: 2, per_page: 2 },
+        { page: 1, per_page: 2, sort: '-name' },
       ])
       // Writing the same values again asks nothing.
       sort.value = '-name'

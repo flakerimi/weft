@@ -27,6 +27,13 @@ it('decodes each value, and leaves one that does not decode as it is', () => {
   expect(useParams()).toEqual({ id: '100%' })
   open('/products/:id', '/products/%E0%A4%A')
   expect(useParams()).toEqual({ id: '%E0%A4%A' })
+  // Not UTF-8: the escapes that do not decode stay as they are, and the rest decodes.
+  open('/products/:id', '/products/%FF')
+  expect(useParams()).toEqual({ id: '%FF' })
+  open('/products/:id', '/products/caf%C3%A9%FF%20x')
+  expect(useParams()).toEqual({ id: 'café%FF x' })
+  open('/products/:id', '/products/%C3%A9%C3')
+  expect(useParams()).toEqual({ id: 'é%C3' })
   // A static segment is compared as the server compares it, decoded.
   open('/café/:id', '/caf%C3%A9/1')
   expect(useParams()).toEqual({ id: '1' })
@@ -37,6 +44,11 @@ it('splits the address as the server does: decoded first, then cleaned', () => {
   open('/products/:id/edit', '/products/a%2Fedit')
   expect(useParams()).toEqual({ id: 'a' })
   open('/products/:id', '/products/a%2Fedit')
+  expect(useParams()).toEqual({})
+  // An encoded slash splits the path where the server splits it even when another escape is not UTF-8.
+  open('/products/:id/edit', '/products/%FF%2Fedit')
+  expect(useParams()).toEqual({ id: '%FF' })
+  open('/products/:id', '/products/%FF%2Fedit')
   expect(useParams()).toEqual({})
   // A trailing slash and a doubled one, as path.Clean drops them.
   open('/products/:id', '/products/42/')

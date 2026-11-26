@@ -16,6 +16,25 @@ export interface FormContext {
   input(name: string): void
 }
 
+/**
+ * What a Form's template ref gives, for `useTemplateRef<FormApi>('form')`:
+ * the methods and state Form exposes, its refs read as values.
+ */
+export interface FormApi {
+  /** Show these errors (a server's answer), in place of the ones shown now; `{}` clears them. */
+  setErrors(errors: Record<string, string>): void
+  /** Check every field and show the errors, as a submit would, without submitting; true when all pass. */
+  validate(): boolean
+  /** Clear every error, and forget the submit (fields are checked on leaving only after the next one). */
+  clear(): void
+  /** The errors shown now, by field name. */
+  readonly errors: Record<string, string>
+  /** Busy: `loading`, or an async submit handler still running. */
+  readonly loading: boolean
+  /** Submit as the submit button would: check, then run the handler or emit `error`. */
+  submit(): void
+}
+
 export const formKey: InjectionKey<FormContext> = Symbol('weft-form')
 
 export const useForm = () => inject(formKey, null)

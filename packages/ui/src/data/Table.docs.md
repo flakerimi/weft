@@ -17,16 +17,18 @@ row's checkbox ("Select Ada").
 
 **Rows.** Give `rows` (an array), sorted and paged on the client (text in
 the WeftProvider's `locale`, en-US without one, numbers and dates by
-amount), or
-`fetch(query)`, which receives `{ page, perPage, sort, q, filters }`
-(each but `page` and `perPage` is absent when there is none; `sort` is
-`name` or `-since`) and answers the wire format's whole list, `{ items,
-total, page, per_page }` (`page` and `per_page` are optional), so paging,
-sorting, searching and filtering happen on the server. Give the search text
-as `search` and the filters as `filters` (`{ plan: 'pro' }`); a change asks
-again. Clearing a filter is setting it to an empty string or leaving it out:
-a filter with no value is not sent, and `{ status: '' }` is the same query as
-`{}`. With `rows` and no `fetch`, `search` and `filters` do nothing.
+amount), or `fetch(query)`, which receives the wire format's list query
+in its names, `{ page, per_page, sort, q, filter }` (each but `page` and
+`per_page` is absent when there is none; `sort` is `name` or `-since`),
+and answers the wire format's whole list, `{ items, total, page, per_page }`
+(`page` and `per_page` are optional), so paging, sorting, searching and
+filtering happen on the server. A list function from the generated client
+fits as it is: `:fetch="api.products.list"`. Give the search text as
+`search` (sent as `q`) and the filters as `filters` (`{ plan: 'pro' }`,
+sent as `filter`); a change asks again. Clearing a filter is setting it to
+an empty string or leaving it out: a filter with no value is not sent, and
+`{ status: '' }` is the same query as `{}`. With `rows` and no `fetch`,
+`search` and `filters` do nothing.
 `tableSearch(query)` writes the query as the wire format's search
 parameters: `page=2&per_page=20&sort=-since&q=ada&filter[plan]=pro`. It asks
 once mounted (the server draws skeleton rows), again whenever the page, the
