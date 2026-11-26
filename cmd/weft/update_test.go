@@ -184,3 +184,43 @@ func TestUpdateSwapsAside(t *testing.T) {
 		t.Errorf("a failed swapIn left weft.exe %q, want it put back as new", contents(t, exe))
 	}
 }
+
+// When the new binary cannot take the old one's name, nor the old one be put
+// back, the sentence says where the old one is now and what to do.
+func TestUpdateSaysWhereTheBinaryIsWhenItCannotBePutBack(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "weft.exe")
+	calls := 0
+	prev := rename
+	rename = func(from, to string) error {
+		calls++
+		if calls == 1 {
+			return os.Rename(from, to)
+		}
+		return os.ErrPermission
+	}
+	t.Cleanup(func() { rename = prev })
+	os.WriteFile(exe, []byte("running"), 0o755)
+	err := swapIn(filepath.Join(dir, ".weft.new-1"), exe, true)
+	want := "could not replace " + exe + " (permission denied), nor put it back, so your weft is now " + exe + ".old; rename it to weft.exe and run weft update again."
+	if err == nil || err.Error() != want {
+		t.Errorf("swapIn = %v, want %q", err, want)
+	}
+}
+
+// What an update on Windows set aside, the binary's own name with .old, is
+// removed at the next run, and nothing else beside it.
+func TestLeftoverOldBinaryRemoved(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "weft.exe")
+	for _, f := range []string{"weft.exe", "weft.exe.old", "weft.old", "other.exe.old"} {
+		os.WriteFile(filepath.Join(dir, f), []byte(f), 0o755)
+	}
+	removeSetAside(exe)
+	for f, want := range map[string]bool{"weft.exe": true, "weft.exe.old": false, "weft.old": true, "other.exe.old": true} {
+		if _, err := os.Stat(filepath.Join(dir, f)); (err == nil) != want {
+			t.Errorf("%s there = %v, want %v", f, err == nil, want)
+		}
+	}
+	removeSetAside(exe) // none left: nothing to do, and no error
+}

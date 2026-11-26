@@ -358,11 +358,25 @@ func startChild(name string, cmd *exec.Cmd) (*child, error) {
 	return c, nil
 }
 
-// stop stops the child's group and waits for the child.
+// stop stops the child's group and waits for the child. A child that has
+// exited and been waited for is left alone: once it is waited for, its
+// process id may be given to another program (on Windows at once), whose
+// processes a stop would reach. What it started reads the end of its input
+// and exits when weft dev does.
 func (c *child) stop() {
-	stopGroup(c.cmd)
+	select {
+	case <-c.done:
+		unpin(c.cmd)
+		return
+	default:
+	}
+	stopChild(c.cmd)
 	<-c.done
+	unpin(c.cmd)
 }
+
+// stopChild is stopGroup; a test puts another in its place.
+var stopChild = stopGroup
 
 // goBuild builds the app with the dev tag into bin, passing the compiler's
 // output through; it says whether the build succeeded. command names the
@@ -378,10 +392,17 @@ func goBuild(ctx context.Context, command, appDir, bin string, stderr io.Writer)
 	cmd := exec.CommandContext(ctx, "go", "build", "-tags", "dev", "-o", bin, ".")
 	cmd.Dir, cmd.Env = appDir, hostBuildEnv(os.Environ())
 	cmd.Stdout, cmd.Stderr = stderr, stderr
-	// Stopped as a Ctrl-C would, so go stops the compilers it started.
-	cmd.Cancel = func() error { return interrupt(cmd.Process) }
+	// Stopped as a Ctrl-C would, so go stops the compilers it started; on
+	// Windows, which has none to send, go and what it started are killed.
+	// Cancel runs before Wait returns, so always while go is pinned.
+	cmd.Cancel = func() error { return interrupt(cmd) }
 	cmd.WaitDelay = 3 * time.Second
-	return cmd.Run() == nil
+	if cmd.Start() != nil {
+		return false
+	}
+	pin(cmd)
+	defer unpin(cmd)
+	return cmd.Wait() == nil
 }
 
 // hostBuildEnv is environ with GOOS and GOARCH set to this machine's, and

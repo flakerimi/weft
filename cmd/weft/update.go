@@ -214,27 +214,49 @@ func replaceExecutable(binary []byte) error {
 		return updateError(fmt.Sprintf("could not make the new weft executable: %v.", err))
 	}
 	if err := swapIn(tmpName, exe, runtime.GOOS == "windows"); err != nil {
+		if errors.As(err, new(updateError)) {
+			return err
+		}
 		return updateError(fmt.Sprintf("could not replace %s: %v.", exe, err))
 	}
 	ok = true
 	return nil
 }
 
+// rename is os.Rename; a test puts another in its place.
+var rename = os.Rename
+
 // swapIn renames tmp to exe. With aside, as on Windows, where a running
 // binary may be renamed but not written over, exe is first renamed to
 // exe.old, replacing the one an earlier update left, and is put back if tmp
-// cannot take its place.
+// cannot take its place; if it cannot be put back either, the error says
+// where it is. The next run removes exe.old (removeSetAside).
 func swapIn(tmp, exe string, aside bool) error {
 	if !aside {
-		return os.Rename(tmp, exe)
+		return rename(tmp, exe)
 	}
 	old := exe + ".old"
-	if err := os.Rename(exe, old); err != nil {
+	if err := rename(exe, old); err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, exe); err != nil {
-		os.Rename(old, exe)
+	if err := rename(tmp, exe); err != nil {
+		if rename(old, exe) != nil {
+			cause := err
+			if le := (*os.LinkError)(nil); errors.As(err, &le) {
+				cause = le.Err
+			}
+			return updateError(fmt.Sprintf("could not replace %s (%v), nor put it back, so your weft is now %s; rename it to %s and run weft update again.", exe, cause, old, filepath.Base(exe)))
+		}
 		return err
 	}
 	return nil
+}
+
+// removeSetAside removes exe.old, the binary an update on Windows set aside
+// while it ran, and nothing else; it is no longer running once exe runs.
+func removeSetAside(exe string) {
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	os.Remove(exe + ".old")
 }

@@ -86,10 +86,7 @@ func buildCmd(args []string, stdout, stderr io.Writer) int {
 	// in the app's folder, with .exe for Windows.
 	shown, target := *out, *out
 	if target == "" {
-		goos := os.Getenv("GOOS")
-		if goos == "" {
-			goos = runtime.GOOS
-		}
+		goos := targetGOOS(appDir, goBuildEnv(os.Environ()))
 		target = filepath.Join(appDir, binaryName(cfg, appDir)+exeSuffix(goos))
 		shown = target
 		if wd, err := os.Getwd(); err == nil {
@@ -141,6 +138,19 @@ func binaryName(cfg appConfig, appDir string) string {
 		return cfg.Name
 	}
 	return filepath.Base(appDir)
+}
+
+// targetGOOS is the system go build builds for in appDir with environ, as go
+// env GOOS says, so a GOOS set with go env -w counts too; this machine's if
+// go cannot say.
+func targetGOOS(appDir string, environ []string) string {
+	cmd := exec.Command("go", "env", "GOOS")
+	cmd.Dir, cmd.Env = appDir, environ
+	out, err := cmd.Output()
+	if goos := strings.TrimSpace(string(out)); err == nil && goos != "" {
+		return goos
+	}
+	return runtime.GOOS
 }
 
 // exeSuffix is ".exe" for a binary built for goos windows, where a program

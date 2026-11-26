@@ -612,3 +612,30 @@ func TestBuildFromSubfolder(t *testing.T) {
 		t.Error("the build wrote into the subfolder")
 	}
 }
+
+// weft build names its binary for the system go builds for, which go env
+// says, whether GOOS is in the environment or was set with go env -w.
+func TestTargetGOOS(t *testing.T) {
+	dir := t.TempDir()
+	goenv := filepath.Join(t.TempDir(), "env")
+	os.WriteFile(goenv, []byte("GOOS=windows\n"), 0o644)
+	for _, c := range []struct {
+		env  []string
+		want string
+	}{
+		{[]string{"GOENV=off", "GOOS=windows"}, "windows"},
+		{[]string{"GOENV=off", "GOOS=linux"}, "linux"},
+		{[]string{"GOENV=" + goenv}, "windows"},
+		{[]string{"GOENV=off"}, runtime.GOOS},
+	} {
+		var env []string
+		for _, kv := range os.Environ() {
+			if !strings.HasPrefix(kv, "GOOS=") && !strings.HasPrefix(kv, "GOENV=") {
+				env = append(env, kv)
+			}
+		}
+		if got := targetGOOS(dir, append(env, c.env...)); got != c.want {
+			t.Errorf("targetGOOS with %v = %q, want %q", c.env, got, c.want)
+		}
+	}
+}
