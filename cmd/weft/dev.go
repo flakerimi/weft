@@ -305,6 +305,7 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 				return stopAsked()
 			case <-time.After(devGrace):
 			}
+			unpin(api.cmd) // its process was waited for: let its handle go (Windows)
 			api = nil
 			fmt.Fprintln(stderr, "weft dev: the Go server stopped after the restart; fix it and save again.")
 			continue
