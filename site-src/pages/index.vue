@@ -6,8 +6,8 @@
 // install command, each with its copy button (an island); and one app,
 // Northline's device list, drawn twice by the real components, on a
 // desktop and on a phone (inert pictures from the server).
-// A saffron thread pulls across it at the install command, under the
-// desktop and over the phone (CSS, the page's one automatic motion). Behind
+// A saffron thread pulls across its foot, where the band ends, under the
+// frames (CSS, the page's one automatic motion). Behind
 // them, in the band's ground, the owner's picture of a weave, drawn by the
 // CSS (docs/design/hero-2026-11-23/); it never moves. Then:
 //   - screens you'd ship: five scenes on tiles, drawn by the server from the
@@ -108,7 +108,6 @@ for (const s of scenes) {
               <Island when="idle" :component="CopyCommand" :props="{ command: install }" />
             </div>
             <p class="landing-after">Already installed? <code>weft update</code> moves you to the newest release.</p>
-            <span class="landing-thread" aria-hidden="true" />
           </div>
           <figure class="landing-frames">
             <Still class="hero-frame hero-frame--desk" scope="hd" input="pointer" width="wide"><NorthlineDesk /></Still>
@@ -119,6 +118,7 @@ for (const s of scenes) {
             </figcaption>
           </figure>
         </div>
+        <span class="landing-thread" aria-hidden="true" />
       </section>
 
       <section id="screens" class="landing-wrap landing-band" aria-labelledby="screens-title">

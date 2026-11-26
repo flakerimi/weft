@@ -1,7 +1,7 @@
 /* The landing page, after the approved design's second pass
    (docs/design/site-2026-11-21-v2/): a night band for the hero, with the
    warp in it alone, the app drawn twice beside the copy, and a saffron
-   thread pulled across at the install command; then bands of white tiles on
+   thread pulled across the band's foot; then bands of white tiles on
    the ground. The night is the theme's dark scheme (a region marked
    data-weft-scheme="dark"), so it is night in both schemes, while the
    pictures of the app follow the page's. Every colour is a theme token.
@@ -153,10 +153,10 @@
 .landing-thread {
   position: absolute;
   inset-inline: 0;
+  inset-block-end: 0;
   z-index: 1;
   display: block;
   block-size: 6px;
-  margin-block-start: 40px;
   background: var(--site-saffron);
   animation: landing-pull 1.4s cubic-bezier(0.2, 0.7, 0.1, 1) 0.3s both;
 }
