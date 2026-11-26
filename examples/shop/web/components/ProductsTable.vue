@@ -41,12 +41,12 @@ const columns: TableColumn<Product>[] = [
   { key: 'actions', label: 'Actions', align: 'end' },
 ]
 
-// The dialog that makes a product, or changes the one in `editing`.
-// InputNumber gives null when emptied, so the price may be null here.
-type Draft = Omit<ProductInput, 'price'> & { price: number | null }
+// The dialog that makes a product, or changes the one in `editing`. A price
+// left empty is not in the values the Form submits, so the server reads it
+// as not sent: 0 for a new product, unchanged for one being edited.
 const open = ref(false)
 const editing = ref<Product | null>(null)
-const draft = reactive<Draft>({ name: '', price: 0, status: 'draft' })
+const draft = reactive<ProductInput>({ name: '', price: 0, status: 'draft' })
 const problem = ref('')
 const formKey = ref(0)
 const form = useTemplateRef<FormApi>('form')
@@ -63,20 +63,19 @@ function edit(product: Product | null) {
 function changes(values: ProductInput, was: Product): Partial<ProductInput> {
   const out: Partial<ProductInput> = {}
   if (values.name !== was.name) out.name = values.name
-  if (values.price !== was.price) out.price = values.price
+  if ('price' in values && values.price !== was.price) out.price = values.price
   if (values.status !== was.status) out.status = values.status
   return out
 }
 
-async function save(values: Draft) {
+async function save(values: ProductInput) {
   problem.value = ''
-  const input: ProductInput = { ...values, price: values.price ?? 0 }
   try {
     if (editing.value) {
-      const changed = changes(input, editing.value)
+      const changed = changes(values, editing.value)
       if (Object.keys(changed).length > 0) await api.products.update(editing.value.id, changed)
     } else {
-      await api.products.create(input)
+      await api.products.create(values)
     }
     open.value = false
     table.value?.refresh()
