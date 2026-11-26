@@ -172,6 +172,16 @@ func (a *App) Describe() (Description, error) {
 	seen := map[string]string{} // a TypeScript name to the Go type that has it
 	name := func(ts, goName string) {
 		if other, ok := seen[ts]; ok {
+			// The login's User, which warp/auth answers, is not the app's to rename.
+			const loginUser = "github.com/flakerimi/weft/warp/auth.User"
+			if other == loginUser || goName == loginUser {
+				mine := other
+				if other == loginUser {
+					mine = goName
+				}
+				d.fail("two types are named %q (%s, the login's, and %s); rename yours, since the generated TypeScript has one name for each.", ts, loginUser, mine)
+				return
+			}
 			d.fail("two types are named %q (%s and %s); rename one, since the generated TypeScript has one name for each.", ts, other, goName)
 			return
 		}

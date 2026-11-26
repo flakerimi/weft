@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/flakerimi/weft/warp"
+	"github.com/flakerimi/weft/warp/data"
 )
 
 var (
@@ -136,5 +137,27 @@ func TestShortKeyReadsNoSession(t *testing.T) {
 	}
 	if _, ok := readSession(testSecret, sessionValue(testSecret, 1, testNow.Add(-time.Hour), testNow.Add(time.Hour)), testNow); !ok {
 		t.Error("a key of 32 bytes read no session")
+	}
+}
+
+// appStore is a module of an app's own whose Register runs fn.
+type appStore struct{ fn func(app *warp.App) }
+
+func (appStore) Name() string                   { return "notes" }
+func (m appStore) Register(app *warp.App) error { m.fn(app); return nil }
+
+// The login answers the type User: an app's own type of that name is told
+// which is the login's and to rename its own. (dbtest holds the table's half.)
+func TestTheLoginsNamesAreReserved(t *testing.T) {
+	type User struct {
+		Name string `json:"name"`
+	}
+	app := warp.New(warp.Config{})
+	app.Use(data.Module(), Module(), appStore{func(app *warp.App) {
+		warp.Get(app, "/people", func(context.Context, warp.None) (User, error) { return User{}, nil })
+	}})
+	_, err := app.Describe()
+	if err == nil || !strings.Contains(err.Error(), "the login's") || !strings.Contains(err.Error(), "rename yours") {
+		t.Errorf("Describe = %v, want it to say which User is the login's", err)
 	}
 }
