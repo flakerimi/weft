@@ -6,6 +6,7 @@ export const runtime = true
 <script setup vapor lang="ts">
 import { Island } from '@weft/ui'
 import Counter from '../../components/Counter.vue'
+import Product from '../../components/Product.vue'
 
 defineProps<{ id: string }>()
 </script>
@@ -14,5 +15,6 @@ defineProps<{ id: string }>()
   <main>
     <h1>Product [{{ id }}]</h1>
     <Island when="load" :component="Counter" :props="{ start: 1 }" />
+    <Island when="load" :component="Product" />
   </main>
 </template>

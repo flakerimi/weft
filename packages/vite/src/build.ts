@@ -209,7 +209,9 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
     // The pages' CSS is minified for the browsers the site's Vite config targets.
     cssTarget = cssTargets(server.config.build.cssTarget)
     const load = (file: string) => server.ssrLoadModule(`/pages/${file}`) as Promise<PageModule>
-    for (const route of await expandRoutes(routes, load)) {
+    const expanded = await expandRoutes(routes, load)
+    refuseSharedFiles(expanded)
+    for (const route of expanded) {
       const page = join('pages', route.file)
       const rendered = await renderPage({ root, page, props: route.params, server, providedCSS: baseFiles, bundleCSS: bundles })
       pages.push({ ...route, ...rendered })
@@ -580,7 +582,7 @@ async function writeBuild(
           ]
         : []),
     ]
-    const file = page.runtime ? shellFile(page.path) : htmlFile(page.path)
+    const file = pageFile(page)
     const route = page.runtime ? page.path : undefined
     await write(file, pageHTML({ body: dropStaticComments(page.html), head: page.head, prePaint: page.prePaint, icons, fonts, css, stylesheet, tags, route }))
 
@@ -1083,6 +1085,26 @@ function htmlFile(path: string): string {
     throw new Error(`buildSite: page path ${path} has an empty, "." or ".." segment.`)
   }
   return `pages/${segments.join('/')}/index.html`
+}
+
+/** The file a page is written to: a runtime page's shell, or the folder its path names. */
+const pageFile = (route: ExpandedRoute) => (route.runtime ? shellFile(route.path) : htmlFile(route.path))
+
+/**
+ * Refuse two pages that would write one file, which only a runtime page's
+ * shell and a page whose path is its folder's name can (a getPaths value
+ * of `[id]`), compared without case or Unicode form so that it fails on
+ * every OS alike. The other pages come first, so they are named first.
+ */
+function refuseSharedFiles(routes: ExpandedRoute[]) {
+  const writers = new Map<string, string>()
+  for (const route of [...routes.filter((r) => !r.runtime), ...routes.filter((r) => r.runtime)]) {
+    const file = pageFile(route)
+    const key = file.normalize('NFC').toLowerCase()
+    const other = writers.get(key)
+    if (other !== undefined) throw new Error(`pages "${other}" and "${route.file}" both write ${file}; rename one.`)
+    writers.set(key, route.file)
+  }
 }
 
 /**

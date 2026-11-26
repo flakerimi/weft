@@ -15,7 +15,7 @@ import { contentType, CSS_MODULE, dropStaticComments } from './build.ts'
 import { siteConfig } from './config.ts'
 import { escapeHTML, iconTags, pageHTML, readStyles, THEMES, VIEW_TRANSITION, type Theme } from './document.ts'
 import { renderPage } from './render.ts'
-import { byPattern, discoverRoutes, expandRoutes, matchPattern, type ExpandedRoute, type PageModule, type Route } from './routes.ts'
+import { byPattern, discoverRoutes, expandRoutes, matchPattern, refuseSameShape, type ExpandedRoute, type PageModule, type Route } from './routes.ts'
 
 export interface DevOptions {
   /** The site's folder, which holds `pages/`. Its `package.json` may be in a folder above. */
@@ -178,7 +178,7 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
     }
     // Refused as the build refuses them: two runtime pages of one shape.
     failing.file = ''
-    if (runtime.length > 1) await expandRoutes(routes.filter((r) => runtime.some((e) => e.file === r.file)), load)
+    refuseSameShape(runtime)
     return { route: null, runtime: runtime.sort(byPattern) }
   }
 

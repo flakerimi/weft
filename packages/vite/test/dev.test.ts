@@ -138,6 +138,22 @@ describe('devSite', { timeout: 30_000 }, () => {
     expect((await get(dev.url)).body).toContain('<html lang="en">')
   })
 
+  it('refuses two runtime pages of one shape, as the build does', async () => {
+    const root = site('dev-site')
+    mkdirSync(join(root, 'pages/a'))
+    for (const name of ['x', 'y']) writeFileSync(join(root, `pages/a/[${name}].vue`), '<script lang="ts">\nexport const runtime = true\n</script>\n\n<template><p>a</p></template>\n')
+    const dev = await start(root)
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const page = await get(dev.url + 'a/1')
+    expect(page.status).toBe(500)
+    expect(page.body).toContain('pages &quot;a/[x].vue&quot; and &quot;a/[y].vue&quot; both match paths like /a/1; keep one.')
+    // As the build fails, so does every path that reaches the patterns.
+    expect((await get(dev.url + 'products/42')).status).toBe(500)
+    // A path an exact page has does not.
+    expect((await get(dev.url)).status).toBe(200)
+    error.mockRestore()
+  })
+
   it('serves the files a page wrote with useFile, once it has rendered', async () => {
     const dev = await start(site('dev-site'))
     expect((await get(dev.url + 'feed.json')).status).toBe(404)

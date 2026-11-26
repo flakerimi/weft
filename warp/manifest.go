@@ -59,7 +59,9 @@ type runtimePage struct {
 
 // match reports whether the cleaned path p has the pattern's shape: a
 // segment equals a static one byte for byte, ":name" takes one segment, and
-// ":...name" the rest of the path, or none of it. It allocates nothing.
+// ":...name" the rest of the path, or none of it. The path is bounded by net/http's header limit (http.DefaultMaxHeaderBytes
+// unless the server sets MaxHeaderBytes), and matching is O(len(p)) per
+// pattern, with no allocation.
 func (rp *runtimePage) match(p string) bool {
 	rest := p[1:]
 	for _, want := range rp.pattern {

@@ -32,6 +32,24 @@ it('decodes each value, and leaves one that does not decode as it is', () => {
   expect(useParams()).toEqual({ id: '1' })
 })
 
+it('splits the address as the server does: decoded first, then cleaned', () => {
+  // The server decodes %2F before it matches, so this is the edit page of product "a".
+  open('/products/:id/edit', '/products/a%2Fedit')
+  expect(useParams()).toEqual({ id: 'a' })
+  open('/products/:id', '/products/a%2Fedit')
+  expect(useParams()).toEqual({})
+  // A trailing slash and a doubled one, as path.Clean drops them.
+  open('/products/:id', '/products/42/')
+  expect(useParams()).toEqual({ id: '42' })
+  open('/products/:id', '/products//42')
+  expect(useParams()).toEqual({ id: '42' })
+  // A decoded .. takes a segment back, as path.Clean takes it.
+  open('/products/:id', '/products/x/%2E%2E/42')
+  expect(useParams()).toEqual({ id: '42' })
+  open('/docs/:...rest', '/docs//a///b/')
+  expect(useParams()).toEqual({ rest: 'a/b' })
+})
+
 it('gives a catch-all the rest of the path without its leading slash, or an empty string', () => {
   open('/docs/:...rest', '/docs/guides/islands%20here')
   expect(useParams()).toEqual({ rest: 'guides/islands here' })

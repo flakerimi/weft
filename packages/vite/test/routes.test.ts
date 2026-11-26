@@ -215,18 +215,42 @@ describe('runtime pages', () => {
     expect((await expandRoutes(other, async () => ({ runtime: true }))).map((r) => r.path)).toEqual(['/a/b', '/:s/:t', '/a/:...y', '/a/:x'])
   })
 
-  it('orders patterns by more static segments, then fewer params, then a catch-all last, then by path', () => {
-    const paths = ['/:a', '/:section/:id', '/docs/:...rest', '/products/:id', '/products/:id/edit', '/blog/:slug', '/a/b/:...c', '/:...all']
+  it('orders patterns so that a catch-all never hides a more specific page', () => {
+    // More static segments first; then a catch-all last; then fewer params, but
+    // the longer of two catch-alls first; then by path.
+    const paths = [
+      '/:a', '/:section/:id', '/docs/:...rest', '/products/:id', '/products/:id/edit', '/blog/:slug',
+      '/a/b/:...c', '/:...all', '/docs/:a/:b', '/docs/:a/:...r', '/a/:x/:...r', '/a/:x/:y/:z',
+    ]
     expect(paths.map((path) => ({ path })).sort(byPattern).map((r) => r.path)).toEqual([
       '/products/:id/edit',
       '/a/b/:...c',
       '/blog/:slug',
       '/products/:id',
+      '/docs/:a/:b',
+      '/a/:x/:y/:z',
+      '/a/:x/:...r',
+      '/docs/:a/:...r',
       '/docs/:...rest',
       '/:a',
-      '/:...all',
       '/:section/:id',
+      '/:...all',
     ])
+    // So each of them answers some path: the first that matches is never a pattern listed earlier that covers it.
+    const sorted = paths.map((path) => ({ path })).sort(byPattern)
+    for (const [path, want] of [
+      ['/docs/x/y', '/docs/:a/:b'],
+      ['/docs/x/y/z', '/docs/:a/:...r'],
+      ['/docs/x', '/docs/:a/:...r'],
+      ['/docs', '/docs/:...rest'],
+      ['/a/x/y/z', '/a/:x/:y/:z'],
+      ['/a/x/y', '/a/:x/:...r'],
+      ['/x/y', '/:section/:id'],
+      ['/x', '/:a'],
+      ['/x/y/z', '/:...all'],
+    ] as const) {
+      expect(sorted.find((r) => matchPattern(r.path, path) !== null)?.path, path).toBe(want)
+    }
   })
 
   it('matches a path against a pattern as warp.Serve does', () => {
@@ -235,6 +259,11 @@ describe('runtime pages', () => {
     expect(matchPattern('/docs/:...rest', '/docs')).toEqual({ rest: '' })
     expect(matchPattern('/docs/:...rest', '/docs/a/b')).toEqual({ rest: 'a/b' })
     expect(matchPattern('/:...rest', '/')).toEqual({ rest: '' })
+    // Cleaned as path.Clean cleans it: empty and . segments dropped, .. taking one back.
+    expect(matchPattern('/products/:id', '/products//42/')).toEqual({ id: '42' })
+    expect(matchPattern('/products/:id', '/products/x/../42')).toEqual({ id: '42' })
+    expect(matchPattern('/products/:id', '/products/./42')).toEqual({ id: '42' })
+    expect(matchPattern('/products/:id', '/products/../42')).toBeNull()
     for (const path of ['/products', '/products/', '/products/1/x', '/Products/1', '/product/1', '/']) {
       expect(matchPattern('/products/:id', path), path).toBeNull()
     }

@@ -465,3 +465,34 @@ func TestStaticPagesPayNothing(t *testing.T) {
 		t.Errorf("a runtime page: %v allocs, an exact page %v", b, a)
 	}
 }
+
+// In the order the build writes them, a catch-all comes after the patterns it
+// would otherwise hide, so each page answers some path.
+func TestCatchAllNeverHidesAPage(t *testing.T) {
+	files := append(slices.Clone(runtimeFiles),
+		siteFile{"/pages/docs/[a]/[b]/index.html", "<p>docs a b</p>", `"docsab"`, "text/html; charset=utf-8", true, false},
+		siteFile{"/pages/[a]/[b]/index.html", "<p>a b</p>", `"ab"`, "text/html; charset=utf-8", true, false},
+		siteFile{"/pages/[...all]/index.html", "<p>all</p>", `"all"`, "text/html; charset=utf-8", true, false},
+	)
+	routes := `{"pages":[
+    {"path": "/docs/:a/:b", "html": "pages/docs/[a]/[b]/index.html", "islands": [], "runtime": true},
+    {"path": "/docs/:...rest", "html": "pages/docs/[...rest]/index.html", "islands": [], "runtime": true},
+    {"path": "/:a/:b", "html": "pages/[a]/[b]/index.html", "islands": [], "runtime": true},
+    {"path": "/:...all", "html": "pages/[...all]/index.html", "islands": [], "runtime": true}
+  ],"notFound":null,"app":null}`
+	h := Serve(buildOf(t, files, routes), nil)
+	for _, c := range []struct{ path, body string }{
+		{"/docs/x/y", "<p>docs a b</p>"},
+		{"/docs/x", "<p>docs shell</p>"},
+		{"/docs", "<p>docs shell</p>"},
+		{"/docs/x/y/z", "<p>docs shell</p>"},
+		{"/x/y", "<p>a b</p>"},
+		{"/x", "<p>all</p>"},
+		{"/x/y/z", "<p>all</p>"},
+		{"/", "<p>all</p>"},
+	} {
+		if r := do(t, h, "GET", c.path); r.StatusCode != 200 || r.body != c.body {
+			t.Errorf("%s: status %d body %q, want %q", c.path, r.StatusCode, r.body, c.body)
+		}
+	}
+}

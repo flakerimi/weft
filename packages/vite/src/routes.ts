@@ -100,9 +100,14 @@ const isParam = (segment: string) => segment.startsWith(':')
 const isRest = (segment: string) => segment.startsWith(':...')
 
 /**
- * The order the server tries runtime pages in: more static segments first,
- * then fewer params, then a pattern without a catch-all before one with (so
- * `/docs/:slug` is tried before `/docs/:...rest`), then by path.
+ * The order the server tries runtime pages in, so that a catch-all never
+ * hides a more specific page: more static segments first; then a pattern
+ * without a catch-all before one with (`/docs/:a/:b` before `/docs/:...rest`);
+ * then fewer params, except that of two catch-alls the one with more comes
+ * first (`/docs/:a/:...r` before `/docs/:...rest`, which matches everything
+ * it does); then by path. Two patterns without a catch-all and with as many
+ * static segments overlap only when their lengths are equal, so for them the
+ * count orders nothing that matters.
  */
 export function byPattern(a: { path: string }, b: { path: string }): number {
   const [x, y] = [segmentsOf(a.path), segmentsOf(b.path)]
@@ -111,22 +116,35 @@ export function byPattern(a: { path: string }, b: { path: string }): number {
   const rest = (s: string[]) => Number(s.some(isRest))
   return (
     statics(y) - statics(x) ||
-    params(x) - params(y) ||
     rest(x) - rest(y) ||
+    (rest(x) ? params(y) - params(x) : params(x) - params(y)) ||
     (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)
   )
+}
+
+/**
+ * A path's segments as Go's path.Clean leaves them: no empty or `.` segment,
+ * and a `..` taking the one before it back.
+ */
+function cleanSegments(path: string): string[] {
+  const out: string[] = []
+  for (const s of path.split('/')) {
+    if (s === '..') out.pop()
+    else if (s !== '' && s !== '.') out.push(s)
+  }
+  return out
 }
 
 /**
  * The params of `path` against a runtime page's `pattern`, or null when it
  * does not match, as warp.Serve matches: `:name` takes one segment, `:...name`
  * the rest of the path (joined by `/`) or none of it (`''`), and a static
- * segment is compared exactly. `path` is cleaned as the server cleans it: a
- * trailing slash and empty segments are dropped.
+ * segment is compared exactly. `path` is decoded already, and cleaned here as
+ * the server cleans it (cleanSegments).
  */
 export function matchPattern(pattern: string, path: string): Record<string, string> | null {
   const want = segmentsOf(pattern)
-  const got = path.split('/').filter(Boolean)
+  const got = cleanSegments(path)
   const params: Record<string, string> = {}
   for (let i = 0; i < want.length; i++) {
     const w = want[i]!
@@ -144,6 +162,19 @@ export function matchPattern(pattern: string, path: string): Record<string, stri
 
 /** A runtime page's shape, the same for patterns that match the same paths: `/a/:x` and `/a/:y` are `/a/:`. */
 const shapeOf = (pattern: string) => pattern.replace(/\/:(\.\.\.)?[^/]+/g, (_, rest: string | undefined) => (rest ? '/:...' : '/:'))
+
+/** Refuses two runtime pages of one shape, which would match the same paths, in the order they are given. */
+export function refuseSameShape(pages: { path: string; file: string }[]): void {
+  const shapes = new Map<string, string>()
+  for (const r of pages) {
+    const shape = shapeOf(r.path)
+    const other = shapes.get(shape)
+    if (other !== undefined) {
+      throw new Error(`pages "${other}" and "${r.file}" both match paths like ${shape.replace(/:(\.\.\.)?/g, '1')}; keep one.`)
+    }
+    shapes.set(shape, r.file)
+  }
+}
 
 /**
  * Turns routes into concrete paths, calling each dynamic page's `getPaths()`;
@@ -164,18 +195,11 @@ export async function expandRoutes(
     out.push({ path, file, params })
   }
   for (const r of routes) if (!r.dynamic) add(r.path, r.file, {})
-  const shapes = new Map<string, string>()
   for (const r of routes) {
     if (!r.dynamic) continue
     const { getPaths, runtime } = await loadPage(r.file)
     if (runtime === true) {
       if (getPaths !== undefined) throw new Error(`page "${r.file}" exports both runtime and getPaths; keep one.`)
-      const shape = shapeOf(r.path)
-      const other = shapes.get(shape)
-      if (other !== undefined) {
-        throw new Error(`pages "${other}" and "${r.file}" both match paths like ${shape.replace(/:(\.\.\.)?/g, '1')}; keep one.`)
-      }
-      shapes.set(shape, r.file)
       const params = Object.fromEntries(segmentsOf(r.path).filter(isParam).map((p) => [p.replace(/^:(\.\.\.)?/, ''), '']))
       out.push({ path: r.path, file: r.file, params, runtime: true })
       continue
@@ -185,6 +209,7 @@ export async function expandRoutes(
     }
     for (const params of await getPaths()) add(fill(r, params), r.file, params)
   }
+  refuseSameShape(out.filter((r) => r.runtime))
   return out
 }
 

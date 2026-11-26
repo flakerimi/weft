@@ -396,7 +396,7 @@ describe('buildSite with runtime pages', () => {
         { path: '/products/new', html: 'pages/products/new/index.html', islands: [] },
         { path: '/blog/first', html: 'pages/blog/first/index.html', islands: [] },
         { path: '/products/:id/edit', html: 'pages/products/[id]/edit/index.html', islands: [], runtime: true },
-        { path: '/products/:id', html: 'pages/products/[id]/index.html', islands: ['Counter'], runtime: true },
+        { path: '/products/:id', html: 'pages/products/[id]/index.html', islands: ['Counter', 'Product'], runtime: true },
         { path: '/docs/:...rest', html: 'pages/docs/[...rest]/index.html', islands: [], runtime: true },
         { path: '/:section/:id', html: 'pages/[section]/[id]/index.html', islands: [], runtime: true },
       ],
@@ -405,6 +405,25 @@ describe('buildSite with runtime pages', () => {
     })
     // The other entries have no runtime key at all.
     expect(read('routes.json')).not.toContain('"runtime": false')
+  })
+})
+
+describe('buildSite with a runtime page whose shell another page writes', { timeout: 30_000 }, () => {
+  it('refuses both in one sentence, naming the file', async () => {
+    const root = join(tempDir(), 'site')
+    mkdirSync(join(root, 'pages/blog'), { recursive: true })
+    symlinkSync(fileURLToPath(new URL('../node_modules', import.meta.url)), join(root, 'node_modules'))
+    // A value of getPaths that is literally [id] makes the shell's own file.
+    writeFileSync(
+      join(root, 'pages/blog/[slug].vue'),
+      "<script lang=\"ts\">\nexport const getPaths = async () => [{ slug: '[id]' }]\n</script>\n\n<template><p>post</p></template>\n",
+    )
+    writeFileSync(join(root, 'pages/blog/[id].vue'), '<script lang="ts">\nexport const runtime = true\n</script>\n\n<template><p>shell</p></template>\n')
+    const out = join(tempDir(), 'dist')
+    await expect(buildSite({ root, outDir: out })).rejects.toThrow(
+      new Error('pages "blog/[slug].vue" and "blog/[id].vue" both write pages/blog/[id]/index.html; rename one.'),
+    )
+    expect(existsSync(out)).toBe(false)
   })
 })
 
