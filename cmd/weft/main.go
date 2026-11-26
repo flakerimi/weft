@@ -43,6 +43,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "weft: unknown command %q. Run \"weft help\".\n", args[0])
 		return 2
 	}
+	// A wait for another weft command's unpack is said under this one's name.
+	was := lockSays
+	lockSays.command, lockSays.to = args[0], stderr
+	defer func() { lockSays = was }()
 	return cmd.run(args[1:], stdout, stderr)
 }
 

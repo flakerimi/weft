@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -9,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 )
 
 func testBundle(files ...string) fstest.MapFS {
@@ -564,5 +567,64 @@ func TestTwoUnpacksAtOnce(t *testing.T) {
 			}
 			t.Fatalf("round %d: the app folder holds %q", i, names)
 		}
+	}
+}
+
+// A lock left by a weft command that is gone is taken over at once, and one
+// older than an unpack can take; one a running command holds is waited for,
+// which is said once.
+func TestLockLeftBehind(t *testing.T) {
+	app := t.TempDir()
+	lock := filepath.Join(app, ".weft.lock")
+	var said bytes.Buffer
+	was, wait := lockSays, lockWait
+	lockSays.command, lockSays.to, lockWait = "routes", &said, 5*time.Second
+	t.Cleanup(func() { lockSays, lockWait = was, wait })
+
+	gone := exec.Command("true")
+	if err := gone.Run(); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name string
+		text string
+		age  time.Duration
+	}{
+		{"a gone process", fmt.Sprintf("%d\n", gone.Process.Pid), 0},
+		{"no process", "", 2 * time.Second},
+		{"older than an unpack takes", fmt.Sprintf("%d\n", os.Getpid()), lockWait + time.Minute},
+	} {
+		os.WriteFile(lock, []byte(c.text), 0o644)
+		when := time.Now().Add(-c.age)
+		os.Chtimes(lock, when, when)
+		start := time.Now()
+		unlock, err := lockWeft(app)
+		if took := time.Since(start); err != nil || took > time.Second {
+			t.Fatalf("%s: %v after %v", c.name, err, took)
+		}
+		if b, _ := os.ReadFile(lock); string(b) != fmt.Sprintf("%d\n", os.Getpid()) {
+			t.Errorf("%s: the lock holds %q", c.name, b)
+		}
+		unlock()
+	}
+	if said.Len() != 0 {
+		t.Errorf("taking over said %q", said.String())
+	}
+
+	live := exec.Command("sleep", "30")
+	if err := live.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { live.Process.Kill(); live.Wait() })
+	os.WriteFile(lock, []byte(fmt.Sprintf("%d\n", live.Process.Pid)), 0o644)
+	time.AfterFunc(300*time.Millisecond, func() { os.Remove(lock) }) // the holder finishes
+	start := time.Now()
+	unlock, err := lockWeft(app)
+	if took := time.Since(start); err != nil || took < 250*time.Millisecond {
+		t.Fatalf("a running holder: %v after %v, want a wait", err, took)
+	}
+	unlock()
+	if want := "weft routes: another weft command is unpacking in this app; waiting for it.\n"; said.String() != want {
+		t.Errorf("waiting said %q, want %q once", said.String(), want)
 	}
 }

@@ -109,7 +109,7 @@ func TestShopCopyFollowsItsGitignore(t *testing.T) {
 			t.Errorf("examples/shop/.gitignore does not name %s as a path", want)
 		}
 	}
-	for _, want := range []string{".weft", "node_modules", "data", ".env", "pnpm-lock.yaml"} {
+	for _, want := range []string{".weft", ".weft.lock", "node_modules", "data", ".env", "pnpm-lock.yaml"} {
 		if !names[want] {
 			t.Errorf("examples/shop/.gitignore does not name %s", want)
 		}
