@@ -39,11 +39,22 @@ func main() {
 
 - `warp.New(warp.FromEnv())` makes the app, configured from `.env` and the environment (see [Configuration](#configuration)).
 - `Use` registers each module at once, in the order given.
-- `Serve` listens on `HOST` and `PORT`, serves the pages in `dist` and the API under `/api`, and runs until the process gets SIGINT or SIGTERM. With `dist` nil it serves the API alone.
+- `Serve` starts the modules, then listens on `HOST` and `PORT`, serves the pages in `dist` and the API under `/api`, and runs until the process gets SIGINT or SIGTERM. With `dist` nil it serves the API alone.
 
 The modules are listed in one place, `app/modules.go`. Nothing registers itself from an `init` function, so this list is the whole app. The example shop's:
 
 ```go
+// Package app lists the modules of the app.
+package app
+
+import (
+	"github.com/flakerimi/weft/warp"
+	"github.com/flakerimi/weft/warp/auth"
+	"github.com/flakerimi/weft/warp/data"
+
+	"shop/app/products"
+)
+
 // Modules is the one list of the app's modules, in the order they start: the
 // database first, since the login and the products keep their records in it.
 func Modules() []warp.Module {
@@ -55,7 +66,33 @@ func Modules() []warp.Module {
 }
 ```
 
-To add a module, make a folder `app/<name>/` with a `Module()` function and add it to this list. [Data](data.md) and [Login](login.md) are the two modules Warp has.
+To add a module, make a folder `app/<name>/` with a `Module()` function and add it to this list. [Data](data.md) and [Login](login.md) are the two modules Warp has. The shop's `app/products/routes.go` is a whole module, beside `model.go`, which holds [its model](data.md#a-model-and-its-store):
+
+```go
+package products
+
+import (
+	"github.com/flakerimi/weft/warp"
+	"github.com/flakerimi/weft/warp/auth"
+	"github.com/flakerimi/weft/warp/data"
+)
+
+type module struct{}
+
+func (module) Name() string { return "products" }
+
+// Register adds the five routes of the products, each behind its permission:
+// products:read to list and show, products:create, products:edit and
+// products:delete.
+func (module) Register(app *warp.App) error {
+	store := data.NewStore[Product](data.For(app), "products")
+	data.Resource(app, "/products", store, data.PerAction(auth.Per("products")))
+	return nil
+}
+
+// Module returns the module, for app/modules.go to list.
+func Module() warp.Module { return module{} }
+```
 
 ## A module
 
@@ -78,7 +115,7 @@ A module may also have any of three more methods, each a step of the app's life:
 | `warp.Starter` | `Start(ctx context.Context) error` | Next, before the app serves, in the same order |
 | `warp.Stopper` | `Stop(ctx context.Context) error` | Last, after the app has stopped serving, in reverse order |
 
-When the app is told to stop, it takes no new requests and lets the ones in flight finish, for up to 10 seconds. Then it stops the modules, last first, with 10 seconds more for them. When a step fails, every module that already migrated or started is stopped, last first, and `Serve` returns the error, such as `warp: module "jobs" could not start: <the error>`.
+When the app is told to stop, it takes no new requests and lets the ones in flight finish, for up to 10 seconds. Then it stops the modules, last first, with 10 seconds more for them; a module still stopping then is left, and named. When a step fails, every module that already migrated or started is stopped, last first, and `Serve` returns the error, such as `warp: module "jobs" could not start: <the error>`.
 
 A module with work of its own while the app runs:
 
@@ -126,6 +163,15 @@ A module wraps `Need` in a function of its own, so app code reads `data.For(app)
 | `APP_URL` | The address people open the app at: `http` or `https` and a host, nothing after it. The login's setup link starts with it | `http://localhost:` and the port |
 | `TRUST_PROXY` | `on` to believe the proxy in front of the app (see below) | off |
 | `TRUSTED_ORIGINS` | Other sites, comma-separated, whose pages may make state-changing API requests (see [Cross-site requests](#cross-site-requests)) | none |
+
+An app with [Data](data.md) and the [Login](login.md) has their keys beside these, as the shop's `.env` does:
+
+```sh
+DB_DRIVER=sqlite
+DB_URL=file:data/shop.db
+AUTH_SECRET=<32 random bytes or more, such as openssl rand -base64 48 writes>
+AUTH_OWNER_EMAIL=owner@example.com
+```
 
 A module reads its own keys with `app.Config().Get("KEY")`, which is `""` when it is unset, and `app.Config().On("KEY")`, which is true for `on`, `true`, `1` and `yes`, in any case. [Data](data.md) and [Login](login.md) list theirs.
 

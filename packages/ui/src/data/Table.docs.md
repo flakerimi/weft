@@ -59,7 +59,9 @@ and development builds warn once.
 
 **Paging.** `per-page` pages the rows with a Pagination under the table
 (`v-model:page`), shown when there is more than one page; with `fetch` it
-defaults to 20.
+defaults to 20. A fetched page past the last one, as after the last row of
+the last page is deleted, moves the page to the last one there is, which it
+then asks for, once.
 
 **States.** `loading` makes it `aria-busy` and draws skeleton rows (hidden
 from assistive technology, a status saying Loading) until there are rows;

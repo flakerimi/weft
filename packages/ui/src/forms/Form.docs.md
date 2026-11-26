@@ -69,7 +69,8 @@ errors, not the browser.
 
 **Before it is live.** A Form sends only through its `@submit` handler,
 so it belongs in an island: one drawn by the page, with no island around
-it, is never live and does nothing on submit. Until its island is live it
+it, is never live and does nothing on submit; in development its first
+submit says so in the console. Until its island is live it
 sends nothing: a small inline script at the top of the page's `<head>`
 stops every submit of a Weft form from the first moment, and the form is
 `method="post"`, so with scripts off its own submit puts nothing in the

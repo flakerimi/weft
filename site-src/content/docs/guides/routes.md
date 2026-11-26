@@ -67,13 +67,13 @@ func remove(ctx context.Context, in ShowIn) (warp.None, error) {
 
 `GET /api/products/1` answers `{"id":1,"name":"Lamp","price":12}`. The paths are the standard library's `http.ServeMux` patterns, wildcards included.
 
-The output is written as JSON, with status 200. `warp.Post` answers 201 instead, and the option `warp.Status(200)` changes it. An output of `warp.None` answers 204 with no body. An input of `warp.None` reads nothing from the request. An answer never holds `null` for a list, a map or bytes: a nil one, at any depth, is written as `[]`, `{}` or `""`, as the [generated types](types-from-go.md) say. A nil pointer is `null`, and a field tagged `omitempty` or `omitzero` is left out. A field typed `any` is written as it is.
+The output is written as JSON, with status 200. `warp.Post` answers 201 instead, and the option `warp.Status(200)` changes it. An output of `warp.None` answers 204 with no body; a route with an output and `Status(204)` or `Status(304)`, which carry none, answers 500 without running, and logs `warp: GET /api/x set the status 204 and has an answer to write; use warp.None as its output.` once. Every answer under `/api` carries `Cache-Control: no-store` unless the handler sets its own. An input of `warp.None` reads nothing from the request. An answer never holds `null` for a list, a map or bytes: a nil one, at any depth, is written as `[]`, `{}` or `""`, as the [generated types](types-from-go.md) say. A nil pointer is `null`, and a field tagged `omitempty` or `omitzero` is left out. A field typed `any` is written as it is.
 
 ### Names and permissions
 
-Each route has a name within its module, which the [generated client](types-from-go.md) calls it by: `api.products.show(1)`. Without `warp.Name` it is made from the path's fixed segments, with the method in front unless it is `GET`: `GET /hello` is `hello`, `POST /hello/greet` is `post_hello_greet`. Two routes of one module with one name are a mistake, so `GET /products` and `GET /products/{id}`, both `products`, need a `warp.Name` each, as above.
+Each route has a name within its module, which the [generated client](types-from-go.md) calls it by: `api.products.show(1)`. Without `warp.Name` it is made from the path's fixed segments, with the method in front unless it is `GET`: `GET /hello` is `hello`, `POST /hello/greet` is `post_hello_greet`. Two routes of one module with one name are a mistake, so `GET /products` and `GET /products/{id}`, both `products`, need a `warp.Name` each, as above; two given one name are told `give them different names.` Two routes that answer some of the same requests are `warp: route "GET /x" conflicts with GET /x, registered before it; give one of them another path.`
 
-`warp.Permission("products:edit")` records the permission a route needs, for `app.Routes()` and `weft routes`, and guards nothing. The [login](login.md)'s `auth.Can("products:edit")` records it and guards the route. `warp.Options(opts...)` makes one option of several, which is how a package writes one like `Can`.
+`warp.Permission("products:edit")` records the permission a route needs, for `app.Routes()` and `weft routes`, and guards nothing: `weft routes` shows it on a route that is open. The [login](login.md)'s `auth.Can("products:edit")` records it and guards the route. `warp.Options(opts...)` makes one option of several, which is how a package writes one like `Can`, and `warp.Requires("auth", "auth.Module()")` says the route needs a module: an app that lists none of that name has the mistake `warp: route "GET /x" needs the "auth" module; list auth.Module() in app/modules.go.`
 
 ### Where each field comes from
 
@@ -148,8 +148,10 @@ The handler is not called, and the answer is in the [error shape](#errors):
 | A body that is not JSON, or has more after the value | 400 `bad_request` | `The body is not valid JSON.` |
 | A body that is JSON but not an object | 400 `bad_request` | `The body must be a JSON object.` |
 | A body field the input does not have, or a `readonly` one | 400 `bad_request` | `The body has the field "nme", which this route does not take.` |
-| A body field of the wrong type | 400 `bad_request` | `1 field has the wrong type.`, with `price: Send a number.` (or `Send text.`, `Send true or false.`, `Send a list.`, `Send an object.`) |
-| A value its field's own decoder refuses (`"tomorrow"` for a `time.Time`) | 400 `bad_request` | `The body has a value its field cannot take.` |
+| A body field of the wrong type, at any depth | 400 `bad_request` | `1 field has the wrong type.`, with `price: Send a number.` (or `Send text.`, `Send true or false.`, `Send a list.`, `Send an object.`, `Send a whole number from 0 to 255.`) |
+| `null` for a field that is not a pointer, an `any` or a type that reads its own JSON, in a list or map too | 400 `bad_request` | the same, with `price: Send a value, not null.` |
+| A list of another length for a fixed-size array | 400 `bad_request` | the same, with `rgb: Send a list of 3 values.` |
+| A value its field's own decoder refuses (`"tomorrow"` for a `time.Time`) | 400 `bad_request` | the same, with `when: Send a time like 2026-11-25T10:00:00Z.` (or `Send base64 text.`, `Send a value this field takes.`); `The body has a value its field cannot take.` when no one field can be found |
 | A query value that does not convert | 400 `bad_request` | `1 field has the wrong type.`, with `page: Send a whole number.` (or `Send a number.`, `Send true or false.`) |
 | A path value that does not convert | 404 `not_found` | `Nothing is at /api/products/abc.` |
 | A rule that fails | 422 `validation` | `1 field needs attention.`, with a message per field (see [Validation](#validation)) |
@@ -197,7 +199,7 @@ Rules go in a field's `warp` tag, separated by commas. They run on every typed i
 | Rule | For | Fails when | Message |
 | --- | --- | --- | --- |
 | `required` | anything | the value is zero, an empty slice or map, a nil pointer, or text that is empty once trimmed | `This is required.` |
-| `email` | text | it is not an email address, or it has a display name | `Enter an email address.` |
+| `email` | text | it is not an email address by the rule browsers use for `type="email"`, which `Form` uses too: ASCII, no display name, nothing trimmed | `Enter an email address.` |
 | `url` | text | it is not an `http://` or `https://` address with a host, as the browser's `Form` defines it | `Enter a web address that starts with http:// or https://.` |
 | `min=N` | text, a number, a list | it has fewer than N characters, is below N, or has fewer than N items | `Use at least N characters.`, `Enter N or more.`, `Choose at least N.` |
 | `max=N` | the same | more than N | `Use at most N characters.`, `Enter N or less.`, `Choose at most N.` |
@@ -261,6 +263,9 @@ The app answers some errors itself:
 
 - a path under `/api` that no route has: 404 `not_found`, `Nothing is at /api/nope.`;
 - a method a route does not take: 405 `method_not_allowed`, `/api/products/1 does not take PUT; use DELETE or GET.`, with an `Allow` header;
-- a state-changing request from another site: 403 `forbidden`, `This request came from another site.`
+- a state-changing request from another site: 403 `forbidden`, `This request came from another site.`;
+- a path that is not clean, such as `/api/a//b`, or a `{rest...}` route asked without its tail: the mux's redirect, with its status and `Location`, and code `moved`, `This is at /api/a/b; ask there.`
 
-`warp.WriteError(w, r, err)` writes an error in this shape from a plain handler, and `warp.WriteJSON(w, status, v)` a value as JSON, a nil slice at the top as `[]`; inside `v`, nil lists and maps are `null` as `encoding/json` writes them. An `*Error` with a status outside 400 to 599, or a value JSON cannot hold, such as a NaN, is answered as the 500.
+An `*Error` with a status alone answers that status's words, as code `teapot` and `I'm a teapot.` for 418.
+
+`warp.WriteError(w, r, err)` writes an error in this shape from a plain handler, and nothing for `context.Canceled` once the client has gone; `warp.WriteJSON(w, status, v)` writes a value as JSON, a nil slice at the top, or one `v` points to, as `[]`; inside `v`, nil lists and maps are `null` as `encoding/json` writes them. An `*Error` with a status outside 400 to 599, or a value JSON cannot hold, such as a NaN, is answered as the 500.

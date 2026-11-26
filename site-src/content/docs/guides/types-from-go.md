@@ -8,7 +8,7 @@ On this page you learn how the Vue side of an app calls its Go API with no fetch
 
 ## Where the file comes from
 
-`weft gen` builds the app with the `dev` tag and runs it with `WARP_DESCRIBE=1`, so `Serve` prints every route and every type it takes and answers as JSON, and exits without opening anything. From that it writes `web/.weft-types/api.ts`. `weft dev` writes it again after each Go change that builds, and `weft build` before the pages, so you seldom run `weft gen` yourself. The file is git-ignored; never edit it. The [CLI reference](../reference/cli.md#weft-gen) has what each command prints and its errors.
+`weft gen` builds the app with the `dev` tag and runs it with `WARP_DESCRIBE=1`, so `Serve` prints every route and every type it takes and answers as JSON, and exits without opening anything. From that it writes `web/.weft-types/api.ts`. `weft dev` writes it again after each Go change that builds, and `weft build` before the pages, which it then type-checks against it, so you seldom run `weft gen` yourself. An app that serves without a `warp.App` gets a client with no routes. The file is git-ignored; never edit it. The [CLI reference](../reference/cli.md#weft-gen) has what each command prints and its errors.
 
 `weft routes` prints the same description as a table. The shop's:
 
@@ -63,7 +63,13 @@ Then `api`, a function for each typed route, under its module's name and the rou
 
 Path parameters come first, in the path's order, then the body, then the query, which may be left out: `api.products.list({ page: 2, sort: '-price', filter: { status: 'live' } })`. A `PATCH` takes a `Partial` body. A route that answers `warp.None` resolves to `undefined`.
 
-Text and times are `string`, numbers `number`, a pointer `T | null`, a list `T[]` and a map `Record<string, T>`. A pointer field may be left out, `name?:`, and so may an answered field tagged `omitempty` or `omitzero`. A list, a map or bytes is never `null` on the wire, since [the server never answers one so](routes.md#a-route), except in a field typed `any`.
+Text and times are `string`, numbers `number`, a pointer `T | null`, a list `T[]` and a map `Record<string, T>`. A pointer field may be left out, `name?:`, and so may an answered field tagged `omitempty` or `omitzero`, and a field an answered type has from an embedded pointer, which a nil pointer leaves out. A list, a map or bytes is never `null` on the wire, since [the server never answers one so](routes.md#a-route), except in a field typed `any`.
+
+- A 64-bit integer is `number`, which is exact only up to 2^53: an id above 9007199254740991 is read as another.
+- A fixed-size array, `[3]int`, is `number[]`; the server takes a list of exactly 3.
+- `null` is sent only for a pointer, an `any` or a type that reads its own JSON; for anything else the server refuses it on the field with `Send a value, not null.`
+- A type whose `MarshalJSON` or `MarshalText` has a pointer receiver is written by it, since an answer is written through a pointer; held as a map's values, where nothing can point to it, it is a mistake `weft gen` names.
+- A generic type is named with its arguments: `List[Product]` is `ListProduct`, and `Page[*Address]` is `PageAddressOrNull`.
 
 ## Calling the API
 
@@ -77,13 +83,13 @@ try {
 }
 ```
 
-Every rejection is an `ApiError`, with `status`, `code`, `message` and `fields` from the [error shape](routes.md#errors). When nothing could be sent, the status is 0 and the code `network`. A path parameter that is empty, `.` or `..` would reach another route, so it is refused before anything is sent, with code `bad_request`: `The id in the address cannot be empty, "." or "..".` A failure that is not in the error shape has the code `http` and the status's text.
+Every rejection is an `ApiError`, with `status`, `code`, `message` and `fields` from the [error shape](routes.md#errors). When nothing could be sent, the status is 0 and the code `network`. What the server would misread is refused before anything is sent, with status 0 and code `bad_request`: a path parameter that is empty, `.` or `..`, which would reach another route (`The id in the address cannot be empty, "." or "..".`), or is not well-formed text; a path or query parameter that is `undefined`, `null` or not a finite number (`The id in the address is NaN; give it a value.`); and a body with `NaN`, an infinity or a `bigint` (`fields: { price: 'Send a number.' }`) or an `undefined` in a list, which JSON would send as `null`. A failure that is not in the error shape has the code `http` and the status's text.
 
 Requests go to the page's own origin, with its cookies. `setBase(url)` puts a path prefix, or an absolute URL of that same origin, in front of every path; an API on another origin is not supported yet.
 
 ## Tables and forms
 
-`Table` asks its `fetch` for a page in the list route's own names, `{ page, per_page, sort?, q?, filter? }`, and reads `{ items, total }`, so the generated function fits as it is. From the shop's products table:
+`Table` asks its `fetch` for a page in the list route's own names, `{ page, per_page, sort?, q?, filter? }`, and reads `{ items, total }`, so the generated function fits as it is. From the shop's products table, where `ready` turns true once the session is known to be signed in:
 
 ```vue
     <Table
@@ -110,7 +116,7 @@ try {
 }
 ```
 
-`unique`, and every rule of a type nested in a body, are checked by the server only, and arrive the same way, as `This is already taken.` under the name field. A `Form` sends only from its island, so put it in one ([Islands](pages-and-islands.md#islands)).
+`unique`, and every rule of a type nested in a body, are checked by the server only, and arrive the same way, as `This is already taken.` under the name field. A `Form` sends only from its island, so put it in one ([Islands](pages-and-islands.md#islands)); in development, a submit of one in no island says so in the console.
 
 ### Where the browser and Go differ
 
@@ -120,12 +126,12 @@ try {
 | --- | --- | --- |
 | `0` for a `required` number | filled in, so it passes | empty, so it fails (`This is required.`) unless the field is a pointer |
 | `0` for a number with `min=1` | checked, so it fails | empty, so it passes unless the field is a pointer |
-| `"a b"@example.com` for `email` | refused (the rule browsers use for `type="email"`) | taken (`net/mail`) |
-| `a..b@example.com` for `email` | taken | refused |
+| `""`, `false` or `[]` for a `required` pointer field | empty, so it fails | sent, since a pointer that is not nil says sent, so it passes |
+| `""` for a pointer field with `min`, `email` or `enum` | empty, so it passes | sent, so it is checked and fails |
+| an empty object, or a zero time, for `required` | filled in | empty, so it fails |
 | `pattern` | checked | no such rule |
-| `ab` for text with `max=1` | `Use at most 1 character.` | `Use at most 1 characters.` |
 
-A model that accepts 0 does not mark the field `required`; one that must tell 0 from nothing uses a pointer.
+`email` and `url` are one rule on both sides, tested on the same rows. A model that accepts 0 does not mark the field `required`; one that must tell 0 from nothing uses a pointer.
 
 ## A renamed field
 

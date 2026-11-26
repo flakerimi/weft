@@ -5,7 +5,7 @@ description: Use when writing the Go side of a Weft app or shipping it - the war
 
 # The Go side of a Weft app, and shipping it
 
-An app's Go half is Warp, `github.com/flakerimi/weft/warp`, on Go's standard library alone: a `warp.App` of modules whose routes are typed Go functions, and `warp.Serve`, which serves the page build from memory beside the API, in one binary. Pages are the `weft-site` skill.
+An app's Go half is Warp, `github.com/flakerimi/weft/warp`, on Go's standard library alone: a `warp.App` of modules whose routes are typed Go functions, and `warp.Serve`, which serves the page build from memory beside the API, in one binary. Pages are the `weft-site` skill. Install `weft` per https://weft.base.al/docs/getting-started/install.
 
 ## The app
 
@@ -48,7 +48,7 @@ func (module) Register(app *warp.App) error {
 - A body is `application/json` (else 415), with no field the input lacks (400).
 - A `readonly` field is never read. On `Patch` rules run only on sent fields (`warp.Sent`).
 - Rules: `required`, `email`, `url`, `min=N`, `max=N`, `enum=a|b`, `unique` (a `data` store checks it), `readonly`. Every rule but `required` passes an empty value; a non-nil pointer was sent. A failure is 422. A `Validate(ctx) error` method checks across fields.
-- `GET /products` and `GET /products/{id}` are both named `products`: give each a `warp.Name`. A mistake is one sentence from `app.Err()`, and `Serve` refuses to start.
+- `GET /products` and `GET /products/{id}` are both named `products`: give each a `warp.Name`. A mistake is one sentence from `app.Err()`; `Serve` will not start.
 - `warp.Request(ctx)` is the request, `warp.ResponseHeader(ctx)` the answer's headers. `app.Handle("GET /export.csv", h)` mounts a plain handler; `app.Wrap(mw)` wraps every API request, `warp.With(mw)` one route.
 
 ## Errors and configuration

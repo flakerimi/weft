@@ -23,6 +23,7 @@ func (a *App) Start(ctx context.Context) error
 func (a *App) Stop(ctx context.Context) error
 func (a *App) Describe() (Description, error)
 func (a *App) Mistake(format string, args ...any)
+func (a *App) Module() string
 func (a *App) ClientIP(r *http.Request) string
 func (a *App) ClientKey(r *http.Request) string
 func (a *App) IsHTTPS(r *http.Request) bool
@@ -83,11 +84,11 @@ type RuleInfo struct {
 	Arg  string `json:"arg"`
 }
 ```
-- `Handler` is the API alone, at `/api/...`: a path no route has is a 404, a method a route does not take a 405 with `Allow`, and a panic a 500, all in the error shape.
-- `Serve` returns `Err()` if there is a mistake. With `WARP_DESCRIBE=1` it prints `Describe` as JSON and returns, without migrating, starting or listening. Otherwise it listens on `Host` and `Port`, logs `listening on http://localhost:<port>`, and calls `Run` until SIGINT or SIGTERM. It returns nil after a clean stop. A taken port is `warp: port 8080 is taken; stop what uses it or set PORT in .env.` Once the first signal comes it stops taking them, so a second Ctrl-C ends the process at once. Under `weft dev` (`WEFT_DEV_PARENT=1`) it logs nothing and also stops when standard input closes.
+- `Handler` is the API alone, at `/api/...`: a path no route has is a 404, a method a route does not take a 405 with `Allow`, the redirect of a path that is not clean a 3xx with `Location`, and a panic a 500, all in the error shape. Every answer carries `Cache-Control: no-store` unless the handler sets its own.
+- `Serve` returns `Err()` if there is a mistake. With `WARP_DESCRIBE=1` it prints `Describe` as JSON and returns, without migrating, starting or listening. Otherwise it starts the app, as `Start` does, then listens on `Host` and `Port`, logs `listening on http://localhost:<port>`, and serves as `Run` does until SIGINT or SIGTERM, so nothing answers on the port while the modules migrate. It returns nil after a clean stop. A taken port stops what started and is `warp: port 8080 is taken; stop what uses it or set PORT in .env.` Once the first signal comes it stops taking them, so a second Ctrl-C ends the process at once. Under `weft dev` (`WEFT_DEV_PARENT=1`) it logs nothing and also stops when standard input closes.
 - `Run` does the same on `ln` until `ctx` ends: `Migrate` on every `Migrator`, then `Start` on every `Starter`, in order; it serves `dist` and the API through `Serve` (the API alone when `dist` is nil); when `ctx` ends it lets the requests in flight finish, for up to 10 seconds, then calls `Stop` on every `Stopper`, last first, with 10 seconds more. When a step fails, every module already migrated or started is stopped. A client has 10 seconds to send a request's headers. A nil `ln` is `warp: Run needs a listener; call Serve, or pass one from net.Listen.`
-- `Start` runs every `Migrate`, then every `Start`, without listening, once; `Stop` stops what it started, last first, within 10 seconds. A test that calls `Handler` uses them; `Run` is built on them.
-- `Mistake` records a registration mistake found by a package outside the core, with `warp: ` in front, for `Err` to report.
+- `Start` runs every `Migrate`, then every `Start`, without listening, once; `Stop` stops what it started, last first, within 10 seconds. A module whose `Stop` has not returned when they are up is left running, and named: `warp: module "x" did not stop before the app's time to stop ran out, so the app went on without it; make its Stop return when its context ends.` A test that calls `Handler` uses them; `Run` is built on them.
+- `Mistake` records a registration mistake found by a package outside the core, with `warp: ` in front, for `Err` to report. `Module` is the name of the module whose `Register` is running, `""` outside one.
 - `ClientIP` is the client's address without its port, and `IsHTTPS` whether it came over HTTPS; with `TRUST_PROXY` on they read `X-Forwarded-For` and `X-Forwarded-Proto`. `ClientKey` is the address for IPv4 and its /64 for IPv6, for a limit to count by.
 
 ## Module
@@ -129,7 +130,7 @@ func SentKeys(ctx context.Context) []string
 ```
 
 - Each registers `fn` at `/api` plus `path`. `In` is a struct whose fields are tagged `json`, `query` or `path`, or one field `body:"json"` that takes the whole body, or `None`; it is filled, checked by `Validate`, and given to `fn`. `Out` is answered as JSON: 200, 201 for `Post`, 204 with no body for `None`.
-- `Post`, `Put` and `Patch` read a JSON body, at most `MaxBodyBytes`, sent as `application/json` or a `+json` type, and nested at most 64 levels (`The body is nested more than 64 levels deep.`). A value its field's own decoder refuses, such as `"tomorrow"` for a `time.Time`, is `The body has a value its field cannot take.` `Get` and `Delete` read none. Taking JSON alone keeps another site from sending a route a body; it does not protect a route that takes none.
+- `Post`, `Put` and `Patch` read a JSON body, at most `MaxBodyBytes`, sent as `application/json` or a `+json` type, and nested at most 64 levels (`The body is nested more than 64 levels deep.`). A wrong value names its field: `price: Send a number.`, `when: Send a time like 2026-11-25T10:00:00Z.`; `null` for a field that cannot be null is `Send a value, not null.`, and a fixed-size array of another length `Send a list of 3 values.` `Get` and `Delete` read none. Taking JSON alone keeps another site from sending a route a body; it does not protect a route that takes none.
 - An input that embeds a pointer to a struct, or a struct with a `json` name or `json:"-"`, is a registration mistake.
 - `Request` returns the request a typed handler is answering, or nil outside one. On `POST`, `PUT` and `PATCH` its body has already been read.
 - `ResponseHeader` returns the headers its answer is sent with, whether it succeeds or fails.
@@ -146,12 +147,13 @@ func Status(code int) RouteOption
 func Name(name string) RouteOption
 func Permission(permission string) RouteOption
 func Options(opts ...RouteOption) RouteOption
+func Requires(module, constructor string) RouteOption
 ```
 
 - `With` puts `mw` around one route, inside every `Wrap`; the first given is the outermost.
-- `Status` sets the status a typed route answers with, from 200 to 599; any other is a mistake.
+- `Status` sets the status a typed route answers with, from 200 to 599; any other is a mistake. A route with an output and `Status(204)` or `Status(304)` answers 500 and logs why once.
 - `Name` names the route within its module, in place of the name made from its method and path; two routes of one module with one name are a mistake.
-- `Permission` records the permission the route needs, and guards nothing. `Options` makes one option of several, in order.
+- `Permission` records the permission the route needs, and guards nothing. `Options` makes one option of several, in order. `Requires` records that the route needs the module named `module`, made by `constructor`; an app that lists none of that name has a mistake, as `auth.Can` gives one.
 
 ## Route
 
@@ -202,7 +204,7 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error)
 ```
 
 - `Error` returns the message. `Invalid`'s message is `1 field needs attention.` or `N fields need attention.`
-- `WriteJSON` writes `v` as JSON with `status`: a nil slice at the top as `[]`, a nil one inside as `null`, and nothing for a 204. A value JSON cannot hold, such as a NaN or a channel, is logged and answered as the 500 below.
+- `WriteJSON` writes `v` as JSON with `status`: a nil slice at the top, or one `v` points to, as `[]`, a nil one inside as `null`, and nothing for a 204. A value JSON cannot hold, such as a NaN or a channel, is logged and answered as the 500 below.
 - `WriteError` writes `err` as `{"error":{...}}`. An `*Error`, even wrapped, is written as it is; any other error, and an `*Error` whose `Status` is not 400 to 599, is logged and answered 500, code `internal`, without its text.
 
 ## Config
@@ -241,7 +243,7 @@ Returns the handler for a Weft app's pages and API. `App.Serve` and `App.Run` bu
 - When `dist` holds a page build (`routes.json` and the `manifest.json` that `weft-build-pages` writes), every file is read into memory once, here. Each request gets a page, a listed file, the app's `index.html` under its prefix, or the not-found page with status 404. Each answer is the stored brotli, gzip or plain variant the client accepts best, with an `ETag`; `If-None-Match` gets a 304. Hashed files are cached for a year, the rest revalidated. A page with linked files gets a `103 Early Hints` first.
 - Otherwise `dist` is a single-page app: its files are served as they are, and every other path gets its `index.html`. Files under `/assets/` are cached for a year; a missing one is a 404.
 
-Serve panics, in one sentence that starts `warp.Serve:` and names the file, when the build is incomplete or `dist` has no `index.html`. It does that at start, not on a request.
+Serve panics, in one sentence that starts `warp.Serve:` and names the file, when the build is incomplete, `dist` has no `index.html`, or `dist` is nil. It does that at start, not on a request. With `WARP_DESCRIBE=1` it prints the description of an app with no routes and exits 0, so an app that serves without a `warp.App` describes itself to `weft gen`.
 
 ## ServeOption
 

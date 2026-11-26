@@ -28,7 +28,7 @@ In a fresh clone `.weft/` is missing, and the Go module it holds with it: run `w
 | `.env`, `.env.sample` | The settings; `.env` is not committed, `.env.sample` is and says what each one is |
 | `web/pages/` | One page per `.vue` file; its path is the route. `products/[id].vue` is built once and served for every id |
 | `web/components/` | The islands (`LoginForm`, `SetupForm`, `ProductsTable`, `ProductView`, `SessionBar`) and `ShopHeader` |
-| `web/session.ts` | `useSession()`: who is signed in, asked once per page; `requireUser()` |
+| `web/session.ts` | `useSession()`: who is signed in, asked once per page; `requireUser()`; `signInAgain()`, which a 401 from the list leads to |
 | `web/answers.ts` | Plain rules with no Vue: `nextPath` (where to go after signing in, only on this site), `formProblem`, `sessionFrom`, `productId` |
 | `test/` | `answers.test.ts` (Node's test runner, `pnpm test`), and `browser.mjs`, the browser test `cmd/weft/shop_test.go` runs |
 | `web/.weft-types/api.ts` | The typed client `weft gen` writes; every call to the server goes through it |
