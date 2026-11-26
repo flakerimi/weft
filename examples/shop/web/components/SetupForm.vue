@@ -2,23 +2,21 @@
 // An island: sets the owner's password with the one-time token from the
 // link the app logs at its first start (/setup#token=…), which signs the
 // owner in. The token is in the address's fragment, which never reaches a
-// server log or a Referer header.
+// server log or a Referer header; once read it is taken out of the address
+// too, so it is not in the address bar, the history or a copied link.
 import { onMounted, reactive, ref, useTemplateRef } from 'vue'
+import type { FormApi } from '@weft/ui'
 import { api, schema, type SetupInput } from '../.weft-types/api.ts'
-import { formProblem } from '../session.ts'
+import { formProblem } from '../answers.ts'
 
 const state = reactive<SetupInput>({ token: '', password: '' })
 const problem = ref('')
 const noToken = ref(false)
-const form = useTemplateRef<{ setErrors(errors: Record<string, string>): void }>('form')
-// Form's server-rendered markup is a plain <form> that the browser submits as
-// a GET to this page until the island hydrates, which would put the password
-// in the address; so the form is drawn only once mounted.
-const mounted = ref(false)
+const form = useTemplateRef<FormApi>('form')
 
 onMounted(() => {
-  mounted.value = true
   state.token = new URLSearchParams(location.hash.slice(1)).get('token') ?? ''
+  if (location.hash) history.replaceState(history.state, '', location.pathname + location.search)
   noToken.value = state.token === ''
 })
 
@@ -38,9 +36,8 @@ async function setUp(values: SetupInput) {
 </script>
 
 <template>
-  <Skeleton v-if="!mounted" height="8rem" />
   <Alert
-    v-else-if="noToken"
+    v-if="noToken"
     tone="warning"
     title="This page needs the setup link."
     description="Open the link the app wrote to its log when it started, which ends in #token=…."

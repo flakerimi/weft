@@ -106,8 +106,10 @@ func TestStory(t *testing.T) {
 	if e := c.Patch("/api/products/"+id(made["Chair"]), map[string]any{"name": "Lamp"}).Want(http.StatusUnprocessableEntity).Error(); e.Fields["name"] != "This is already taken." {
 		t.Errorf("renaming Chair to Lamp: %+v", e)
 	}
-	// The id is the store's.
-	c.Patch("/api/products/"+id(lamp), map[string]any{"id": 9}).Want(http.StatusBadRequest)
+	// The id is the store's: the body may not carry one, and the error says so.
+	if e := c.Patch("/api/products/"+id(lamp), map[string]any{"id": 9}).Want(http.StatusBadRequest).Error(); e.Code != "bad_request" || e.Message != `The body has the field "id", which this route does not take.` {
+		t.Errorf(`PATCH {"id": 9}: %+v, want bad_request naming id`, e)
+	}
 
 	chair := made["Chair"]
 	c.Delete("/api/products/" + id(chair)).Want(http.StatusNoContent)

@@ -4,12 +4,14 @@
 // checked with the same rules the server has; and a confirmation before a
 // product is deleted. Every call goes through the generated client.
 import { computed, onMounted, reactive, ref, useTemplateRef } from 'vue'
-import type { TableColumn, TableQuery, TableResult } from '@weft/ui'
+import type { FormApi, TableColumn } from '@weft/ui'
 import { api, schema, type Product, type ProductInput } from '../.weft-types/api.ts'
-import { formProblem, requireUser } from '../session.ts'
+import { formProblem } from '../answers.ts'
+import { requireUser, useSession } from '../session.ts'
 
 // The table asks only once the visitor is known to be signed in.
 const ready = ref(false)
+const { session } = useSession()
 onMounted(async () => {
   ready.value = (await requireUser()) !== null
 })
@@ -23,11 +25,6 @@ const statuses = [
   { label: 'Draft', value: 'draft' },
   { label: 'Live', value: 'live' },
 ]
-
-/** The Table's query, written as the list route takes it. */
-function load(query: TableQuery): Promise<TableResult<Product>> {
-  return api.products.list({ page: query.page, per_page: query.perPage, sort: query.sort, q: query.q, filter: query.filters })
-}
 
 const columns: TableColumn<Product>[] = [
   { key: 'name', label: 'Name', sortable: true, rowHeader: true },
@@ -44,7 +41,7 @@ const editing = ref<Product | null>(null)
 const draft = reactive<Draft>({ name: '', price: 0, status: 'draft' })
 const problem = ref('')
 const formKey = ref(0)
-const form = useTemplateRef<{ setErrors(errors: Record<string, string>): void }>('form')
+const form = useTemplateRef<FormApi>('form')
 
 function edit(product: Product | null) {
   editing.value = product
@@ -121,7 +118,7 @@ function removeFailed(e: unknown) {
     <Table
       v-if="ready"
       ref="table"
-      :fetch="load"
+      :fetch="api.products.list"
       :columns="columns"
       :search="search"
       :filters="filters"
@@ -146,6 +143,7 @@ function removeFailed(e: unknown) {
         <EmptyState title="No products" description="Make one with New product, or change the search." icon="package" variant="ghost" />
       </template>
     </Table>
+    <Alert v-else-if="session.problem" tone="danger" :title="session.problem" />
     <Skeleton v-else height="12rem" />
   </Stack>
 

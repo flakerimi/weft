@@ -7,11 +7,13 @@
 #   dev (the default)  weft dev, on http://localhost:5173 (or the port
 #                      SHOP_PORT names)
 #   build              weft build, which writes examples/shop/shop
-#   test               weft gen (which unpacks .weft/ and installs the
-#                      packages), then go test -tags dev ./...
+#   test               weft gen (which unpacks .weft/, installs the packages
+#                      and writes the client), then the Go tests
+#                      (go test -tags dev ./...), the web tests (pnpm test)
+#                      and the type check (pnpm typecheck)
 # What it makes in examples/shop (.weft/, node_modules/, web/dist/,
-# web/.weft-types/, data/, .env, shop) is git-ignored. It deletes nothing: an
-# earlier examples/shop/.weft is moved into the temporary folder.
+# web/.weft-types/, data/, .env, pnpm-lock.yaml, shop) is git-ignored. It
+# deletes nothing; each run leaves its staging folder, whose path it prints.
 # Usage: scripts/shop.sh [dev|build|test]
 set -eu
 
@@ -39,44 +41,33 @@ echo "scripts/shop.sh: Weft is staged in $tmp" >&2
 
 if [ ! -e "$app/.env" ]; then
 	secret=$(head -c 48 /dev/urandom | base64 | tr -d '\n')
-	umask 077
-	cat >"$app/.env" <<EOF
+	# Only .env is private; the umask of the rest of the run is the person's.
+	(
+		umask 077
+		cat >"$app/.env" <<EOF
 PORT=8080
 DB_DRIVER=sqlite
 DB_URL=file:data/shop.db
 AUTH_SECRET=$secret
 AUTH_OWNER_EMAIL=owner@example.com
 EOF
-	umask 022
+	)
 	echo "scripts/shop.sh: wrote examples/shop/.env, for the owner owner@example.com" >&2
-fi
-
-# weft unpacks a bundle only when .weft/ holds another version, and this
-# repository's Weft is always 0.0.0-dev: an earlier .weft/ would be kept as it
-# was, with the Go and the packages of an earlier run. Move it into the
-# temporary folder (nothing is deleted), so weft unpacks the one just staged.
-if [ -e "$app/.weft" ]; then
-	mv "$app/.weft" "$tmp/earlier-weft"
-	echo "scripts/shop.sh: the earlier examples/shop/.weft is in $tmp/earlier-weft" >&2
 fi
 
 export WEFT_BUNDLE="$tmp/bundle"
 cd "$app"
 case "$what" in
 dev)
-	# weft dev does not give the Go server the page server's address, so the
-	# setup link it logs would name the Go server's own port, which serves no
-	# pages under weft dev. APP_URL in the environment wins over .env.
-	port=${SHOP_PORT:-5173}
-	APP_URL=${APP_URL:-http://localhost:$port} exec "$tmp/weft" dev --port "$port"
+	exec "$tmp/weft" dev --port "${SHOP_PORT:-5173}"
 	;;
 build)
 	exec "$tmp/weft" build
 	;;
 test)
-	# Nothing in weft only unpacks .weft/, which go test needs for the Weft
-	# module; weft gen does it on the way.
 	"$tmp/weft" gen
-	exec go test -tags dev ./...
+	go test -tags dev ./...
+	pnpm test
+	exec pnpm typecheck
 	;;
 esac

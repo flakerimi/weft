@@ -10,11 +10,13 @@ weft build      # build the pages, then the binary
 weft gen        # write web/.weft-types/api.ts from the Go types
 weft routes     # every route, with its module, name and permission
 weft catalog    # the components; weft catalog <Name> for one, --find <word> to search
+weft unpack     # unpack .weft/ alone, as in a fresh clone before go test
 go test -tags dev ./...   # the Go tests
+pnpm test       # the web tests (test/*.test.ts, Node's test runner)
 pnpm typecheck  # check the Vue files against the generated client
 ```
 
-Go commands need `-tags dev` until the first `weft build`: without it `dist.go` embeds `web/dist`, which does not exist yet.
+In a fresh clone `.weft/` is missing, and the Go module it holds with it: run `weft unpack` (or any of `weft dev`, `weft build`, `weft gen`) before `go test`. The web tests and the type check also need the generated client, so run `weft gen` before them. Go commands need `-tags dev` until the first `weft build`: without it `dist.go` embeds `web/dist`, which does not exist yet.
 
 ## Layout
 
@@ -26,7 +28,9 @@ Go commands need `-tags dev` until the first `weft build`: without it `dist.go` 
 | `.env`, `.env.sample` | The settings; `.env` is not committed, `.env.sample` is and says what each one is |
 | `web/pages/` | One page per `.vue` file; its path is the route. `products/[id].vue` is built once and served for every id |
 | `web/components/` | The islands (`LoginForm`, `SetupForm`, `ProductsTable`, `ProductView`, `SessionBar`) and `ShopHeader` |
-| `web/session.ts` | `useSession()`: who is signed in, asked once per page |
+| `web/session.ts` | `useSession()`: who is signed in, asked once per page; `requireUser()` |
+| `web/answers.ts` | Plain rules with no Vue: `nextPath` (where to go after signing in, only on this site), `formProblem`, `sessionFrom`, `productId` |
+| `test/` | `answers.test.ts` (Node's test runner, `pnpm test`), and `browser.mjs`, the browser test `cmd/weft/shop_test.go` runs |
 | `web/.weft-types/api.ts` | The typed client `weft gen` writes; every call to the server goes through it |
 
 ## Rules

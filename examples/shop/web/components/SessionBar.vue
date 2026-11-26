@@ -2,7 +2,7 @@
 // An island in every page's header: the signed-in email and a sign-out
 // button, or a link to sign in. Pages are built with no session, so the
 // server draws nothing here and the browser asks.
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useSession } from '../session.ts'
 
 const { session, signOut } = useSession()
@@ -17,7 +17,12 @@ async function leave() {
   }
 }
 
-const here = () => (typeof location === 'undefined' ? '/' : location.pathname + location.search)
+// On /login and /setup there is nothing to come back to, and a link from
+// /login would wrap its own next in another one.
+const signIn = computed(() => {
+  if (typeof location === 'undefined' || ['/login', '/setup'].includes(location.pathname)) return ''
+  return `/login?next=${encodeURIComponent(location.pathname + location.search)}`
+})
 </script>
 
 <template>
@@ -26,6 +31,6 @@ const here = () => (typeof location === 'undefined' ? '/' : location.pathname + 
       <span>{{ session.user.email }}</span>
       <Button label="Sign out" variant="ghost" size="sm" :loading="leaving" @click="leave" />
     </template>
-    <Link v-else-if="!session.loading" :to="`/login?next=${encodeURIComponent(here())}`">Sign in</Link>
+    <Link v-else-if="!session.loading && !session.problem && signIn" :to="signIn">Sign in</Link>
   </Stack>
 </template>

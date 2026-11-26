@@ -19,7 +19,7 @@ Run it from the repository's root with this repository's Weft:
 ```sh
 scripts/shop.sh          # weft dev, on http://localhost:5173 (SHOP_PORT=5180 for another)
 scripts/shop.sh build    # weft build, which writes examples/shop/shop
-scripts/shop.sh test     # the app's Go tests
+scripts/shop.sh test     # the Go tests, the web tests (pnpm test) and the type check
 ```
 
 The script writes `.env` when there is none, with a fresh `AUTH_SECRET` and
@@ -27,7 +27,9 @@ The script writes `.env` when there is none, with a fresh `AUTH_SECRET` and
 At the first start the log says `Set up the owner at …/setup#token=…`: open
 that link to choose the owner's password. Everything a run makes here
 (`.weft/`, `node_modules/`, `web/dist/`, `web/.weft-types/`, `data/`, `.env`,
-`shop`) is git-ignored.
+`pnpm-lock.yaml`, `shop`) is git-ignored.
 
 The suite drives a copy of this folder: `cmd/weft/shop_test.go` builds it,
-runs its tests and type check, and requests its pages and API.
+runs its Go and web tests and its type check, requests its pages and API,
+and, when Chrome or Chromium is installed, drives it in the browser with
+`test/browser.mjs`.

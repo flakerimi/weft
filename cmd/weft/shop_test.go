@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -23,13 +25,6 @@ import (
 	"time"
 )
 
-// shopIgnored is what examples/shop/.gitignore leaves out, relative to the
-// app: a copy of the example never takes what a run there made.
-var shopIgnored = map[string]bool{
-	".weft": true, "node_modules": true, "data": true, ".env": true, "shop": true, "pnpm-lock.yaml": true,
-	filepath.Join("web", "dist"): true, filepath.Join("web", ".weft-types"): true,
-}
-
 // shopSource is the repository's examples/shop, found while the test binary
 // still runs in cmd/weft.
 var shopSource = func() string {
@@ -37,11 +32,47 @@ var shopSource = func() string {
 	return filepath.Join(wd, "..", "..", "examples", "shop")
 }()
 
-// copyShop copies examples/shop into dir/shop without what is git-ignored,
+// shopIgnored reads examples/shop/.gitignore, so that a copy of the example
+// never takes what a run there made, and the two cannot drift apart. An
+// entry with a slash other than a trailing one names a path from the app's
+// folder; one without names a file or folder at any depth, as git reads them.
+// A pattern with a wildcard or a negation is refused, since the copy does not
+// read those.
+func shopIgnored() (paths, names map[string]bool, err error) {
+	f, err := os.Open(filepath.Join(shopSource, ".gitignore"))
+	if err != nil {
+		return nil, nil, err
+	}
+	defer f.Close()
+	paths, names = map[string]bool{}, map[string]bool{}
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.ContainsAny(line, "*?[!\\") {
+			return nil, nil, fmt.Errorf("examples/shop/.gitignore has %q, a pattern copyShop cannot read; list plain paths there", line)
+		}
+		entry := strings.TrimSuffix(line, "/")
+		if strings.Contains(entry, "/") {
+			paths[filepath.FromSlash(strings.TrimPrefix(entry, "/"))] = true
+		} else {
+			names[entry] = true
+		}
+	}
+	return paths, names, sc.Err()
+}
+
+// copyShop copies examples/shop into dir/shop without what it git-ignores,
 // and returns the copy's path.
 func copyShop(dir string) (string, error) {
 	if _, err := os.Stat(filepath.Join(shopSource, "main.go")); err != nil {
 		return "", fmt.Errorf("examples/shop has no main.go: %v", err)
+	}
+	paths, names, err := shopIgnored()
+	if err != nil {
+		return "", err
 	}
 	dst := filepath.Join(dir, "shop")
 	return dst, filepath.WalkDir(shopSource, func(path string, d fs.DirEntry, err error) error {
@@ -49,7 +80,7 @@ func copyShop(dir string) (string, error) {
 			return err
 		}
 		rel, _ := filepath.Rel(shopSource, path)
-		if shopIgnored[rel] || d.Name() == ".DS_Store" {
+		if rel != "." && (paths[rel] || names[d.Name()] || d.Name() == ".DS_Store") {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
@@ -64,6 +95,25 @@ func copyShop(dir string) (string, error) {
 		}
 		return os.WriteFile(filepath.Join(dst, rel), b, 0o644)
 	})
+}
+
+// The copy leaves out exactly what the example's .gitignore names, so a run
+// of scripts/shop.sh in examples/shop never reaches a test.
+func TestShopCopyFollowsItsGitignore(t *testing.T) {
+	paths, names, err := shopIgnored()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"shop", filepath.Join("web", "dist"), filepath.Join("web", ".weft-types")} {
+		if !paths[want] {
+			t.Errorf("examples/shop/.gitignore does not name %s as a path", want)
+		}
+	}
+	for _, want := range []string{".weft", "node_modules", "data", ".env", "pnpm-lock.yaml"} {
+		if !names[want] {
+			t.Errorf("examples/shop/.gitignore does not name %s", want)
+		}
+	}
 }
 
 // writeShopEnv writes the .env the shop needs, with a fresh secret, as
@@ -90,10 +140,6 @@ func builtShop(t *testing.T) string {
 	t.Helper()
 	shopOnce.Do(func() {
 		dir := filepath.Join(filepath.Dir(stagedBundle), "shop-built")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			shopCopyErr = err.Error()
-			return
-		}
 		app, err := copyShop(dir)
 		if err == nil {
 			err = writeShopEnv(app)
@@ -102,15 +148,24 @@ func builtShop(t *testing.T) string {
 			shopCopyErr = err.Error()
 			return
 		}
-		wd, _ := os.Getwd()
-		os.Chdir(app)
-		defer os.Chdir(wd)
+		// weft build runs in this process and finds the app from its folder.
+		wd, err := os.Getwd()
+		if err == nil {
+			err = os.Chdir(app)
+		}
+		if err != nil {
+			shopCopyErr = err.Error()
+			return
+		}
 		var out, errb bytes.Buffer
 		shopCode = run([]string{"build"}, &out, &errb)
 		shopStdout, shopStderr, shopDir = out.String(), errb.String(), app
+		if err := os.Chdir(wd); err != nil {
+			shopCopyErr, shopDir = "cannot go back to "+wd+": "+err.Error(), ""
+		}
 	})
 	if shopDir == "" {
-		t.Fatalf("examples/shop could not be copied: %s", shopCopyErr)
+		t.Fatalf("examples/shop could not be copied and built: %s", shopCopyErr)
 	}
 	if shopCode != 0 {
 		t.Fatalf("weft build in examples/shop: exit %d\n%s%s", shopCode, shopStdout, shopStderr)
@@ -130,17 +185,33 @@ func shopCopy(t *testing.T) string {
 	return filepath.Join(dir, "shop")
 }
 
-// typecheck runs the pages' type check in app.
-func typecheck(app string) (string, error) {
-	cmd := exec.Command("pnpm", "exec", "vue-tsc", "--noEmit", "-p", "web")
+// inShop runs name with args in app and returns its output.
+func inShop(app, name string, args ...string) (string, error) {
+	cmd := exec.Command(name, args...)
 	cmd.Dir = app
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
 
-// setupLink is the line auth logs while no user exists; the token is in the
-// link's fragment (or, before the login's fix round, its query).
-var setupLink = regexp.MustCompile(`Set up the owner at http://\S+/setup[#?]token=([A-Za-z0-9_-]+)`)
+// typecheck runs the pages' type check in app.
+func typecheck(app string) (string, error) {
+	return inShop(app, "pnpm", "exec", "vue-tsc", "--noEmit", "-p", "web")
+}
+
+// apiBlock is the object of one module in the generated api: the lines from
+// "  name: {" to its closing "  },".
+func apiBlock(api, module string) string {
+	_, rest, ok := strings.Cut(api, "\n  "+module+": {\n")
+	if !ok {
+		return ""
+	}
+	block, _, _ := strings.Cut(rest, "\n  },\n")
+	return block
+}
+
+// setupLink is the line auth logs while no user exists, with the token in the
+// link's fragment.
+var setupLink = regexp.MustCompile(`Set up the owner at http://\S+/setup#token=([A-Za-z0-9_-]+)`)
 
 // logBuffer is the output of a running process, read while it writes.
 type logBuffer struct {
@@ -161,13 +232,29 @@ func (l *logBuffer) String() string {
 }
 
 // startShop runs the shop's binary in its folder, so it reads its .env and
-// keeps its database in data/, on a free port, and returns its base URL and
-// the setup token it logged. The process is stopped when the test ends.
+// keeps its database in data/, and returns its base URL and the setup token
+// it logged. The port is a free one found by listening; another process can
+// take it before the shop does, so a start that says the port is taken is
+// tried again on another. The process is stopped when the test ends.
 func startShop(t *testing.T, app string) (string, string) {
 	t.Helper()
+	for try := 1; ; try++ {
+		url, token, err := tryStartShop(t, app)
+		if err == nil {
+			return url, token
+		}
+		if !errors.Is(err, errPortTaken) || try == 3 {
+			t.Fatal(err)
+		}
+	}
+}
+
+var errPortTaken = errors.New("the port was taken")
+
+func tryStartShop(t *testing.T, app string) (string, string, error) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatal(err)
+		return "", "", err
 	}
 	port := l.Addr().(*net.TCPAddr).Port
 	l.Close()
@@ -178,11 +265,22 @@ func startShop(t *testing.T, app string) (string, string) {
 	logs := &logBuffer{}
 	cmd.Stdout, cmd.Stderr = logs, logs
 	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
+		cancel()
+		return "", "", err
 	}
-	t.Cleanup(func() { cancel(); cmd.Wait() })
+	exited := make(chan struct{})
+	go func() { cmd.Wait(); close(exited) }()
+	t.Cleanup(func() { cancel(); <-exited })
 	url := "http://127.0.0.1:" + strconv.Itoa(port)
 	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		select {
+		case <-exited:
+			if strings.Contains(logs.String(), "port "+strconv.Itoa(port)+" is taken") {
+				return "", "", errPortTaken
+			}
+			return "", "", fmt.Errorf("the shop stopped: %s", logs.String())
+		default:
+		}
 		res, err := http.Get(url + "/api/auth/me")
 		if err != nil {
 			continue
@@ -190,12 +288,11 @@ func startShop(t *testing.T, app string) (string, string) {
 		res.Body.Close()
 		m := setupLink.FindStringSubmatch(logs.String())
 		if m == nil {
-			t.Fatalf("the shop answers but logged no setup link: %s", logs.String())
+			return "", "", fmt.Errorf("the shop answers but logged no setup link: %s", logs.String())
 		}
-		return url, m[1]
+		return url, m[1], nil
 	}
-	t.Fatalf("the shop did not answer within 15 s: %s", logs.String())
-	return "", ""
+	return "", "", fmt.Errorf("the shop did not answer within 15 s: %s", logs.String())
 }
 
 // send sends a JSON body with client and returns the status and the body.
@@ -225,33 +322,38 @@ func send(t *testing.T, client *http.Client, method, url string, body any) (int,
 	return res.StatusCode, string(b)
 }
 
+// A password form as the server draws it, before its island is live: a POST
+// form, and the page's inline guard that stops any submit of it.
+var (
+	postForm    = regexp.MustCompile(`<form class="weft-form"[^>]*\bmethod="post"`)
+	submitGuard = regexp.MustCompile(`<script data-weft-prepaint>[^<]*classList\.contains\("weft-form"\)\)e\.preventDefault\(\)`)
+)
+
 // The shop builds with weft build (which writes its typed client), its own Go
-// tests pass, its pages type-check against the client, and the binary
+// and web tests pass, its pages type-check against the client, and the binary
 // serves the pages, the run-time page's shell and the API behind its login.
 func TestShop(t *testing.T) {
 	inTempDir(t, "work")
 	app := shopCopy(t)
 
-	api, err := os.ReadFile(filepath.Join(app, "web", ".weft-types", "api.ts"))
+	src, err := os.ReadFile(filepath.Join(app, "web", ".weft-types", "api.ts"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []*regexp.Regexp{
-		regexp.MustCompile(`(?m)^export interface Product \{$`),
-		regexp.MustCompile(`(?s)\n  products: \{\n.*?\blist\(query\?`),
-		regexp.MustCompile(`(?m)^  ProductInput: \{$`),
-	} {
-		if !want.Match(api) {
-			t.Errorf("web/.weft-types/api.ts does not match %s:\n%s", want, api)
-		}
+	api := string(src)
+	if !regexp.MustCompile(`(?m)^export interface Product \{$`).MatchString(api) || !regexp.MustCompile(`(?m)^  ProductInput: \{$`).MatchString(api) {
+		t.Errorf("web/.weft-types/api.ts has no interface Product or schema ProductInput:\n%s", api)
+	}
+	if block := apiBlock(api, "products"); !regexp.MustCompile(`\blist\(query\?`).MatchString(block) {
+		t.Errorf("api.products has no list(query?): %q", block)
 	}
 
-	test := exec.Command("go", "test", "-count=1", "./...")
-	test.Dir = app
-	if out, err := test.CombinedOutput(); err != nil || !strings.Contains(string(out), "ok  \tshop/app/products") {
+	if out, err := inShop(app, "go", "test", "-count=1", "./..."); err != nil || !strings.Contains(out, "ok  \tshop/app/products") {
 		t.Errorf("go test ./... in the shop: %v\n%s", err, out)
 	}
-
+	if out, err := inShop(app, "pnpm", "test"); err != nil || !strings.Contains(out, "# fail 0") && !strings.Contains(out, "ℹ fail 0") {
+		t.Errorf("pnpm test (the web tests) in the shop: %v\n%s", err, out)
+	}
 	if out, err := typecheck(app); err != nil {
 		t.Errorf("the pages do not type-check against the generated client: %v\n%s", err, out)
 	}
@@ -259,13 +361,17 @@ func TestShop(t *testing.T) {
 	url, token := startShop(t, app)
 	for path, want := range map[string]string{
 		"/":            ">Shop</h1>",
-		"/login":       "<weft-island",
-		"/setup":       "<weft-island",
-		"/products":    "<weft-island",
+		"/login":       `<weft-island data-id="LoginForm"`,
+		"/setup":       `<weft-island data-id="SetupForm"`,
+		"/products":    `<weft-island data-id="ProductsTable"`,
 		"/products/42": `data-weft-route="/products/:id"`,
 	} {
-		if code, body := get(t, url+path); code != 200 || !strings.Contains(body, want) {
+		code, body := get(t, url+path)
+		if code != 200 || !strings.Contains(body, want) {
 			t.Errorf("GET %s = %d, want 200 with %q: %s", path, code, want, body)
+		}
+		if (path == "/login" || path == "/setup") && (!postForm.MatchString(body) || !submitGuard.MatchString(body)) {
+			t.Errorf("GET %s: the password form is not a POST form behind the inline submit guard: %s", path, body)
 		}
 	}
 	if code, body := get(t, url+"/nope"); code != 404 || !strings.Contains(body, "Not found") {
@@ -295,6 +401,9 @@ func TestShop(t *testing.T) {
 	}
 }
 
+// renamedPrice is a type error in a page that names price.
+var renamedPrice = regexp.MustCompile(`\.vue\(\d+,\d+\): error TS\d+:[^\n]*\bprice\b`)
+
 // A Go field renamed is a TypeScript error in the pages after weft gen: the
 // design's promise, on the shop's own pages.
 func TestShopRenamedFieldBreaksTypes(t *testing.T) {
@@ -317,7 +426,56 @@ func TestShopRenamedFieldBreaksTypes(t *testing.T) {
 		t.Fatalf("weft gen after the rename: exit %d: %s%s", code, out, errs)
 	}
 	out, err := typecheck(app)
-	if err == nil || !strings.Contains(out, "price") || !strings.Contains(out, ".vue") {
-		t.Errorf("the pages type-check though Product has no price any more: %v\n%s", err, out)
+	if err == nil || !renamedPrice.MatchString(out) {
+		t.Errorf("the pages type-check, or fail elsewhere, though Product has no price any more: %v\n%s", err, out)
 	}
+}
+
+// browserPath is a Chrome or Chromium to drive the shop with: WEFT_BROWSER,
+// else one installed in the usual places, else "".
+func browserPath() string {
+	if p := os.Getenv("WEFT_BROWSER"); p != "" {
+		return p
+	}
+	for _, p := range []string{
+		"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+		"/Applications/Chromium.app/Contents/MacOS/Chromium",
+	} {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	for _, name := range []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser"} {
+		if p, err := exec.LookPath(name); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+// The shop in a real browser, as a person uses it (examples/shop/test/browser.mjs):
+// the setup link, whose token then leaves the address; next links that lead
+// off the site; create, a taken name, the browser's own checks, edit, search
+// and filter; the product page, and addresses that only look like an id;
+// delete; sign out and the way back; a submit on /login before its island is
+// live, which sends nothing; and a wrong password. Skipped when no Chrome or
+// Chromium is installed (set WEFT_BROWSER to name one).
+func TestShopInBrowser(t *testing.T) {
+	inTempDir(t, "work")
+	browser := browserPath()
+	if browser == "" {
+		t.Skip("no Chrome or Chromium is installed; set WEFT_BROWSER to drive the shop in one")
+	}
+	app := shopCopy(t)
+	url, token := startShop(t, app)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	defer cancel()
+	out := t.TempDir()
+	cmd := exec.CommandContext(ctx, "node", "test/browser.mjs", browser, url, url+"/setup#token="+token, out)
+	cmd.Dir = app
+	got, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("the shop in %s: %v\n%s", browser, err, got)
+	}
+	t.Logf("drove the shop in %s:\n%s", browser, got)
 }

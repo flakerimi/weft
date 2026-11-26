@@ -5,7 +5,8 @@
 import { onMounted, ref } from 'vue'
 import { useParams } from '@weft/ui'
 import { api, ApiError, type Product } from '../.weft-types/api.ts'
-import { requireUser } from '../session.ts'
+import { formProblem, productId } from '../answers.ts'
+import { requireUser, useSession } from '../session.ts'
 
 const product = ref<Product | null>(null)
 const missing = ref(false)
@@ -13,14 +14,18 @@ const problem = ref('')
 const loading = ref(true)
 
 onMounted(async () => {
-  if (!(await requireUser())) return
   try {
-    // The address gives text and the route takes a number; an id that is no
-    // number goes as NaN, which the server answers with the same 404.
-    product.value = await api.products.show(Number(useParams().id))
+    if (!(await requireUser())) {
+      problem.value = useSession().session.problem
+      return
+    }
+    // Only an id as the server writes one: /products/0x2a is not product 42.
+    const id = productId(useParams().id)
+    if (id === null) missing.value = true
+    else product.value = await api.products.show(id)
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) missing.value = true
-    else problem.value = e instanceof ApiError ? e.message : 'The server could not be reached; check the connection and try again.'
+    else problem.value = formProblem(e).message
   } finally {
     loading.value = false
   }

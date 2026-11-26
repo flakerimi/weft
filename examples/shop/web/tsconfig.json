@@ -14,5 +14,5 @@
     "resolveJsonModule": true,
     "types": ["vite/client", "@weft/vite/virtual", "node"]
   },
-  "include": ["pages", "components", "env.d.ts", ".weft-types/components.d.ts"]
+  "include": ["pages", "components", "env.d.ts", ".weft-types/components.d.ts", "../test"]
 }

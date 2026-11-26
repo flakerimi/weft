@@ -4,7 +4,8 @@
   "type": "module",
   "weft":{"version":"0.0.0-dev","theme":"weft"},
   "scripts": {
-    "typecheck": "vue-tsc -p web/tsconfig.json"
+    "typecheck": "vue-tsc -p web/tsconfig.json",
+    "test": "node --test test/*.test.ts"
   },
   "dependencies": {
     "@weft/themes": "workspace:*",
