@@ -39,7 +39,7 @@ func (s *Store[T]) First(ctx context.Context, field string, value any) (v T, ok 
 		return zero, false, nil
 	case err != nil:
 		var zero T
-		return zero, false, unavailable(d, err)
+		return zero, false, unavailable(ctx, d, err)
 	}
 	return v, true, nil
 }
@@ -58,7 +58,7 @@ func (t *table) lookupValue(d dialect, c *column, value any) (any, error) {
 		return nil, fmt.Errorf("data: %s cannot look up %q by nil, which no value equals; give it a value.", t.name, c.name)
 	}
 	wrong := func(want string) error {
-		return fmt.Errorf("data: %s cannot look up %q by a %s; give it %s.", t.name, c.name, rv.Type(), want)
+		return fmt.Errorf("data: %s cannot look up %q by a value of type %s; give it %s.", t.name, c.name, rv.Type(), want)
 	}
 	k := rv.Kind()
 	switch c.kind {

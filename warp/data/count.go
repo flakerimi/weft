@@ -11,7 +11,7 @@ func (s *Store[T]) Count(ctx context.Context) (int, error) {
 	}
 	var n int
 	if err := q.QueryRowContext(ctx, s.t.countSQL(d)).Scan(&n); err != nil {
-		return 0, unavailable(d, err)
+		return 0, unavailable(ctx, d, err)
 	}
 	return n, nil
 }

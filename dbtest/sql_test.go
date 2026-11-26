@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/flakerimi/weft/warp"
 	"github.com/flakerimi/weft/warp/data"
@@ -101,13 +100,13 @@ func TestOwnSQLBeforeStart(t *testing.T) {
 
 // Warp's settings are the connection's whatever DB_URL says, for those the
 // store relies on: transactions that take the write lock when they begin,
-// the WAL journal and foreign keys. A DB_URL's busy timeout is kept.
+// the WAL journal and foreign keys. A DB_URL may raise the busy timeout and
+// never lower it, since the app's own writers wait on it.
 func TestWarpSettingsWinOverTheURL(t *testing.T) {
 	file := dbFile(t)
 	url := "file:" + file + "?_txlock=deferred&_journal=DELETE&_journal_mode=TRUNCATE&_fk=0&_foreign_keys=off&%5Ftxlock=exclusive&_busy_timeout=0"
-	var s *data.Store[Product]
 	c := warptest.New(t, map[string]string{"DB_DRIVER": "sqlite", "DB_URL": url},
-		data.Module(), stores{"products", func(db *data.DB) { s = data.NewStore[Product](db, "products") }})
+		data.Module(), stores{"products", func(db *data.DB) { data.NewStore[Product](db, "products") }})
 	db := data.For(c.App)
 	var mode string
 	var fk int
@@ -139,16 +138,15 @@ func TestWarpSettingsWinOverTheURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The URL's busy timeout of 0 is kept: a write the other connection
-	// blocks fails at once rather than after Warp's 5 s.
-	release := lockWrites(t, other)
-	defer release()
-	began := time.Now()
-	if err := s.Create(ctx, &Product{Name: "Lamp"}); err == nil {
-		t.Fatal("Create succeeded while another connection held the write lock")
-	}
-	if took := time.Since(began); took > 2*time.Second {
-		t.Fatalf("Create waited %v; the URL's _busy_timeout=0 was not kept", took)
+	// A busy timeout may be raised by the URL, never lowered: 0 is Warp's
+	// 5000, and 9000 is 9000.
+	for url, want := range map[string]int{"file:" + file + "?_busy_timeout=0": 5000, "file:" + file + "?_busy_timeout=9000": 9000} {
+		c2 := warptest.New(t, map[string]string{"DB_DRIVER": "sqlite", "DB_URL": url},
+			data.Module(), stores{"products", func(db *data.DB) { data.NewStore[Product](db, "products") }})
+		var got int
+		if err := data.For(c2.App).QueryRow(ctx, "PRAGMA busy_timeout").Scan(&got); err != nil || got != want {
+			t.Errorf("%s: busy_timeout %d, %v; want %d", url, got, err, want)
+		}
 	}
 }
 
@@ -172,4 +170,36 @@ func lockWrites(t *testing.T, pool *sql.DB) (release func()) {
 	}
 	t.Cleanup(release)
 	return release
+}
+
+// The busy check reads the driver's code: a stored value that reads
+// "database is locked", and SQLITE_LOCKED, which trying again never cures,
+// are errors of their own, answered as any other is, never the 503.
+func TestBusyIsTheCodeNotTheWords(t *testing.T) {
+	c, s := shop[Product](t, dbFile(t))
+	db := data.For(c.App)
+	if err := s.Create(ctx, &Product{Name: "database is locked"}); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	err := db.QueryRow(ctx, `SELECT "name" FROM "products"`).Scan(&n)
+	var e *warp.Error
+	if err == nil || errors.As(err, &e) {
+		t.Fatalf("scanning stored text into an int = %v, want the conversion error, not a warp.Error", err)
+	}
+	// A table dropped inside a transaction that has its rows open is locked
+	// within the one connection.
+	err = db.Tx(ctx, func(ctx context.Context) error {
+		rows, err := db.Query(ctx, `SELECT "id" FROM "products"`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		rows.Next()
+		_, err = db.Exec(ctx, `DROP TABLE "products"`)
+		return err
+	})
+	if err == nil || errors.As(err, &e) || !strings.Contains(err.Error(), "locked") {
+		t.Fatalf("DROP TABLE with its rows open = %v, want SQLite's locked error, not a warp.Error", err)
+	}
 }

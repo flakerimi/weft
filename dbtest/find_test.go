@@ -110,10 +110,10 @@ func TestFirstConvertsItsValue(t *testing.T) {
 	}{
 		{"name", nil, `data: products cannot look up "name" by nil, which no value equals; give it a value.`},
 		{"name", (*string)(nil), `data: products cannot look up "name" by nil, which no value equals; give it a value.`},
-		{"name", Product{}, `data: products cannot look up "name" by a dbtest.Product; give it text.`},
-		{"name", []string{"Desk"}, `data: products cannot look up "name" by a []string; give it text.`},
-		{"price", "80", `data: products cannot look up "price" by a string; give it a number.`},
-		{"created_at", "2026-11-25", `data: products cannot look up "created_at" by a string; give it a time.Time.`},
+		{"name", Product{}, `data: products cannot look up "name" by a value of type dbtest.Product; give it text.`},
+		{"name", []string{"Desk"}, `data: products cannot look up "name" by a value of type []string; give it text.`},
+		{"price", "80", `data: products cannot look up "price" by a value of type string; give it a number.`},
+		{"created_at", "2026-11-25", `data: products cannot look up "created_at" by a value of type string; give it a time.Time.`},
 	} {
 		if _, ok, err := s.First(ctx, c.field, c.value); err == nil || err.Error() != c.want || ok {
 			t.Errorf("First(%s, %#v) = %v, %v; want %q", c.field, c.value, ok, err, c.want)

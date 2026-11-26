@@ -441,6 +441,15 @@ func TestResourceMistakes(t *testing.T) {
 	if want := []string{`warp: data.Resource was given the path "/api/api/products"; write it without /api, as /products.`}; !reflect.DeepEqual(got, want) || len(routes) != 0 {
 		t.Errorf("/api twice in front: %q, %d routes", got, len(routes))
 	}
+	// /api/api, nothing left once /api is taken off, is told the general way.
+	for _, path := range []string{"/api/api", "/api/api/api"} {
+		got, _ = mistakes(func(app *warp.App) {
+			data.Resource(app, path, data.NewStore[Product](data.For(app), "products"))
+		})
+		if want := []string{fmt.Sprintf("warp: data.Resource was given the path %q; write it like /products.", path)}; !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: %q, want %q", path, got, want)
+		}
+	}
 	for _, path := range []string{"/products", "/shop/order-items", "/v2/things_1", "/v1.2/items", "/apis"} {
 		got, routes := mistakes(func(app *warp.App) {
 			data.Resource(app, path, data.NewStore[Product](data.For(app), "products"))
@@ -498,7 +507,11 @@ func (r Raced) Validate(ctx context.Context) error {
 // record never breaks the rule. Without the transaction around update's
 // read, check and write, both would read price 10 and sale 5 and pass.
 func TestResourcePatchesDoNotRace(t *testing.T) {
-	c, s := withResource[Raced](t)
+	// _busy_timeout=0 in the URL is raised to Warp's: the second PATCH waits
+	// for the first, never a 503.
+	var s *data.Store[Raced]
+	c := warptest.New(t, map[string]string{"DB_DRIVER": "sqlite", "DB_URL": "file:" + dbFile(t) + "?_busy_timeout=0"},
+		data.Module(), resourceModule[Raced]{&s, nil})
 	var rec Raced
 	c.Post("/api/products", map[string]any{"price": 10, "sale": 5}).Want(201).JSON(&rec)
 	path := fmt.Sprintf("/api/products/%d", rec.ID)

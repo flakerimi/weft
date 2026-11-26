@@ -366,29 +366,14 @@ func TestStartWhileLocked(t *testing.T) {
 		}
 	})
 
-	t.Run("no busy timeout", func(t *testing.T) {
-		// _busy_timeout=0 in DB_URL wins over Warp's, the one setting of
-		// Warp's a DB_URL may change: each try fails at once, as a fresh file being switched to
-		// WAL by another process does, and the retries fill about a second.
-		file := dbFile(t)
-		lock(t, file)
-		url := "file:" + file + "?_busy_timeout=0"
-		err, took := startLocked(t, url)
-		if err == nil || err.Error() != locked(url) {
-			t.Fatalf("Start = %v\nwant %s", err, locked(url))
-		}
-		// Loose above, for a loaded machine, yet under the 5 s a busy timeout
-		// of Warp's would take.
-		if took < 900*time.Millisecond || took > 4500*time.Millisecond {
-			t.Fatalf("Start took %v, want about the one-second retry deadline", took)
-		}
-	})
-
+	// A DB_URL cannot lower the busy timeout, so the retries after a try
+	// that fails at once (a fresh file another process is switching to WAL)
+	// are tested with a fake driver, in warp/data's TestPingRetriesUntilItsDeadline.
 	t.Run("released while retrying", func(t *testing.T) {
 		file := dbFile(t)
 		release := lock(t, file)
 		time.AfterFunc(200*time.Millisecond, release)
-		if err, _ := startLocked(t, "file:"+file+"?_busy_timeout=0"); err != nil {
+		if err, _ := startLocked(t, "file:"+file+"?_busy_timeout=0"); err != nil { // raised to Warp's 5 s
 			t.Fatalf("Start = %v, want it to wait for the lock", err)
 		}
 	})

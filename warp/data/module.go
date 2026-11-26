@@ -7,11 +7,15 @@ package data
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net/http"
 	"os"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/flakerimi/weft/warp"
@@ -171,7 +175,10 @@ func (db *DB) open(ctx context.Context) error {
 	cannot := func(err error) error {
 		return fmt.Errorf("the database at %s cannot be opened (%v); check DB_URL in .env.", url, err)
 	}
-	dsn, dir, memory := d.dsn(url)
+	dsn, dir, memory, notes := d.dsn(url)
+	for _, note := range notes {
+		slog.Warn("data: " + note)
+	}
 	if dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return cannot(err)
@@ -250,23 +257,33 @@ var errBeforeStart = errors.New("warp: the database was used before the app star
 // connection held it past the busy timeout.
 const busyMessage = "The database is busy; try again in a moment."
 
-// unavailable is err, or the 503 when the dialect says the database was busy
-// or locked.
-func unavailable(d dialect, err error) error {
-	if err != nil && d != nil && d.busy(err) {
-		return warp.Unavailable(busyMessage)
+// unavailable is err, or the 503 when the dialect says another connection
+// held the database past the busy timeout. The client did not cause that, so
+// it is logged, at warn level, with the request's method and path when ctx
+// is a typed handler's: once for each refusal, which is once a request
+// unless the handler tries again.
+func unavailable(ctx context.Context, d dialect, err error) error {
+	if err == nil || d == nil || !d.busy(err) {
+		return err
 	}
-	return err
+	if r := warp.Request(ctx); r != nil {
+		slog.Warn("data: the database was busy, so the request was answered 503", "method", r.Method, "path", r.URL.Path, "error", err)
+	} else {
+		slog.Warn("data: the database was busy, so the call was answered 503", "error", err)
+	}
+	return warp.Unavailable(busyMessage)
 }
 
 // on returns what a call on ctx runs on, the transaction on ctx or the pool,
-// and the dialect; or the error of a call before start.
+// and the dialect; or the error of a call before start, or of a call on a
+// transaction's context after its Tx returned.
 func (db *DB) on(ctx context.Context) (querier, dialect, error) {
 	conn, d := db.handle()
 	if conn == nil {
 		return nil, nil, errBeforeStart
 	}
-	return db.q(ctx, conn), d, nil
+	q, err := db.q(ctx, conn)
+	return q, d, err
 }
 
 // Exec runs a statement of the app's own, in the transaction on ctx when
@@ -278,18 +295,19 @@ func (db *DB) Exec(ctx context.Context, query string, args ...any) (sql.Result, 
 		return nil, err
 	}
 	res, err := q.ExecContext(ctx, query, args...)
-	return res, unavailable(d, err)
+	return res, unavailable(ctx, d, err)
 }
 
 // Query runs a query of the app's own as Exec does, and returns its rows,
-// which the caller closes.
+// which the caller closes. Only the query's start is turned into the 503: an
+// error its rows meet later (Next, Err) is the driver's own.
 func (db *DB) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	q, d, err := db.on(ctx)
 	if err != nil {
 		return nil, err
 	}
 	rows, err := q.QueryContext(ctx, query, args...)
-	return rows, unavailable(d, err)
+	return rows, unavailable(ctx, d, err)
 }
 
 // QueryRow runs a query of the app's own as Exec does, for at most one row,
@@ -299,7 +317,7 @@ func (db *DB) QueryRow(ctx context.Context, query string, args ...any) *Row {
 	if err != nil {
 		return &Row{err: err}
 	}
-	return &Row{row: q.QueryRowContext(ctx, query, args...), d: d}
+	return &Row{row: q.QueryRowContext(ctx, query, args...), d: d, ctx: ctx}
 }
 
 // Row is the result of QueryRow: a *sql.Row whose errors are the database's
@@ -307,6 +325,7 @@ func (db *DB) QueryRow(ctx context.Context, query string, args ...any) *Row {
 type Row struct {
 	row *sql.Row
 	d   dialect
+	ctx context.Context
 	err error
 }
 
@@ -316,7 +335,7 @@ func (r *Row) Scan(dest ...any) error {
 	if r.err != nil {
 		return r.err
 	}
-	return unavailable(r.d, r.row.Scan(dest...))
+	return unavailable(r.ctx, r.d, r.row.Scan(dest...))
 }
 
 // Err returns the error of the query, if any, without scanning.
@@ -324,62 +343,106 @@ func (r *Row) Err() error {
 	if r.err != nil {
 		return r.err
 	}
-	return unavailable(r.d, r.row.Err())
+	return unavailable(r.ctx, r.d, r.row.Err())
 }
 
 // txKey is where a DB keeps its transaction on a context; one key per DB, so
 // two databases' transactions never mix.
 type txKey struct{ db *DB }
 
+// txState is the transaction on a context, and whether its Tx has returned.
+type txState struct {
+	tx   *sql.Tx
+	done atomic.Bool
+}
+
+// errTxDone is the answer to a call on a transaction's context after its Tx
+// returned, from a goroutine that outlived it or a context kept past it.
+var errTxDone = errors.New("data: the transaction this context carries has ended; use Tx's context only inside its fn.")
+
 // q is what a store call on ctx runs on: the transaction on ctx, else the
 // database.
-func (db *DB) q(ctx context.Context, conn *sql.DB) querier {
-	if tx, ok := ctx.Value(txKey{db}).(*sql.Tx); ok {
-		return tx
+func (db *DB) q(ctx context.Context, conn *sql.DB) (querier, error) {
+	if st, ok := ctx.Value(txKey{db}).(*txState); ok {
+		if st.done.Load() {
+			return nil, errTxDone
+		}
+		return st.tx, nil
 	}
-	return conn
+	return conn, nil
 }
 
 // Tx runs fn in a transaction, which it commits when fn returns nil and rolls
 // back otherwise, or when fn panics, which it then panics with again. A store
 // call, and Exec, Query and QueryRow, made with fn's context run in the
-// transaction. A database another connection holds past the busy timeout, so
-// that the transaction cannot begin or commit, is a warp.Unavailable, a 503.
+// transaction; made with it after Tx returned, they are an error. A database
+// another connection holds past the busy timeout, so that the transaction
+// cannot begin or commit, is a warp.Unavailable, a 503. When the commit
+// fails, the transaction is rolled back on its connection before the
+// connection goes back to the pool, so the pool never holds one left inside
+// a transaction.
 //
 // A Tx inside another one joins it: it runs fn in the outer transaction and
 // returns fn's error, and only the outer Tx commits or rolls back. So when an
 // inner fn fails and the outer fn swallows that error and returns nil, the
 // outer Tx commits, with whatever the inner fn wrote before it failed.
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context) error) error {
-	if _, ok := ctx.Value(txKey{db}).(*sql.Tx); ok {
+	if st, ok := ctx.Value(txKey{db}).(*txState); ok {
+		if st.done.Load() {
+			return errTxDone
+		}
 		return fn(ctx)
 	}
-	conn, d := db.handle()
-	if conn == nil {
+	pool, d := db.handle()
+	if pool == nil {
 		return errBeforeStart
 	}
-	tx, err := conn.BeginTx(ctx, nil)
+	// A connection of its own, so that it is still at hand when the commit
+	// fails: database/sql hands a failed transaction's connection back as
+	// it is.
+	conn, err := pool.Conn(ctx)
 	if err != nil {
-		if d.busy(err) {
-			return warp.Unavailable(busyMessage)
+		if err := unavailable(ctx, d, err); isUnavailable(err) {
+			return err
 		}
 		return fmt.Errorf("data: cannot begin a transaction: %w", err)
 	}
+	defer conn.Close()
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		if err := unavailable(ctx, d, err); isUnavailable(err) {
+			return err
+		}
+		return fmt.Errorf("data: cannot begin a transaction: %w", err)
+	}
+	st := &txState{tx: tx}
+	defer st.done.Store(true)
 	committing := false
 	defer func() {
 		if !committing { // fn failed or panicked; a panic goes on after this
 			tx.Rollback()
 		}
 	}()
-	if err := fn(context.WithValue(ctx, txKey{db}, tx)); err != nil {
+	if err := fn(context.WithValue(ctx, txKey{db}, st)); err != nil {
 		return err
 	}
 	committing = true
 	if err := tx.Commit(); err != nil {
-		if d.busy(err) {
-			return warp.Unavailable(busyMessage)
+		// SQLite keeps a transaction whose COMMIT was busy open; end it here,
+		// or have the connection thrown away.
+		if _, rerr := conn.ExecContext(context.WithoutCancel(ctx), "ROLLBACK"); rerr != nil {
+			conn.Raw(func(any) error { return driver.ErrBadConn })
+		}
+		if err := unavailable(ctx, d, err); isUnavailable(err) {
+			return err
 		}
 		return fmt.Errorf("data: cannot commit the transaction: %w", err)
 	}
 	return nil
+}
+
+// isUnavailable reports whether err is the busy database's 503.
+func isUnavailable(err error) bool {
+	var e *warp.Error
+	return errors.As(err, &e) && e.Status == http.StatusServiceUnavailable && e.Message == busyMessage
 }

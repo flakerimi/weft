@@ -281,7 +281,7 @@ func (s *Store[T]) List(ctx context.Context, q Query) (List[T], error) {
 	out.Page, out.PerPage = l.page, l.perPage
 	var total int64
 	if err := conn.QueryRowContext(ctx, l.count, l.args...).Scan(&total); err != nil {
-		return out, unavailable(d, err)
+		return out, unavailable(ctx, d, err)
 	}
 	out.Total = int(total)
 	if l.rows == "" {
@@ -289,15 +289,15 @@ func (s *Store[T]) List(ctx context.Context, q Query) (List[T], error) {
 	}
 	rows, err := conn.QueryContext(ctx, l.rows, l.rowArgs...)
 	if err != nil {
-		return out, unavailable(d, err)
+		return out, unavailable(ctx, d, err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var v T
 		if err := s.t.scan(d, rows, reflect.ValueOf(&v).Elem()); err != nil {
-			return out, err
+			return out, unavailable(ctx, d, err)
 		}
 		out.Items = append(out.Items, v)
 	}
-	return out, unavailable(d, rows.Err())
+	return out, unavailable(ctx, d, rows.Err())
 }

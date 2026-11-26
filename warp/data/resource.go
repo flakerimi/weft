@@ -86,14 +86,14 @@ func Resource[T any](app *warp.App, path string, store *Store[T], opts ...Resour
 	// /api in front is dropped from the path suggested: /api/api/products is
 	// to be /products.
 	rest, ok := strings.CutPrefix(path, "/api")
-	for ok && strings.HasPrefix(rest, "/api/") {
+	for ok && (rest == "/api" || strings.HasPrefix(rest, "/api/")) {
 		rest = rest[len("/api"):]
 	}
 	if ok && goodPath(rest) {
 		app.Mistake("data.Resource was given the path %q; write it without /api, as %s.", path, rest)
 		return
 	}
-	if !goodPath(path) || path == "/api" {
+	if !goodPath(path) || ok && (rest == "" || strings.HasPrefix(rest, "/")) {
 		app.Mistake("data.Resource was given the path %q; write it like /products.", path)
 		return
 	}

@@ -8,6 +8,7 @@ import (
 	neturl "net/url"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -41,9 +42,10 @@ type dialect interface {
 	// busy reports whether err says another connection holds the database.
 	busy(err error) bool
 	// dsn is the driver's name for url with the settings every connection
-	// needs, the folder to make for the file (none for memory), and whether
-	// the database lives in memory, where one connection must hold it.
-	dsn(url string) (dsn, dir string, memory bool)
+	// needs, the folder to make for the file (none for memory), whether the
+	// database lives in memory, where one connection must hold it, and a
+	// sentence for each setting of url's that Warp's replaced.
+	dsn(url string) (dsn, dir string, memory bool, notes []string)
 	// contains is the condition that the column named name holds the n-th
 	// value, written by containsText, ignoring case as far as the engine does.
 	contains(name string, n int) string
@@ -184,46 +186,95 @@ func (sqlite) uniqueColumn(err error, table string) (string, bool) {
 	return rest, true
 }
 
-// busy reads SQLite's words for a database another connection holds, which
-// modernc.org/sqlite writes as "database is locked (5) (SQLITE_BUSY)"; dbtest
-// fails if they change.
+// busy reports whether err says another connection held the database past
+// the busy timeout, which trying again in a moment may cure. It reads the
+// driver's result code when an error in the chain has one (Code() int, as
+// modernc.org/sqlite's errors do): SQLITE_BUSY, 5, in any of its extended
+// forms (BUSY_RECOVERY, BUSY_SNAPSHOT, BUSY_TIMEOUT). SQLITE_LOCKED, a
+// conflict within one connection, is not: trying again never cures it. With
+// no code in the chain (mattn/go-sqlite3's errors have none) it reads the
+// words SQLite writes for it, "database is locked", as the whole message of
+// the innermost error, so that a value quoted in an error never matches.
 func (sqlite) busy(err error) bool {
-	text := err.Error()
-	return strings.Contains(text, "database is locked") || strings.Contains(text, "database table is locked") ||
-		strings.Contains(text, "SQLITE_BUSY") || strings.Contains(text, "SQLITE_LOCKED")
+	var coded interface{ Code() int }
+	if errors.As(err, &coded) {
+		return coded.Code()&0xff == sqliteBusy
+	}
+	for {
+		inner := errors.Unwrap(err)
+		if inner == nil {
+			break
+		}
+		err = inner
+	}
+	return err.Error() == "database is locked"
 }
+
+// sqliteBusy is SQLITE_BUSY, the low byte of each of its extended codes.
+const sqliteBusy = 5
 
 // settings are set on every connection the pool opens, through the DSN, which
 // the driver applies to each new connection: foreign keys on, the WAL journal
-// so that readers and a writer do not block each other, 5 s of waiting for a
-// lock before "database is locked", and transactions that take the write lock
-// when they begin, so two of them never deadlock upgrading a read. The names
-// are the ones both modernc.org/sqlite and mattn/go-sqlite3 read.
-const settings = "_busy_timeout=5000&_foreign_keys=1&_journal_mode=WAL&_txlock=immediate"
+// so that readers and a writer do not block each other, and transactions
+// that take the write lock when they begin, so two of them never deadlock
+// upgrading a read; beside them, busyTimeout. The names are the ones both
+// modernc.org/sqlite and mattn/go-sqlite3 read.
+const settings = "_foreign_keys=1&_journal_mode=WAL&_txlock=immediate"
+
+// busyTimeout is how many milliseconds a connection waits for a lock before
+// "database is locked". The store relies on it: the app's own writers take
+// turns by waiting it out.
+const busyTimeout = 5000
 
 // ownSettings are the keys of settings the store relies on, with the
-// drivers' aliases for them: dsn drops them from a DB_URL, so Warp's values
-// are the connection's whatever the URL says. A busy timeout is only how long
-// to wait, so a DB_URL's (_busy_timeout or _timeout) is kept, and wins, since
-// the drivers read the first value.
-var ownSettings = []string{"_txlock", "_journal_mode", "_journal", "_foreign_keys", "_fk"}
+// drivers' aliases for them, and Warp's value for each: dsn drops them from
+// a DB_URL, so Warp's values are the connection's whatever the URL says.
+var ownSettings = map[string]string{
+	"_txlock": "immediate", "_journal_mode": "WAL", "_journal": "WAL", "_foreign_keys": "1", "_fk": "1",
+}
 
-func (sqlite) dsn(url string) (string, string, bool) {
+// busyKeys are the drivers' names for the busy timeout. A DB_URL may raise
+// it above busyTimeout and never lower it.
+var busyKeys = []string{"_busy_timeout", "_timeout"}
+
+func (sqlite) dsn(url string) (dsn, dir string, memory bool, notes []string) {
 	path, query, _ := strings.Cut(url, "?")
 	var kept []string
+	wait := busyTimeout
 	for part := range strings.SplitSeq(query, "&") {
-		key, _, _ := strings.Cut(part, "=")
+		if part == "" {
+			continue
+		}
+		key, value, _ := strings.Cut(part, "=")
 		if unescaped, err := neturl.QueryUnescape(key); err == nil {
 			key = unescaped
 		}
-		if part != "" && !slices.Contains(ownSettings, key) {
-			kept = append(kept, part)
+		if unescaped, err := neturl.QueryUnescape(value); err == nil {
+			value = unescaped
 		}
+		if own, ok := ownSettings[key]; ok {
+			if !strings.EqualFold(value, own) {
+				notes = append(notes, fmt.Sprintf("DB_URL sets %s=%s, which Warp sets itself; Warp's %s is used, since the store relies on it.", key, value, own))
+			}
+			continue
+		}
+		if slices.Contains(busyKeys, key) {
+			if n, err := strconv.Atoi(value); err == nil {
+				if n < busyTimeout {
+					notes = append(notes, fmt.Sprintf("DB_URL sets %s=%s, below Warp's %d; %d is used, since the app's own writers wait on it.", key, value, busyTimeout, busyTimeout))
+				}
+				wait = max(wait, n)
+				continue
+			}
+			// Not a number: left for the driver to refuse in its own words.
+		}
+		kept = append(kept, part)
 	}
-	dsn := path + "?" + strings.Join(append(kept, settings), "&")
+	kept = append(kept, "_busy_timeout="+strconv.Itoa(wait), settings)
+	dsn = path + "?" + strings.Join(kept, "&")
 	values := "&" + query + "&"
 	if path == ":memory:" || path == "file::memory:" || path == "file:" || path == "" || strings.Contains(values, "&mode=memory&") {
-		return dsn, "", true
+		return dsn, "", true, notes
 	}
 	if rest, ok := strings.CutPrefix(path, "file:"); ok { // a URI, percent-escaped
 		path = strings.TrimPrefix(rest, "//") // file:///srv/app.db has no host
@@ -231,7 +282,7 @@ func (sqlite) dsn(url string) (string, string, bool) {
 			path = unescaped
 		}
 	}
-	return dsn, filepath.Dir(path), false
+	return dsn, filepath.Dir(path), false, notes
 }
 
 // contains uses LIKE, which in SQLite ignores the case of ASCII letters alone,

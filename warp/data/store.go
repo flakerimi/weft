@@ -73,7 +73,8 @@ func (s *Store[T]) ready(ctx context.Context) (querier, dialect, error) {
 	if conn == nil {
 		return nil, nil, fmt.Errorf("warp: the %s store was used before the app started; use it from a handler, or after Start.", s.name)
 	}
-	return s.db.q(ctx, conn), d, nil
+	q, err := s.db.q(ctx, conn)
+	return q, d, err
 }
 
 // notFound is the answer for a record that does not exist.
@@ -83,13 +84,13 @@ func (s *Store[T]) notFound(id int64) error {
 
 // taken turns a unique violation into a 422 on the field, and a busy
 // database into the 503; any other error is returned as it is.
-func (s *Store[T]) taken(d dialect, err error) error {
+func (s *Store[T]) taken(ctx context.Context, d dialect, err error) error {
 	if name, ok := d.uniqueColumn(err, s.name); ok {
 		if c := s.t.col(name); c != nil {
 			return warp.Invalid(map[string]string{c.name: "This is already taken."})
 		}
 	}
-	return unavailable(d, err)
+	return unavailable(ctx, d, err)
 }
 
 // Get returns the record with the id, or a warp.NotFound.
@@ -103,7 +104,7 @@ func (s *Store[T]) Get(ctx context.Context, id int64) (T, error) {
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, s.notFound(id)
 	}
-	return v, unavailable(d, err)
+	return v, unavailable(ctx, d, err)
 }
 
 // Create adds v as a new record and sets its ID, CreatedAt and UpdatedAt,
@@ -132,7 +133,7 @@ func (s *Store[T]) Create(ctx context.Context, v *T) error {
 	}
 	var id int64
 	if err := q.QueryRowContext(ctx, s.t.insertSQL(d), args...).Scan(&id); err != nil {
-		return s.taken(d, err)
+		return s.taken(ctx, d, err)
 	}
 	rec := rv.FieldByIndex(s.t.record).Addr().Interface().(*Record)
 	rec.ID, rec.CreatedAt, rec.UpdatedAt = id, now, now
@@ -188,7 +189,7 @@ func (s *Store[T]) Update(ctx context.Context, id int64, v *T, fields []string) 
 	case errors.Is(err, sql.ErrNoRows):
 		return out, s.notFound(id)
 	case err != nil:
-		return out, s.taken(d, err)
+		return out, s.taken(ctx, d, err)
 	}
 	return out, nil
 }
@@ -201,7 +202,7 @@ func (s *Store[T]) Delete(ctx context.Context, id int64) error {
 	}
 	res, err := q.ExecContext(ctx, s.t.deleteSQL(d), id)
 	if err != nil {
-		return unavailable(d, err)
+		return unavailable(ctx, d, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {

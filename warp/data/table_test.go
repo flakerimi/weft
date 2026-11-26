@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -262,18 +263,41 @@ func TestIndexNameClash(t *testing.T) {
 	}
 }
 
+// codedError is an error with a result code, as modernc.org/sqlite's are.
+type codedError struct {
+	code int
+	text string
+}
+
+func (e codedError) Error() string { return e.text }
+func (e codedError) Code() int     { return e.code }
+
+// busy reads the driver's code when it has one: SQLITE_BUSY in any of its
+// extended forms, and not SQLITE_LOCKED; without a code, only the whole
+// message "database is locked" of the innermost error.
 func TestBusy(t *testing.T) {
 	var d sqlite
-	for text, want := range map[string]bool{
-		"database is locked (5) (SQLITE_BUSY)":                              true,
-		"database is locked (517) (SQLITE_BUSY_SNAPSHOT)":                   true,
-		"database table is locked (6) (SQLITE_LOCKED)":                      true,
-		"database is locked":                                                true,
-		"unable to open database file (14)":                                 false,
-		"constraint failed: UNIQUE constraint failed: products.name (2067)": false,
+	for _, c := range []struct {
+		err  error
+		want bool
+	}{
+		{codedError{5, "database is locked (5) (SQLITE_BUSY)"}, true},
+		{codedError{261, "database is locked (261) (SQLITE_BUSY_RECOVERY)"}, true},
+		{codedError{517, "database is locked (517) (SQLITE_BUSY_SNAPSHOT)"}, true},
+		{codedError{773, "database is locked (773) (SQLITE_BUSY_TIMEOUT)"}, true},
+		{fmt.Errorf("data: cannot commit: %w", codedError{5, "database is locked"}), true},
+		{codedError{6, "database table is locked (6) (SQLITE_LOCKED)"}, false},
+		{codedError{262, "database table is locked (262) (SQLITE_LOCKED_SHAREDCACHE)"}, false},
+		{codedError{1, "SQL logic error: database is locked"}, false},
+		{errString("database is locked"), true},                          // a driver with no codes
+		{fmt.Errorf("query: %w", errString("database is locked")), true}, // the innermost error's whole message
+		{errString(`sql: Scan error on column index 0, name "name": converting driver.Value type string ("database is locked") to a int: invalid syntax`), false},
+		{errString("database table is locked"), false},
+		{errString("unable to open database file (14)"), false},
+		{errString("constraint failed: UNIQUE constraint failed: products.name (2067)"), false},
 	} {
-		if got := d.busy(errString(text)); got != want {
-			t.Errorf("busy(%q) = %v, want %v", text, got, want)
+		if got := d.busy(c.err); got != c.want {
+			t.Errorf("busy(%v) = %v, want %v", c.err, got, c.want)
 		}
 	}
 }
@@ -412,25 +436,38 @@ func TestDSN(t *testing.T) {
 	cases := []struct {
 		url, dsn, dir string
 		memory        bool
+		notes         int
 	}{
-		{"file:data/app.db", "file:data/app.db?" + settings, "data", false},
-		{"file:data/app.db?cache=shared", "file:data/app.db?cache=shared&" + settings, "data", false},
-		{"file:///srv/app.db", "file:///srv/app.db?" + settings, "/srv", false},
-		{"app.db", "app.db?" + settings, ".", false},
-		{":memory:", ":memory:?" + settings, "", true},
-		{"file::memory:?cache=shared", "file::memory:?cache=shared&" + settings, "", true},
-		{"file:x.db?mode=memory", "file:x.db?mode=memory&" + settings, "", true},
+		{"file:data/app.db", "file:data/app.db?" + settings, "data", false, 0},
+		{"file:data/app.db?cache=shared", "file:data/app.db?cache=shared&" + settings, "data", false, 0},
+		{"file:///srv/app.db", "file:///srv/app.db?" + settings, "/srv", false, 0},
+		{"app.db", "app.db?" + settings, ".", false, 0},
+		{":memory:", ":memory:?" + settings, "", true, 0},
+		{"file::memory:?cache=shared", "file::memory:?cache=shared&" + settings, "", true, 0},
+		{"file:x.db?mode=memory", "file:x.db?mode=memory&" + settings, "", true, 0},
 		// Warp's own settings replace the URL's for the keys the store relies
-		// on, aliases and escaped keys included; a busy timeout is kept.
-		{"file:app.db?_txlock=deferred&cache=shared", "file:app.db?cache=shared&" + settings, ".", false},
-		{"file:app.db?_journal=DELETE&_journal_mode=OFF&_fk=0&_foreign_keys=no&%5Ftxlock=exclusive", "file:app.db?" + settings, ".", false},
-		{"file:app.db?_busy_timeout=0", "file:app.db?_busy_timeout=0&" + settings, ".", false},
-		{"file:app.db?_txlock=deferred", "file:app.db?" + settings, ".", false},
+		// on, aliases and escaped keys included, each named in a note.
+		{"file:app.db?_txlock=deferred&cache=shared", "file:app.db?cache=shared&" + settings, ".", false, 1},
+		{"file:app.db?_journal=DELETE&_journal_mode=OFF&_fk=0&_foreign_keys=no&%5Ftxlock=exclusive", "file:app.db?" + settings, ".", false, 5},
+		{"file:app.db?_txlock=immediate", "file:app.db?" + settings, ".", false, 0},
+		// A busy timeout may be raised, never lowered.
+		{"file:app.db?_busy_timeout=0", "file:app.db?" + settings, ".", false, 1},
+		{"file:app.db?_timeout=100&_busy_timeout=4999", "file:app.db?" + settings, ".", false, 2},
+		{"file:app.db?_busy_timeout=9000", "file:app.db?_busy_timeout=9000&_foreign_keys=1&_journal_mode=WAL&_txlock=immediate", ".", false, 0},
+		{"file:app.db?_timeout=8000&_busy_timeout=6000", "file:app.db?_busy_timeout=8000&_foreign_keys=1&_journal_mode=WAL&_txlock=immediate", ".", false, 0},
+		{"file:app.db?_busy_timeout=soon", "file:app.db?_busy_timeout=soon&" + settings, ".", false, 0}, // the driver's to refuse
 	}
 	for _, c := range cases {
-		dsn, dir, memory := d.dsn(c.url)
-		if dsn != c.dsn || dir != c.dir || memory != c.memory {
-			t.Errorf("dsn(%q) = %q, %q, %v; want %q, %q, %v", c.url, dsn, dir, memory, c.dsn, c.dir, c.memory)
+		dsn, dir, memory, notes := d.dsn(c.url)
+		if dsn != c.dsn || dir != c.dir || memory != c.memory || len(notes) != c.notes {
+			t.Errorf("dsn(%q) = %q, %q, %v, %q; want %q, %q, %v and %d notes", c.url, dsn, dir, memory, notes, c.dsn, c.dir, c.memory, c.notes)
 		}
+	}
+	_, _, _, notes := d.dsn("file:app.db?_busy_timeout=0&_txlock=deferred")
+	if want := []string{
+		"DB_URL sets _busy_timeout=0, below Warp's 5000; 5000 is used, since the app's own writers wait on it.",
+		"DB_URL sets _txlock=deferred, which Warp sets itself; Warp's immediate is used, since the store relies on it.",
+	}; !reflect.DeepEqual(notes, want) {
+		t.Errorf("notes %q, want %q", notes, want)
 	}
 }

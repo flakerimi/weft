@@ -416,17 +416,19 @@ func TestTwoConnectionsSeeEachOther(t *testing.T) {
 }
 
 // A database another connection holds is a 503 with a sentence to try again,
-// not a 500, for a store call, a Tx and the developer's own SQL alike.
+// not a 500, for a store call, a Tx and the developer's own SQL alike. The
+// client did not cause it, so it is logged at warn level, with the route,
+// and never at error level. Each call waits out Warp's 5 s busy timeout, so
+// they wait at once.
 func TestBusyIsUnavailable(t *testing.T) {
 	file := dbFile(t)
 	var s *data.Store[Product]
-	c := warptest.New(t, map[string]string{"DB_DRIVER": "sqlite", "DB_URL": "file:" + file + "?_busy_timeout=0"},
-		data.Module(), resourceModule[Product]{&s, nil})
+	c := warptest.New(t, env(file), data.Module(), resourceModule[Product]{&s, nil})
 	db := data.For(c.App)
 	if err := s.Create(ctx, &Product{Name: "Lamp"}); err != nil {
 		t.Fatal(err)
 	}
-	other, err := sql.Open("sqlite", "file:"+file+"?_busy_timeout=0")
+	other, err := sql.Open("sqlite", "file:"+file)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -434,35 +436,88 @@ func TestBusyIsUnavailable(t *testing.T) {
 	release := lockWrites(t, other)
 	defer release()
 
-	busy := func(what string, err error) {
-		t.Helper()
-		var e *warp.Error
-		if !errors.As(err, &e) || e.Status != 503 || e.Code != "unavailable" || e.Message != "The database is busy; try again in a moment." {
-			t.Errorf("%s while the database is held = %v, want the 503", what, err)
-		}
+	errs, warns := captureLevels(t)
+	calls := map[string]func() error{
+		"Create": func() error { return s.Create(ctx, &Product{Name: "Desk"}) },
+		"Update": func() error { _, err := s.Update(ctx, 1, &Product{Name: "Desk"}, []string{"name"}); return err },
+		"Delete": func() error { return s.Delete(ctx, 1) },
+		"Tx":     func() error { return db.Tx(ctx, func(context.Context) error { return nil }) },
+		"Exec":   func() error { _, err := db.Exec(ctx, `UPDATE "products" SET "price" = 1`); return err },
 	}
-	busy("Create", s.Create(ctx, &Product{Name: "Desk"}))
-	_, err = s.Update(ctx, 1, &Product{Name: "Desk"}, []string{"name"})
-	busy("Update", err)
-	busy("Delete", s.Delete(ctx, 1))
-	busy("Tx", db.Tx(ctx, func(context.Context) error { return nil }))
-	_, err = db.Exec(ctx, `UPDATE "products" SET "price" = 1`)
-	busy("Exec", err)
+	var wg sync.WaitGroup
+	got := map[string]error{}
+	var mu sync.Mutex
+	for name, call := range calls {
+		wg.Go(func() {
+			err := call()
+			mu.Lock()
+			got[name] = err
+			mu.Unlock()
+		})
+	}
+	var res *warptest.Response
+	wg.Go(func() { res = c.Post("/api/products", map[string]any{"name": "Chair"}) })
 	// Reading is not held up: the WAL journal lets readers past a writer.
 	if _, err := s.Get(ctx, 1); err != nil {
 		t.Errorf("Get while the database is held = %v", err)
 	}
-
-	logs := captureErrors(t)
-	if e := c.Post("/api/products", map[string]any{"name": "Chair"}).Want(503).Error(); e.Code != "unavailable" || e.Message != "The database is busy; try again in a moment." {
+	wg.Wait()
+	for name, err := range got {
+		var e *warp.Error
+		if !errors.As(err, &e) || e.Status != 503 || e.Code != "unavailable" || e.Message != "The database is busy; try again in a moment." {
+			t.Errorf("%s while the database is held = %v, want the 503", name, err)
+		}
+	}
+	if e := res.Want(503).Error(); e.Code != "unavailable" || e.Message != "The database is busy; try again in a moment." {
 		t.Fatalf("POST while the database is held: %+v", e)
 	}
-	if logs.Len() != 0 {
-		t.Fatalf("the 503 was logged as an error: %s", logs)
+	if errs.Len() != 0 {
+		t.Fatalf("the 503 was logged as an error: %s", errs)
+	}
+	if !strings.Contains(warns.String(), "method=POST path=/api/products") || strings.Count(warns.String(), "path=/api/products") != 1 {
+		t.Fatalf("the warn log names the route %d times, want once: %s", strings.Count(warns.String(), "path=/api/products"), warns)
 	}
 	release()
 	c.Post("/api/products", map[string]any{"name": "Chair"}).Want(201)
 }
+
+// captureLevels collects what slog writes at error level, and at warn level
+// and above, for the rest of the test.
+func captureLevels(t *testing.T) (errs, warns *bytes.Buffer) {
+	t.Helper()
+	errs, warns = &bytes.Buffer{}, &bytes.Buffer{}
+	old := slog.Default()
+	slog.SetDefault(slog.New(levels{
+		slog.NewTextHandler(errs, &slog.HandlerOptions{Level: slog.LevelError}),
+		slog.NewTextHandler(warns, &slog.HandlerOptions{Level: slog.LevelWarn}),
+	}))
+	t.Cleanup(func() { slog.SetDefault(old) })
+	return errs, warns
+}
+
+// levels sends a record to every handler that takes its level.
+type levels []slog.Handler
+
+func (l levels) Enabled(ctx context.Context, lv slog.Level) bool {
+	for _, h := range l {
+		if h.Enabled(ctx, lv) {
+			return true
+		}
+	}
+	return false
+}
+
+func (l levels) Handle(ctx context.Context, r slog.Record) error {
+	for _, h := range l {
+		if h.Enabled(ctx, r.Level) {
+			h.Handle(ctx, r)
+		}
+	}
+	return nil
+}
+
+func (l levels) WithAttrs([]slog.Attr) slog.Handler { return l }
+func (l levels) WithGroup(string) slog.Handler      { return l }
 
 // captureErrors collects what slog writes at error level for the rest of the
 // test.
