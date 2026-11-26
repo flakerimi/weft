@@ -442,7 +442,11 @@ func (a *App) Routes() []Route {
 // Handler returns the API alone, at /api/..., inside every Wrap given so far.
 // A state-changing request from another site is a 403 before any Wrap runs.
 // A path no route has is a 404 and a method a route does not take is a 405,
-// both in the error shape; a panic is logged and answered as a 500.
+// both in the error shape, and so is the redirect of a path that is not clean
+// (/api/a//b, a {rest...} route asked without its tail) to the clean one,
+// with its status and Location. A panic is logged and answered as a 500.
+// Every answer carries Cache-Control: no-store, so no cache keeps what a
+// session sees, unless the handler sets a Cache-Control of its own.
 func (a *App) Handler() http.Handler {
 	a.mu.Lock()
 	wraps := slices.Clone(a.wraps)
@@ -451,14 +455,25 @@ func (a *App) Handler() http.Handler {
 	for i := len(wraps) - 1; i >= 0; i-- {
 		h = wraps[i](h)
 	}
-	return recoverPanics(refuseCrossSite(a.xo, h))
+	return noStore(recoverPanics(refuseCrossSite(a.xo, h)))
+}
+
+// noStore sets Cache-Control: no-store on the answer before h runs, which h
+// may replace.
+func noStore(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if w.Header().Get("Cache-Control") == "" {
+			w.Header().Set("Cache-Control", "no-store")
+		}
+		h.ServeHTTP(w, r)
+	})
 }
 
 // dispatch serves a request through the mux, answering its own 404 and 405
 // in the error shape.
 func (a *App) dispatch(w http.ResponseWriter, r *http.Request) {
 	h, pattern := a.mux.Handler(r)
-	if pattern != "" {
+	if pattern != "" && !muxRedirect(h) {
 		a.mux.ServeHTTP(w, r)
 		return
 	}
@@ -475,10 +490,25 @@ func (a *App) dispatch(w http.ResponseWriter, r *http.Request) {
 		})
 	case http.StatusNotFound:
 		WriteError(w, r, NotFound(fmt.Sprintf("Nothing is at %s.", r.URL.Path)))
+	case http.StatusMovedPermanently, http.StatusTemporaryRedirect, http.StatusPermanentRedirect, http.StatusFound:
+		// The mux's redirect to the clean path, with its body in the error
+		// shape.
+		to := p.header.Get("Location")
+		w.Header().Set("Location", to)
+		WriteJSON(w, p.status, errorBody{&Error{Status: p.status, Code: "moved", Message: fmt.Sprintf("This is at %s; ask there.", to)}})
 	default:
-		h.ServeHTTP(w, r) // a redirect to the clean path
+		h.ServeHTTP(w, r)
 	}
 }
+
+// redirectType is the type of the handler http.ServeMux returns to send a
+// path that is not clean, or a {rest...} or folder route asked without its
+// last slash, to the one it serves: http.RedirectHandler's.
+var redirectType = reflect.TypeOf(http.RedirectHandler("/", http.StatusMovedPermanently))
+
+// muxRedirect reports whether h is that redirect, which runs no route, so
+// dispatch may run it on a probe and answer it in the error shape.
+func muxRedirect(h http.Handler) bool { return reflect.TypeOf(h) == redirectType }
 
 // allowedList writes the mux's Allow header as words: "GET, HEAD, POST" is
 // "GET or POST". HEAD and OPTIONS are left out when another method is there.

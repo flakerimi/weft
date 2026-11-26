@@ -1,12 +1,14 @@
 package warp
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"reflect"
+	"strings"
 )
 
 // Error is the one error shape every API answer goes through. A handler that
@@ -107,6 +109,28 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 	w.Write(b)
 }
 
+// statusCode is the code of an error answer made from its status alone: the
+// status's text in snake case, as teapot for 418 ("I'm a teapot"), the
+// words the error shape's codes are written in.
+func statusCode(status int) string {
+	words := strings.Fields(strings.Map(func(r rune) rune {
+		if r >= 'A' && r <= 'Z' {
+			return r + 'a' - 'A'
+		}
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			return r
+		}
+		return ' '
+	}, http.StatusText(status)))
+	if status == http.StatusTeapot {
+		return "teapot"
+	}
+	if len(words) == 0 {
+		return "error"
+	}
+	return strings.Join(words, "_")
+}
+
 // internal is the answer to an error the client is not told about.
 func internal() *Error {
 	return &Error{Status: http.StatusInternalServerError, Code: "internal", Message: "Something went wrong on the server; its log has the details."}
@@ -129,12 +153,24 @@ type errorBody struct {
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	var e *Error
 	switch {
+	case errors.Is(err, context.Canceled) && r.Context().Err() != nil:
+		return // the client went away: there is no one to answer, and nothing went wrong
 	case !errors.As(err, &e):
 		slog.Error("api error", "method", r.Method, "path", r.URL.Path, "error", err)
 		e = internal()
 	case e.Status < 400 || e.Status > 599:
 		slog.Error("api error with a status that is not an error status", "method", r.Method, "path", r.URL.Path, "status", e.Status, "error", err)
 		e = internal()
+	case e.Code == "" || e.Message == "":
+		// An Error with its status alone: the status's own words.
+		filled := *e
+		if filled.Code == "" {
+			filled.Code = statusCode(e.Status)
+		}
+		if filled.Message == "" {
+			filled.Message = http.StatusText(e.Status) + "."
+		}
+		e = &filled
 	}
 	WriteJSON(w, e.Status, errorBody{e})
 }

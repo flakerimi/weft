@@ -1,10 +1,12 @@
 package warp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -181,4 +183,55 @@ func TestWriteJSONCannotEncodeConcurrently(t *testing.T) {
 		})
 	}
 	wg.Wait()
+}
+
+// Every answer under /api is kept by no cache unless its handler says
+// otherwise; a redirect to the clean path, and an Error with no code or
+// message, are in the error shape; a request whose client went away is not
+// logged as an error.
+func TestAPIAnswersAreTheErrorShapeAndNotCached(t *testing.T) {
+	var logs bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(old) })
+	app := New(Config{})
+	Get(app, "/items", func(context.Context, None) ([]Item, error) { return nil, nil })
+	Get(app, "/files/{rest...}", func(context.Context, struct {
+		Rest string `path:"rest"`
+	}) (Item, error) {
+		return Item{}, nil
+	})
+	Get(app, "/teapot", func(context.Context, None) (Item, error) { return Item{}, &Error{Status: 418} })
+	Get(app, "/gone", func(ctx context.Context, _ None) (Item, error) { return Item{}, context.Canceled })
+	app.Handle("GET /cached", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "max-age=60")
+		w.Write([]byte("x"))
+	}))
+	h := mustRegister(t, app)
+	for _, path := range []string{"/api/items", "/api/nope", "/api/teapot"} {
+		if w := serve(t, h, "GET", path); w.Header().Get("Cache-Control") != "no-store" {
+			t.Errorf("%s: Cache-Control %q", path, w.Header().Get("Cache-Control"))
+		}
+	}
+	if w := serve(t, h, "GET", "/api/cached"); w.Header().Get("Cache-Control") != "max-age=60" {
+		t.Errorf("a handler's own Cache-Control became %q", w.Header().Get("Cache-Control"))
+	}
+	for path, to := range map[string]string{"/api/files": "/api/files/", "/api/a//b": "/api/a/b", "/api/./items": "/api/items"} {
+		w := serve(t, h, "GET", path)
+		code, msg, _ := apiError(t, w)
+		if w.Code < 300 || w.Code > 399 || w.Header().Get("Location") != to || code != "moved" || msg != "This is at "+to+"; ask there." {
+			t.Errorf("%s: %d %s, Location %q", path, w.Code, w.Body, w.Header().Get("Location"))
+		}
+	}
+	w := serve(t, h, "GET", "/api/teapot")
+	if code, msg, _ := apiError(t, w); w.Code != 418 || code != "teapot" || msg != "I'm a teapot." {
+		t.Errorf("an Error with only a status: %d %q %q", w.Code, code, msg)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	r := httptest.NewRequest("GET", "/api/gone", nil).WithContext(ctx)
+	h.ServeHTTP(httptest.NewRecorder(), r)
+	if strings.Contains(logs.String(), "level=ERROR") {
+		t.Errorf("a request its client left was logged as an error: %s", &logs)
+	}
 }
