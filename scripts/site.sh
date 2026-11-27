@@ -9,7 +9,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 # Staged here before releases moved out of the binary: the page build would embed them.
-for old in site-src/public/install site-src/public/releases; do
+for old in site-src/public/install site-src/public/install.ps1 site-src/public/releases; do
 	[ ! -e "$old" ] || {
 		echo "site: $old is left from an earlier staging, and the page build would embed it in the binary; move it out (releases are staged into site-src/releases now)." >&2
 		exit 1

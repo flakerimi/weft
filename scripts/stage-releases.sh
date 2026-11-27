@@ -1,8 +1,8 @@
 #!/bin/sh
-# Copy what the installer and `weft update` fetch into OUT: SITE/install and
-# the releases the site has published, those SITE/releases.txt lists, from
-# SITE/releases, with LATEST, the one being published, beside them and named
-# by releases/latest. Nothing else in SITE/releases is staged: not a dry run's
+# Copy what the installers and `weft update` fetch into OUT: SITE/install,
+# SITE/install.ps1 and the releases the site has published, those
+# SITE/releases.txt lists, from SITE/releases, with LATEST, the one being
+# published, beside them and named by releases/latest. Nothing else in SITE/releases is staged: not a dry run's
 # build, not a folder put there by hand, not a test build (a version ending in
 # -test). A listed release SITE/releases lacks is reported and left out
 # (scripts/published-releases.sh check refuses that before a publish). Without
@@ -130,6 +130,7 @@ fi
 
 mkdir -p "$out"
 cp "$site/install" "$out/install"
+cp "$site/install.ps1" "$out/install.ps1"
 for v in $versions; do
 	# Already staged, and the same (checked above).
 	[ ! -d "$out/releases/$v" ] || continue

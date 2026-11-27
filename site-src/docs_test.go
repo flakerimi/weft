@@ -144,3 +144,29 @@ func TestDocsCoverTheSlice(t *testing.T) {
 		}
 	}
 }
+
+// Windows is a supported platform: install.md, cli.md and index-md.ts name
+// the PowerShell installer (irm https://weft.base.al/install.ps1 | iex), and
+// coming-next.md no longer says Windows is not yet supported.
+func TestDocsCoverWindows(t *testing.T) {
+	for _, f := range []string{
+		"content/docs/getting-started/install.md",
+		"content/docs/reference/cli.md",
+		"agents/index-md.ts",
+	} {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(b), "install.ps1") {
+			t.Errorf("%s does not name install.ps1", f)
+		}
+	}
+	coming, err := os.ReadFile("content/docs/coming-next.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(coming), "Windows is not yet a supported platform") {
+		t.Error("content/docs/coming-next.md still says Windows is not yet a supported platform")
+	}
+}

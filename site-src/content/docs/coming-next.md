@@ -71,7 +71,6 @@ Phase W7: `jobs`, for work on a schedule; `i18n`, for translated fields; `middle
 - When a JSON body has both a field of the wrong type and, inside a nested object, a field the route does not take, the unknown field is reported only when it comes before the wrong-typed value; otherwise the answer names the wrong type.
 - A wrong-typed value is named without a list's index, and a map's by the map's own key: `{"lines":[{"qty":1},{"qty":"x"}]}` gives `lines.qty: Send a whole number.`, where validation would say `lines.1.qty`.
 - A body with two problems names one field, which may differ by build: `{"n8":300,"when":5}` names `when` on the default build and `n8` under `GOEXPERIMENT=jsonv2`.
-- A taken port is named as taken (`warp: port 8080 is taken; …`) on macOS and Linux. Windows is not yet a supported platform: the release workflow builds `weft` for Windows and runs the Go tests there on each tag, and they have not passed yet, so how Warp names a taken port there is not known. On Windows `weft dev` puts each child in a Job Object that ends its process tree when stopped or when `weft dev` ends.
 
 The Warp design gives these no phase.
 

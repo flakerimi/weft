@@ -7,6 +7,15 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
 0.0.12 have no GitHub Release: they were published at weft.base.al, and
 `site/releases.txt` lists them (only 0.0.1 and 0.0.2 have a tag).
 
+## Unreleased
+
+- Windows is supported on amd64 and arm64: `irm https://weft.base.al/install.ps1 | iex`
+  installs `weft.exe` into `$HOME\.local\bin` and adds it to the user `PATH`;
+  `scripts/release.sh` builds all six targets (`darwin`, `linux` and `windows`
+  on `amd64` and `arm64`) by default, so published releases and GitHub Releases
+  carry the Windows `.zip` archives alongside the tarballs; `weft update` names
+  the PowerShell installer on Windows; and the docs cover Windows.
+
 ## 0.0.20
 
 - On a phone (under 640 px) the landing's phone picture follows the install

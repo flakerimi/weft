@@ -17,8 +17,8 @@ the owner; each milestone gets its own design or plan before it is built.
   `warp.App` and modules, typed routes, validation, `Describe` and the typed
   client, `warp/data` on SQLite, `warp/auth` with one owner, `warptest`, and an
   example shop that uses all of it.
-- **Runs on:** macOS and Linux (the full suite passes on both on GitHub's
-  runners). Windows builds, and its tests are being made to pass.
+- **Runs on:** macOS, Linux and Windows (the full suite passes on all three on
+  GitHub's runners; Windows installs from the next release).
 - **Distributed:** from weft.base.al (installer, releases with checksums,
   `weft update`); the repository is public since 2026-11-26.
 - **Not stable:** every 0.0.x may change any name. Vue is pinned to
@@ -56,15 +56,16 @@ What a newcomer meets first works, on every platform.
 
 - **Windows supported:** the release workflow's Windows tests pass (done,
   0.0.19); `weft dev` stops its process trees with a Job Object (done,
-  0.0.19); the installer has a PowerShell form; the docs say Windows is
-  supported. The suite runs on all three platforms on every push to `main`
+  0.0.19); the installer has a PowerShell form (`/install.ps1`), and
+  `scripts/release.sh` builds all six archives by default; the docs say Windows
+  is supported. The suite runs on all three platforms on every push to `main`
   (done: `ci.yml` runs Linux on every push and pull request, macOS and
   Windows on every push to `main`).
 - **The Go module from GitHub (done, 0.0.12):** with the repository public, an app's `go.mod`
   can require `github.com/flakerimi/weft` at the release's tag instead of
   replacing it with `./.weft/go`; tag each release (`vX.Y.Z`) and attach the
   six archives to a public GitHub Release made from the same build the site
-  serves (the release workflow already builds them).
+  serves.
 - **W2 finished (done):** an `enum` typed as its values (comparing or assigning
   a value outside the list is now a TypeScript error; an optional non-pointer
   struct field includes `''` or `0`), `useParams()` typed from the routes.

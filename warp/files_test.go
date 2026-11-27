@@ -19,6 +19,7 @@ func releaseDir(t *testing.T) string {
 	dir := filepath.Join(root, "data")
 	for name, data := range map[string]string{
 		"install":                                "#!/bin/sh\necho install\n",
+		"install.ps1":                            "# install.ps1\n",
 		"releases/latest":                        "0.0.2\n",
 		"releases/0.0.2/SHA256SUMS":              "abc  weft_linux_amd64.tar.gz\n",
 		"releases/0.0.2/weft_linux_amd64.tar.gz": "\x1f\x8b\x08\x00tarball",
@@ -41,6 +42,7 @@ func TestWithFilesServesTheFolder(t *testing.T) {
 	} {
 		for _, c := range []struct{ path, body, typ string }{
 			{"/install", "#!/bin/sh\necho install\n", "text/plain; charset=utf-8"},
+			{"/install.ps1", "# install.ps1\n", "text/plain; charset=utf-8"},
 			{"/releases/latest", "0.0.2\n", "text/plain; charset=utf-8"},
 			{"/releases/0.0.2/SHA256SUMS", "abc  weft_linux_amd64.tar.gz\n", "text/plain; charset=utf-8"},
 			{"/releases/0.0.2/weft_linux_amd64.tar.gz", "\x1f\x8b\x08\x00tarball", "application/gzip"},
