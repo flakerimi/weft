@@ -34,7 +34,7 @@ func (products) Register(app *warp.App) error {
 // signed in on the client it returns.
 func startShop(t *testing.T, vars map[string]string, opts ...auth.Option) *warptest.Client {
 	t.Helper()
-	c := warptest.New(t, vars, data.Module(), auth.Module(opts...), things{}, products{})
+	c := warptest.New(t, vars, data.Module(), mailModule(), auth.Module(opts...), things{}, products{})
 	authtest.Owner(t, c)
 	return c
 }
@@ -103,6 +103,10 @@ func TestMePermissionsMatchGuard(t *testing.T) {
 		"reports:export":  func(rc *warptest.Client) int { return rc.Get("/api/reports").Status },
 		"things:read":     func(rc *warptest.Client) int { return rc.Get("/api/things").Status },
 		"things:purge":    func(rc *warptest.Client) int { return rc.Post("/api/things/purge", nil).Status },
+		"users:read":      func(rc *warptest.Client) int { return rc.Get("/api/auth/invitations").Status },
+		"users:invite": func(rc *warptest.Client) int {
+			return rc.Post("/api/auth/invitations", map[string]string{"email": "probe@example.com", "role": "viewer"}).Status
+		},
 	}
 	for _, role := range roles {
 		rc, _ := authtest.As(t, c, role)

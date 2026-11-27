@@ -97,16 +97,23 @@ func (m *module) signedIn(r *http.Request) (User, int64, error) {
 	return u.user(), id, nil
 }
 
-// expired removes every session that has ended. A session ends at its
-// expires_at, so one ending now is removed too: the store keeps times to the
-// nanosecond.
+// expired removes every session, mailed token and invitation that has
+// ended. Each ends at its expires_at, so one ending now is removed too: the
+// store keeps times to the nanosecond.
 func (m *module) expired(ctx context.Context, now time.Time) error {
-	_, err := m.sessions.DeleteBefore(ctx, "expires_at", now.Add(time.Nanosecond))
+	end := now.Add(time.Nanosecond)
+	if _, err := m.sessions.DeleteBefore(ctx, "expires_at", end); err != nil {
+		return err
+	}
+	if _, err := m.tokens.DeleteBefore(ctx, "expires_at", end); err != nil {
+		return err
+	}
+	_, err := m.invitations.DeleteBefore(ctx, "expires_at", end)
 	return err
 }
 
 // signIn makes a session of the user and sets its cookie on the answer. In
-// one transaction it removes every ended session, ends the user's sessions
+// one transaction it removes every ended session, token and invitation, ends the user's sessions
 // seen longest ago while the user has 50, and adds the new one.
 func (m *module) signIn(ctx context.Context, u userRow) error {
 	r := warp.Request(ctx)

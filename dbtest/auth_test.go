@@ -68,7 +68,7 @@ func startAuth(t *testing.T, vars map[string]string) (*warptest.Client, string) 
 	out, flags := log.Writer(), log.Flags()
 	log.SetOutput(&logged)
 	log.SetFlags(0)
-	c := warptest.New(t, vars, data.Module(), auth.Module(), things{})
+	c := warptest.New(t, vars, data.Module(), mailModule(), auth.Module(), things{})
 	log.SetOutput(out)
 	log.SetFlags(flags)
 	return c, logged.String()
@@ -561,7 +561,7 @@ func wantField(t *testing.T, res *warptest.Response, field, message string) {
 func TestEnvironmentMistakes(t *testing.T) {
 	// Registering reads nothing, so an app with an empty .env describes itself.
 	app := warp.New(warp.ConfigFrom(nil))
-	app.Use(data.Module(), auth.Module())
+	app.Use(data.Module(), mailModule(), auth.Module())
 	if err := app.Err(); err != nil {
 		t.Fatalf("an empty .env: %v", err)
 	}
@@ -585,7 +585,7 @@ func TestEnvironmentMistakes(t *testing.T) {
 		vars := authEnv(t)
 		vars[tc.key] = tc.value
 		app := warp.New(warp.ConfigFrom(vars))
-		app.Use(data.Module(), auth.Module())
+		app.Use(data.Module(), mailModule(), auth.Module())
 		if err := app.Err(); err != nil {
 			t.Fatalf("%s=%q is a registration mistake: %v", tc.key, tc.value, err)
 		}
@@ -630,7 +630,7 @@ func TestOwnerHelper(t *testing.T) {
 
 func TestDescribeHidesTheHash(t *testing.T) {
 	app := warp.New(warp.ConfigFrom(nil))
-	app.Use(data.Module(), auth.Module())
+	app.Use(data.Module(), mailModule(), auth.Module())
 	d, err := app.Describe()
 	if err != nil {
 		t.Fatal(err)
@@ -671,6 +671,14 @@ func TestDescribeHidesTheHash(t *testing.T) {
 		"setup":             "POST /api/auth/setup 201",
 		"sessions":          "GET /api/auth/sessions 200",
 		"end_session":       "DELETE /api/auth/sessions/{id} 204",
+		"settings":          "GET /api/auth/settings 200",
+		"register":          "POST /api/auth/register 204",
+		"forgot":            "POST /api/auth/forgot 204",
+		"token":             "POST /api/auth/token 200",
+		"password":          "POST /api/auth/password 200",
+		"invitations":       "GET /api/auth/invitations 200",
+		"invite":            "POST /api/auth/invitations 201",
+		"remove_invitation": "DELETE /api/auth/invitations/{id} 204",
 	}
 	if !maps.Equal(routes, want) {
 		t.Fatalf("auth's routes are %v, want %v", routes, want)
@@ -741,7 +749,7 @@ func TestTheLoginsTableIsReserved(t *testing.T) {
 		Body string `json:"body"`
 	}
 	app := warp.New(warp.Config{})
-	app.Use(data.Module(), auth.Module(), stores{"notes", func(db *data.DB) { data.NewStore[Note](db, "users") }})
+	app.Use(data.Module(), mailModule(), auth.Module(), stores{"notes", func(db *data.DB) { data.NewStore[Note](db, "users") }})
 	want := `warp: the table users is the login's, which warp/auth keeps its users in; give the store of Note another table.`
 	if err := app.Err(); err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("Err = %v\nwant %s", err, want)

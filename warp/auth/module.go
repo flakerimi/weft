@@ -5,8 +5,12 @@
 // of the owner, the first user.
 //
 // It is configured in .env: AUTH_SECRET (32 bytes or more) keys the cookie,
-// AUTH_SESSION_DAYS (1 to 365, default 30) is how long a session lasts, and
-// AUTH_OWNER_EMAIL is the owner's address. They are read when the app starts.
+// AUTH_SESSION_DAYS (1 to 365, default 30) is how long a session lasts,
+// AUTH_OWNER_EMAIL is the owner's address, AUTH_REGISTRATION (open, invite
+// or closed, default invite) is who may ask for an account, and API_KEYS
+// (on or off, default off) whether other programs may sign in with a key.
+// They are read when the app starts. It mails its links through the mail
+// module.
 package auth
 
 import (
@@ -20,6 +24,7 @@ import (
 	"log"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -66,27 +71,40 @@ func Module(opts ...Option) warp.Module {
 }
 
 type module struct {
-	app      *warp.App
-	db       *data.DB
-	users    *data.Store[userRow]
-	sessions *data.Store[sessionRow]
-	opts     options
-	roles    *roles // set by Register
-	known    known  // the permissions Me may list
+	app         *warp.App
+	db          *data.DB
+	users       *data.Store[userRow]
+	sessions    *data.Store[sessionRow]
+	tokens      *data.Store[tokenRow]
+	invitations *data.Store[invitationRow]
+	mails       *mails
+	postOnce    sync.Once
+	post        postman // the mail module's, once looked for
+	opts        options
+	roles       *roles // set by Register
+	known       known  // the permissions Me may list
 
-	perKey     *limiter      // tries per email and address
-	perAddress *limiter      // tries per address, across emails
-	perAccount *limiter      // tries per email, across addresses
-	slots      chan struct{} // one per password hash running
-	slotWait   time.Duration // how long a request waits for a slot
-	hashes     atomic.Int64  // hashes begun, for tests
+	perKey     *limiter // tries per email and address
+	perAddress *limiter // tries per address, across emails
+	perAccount *limiter // tries per email, across addresses
+
+	mailPerAddress *limiter      // mails asked for per address, by register and forgot
+	mailPerClient  *limiter      // mails asked for per client
+	invitePerUser  *limiter      // invitations per inviter
+	tokenPerClient *limiter      // token and password per client
+	slots          chan struct{} // one per password hash running
+	slotWait       time.Duration // how long a request waits for a slot
+	hashes         atomic.Int64  // hashes begun, for tests
 	// find is the user with an email, as stored; the users store's First.
 	find func(ctx context.Context, email string) (userRow, bool, error)
 
 	// Set by Start.
-	secret []byte
-	maxAge int // seconds
-	owner  string
+	secret       []byte
+	maxAge       int // seconds
+	owner        string
+	registration string // open, invite or closed
+	apiKeys      bool
+	url, host    string // APP_URL and its host, for the mailed links
 
 	mu         sync.Mutex
 	setupHash  []byte // the SHA-256 of the setup token; nil when there is none
@@ -105,15 +123,19 @@ func newModule(now func() time.Time) *module {
 	m.perKey = newLimiter(m.now, maxKeys, maxTries, window)
 	m.perAddress = newLimiter(m.now, maxKeys, maxAddressTries, window)
 	m.perAccount = newLimiter(m.now, maxKeys, maxAccountTries, accountWindow)
+	m.mailPerAddress = newLimiter(m.now, maxKeys, maxMailsPerAddress, time.Hour)
+	m.mailPerClient = newLimiter(m.now, maxKeys, maxMailsPerClient, time.Hour)
+	m.invitePerUser = newLimiter(m.now, maxKeys, maxInvites, time.Hour)
+	m.tokenPerClient = newLimiter(m.now, maxKeys, maxTokenTries, time.Minute)
 	return m
 }
 
-// now is the time by the module's clock.
+// now is the time by the module's clock, in UTC, as the stores keep it.
 func (m *module) now() time.Time {
 	m.mu.Lock()
 	clock := m.clock
 	m.mu.Unlock()
-	return clock()
+	return clock().UTC()
 }
 
 // SetClock replaces the clock the login reads the time from, for its limits,
@@ -136,6 +158,7 @@ func SetClock(app *warp.App, now func() time.Time) {
 func (m *module) Name() string { return "auth" }
 
 func (m *module) Register(app *warp.App) error {
+	var err error
 	m.app = app
 	r, mistakes := newRoles(m.opts.grants)
 	for _, s := range mistakes {
@@ -145,12 +168,18 @@ func (m *module) Register(app *warp.App) error {
 	m.db = data.For(app)
 	m.users = data.NewStore[userRow](m.db, "users")
 	m.sessions = data.NewStore[sessionRow](m.db, "sessions")
+	m.tokens = data.NewStore[tokenRow](m.db, "auth_tokens")
+	m.invitations = data.NewStore[invitationRow](m.db, "invitations")
+	if m.mails, err = parseMails(); err != nil {
+		app.Mistake("%s", strings.TrimPrefix(err.Error(), "auth: "))
+	}
 	m.find = func(ctx context.Context, email string) (userRow, bool, error) {
 		return m.users.First(ctx, "email", email)
 	}
 	warp.Provide(app, m)
 	app.Wrap(m.carry)
 	m.routes()
+	m.mailRoutes()
 	return nil
 }
 
@@ -179,10 +208,28 @@ func (m *module) Start(ctx context.Context) error {
 	if !isEmail(owner) {
 		return fmt.Errorf("AUTH_OWNER_EMAIL is %q; set it to an email address, such as owner@example.com.", cfg.Get("AUTH_OWNER_EMAIL"))
 	}
+	registration := cfg.Get("AUTH_REGISTRATION")
+	switch registration {
+	case "":
+		registration = registrationInvite
+	case registrationOpen, registrationInvite, registrationClosed:
+	default:
+		return fmt.Errorf("AUTH_REGISTRATION is %q; set it to open, invite or closed in .env.", registration)
+	}
+	var apiKeys bool
+	switch v := cfg.Get("API_KEYS"); v {
+	case "on":
+		apiKeys = true
+	case "", "off":
+	default:
+		return fmt.Errorf("API_KEYS is %q; set it to on or off in .env.", v)
+	}
 	m.secret, m.maxAge, m.owner = []byte(secret), days*24*60*60, owner
+	m.registration, m.apiKeys = registration, apiKeys
+	m.setURL(cfg.URL)
 
 	if err := m.expired(ctx, m.now()); err != nil {
-		return fmt.Errorf("the sessions table cannot be written (%v); check the database DB_URL names.", err)
+		return fmt.Errorf("the login's tables cannot be written (%v); check the database DB_URL names.", err)
 	}
 	n, err := m.users.Count(ctx)
 	if err != nil {
@@ -280,7 +327,7 @@ func AddUser(ctx context.Context, app *warp.App, email, password, role string) (
 }
 
 // RemoveUser removes the user with the id and, in the same transaction,
-// every session of theirs. A user no one has is a warp.NotFound. It is for tools and tests, after the app has started, as
+// every session of theirs and every invitation they sent. A user no one has is a warp.NotFound. It is for tools and tests, after the app has started, as
 // AddUser is. It may remove the last user, the owner included: the running
 // app then has no setup link, and the next start, finding no user, logs a
 // new one.
@@ -291,6 +338,9 @@ func RemoveUser(ctx context.Context, app *warp.App, id int64) error {
 	}
 	return m.db.Tx(ctx, func(ctx context.Context) error {
 		if _, err := m.sessions.DeleteBy(ctx, "user_id", id); err != nil {
+			return err
+		}
+		if _, err := m.invitations.DeleteBy(ctx, "invited_by", id); err != nil {
 			return err
 		}
 		return m.users.Delete(ctx, id)
