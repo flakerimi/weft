@@ -1,6 +1,7 @@
 package warp
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -16,9 +17,10 @@ import (
 // rule is one comma-separated part of a warp tag.
 type rule struct {
 	name  string
-	arg   string  // what follows "=", as written
-	num   float64 // arg as a number, for min and max
-	items []string
+	arg   string    // what follows "=", as written
+	num   float64   // arg as a number, for min and max
+	items []string  // choices of an enum, as written
+	nums  []float64 // choices of a numeric enum
 }
 
 // fieldSpec is a validated field of a struct type: its key, where it sits, its
@@ -362,6 +364,50 @@ func isNumberKind(k reflect.Kind) bool {
 	return false
 }
 
+// decimalNum matches a decimal number both Go and JavaScript's Number() parse
+// the same way: an optional + or -, digits with an optional fractional part,
+// and an optional e or E exponent. No 0x, 0b, 0o, _, Inf or NaN.
+var decimalNum = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$`)
+
+// parseEnumChoice parses one enum= choice for a number field of type ft, and
+// returns its value as toFloat(v) reads it and "" on success, or the sentence
+// tail for a choice the field cannot hold.
+func parseEnumChoice(ft reflect.Type, item string) (float64, string) {
+	k := ft.Kind()
+	switch {
+	case k >= reflect.Int && k <= reflect.Int64:
+		n, err := strconv.ParseInt(item, 10, ft.Bits())
+		if err != nil {
+			if ft.Bits() < 64 && errors.Is(err, strconv.ErrRange) {
+				return 0, fmt.Sprintf("write whole numbers from %d to %d separated by | after enum=", -(int64(1) << (ft.Bits() - 1)), int64(1)<<(ft.Bits()-1)-1)
+			}
+			return 0, "write whole numbers separated by | after enum="
+		}
+		return float64(n), ""
+	case k >= reflect.Uint && k <= reflect.Uint64:
+		n, err := strconv.ParseUint(item, 10, ft.Bits())
+		if err != nil {
+			if ft.Bits() < 64 && errors.Is(err, strconv.ErrRange) {
+				return 0, fmt.Sprintf("write whole numbers from 0 to %d separated by | after enum=", uint64(1)<<ft.Bits()-1)
+			}
+			return 0, "write whole numbers separated by | after enum="
+		}
+		return float64(n), ""
+	default:
+		if !decimalNum.MatchString(item) {
+			return 0, "write numbers separated by | after enum="
+		}
+		n, err := strconv.ParseFloat(item, ft.Bits())
+		if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
+			return 0, "write numbers separated by | after enum="
+		}
+		if k == reflect.Float32 {
+			n = float64(float32(n))
+		}
+		return n, ""
+	}
+}
+
 func toFloat(v reflect.Value) float64 {
 	switch {
 	case v.CanInt():
@@ -509,13 +555,17 @@ func checkRule(v reflect.Value, r rule) string {
 			return "Enter a web address that starts with http:// or https://."
 		}
 	case "enum":
-		if k != reflect.String {
-			return ""
-		}
-		for _, item := range r.items {
-			if v.String() == item {
+		switch {
+		case k == reflect.String:
+			if slices.Contains(r.items, v.String()) {
 				return ""
 			}
+		case isNumberKind(k):
+			if slices.Contains(r.nums, toFloat(v)) {
+				return ""
+			}
+		default:
+			return ""
 		}
 		return "Choose one of: " + strings.Join(r.items, ", ") + "."
 	case "min", "max":
@@ -651,6 +701,7 @@ func parseRules(owner reflect.Type, f reflect.StructField, tag string) ([]rule, 
 	}
 	var rules []rule
 	var problems []string
+	seenEnum := false
 	for _, part := range strings.Split(tag, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
@@ -660,19 +711,45 @@ func parseRules(owner reflect.Type, f reflect.StructField, tag string) ([]rule, 
 		r := rule{name: name, arg: arg}
 		switch name {
 		case "required":
-		case "email", "url", "enum":
+		case "email", "url":
 			if !isText {
 				problems = append(problems, fmt.Sprintf("%s has the rule %q, which is for text; remove it or make the field a string.", at, name))
 				continue
 			}
-			if name == "enum" {
-				for _, item := range strings.Split(arg, "|") {
-					if item != "" {
-						r.items = append(r.items, item)
-					}
+		case "enum":
+			if !isText && !isNumber {
+				if !seenEnum {
+					seenEnum = true
+					problems = append(problems, fmt.Sprintf("%s has the rule %q, which is for text and numbers; remove it or make the field a string or a number.", at, name))
 				}
-				if len(r.items) == 0 {
-					problems = append(problems, fmt.Sprintf("%s has \"enum=\" with nothing to choose from; write enum=a|b.", at))
+				continue
+			}
+			if seenEnum {
+				problems = append(problems, fmt.Sprintf("%s has the rule \"enum\" more than once; list every value in one enum=a|b.", at))
+				continue
+			}
+			seenEnum = true
+			for _, item := range strings.Split(arg, "|") {
+				if item != "" {
+					r.items = append(r.items, item)
+				}
+			}
+			if len(r.items) == 0 {
+				problems = append(problems, fmt.Sprintf("%s has \"enum=\" with nothing to choose from; write enum=a|b.", at))
+				continue
+			}
+			if isNumber {
+				why := ""
+				for _, item := range r.items {
+					n, problem := parseEnumChoice(ft, item)
+					if problem != "" {
+						why = problem
+						break
+					}
+					r.nums = append(r.nums, n)
+				}
+				if why != "" {
+					problems = append(problems, fmt.Sprintf("%s has %q; %s.", at, part, why))
 					continue
 				}
 			}

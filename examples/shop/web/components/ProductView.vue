@@ -20,7 +20,7 @@ onMounted(async () => {
       return
     }
     // Only an id as the server writes one: /products/0x2a is not product 42.
-    const id = productId(useParams().id)
+    const id = productId(useParams('/products/:id').id)
     if (id === null) missing.value = true
     else product.value = await api.products.show(id)
   } catch (e) {

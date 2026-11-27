@@ -47,25 +47,40 @@ function clean(path: string): string[] {
 }
 
 /**
+ * Each runtime dynamic page's route pattern (`/products/:id`, `/docs/:...rest`)
+ * mapped to the parameter names it has (`{ id: string }`, `{ rest: string }`).
+ * `@weft/vite`'s `weftAutoImport()` and `weft-types` augment this interface
+ * in `.weft-types/components.d.ts` from the pages under `pages/` that export
+ * `runtime = true`.
+ */
+export interface WeftRouteParams {}
+
+let warnedBuiltAhead = false
+const warnedMismatch = new Set<string>()
+
+/**
  * The params of the page's address, on a page whose paths are known only at
  * run time (one that exports `runtime = true`, such as `pages/products/[id].vue`).
  * The build writes the page's pattern on `<html>` as `data-weft-route`
  * (`/products/:id`); this reads `location.pathname` against it and gives the
- * params (`{ id: '42' }`). The path is split as warp.Serve splits it:
- * decoded first (an escape that is not UTF-8, such as `%FF`, kept as it
- * is), then cleaned as path.Clean cleans it, so an encoded slash (`%2F`)
- * divides segments and is never inside one param. A catch-all
- * (`[...rest]`) gets the rest of the path without its leading slash, or
- * `''` when there is none. It is `{}` on any other page, on an address the
- * pattern does not match, and on the server, which renders the page once
- * with every param empty. It is not reactive: the page loads once
- * per address. In development, called in the browser on a page built ahead
- * (with getPaths, or no params at all), it says once in the console that
- * such a page has no params there.
+ * params (`{ id: '42' }`). Passing the page's pattern (`useParams('/products/:id')`)
+ * types the returned object from `WeftRouteParams` (`{ id: string }`), while
+ * calling `useParams()` with no argument returns `Record<string, string>`.
+ * The path is split as warp.Serve splits it: decoded first (an escape that is
+ * not UTF-8, such as `%FF`, kept as it is), then cleaned as path.Clean cleans
+ * it, so an encoded slash (`%2F`) divides segments and is never inside one
+ * param. A catch-all (`[...rest]`) gets the rest of the path without its
+ * leading slash, or `''` when there is none. It is `{}` on any other page, on
+ * an address the pattern does not match, and on the server, which renders the
+ * page once with every param empty (so a property read on the returned object
+ * is `undefined` there; call it in `onMounted`). It is not reactive: the page
+ * loads once per address. In development, called in the browser on a page built
+ * ahead (with getPaths, or no params at all), or with a `route` argument that
+ * differs from the page's own `data-weft-route`, it says so once in the console.
  */
-let warnedBuiltAhead = false
-
-export function useParams(): Record<string, string> {
+export function useParams<P extends keyof WeftRouteParams>(route: P): WeftRouteParams[P]
+export function useParams(route?: undefined): Record<string, string>
+export function useParams(route?: string): Record<string, string> {
   if (typeof document === 'undefined') return {}
   const pattern = document.documentElement.dataset.weftRoute
   if (!pattern) {
@@ -73,6 +88,16 @@ export function useParams(): Record<string, string> {
       warnedBuiltAhead = true
       console.warn(
         'useParams: this page was built ahead, so it has no params in the browser; export runtime = true from the page to read them here, or pass them to the island as props from getPaths.',
+      )
+    }
+    return {}
+  }
+  if (route !== undefined && route !== pattern) {
+    const key = `${route}|${pattern}`
+    if (import.meta.env.DEV && !warnedMismatch.has(key)) {
+      warnedMismatch.add(key)
+      console.warn(
+        `useParams: asked for the params of "${route}" on a page whose route is "${pattern}"; pass "${pattern}" or call useParams() with no argument.`,
       )
     }
     return {}

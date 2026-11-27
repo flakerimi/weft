@@ -342,7 +342,7 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1
     await send('Page.addScriptToEvaluateOnNewDocument', {
       source: `window.r = 'author-r'; window.s = 'author-s'; window.m = 1; window.__cls = 0; window.__pageErrors = []; window.addEventListener('error', (e) => window.__pageErrors.push(String(e.message))); new PerformanceObserver((l) => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.__cls += e.value }).observe({ type: 'layout-shift', buffered: true });`,
     })
-  })
+  }, 60_000)
 
   afterAll(async () => {
     ws?.close()
@@ -352,7 +352,7 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1
     }
     for (const s of servers) await new Promise<void>((done) => s.close(() => done()))
     if (dir) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
-  })
+  }, 30_000)
 
   async function openAt(url: string, width: number, scheme: 'light' | 'dark' = 'light') {
     await send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false })

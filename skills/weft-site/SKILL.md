@@ -76,9 +76,9 @@ const props = defineProps<{ slug: string }>()
 </script>
 ```
 
-A page for records made after the build exports `runtime = true` instead: built once, it is served as a shell for every matching path no other page has. An island on it reads the params in the browser with `useParams()`, in `onMounted`.
+A page for records made after the build exports `runtime = true` instead: built once, it is served as a shell for every matching path no other page has. An island on it reads the params in the browser with `useParams(route)` in `onMounted`.
 
-`useHead({ title, description, image })` writes `<title>`, description and Open Graph tags. Every page also gets speculation rules and view transitions.
+`useHead({ title, description, image })` writes `<title>`, description and Open Graph tags. Every page gets speculation rules and view transitions.
 
 ## Islands: the only JavaScript
 

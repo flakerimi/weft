@@ -26,8 +26,6 @@ A client-side router and `layouts/`, for an app whose pages the browser switches
 
 `weft gen` and `weft routes` work today ([Types from Go](guides/types-from-go.md)). Not yet, phase W2 widened:
 
-- an `enum` field typed as its values (`'draft' | 'live'`), where it is `string` today;
-- `useParams()` typed from the routes, where it gives strings today;
 - the generated client calling an API on another origin than the pages: `setBase` takes a path prefix or a URL of the pages' own origin.
 
 ## Data
