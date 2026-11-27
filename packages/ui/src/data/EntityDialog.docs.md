@@ -37,11 +37,13 @@ whose label defaults to the sentence-cased field name (`firstName` →
   (`list`, `record`, `object`) start as `[]` or `{}` and render only when
   given a `#<name>-field` slot.
 
-**Customizing fields.** `fields` takes an array of `EntityFieldConfig` objects
+**Customizing fields.** When `fields` is omitted, every field in `schema`
+renders in key order. When `fields` is given, it takes an array of
+`EntityFieldConfig` objects
 (`{ name, label, hint, description, placeholder, control, step, rows, items, hidden }`),
-ordering the fields it lists first and configuring any field by `name`. The
-`#<name>-field="{ state, record, rule, field }"` slot replaces one field's
-control inside its `FormField`, and the default slot
+rendering only the fields it lists, in that order, each merged with
+`schema[f.name]`. The `#<name>-field="{ state, record, rule, field }"` slot
+replaces one field's control inside its `FormField`, and the default slot
 `#default="{ state, record, schema }"` replaces the whole field list while
 keeping the top `Alert` (`role="alert"`) and the Cancel and Create/Save
 buttons.
@@ -53,7 +55,7 @@ required so an emptied number is caught before sending). When `create` or
 field errors matching rendered fields attach to their `FormField`s and focus
 moves to the first invalid control once the form is no longer busy; unknown
 field keys or a top-level `message` appear in an `Alert` (`role="alert"`) at
-the top of the form; `code === 'network'` or `code === 'http'` shows
-`labels.unreachable`; and any other error logs to `console.error` and shows
-`labels.pageFailed`. Reopening the dialog or switching `record` resets the
-draft and clears every error.
+the top of the form; `code === 'network'` shows `labels.unreachable`;
+`code === 'http'` shows `labels.unavailable`; and any other error logs to
+`console.error` and shows `labels.pageFailed`. Reopening the dialog or
+switching `record` resets the draft and clears every error.

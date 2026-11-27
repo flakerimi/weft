@@ -48,8 +48,10 @@ const rules = { ...schema.ProductInput, price: { ...schema.ProductInput.price, r
     :filter-defs="[{ key: 'status', label: 'Status', items: ['draft', 'live'] }]"
     :defaults="{ price: 0, sale: null, status: 'draft' }"
     :fields="[
+      { name: 'name' },
       { name: 'price', step: 0.01 },
       { name: 'sale', step: 0.01, hint: 'Empty when it is not on sale.' },
+      { name: 'status' },
     ]"
     empty-title="No products"
     empty-description="Make one with New product, or change the search."

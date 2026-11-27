@@ -255,6 +255,7 @@ await click(`__t.button('Delete')`)
 await waitFor('the confirmation', `__t.dialog() && __t.dialog().innerText.includes('Delete Lamp?')`)
 await click(`__t.button('Delete', __t.dialog())`)
 await waitFor('the empty table', `!__t.dialog() && __t.text().includes('No products')`)
+await waitFor('focus on New product after deleting last row', `document.activeElement === __t.button('New product')`)
 
 step('a session that ends while the list is open sends the visitor to sign in, and back')
 for (let i = 1; i <= 11; i++) {
@@ -279,6 +280,7 @@ await click(`__t.button('Delete')`)
 await waitFor('the confirmation', `__t.dialog() && __t.dialog().innerText.includes('Delete P11?')`)
 await click(`__t.button('Delete', __t.dialog())`)
 await waitFor('the first page again', `!__t.dialog() && __t.text().includes('P01') && __t.text().includes('P10') && !__t.text().includes('P11') && !__t.text().includes('No products')`)
+await waitFor('focus on a row Delete button after delete', `document.activeElement?.getAttribute('data-weft-row-action') === 'delete'`)
 await shot('last-row-deleted')
 
 step('signing out with the server out of reach says so, and stays signed in')

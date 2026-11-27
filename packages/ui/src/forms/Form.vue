@@ -197,12 +197,12 @@ function copy<V>(value: V, seen = new Map<object, unknown>()): V {
 }
 
 async function focusFirstInvalid() {
-  if (off.value) {
+  if (busy.value) {
     pendingFocusInvalid = true
     return
   }
   await nextTick()
-  if (off.value) {
+  if (busy.value) {
     pendingFocusInvalid = true
     return
   }

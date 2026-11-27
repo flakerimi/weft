@@ -326,7 +326,7 @@ async function doRemove() {
   void nextTick(() => {
     setTimeout(() => {
       const active = typeof document !== 'undefined' ? document.activeElement : null
-      if (!active || active === document.body || !active.isConnected) {
+      if (!active || active === document.body || !active.isConnected || active.closest('#weft-overlays')) {
         focusAfterDelete(deletedIndex)
       }
     }, 0)

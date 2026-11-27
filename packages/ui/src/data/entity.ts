@@ -65,6 +65,7 @@ export interface EntityDialogLabels {
   close: string
   noneOption: string
   unreachable: string
+  unavailable: string
   pageFailed: string
 }
 
@@ -77,6 +78,7 @@ export const ENTITY_DIALOG_LABELS: EntityDialogLabels = {
   close: 'Close',
   noneOption: 'None',
   unreachable: 'The server could not be reached; check the connection and try again.',
+  unavailable: 'The server could not answer right now; try again in a moment.',
   pageFailed: 'Something went wrong on this page; reload it and try again.',
 }
 
@@ -296,14 +298,17 @@ function isApiErrorLike(e: unknown): e is ApiErrorLike {
 export function entityProblem(
   e: unknown,
   knownFields: ReadonlySet<string>,
-  labels: Pick<EntityDialogLabels, 'unreachable' | 'pageFailed'> = ENTITY_DIALOG_LABELS,
+  labels: Pick<EntityDialogLabels, 'unreachable' | 'unavailable' | 'pageFailed'> = ENTITY_DIALOG_LABELS,
 ): { fields: Record<string, string>; message: string } {
   if (!isApiErrorLike(e)) {
     console.error('The page failed:', e)
     return { fields: {}, message: labels.pageFailed }
   }
-  if (e.code === 'network' || e.code === 'http') {
+  if (e.code === 'network') {
     return { fields: {}, message: labels.unreachable }
+  }
+  if (e.code === 'http') {
+    return { fields: {}, message: labels.unavailable }
   }
   const fields: Record<string, string> = {}
   const extra: string[] = []

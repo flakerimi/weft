@@ -155,7 +155,7 @@ const entries = computed<FieldEntry[]>(() => {
     for (const f of props.fields) byName.set(f.name, f)
   }
   const orderedKeys: string[] = props.fields
-    ? [...props.fields.map((f) => f.name), ...Object.keys(schemaMap).filter((k) => !byName.has(k))]
+    ? props.fields.map((f) => f.name)
     : Object.keys(schemaMap)
   const seen = new Set<string>()
   for (const k of orderedKeys) {

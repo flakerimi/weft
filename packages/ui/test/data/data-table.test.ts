@@ -213,8 +213,9 @@ describe('DataTable', () => {
     expect(alert.getAttribute('role')).toBe('alert')
     expect(alert.textContent).toContain('Product is in an open order.')
 
-    // Retry and succeed
+    // Retry and succeed (focus the confirm button as a real browser click does)
     shouldFail = false
+    confirmBtn().focus()
     confirmBtn().click()
     await settle()
     await new Promise((r) => setTimeout(r, 20))
@@ -226,13 +227,63 @@ describe('DataTable', () => {
     expect(document.activeElement).toBe(remainingDelBtn)
 
     // Delete the last remaining row: focus moves to the "New product" button
+    remainingDelBtn.focus()
     remainingDelBtn.click()
     await settle()
+    confirmBtn().focus()
     confirmBtn().click()
     await settle()
     await new Promise((r) => setTimeout(r, 20))
     await settle()
     expect(document.activeElement).toBe($$('button').find((b) => b.textContent!.trim() === 'New product'))
+  })
+
+  it('moves focus to a row Delete button when deleting the last row of page 2 triggers a fallback fetch of page 1', async () => {
+    const items: Product[] = Array.from({ length: 11 }, (_, i) => ({
+      id: i + 1,
+      name: `P${String(i + 1).padStart(2, '0')}`,
+      price: i + 1,
+      sale: null,
+      status: 'live',
+    }))
+    const resource = {
+      list: vi.fn(async (q: { page: number; per_page: number }) => {
+        await new Promise((r) => setTimeout(r, 5))
+        return {
+          items: items.slice((q.page - 1) * q.per_page, q.page * q.per_page),
+          total: items.length,
+        }
+      }),
+      create: vi.fn(async (b: ProductInput) => ({ id: 99, ...b })),
+      update: vi.fn(async (id: number, b: Partial<ProductInput>) => ({ ...items[0]!, id, ...b })),
+      remove: vi.fn(async (id: number) => {
+        const idx = items.findIndex((x) => x.id === id)
+        if (idx >= 0) items.splice(idx, 1)
+      }),
+    }
+    await cases({ resource, perPage: 10 })
+    await new Promise((r) => setTimeout(r, 20))
+    await settle()
+
+    // Go to page 2 (only P11)
+    const page2Btn = $<HTMLElement>('.weft-table [aria-label="Page 2"]')
+    page2Btn.click()
+    await new Promise((r) => setTimeout(r, 20))
+    await settle()
+    expect($('tbody').textContent).toContain('P11')
+
+    const delBtn = $<HTMLElement>('button[data-weft-row-action="delete"]')
+    delBtn.focus()
+    delBtn.click()
+    await settle()
+    const confirmBtn = $$('button', $('[role="alertdialog"]', overlays()!)).find((b) => b.textContent!.trim() === 'Delete')!
+    confirmBtn.focus()
+    confirmBtn.click()
+    await new Promise((r) => setTimeout(r, 40))
+    await settle()
+
+    expect($('tbody').textContent).toContain('P01')
+    expect(document.activeElement?.getAttribute('data-weft-row-action')).toBe('delete')
   })
 
   it('omits New and Edit when schema (and #dialog) is absent or when create/update are absent, and omits Actions column when both update and remove are absent', async () => {

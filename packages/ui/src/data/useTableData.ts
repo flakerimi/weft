@@ -83,6 +83,7 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
   const perPage = computed(() => opts.perPage() ?? (opts.fetch() ? 20 : undefined))
 
   let asked = 0
+  let inflight: Promise<void> | null = null
   let searchTimer: ReturnType<typeof setTimeout> | null = null
   function clearSearchTimer() {
     if (searchTimer !== null) {
@@ -95,7 +96,12 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
   // past the end, the total and the rest of the query, so that the same
   // question is not asked again.
   let moved: { from: number; total: number; rest: string } | null = null
-  async function ask() {
+  function ask(): Promise<void> {
+    const p = runAsk()
+    inflight = p
+    return p
+  }
+  async function runAsk(): Promise<void> {
     clearSearchTimer()
     const fetch = opts.fetch()
     if (!fetch) return
@@ -122,16 +128,19 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
     fetching.value = true
     try {
       const answer = await fetch(query)
-      if (mine !== asked) return
+      if (mine !== asked) {
+        if (inflight) await inflight
+        return
+      }
       const last = Math.max(1, Math.ceil(answer.total / Math.max(1, query.per_page)))
       if (answer.items.length === 0 && answer.total > 0 && query.page > last && opts.setPage) {
         const kept = (moved = { from: query.page, total: answer.total, rest })
         opts.setPage(last) // the watcher asks for it, once
         // A parent that took the move has the page by the next tick; one that
         // keeps its own has put it back by then.
-        void nextTick(() => {
-          if (moved === kept && opts.page.value === last) moved = null
-        })
+        await nextTick()
+        if (moved === kept && opts.page.value === last) moved = null
+        if (mine !== asked && inflight) await inflight
         return
       }
       if (moved?.total !== answer.total) moved = null

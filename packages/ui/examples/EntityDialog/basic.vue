@@ -31,8 +31,10 @@ async function create(body: Omit<Product, 'id'>): Promise<Product> {
     :schema="schema"
     :defaults="{ price: 0, status: 'draft' }"
     :fields="[
+      { name: 'name' },
       { name: 'price', step: 0.01 },
       { name: 'sale', step: 0.01, hint: 'Empty when it is not on sale.' },
+      { name: 'status' },
     ]"
     :create="create"
   />

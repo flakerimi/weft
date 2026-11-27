@@ -85,7 +85,7 @@ describe('entity helpers', () => {
     expect(changes({ name: 'Mug', price: 12, sale: null, status: 'draft' }, wasNoSale, SCHEMA)).toEqual({})
   })
 
-  it('maps ApiError-shaped errors to known field errors and top-level alert text, treating code==="http" like network', () => {
+  it('maps ApiError-shaped errors to known field errors and top-level alert text, distinguishing code==="network" from code==="http"', () => {
     const known = new Set(['name', 'price'])
     expect(
       entityProblem(
@@ -106,13 +106,13 @@ describe('entity helpers', () => {
       entityProblem({ status: 502, code: 'http', message: 'Bad Gateway', fields: {} }, known),
     ).toEqual({
       fields: {},
-      message: 'The server could not be reached; check the connection and try again.',
+      message: 'The server could not answer right now; try again in a moment.',
     })
     expect(
       entityProblem({ status: 200, code: 'http', message: 'The answer was not JSON.', fields: {} }, known),
     ).toEqual({
       fields: {},
-      message: 'The server could not be reached; check the connection and try again.',
+      message: 'The server could not answer right now; try again in a moment.',
     })
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
@@ -168,8 +168,15 @@ describe('EntityDialog', () => {
     await cases({
       schema: richSchema,
       fields: [
+        { name: 'name' },
+        { name: 'email' },
+        { name: 'website' },
         { name: 'notes', control: 'textarea', label: 'Notes' },
+        { name: 'category' },
+        { name: 'status' },
         { name: 'active', control: 'switch', label: 'Active' },
+        { name: 'count' },
+        { name: 'tags' },
       ],
       labels: { noneOption: 'No status' },
     })
@@ -261,8 +268,8 @@ describe('EntityDialog', () => {
     expect(m.exposed.savedRecords).toHaveLength(1)
   })
 
-  it('shows server field errors on known fields (and focuses the first invalid control after busy ends), unknown or hidden field errors in the top Alert with role="alert", and clears them when reopened', async () => {
-    let failMode: 'field' | 'unknownField' | 'hiddenField' | 'top' = 'field'
+  it('shows server field errors on known fields (and focuses the first invalid control after busy ends), unknown, hidden or omitted field errors in the top Alert with role="alert", and clears them when reopened', async () => {
+    let failMode: 'field' | 'unknownField' | 'hiddenField' | 'omittedField' | 'top' = 'field'
     const create = vi.fn(async (_body: ItemInput): Promise<Item> => {
       if (failMode === 'field') {
         throw { status: 422, code: 'invalid', message: 'Invalid input.', fields: { name: 'That name is taken.' } }
@@ -273,19 +280,37 @@ describe('EntityDialog', () => {
       if (failMode === 'hiddenField') {
         throw { status: 422, code: 'invalid', message: 'Invalid input.', fields: { notes: 'Hidden note error.' } }
       }
+      if (failMode === 'omittedField') {
+        throw { status: 422, code: 'invalid', message: 'Invalid input.', fields: { internalCode: 'Omitted code error.' } }
+      }
       throw { status: 500, code: 'internal', message: 'Database unavailable.', fields: {} }
     })
     const m = await cases({
       schema: {
         ...SCHEMA,
         notes: { type: 'string', required: true },
+        internalCode: { type: 'string', required: true },
       },
-      // Hidden required field does not block submit when empty, and its server error goes to the top Alert.
-      fields: [{ name: 'notes', hidden: true }],
+      // Only listed fields render in that order; hidden or omitted required schema fields do not block submit, and their server errors go to the top Alert.
+      fields: [
+        { name: 'name' },
+        { name: 'price' },
+        { name: 'sale' },
+        { name: 'status' },
+        { name: 'notes', hidden: true },
+      ],
       defaults: { name: 'Kettle', price: 10, status: 'draft' },
       create: fn(create),
     })
     const dialog = () => $('[role="dialog"]', overlays()!)
+    expect($$('.weft-form-field__label', dialog()).map((l) => l.textContent!.replace('*', '').trim())).toEqual([
+      'Name',
+      'Price',
+      'Sale',
+      'Status',
+    ])
+    expect(dialog().querySelector('input[name="internalCode"]')).toBeNull()
+    expect(dialog().querySelector('input[name="notes"]')).toBeNull()
     const submit = () => $$('button', dialog()).find((b) => b.textContent!.trim() === 'Create')!
 
     submit().focus()
@@ -307,6 +332,11 @@ describe('EntityDialog', () => {
     submit().click()
     await settle()
     expect($('.weft-alert', dialog()).textContent).toContain('Hidden note error.')
+
+    failMode = 'omittedField'
+    submit().click()
+    await settle()
+    expect($('.weft-alert', dialog()).textContent).toContain('Omitted code error.')
 
     failMode = 'top'
     submit().click()
