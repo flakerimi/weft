@@ -15,8 +15,10 @@ export { formKey, useForm, useFormState, type FormContext } from './form-state.t
 export interface FieldContext {
   /** The control's id, which the field's label is `for`. */
   id: string
-  /** The label's id, for a group control (radios, checkboxes, a slider) to be `aria-labelledby`. */
+  /** The label's id, for a control that is not a labelable element (radios, checkboxes, a slider) to be `aria-labelledby`, while `hasLabel()`. */
   labelId: string
+  /** Whether the field draws a label: with none, `labelId` names no element, and no control may point at it. */
+  hasLabel(): boolean
   name: () => string | undefined
   /** The ids of the hint and the error shown now, space-separated, or undefined. */
   describedBy: () => string | undefined
@@ -30,10 +32,13 @@ export interface FieldContext {
   input(): void
   /**
    * For a control that is not a labelable element (a group, a slider
-   * thumb), during setup: it names itself through `labelId`, so the label
-   * drops `for`, which would point at no form control.
+   * thumb), during setup: it names itself through `labelId` (aria-labelledby),
+   * so the field draws its label as no `<label>`, which must label a form
+   * control. `on` may be a getter, for a control that is one only at times
+   * (InputTime's segments, not its native time input); `false` gives the
+   * field its `<label for>` back, as a control does when it goes.
    */
-  namedByLabel(on?: boolean): void
+  namedByLabel(on?: boolean | (() => boolean)): void
 }
 
 /** What a FieldGroup gives the controls in it. */
@@ -91,6 +96,8 @@ export interface Field {
   field: FieldContext | null
   /** Inside a FormField, the field's id (so its label points here); else the control's own `id`. */
   id: ComputedRef<string | undefined>
+  /** The field's label's id while the field draws a label, for `aria-labelledby`; else undefined. */
+  labelId: ComputedRef<string | undefined>
   name: ComputedRef<string | undefined>
   /** The control's own size, else its FieldGroup's, else its FormField's, else md. */
   size: ComputedRef<Size>
@@ -110,6 +117,7 @@ export function useField(props: ControlProps): Field {
   return {
     field,
     id: computed(() => (field ? field.id : props.id)),
+    labelId: computed(() => (field?.hasLabel() ? field.labelId : undefined)),
     name: computed(() => props.name ?? field?.name()),
     size: computed(() => props.size ?? group?.size() ?? field?.size() ?? 'md'),
     // A disabled Form disables every control in it, in a FormField or not.

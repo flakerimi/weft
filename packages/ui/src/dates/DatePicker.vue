@@ -261,7 +261,7 @@ defineExpose({
       :aria-expanded="open ? 'true' : 'false'"
       :aria-controls="open ? panelId : undefined"
       :aria-label="touch ? (own['aria-label'] as string | undefined) : buttonLabel"
-      :aria-labelledby="touch && f.field ? `${f.field.labelId} ${valueId}` : undefined"
+      :aria-labelledby="touch && f.labelId.value ? `${f.labelId.value} ${valueId}` : undefined"
       :aria-describedby="touch ? describedBy() : undefined"
       :aria-invalid="touch && invalid ? 'true' : undefined"
       :aria-required="touch && (required || f.aria.value['aria-required']) ? 'true' : undefined"

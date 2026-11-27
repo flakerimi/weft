@@ -14,6 +14,7 @@ const changes = ref(0)
 provideField({
   id: 'spy',
   labelId: 'spy-label',
+  hasLabel: () => false,
   name: () => 'spy',
   describedBy: () => undefined,
   invalid: () => false,

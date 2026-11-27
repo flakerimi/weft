@@ -163,7 +163,7 @@ defineExpose({
     :data-size="f.size.value"
     :data-invalid="f.invalid.value ? 'true' : undefined"
     :data-disabled="f.disabled.value ? 'true' : undefined"
-    :aria-labelledby="f.field?.labelId"
+    :aria-labelledby="f.labelId.value"
     :aria-describedby="f.aria.value['aria-describedby']"
     @focusout="leavesGroup($event) && f.blur()"
   >

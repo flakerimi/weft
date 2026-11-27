@@ -9,6 +9,17 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
 
 ## Unreleased
 
+- A FormField's label is a `<label for>` only over a labelable control. Over a
+  RadioGroup, CheckboxGroup, Slider, Listbox without a filter, ToggleGroup or
+  InputTime's parts it is a `<span>` the control is `aria-labelledby`, drawn so
+  by the server too, so a static page has no `<label for>` naming a fieldset, a
+  thumb or a list (Chrome's "Incorrect use of <label for=FORM_ELEMENT>"). An
+  InputTime on touch is a native time input the label is for; a ToggleGroup
+  takes its field's id and label; with no label, no control points
+  `aria-labelledby` at one; and what the `label` slot holds is no control of
+  the field's, with ids of its own in an island. Mounted in the browser with no server
+  HTML, the label is drawn one update after `mount()`, before anything is
+  painted.
 - Three new themes in `@weft/themes`: `synthwave` (neon on deep violet,
   Space Grotesk), `editor` (a warm charcoal code editor with candy accents,
   JetBrains Mono for everything) and `sandstorm` (sand, dune ochre and dusty

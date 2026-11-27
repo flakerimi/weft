@@ -49,6 +49,10 @@
  *    `packages/ui/test/stylesheets.test.ts` checks it. (Not read by this
  *    script.)
  *
+ * A `.vue` file in a `parts/` folder under a group (`forms/parts/FieldLabel.vue`)
+ * is no component: it is a part the components beside the folder draw, never
+ * exported, so it has no docs, examples or stylesheet of its own.
+ *
  * Props, defaults, emits and slots come from the SFC itself, through
  * `compileScript` from `vue/compiler-sfc` (the pinned `vue` package's own);
  * `scripts/catalog-sfc.ts` reads them and its header says how. A
@@ -232,9 +236,10 @@ function readExamples(root: string, name: string): CatalogExample[] {
 
 // ---------------------------------------------------------------- the whole
 
+/** Every file under `dir`, but those in a `parts/` folder, which are no components. */
 function walk(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-    e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)],
+    e.isDirectory() ? (e.name === 'parts' ? [] : walk(join(dir, e.name))) : [join(dir, e.name)],
   )
 }
 

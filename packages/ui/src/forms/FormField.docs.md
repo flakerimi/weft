@@ -8,13 +8,24 @@ adapts:
   surface: Nothing changes in behaviour; text follows the surface's type scale.
   width: Nothing changes; it fills the width of its container.
 ---
-The label sits over the control and is `for` it: the control takes the
-field's id (set `id` to choose it). A control that is not a labelable element
-- a RadioGroup, a CheckboxGroup, a Slider - is named through
-`aria-labelledby` instead, and the label then has no `for` (on the server
-the label keeps it until the island hydrates, as the control's setup runs
-after the label is written). A range Slider names each thumb by the label and
-its own end: "Price Minimum".
+The label sits over the control and is a `<label>` `for` it: the control
+takes the field's id (set `id` to choose it), and a press on the label
+focuses it. A control that is not a labelable element - a RadioGroup, a
+CheckboxGroup, a Slider, a Listbox without a filter, a ToggleGroup, an
+InputTime's parts - is named through `aria-labelledby` instead, and the label
+is then a `<span>`, since a `<label>` must label a form control. The server
+draws it so too, on a page that never hydrates, for a control that sets up
+as the page renders; one inside a component with an async setup gets a
+`<label for>` from the server, put right only once its island hydrates. With
+no label, no control points `aria-labelledby` at one. A range Slider names
+each thumb by the label and its own end: "Price Minimum".
+
+The `label` slot may hold components (a Tooltip, a Checkbox): they are not the
+field's control, and take neither its id nor its name. Mounted in the browser
+with no server markup, the label is drawn once the field has mounted, so its
+slot is set up once; but when the label turns from one element into the other
+(an InputTime switching between its parts and the native time input), the
+slot's content is set up again and loses its state.
 
 `description` is a sentence under the label; `hint` is a short note beside
 it ("Optional", "3 of 10"); `error` sits under the control. All three
