@@ -58,7 +58,7 @@ Build the image from the app's folder, after `weft build`. A `.dockerignore` wit
 
 `scripts/publish-site.sh <version>` publishes weft.base.al. It:
 
-1. builds a release of the `weft` command for four platforms, with `scripts/release.sh`;
+1. builds a release of the `weft` command for all six platforms (macOS, Linux and Windows on arm64 and amd64), with `scripts/release.sh`;
 2. builds this site with `scripts/site.sh build`, with `WEFT_SITE_VERSION` set to the version, which `/index.md` names (a build without it names no version);
 3. makes a tree with the Go sources, the built pages, a Dockerfile that compiles the site's binary in the image and copies it onto `scratch`, the installer, every release `site/releases.txt` lists as published, and the new one;
 4. pushes the tree to the server, which builds the image and runs it, lists the version in `site/releases.txt` as soon as the push succeeds, so every later publish keeps it, and waits until the new version answers.

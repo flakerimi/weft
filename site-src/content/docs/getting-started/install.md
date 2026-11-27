@@ -4,17 +4,23 @@ description: Install the weft command, and get the packages you build with.
 order: 10
 ---
 
-On this page you install the `weft` command and the tools an app needs. You need macOS or Linux, on arm64 or amd64.
+On this page you install the `weft` command and the tools an app needs. You need macOS, Linux or Windows, on arm64 or amd64.
 
 ## The weft command
 
-Run the installer:
+Run the installer on macOS or Linux:
 
 ```sh copy
 curl -fsSL https://weft.base.al/install | sh
 ```
 
-It downloads the release for your system from `weft.base.al`, checks it against the release's `SHA256SUMS`, and puts `weft` in `~/.local/bin`. If that folder is not on your `PATH`, it tells you. Each release is also a [GitHub Release](https://github.com/flakerimi/weft/releases), `v<version>`, with the same archives and the same `SHA256SUMS`.
+Or on Windows, in PowerShell:
+
+```powershell copy
+irm https://weft.base.al/install.ps1 | iex
+```
+
+It downloads the release for your system from `weft.base.al`, checks it against the release's `SHA256SUMS`, and puts `weft` (`weft.exe` on Windows) in `~/.local/bin` (`$HOME\.local\bin` on Windows, adding it to your user `PATH`). If that folder is not on your `PATH`, it tells you. Each release is also a [GitHub Release](https://github.com/flakerimi/weft/releases), `v<version>`, with the same archives and the same `SHA256SUMS`.
 
 Check that it works:
 
@@ -26,11 +32,11 @@ It prints the version and your platform, such as `weft 0.0.3 (darwin/arm64)`.
 
 ### Installer settings
 
-Set these before `sh` to change what the installer does:
+Set these in the environment before running the installer to change what it does:
 
 | Variable | What it does | Default |
 | --- | --- | --- |
-| `WEFT_BIN_DIR` | Where to put `weft` | `$HOME/.local/bin` |
+| `WEFT_BIN_DIR` | Where to put `weft` | `$HOME/.local/bin` (`$HOME\.local\bin` on Windows) |
 | `WEFT_VERSION` | Which release to install | the latest |
 | `WEFT_BASE` | Where the releases are | `https://weft.base.al` |
 

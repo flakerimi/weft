@@ -288,12 +288,13 @@ func get(t *testing.T, srv *httptest.Server, path string, header ...string) (*ht
 }
 
 // stagedReleases writes a folder like the one scripts/stage-releases.sh
-// stages into the image: the installer and one release.
+// stages into the image: the installers and one release.
 func stagedReleases(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	for name, data := range map[string]string{
 		"install":                                "#!/bin/sh\necho weft\n",
+		"install.ps1":                            "# install.ps1\n",
 		"releases/latest":                        "0.0.9\n",
 		"releases/0.0.9/SHA256SUMS":              "abc  weft_linux_amd64.tar.gz\n",
 		"releases/0.0.9/weft_linux_amd64.tar.gz": "tarball",
@@ -342,14 +343,15 @@ func TestSiteServes(t *testing.T) {
 	}
 }
 
-// The installer and the releases come from the folder on disk, not the binary.
+// The installers and the releases come from the folder on disk, not the binary.
 func TestSiteServesReleasesFromDisk(t *testing.T) {
 	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
 	defer srv.Close()
 	for p, want := range map[string]string{
-		"/install":                                "#!/bin/sh\necho weft\n",
-		"/releases/latest":                        "0.0.9\n",
-		"/releases/0.0.9/SHA256SUMS":              "abc  weft_linux_amd64.tar.gz\n",
+		"/install":                   "#!/bin/sh\necho weft\n",
+		"/install.ps1":               "# install.ps1\n",
+		"/releases/latest":           "0.0.9\n",
+		"/releases/0.0.9/SHA256SUMS": "abc  weft_linux_amd64.tar.gz\n",
 		"/releases/0.0.9/weft_linux_amd64.tar.gz": "tarball",
 	} {
 		res, body := get(t, srv, p)
@@ -366,27 +368,33 @@ func TestSiteServesReleasesFromDisk(t *testing.T) {
 	}
 }
 
-// The folder holds the installer and releases/, as scripts/stage-releases.sh
+// The folder holds the installers and releases/, as scripts/stage-releases.sh
 // writes them, and nothing else: anything else would be served at the root.
 func TestReleaseFilesRefuses(t *testing.T) {
 	dir := stagedReleases(t)
 	os.WriteFile(filepath.Join(dir, "index.html"), []byte("x"), 0o644)
-	if _, err := releaseFiles(dir); err == nil || err.Error() != "the releases folder "+dir+" holds index.html; it holds only install and releases/, as scripts/stage-releases.sh stages them" {
+	if _, err := releaseFiles(dir); err == nil || err.Error() != "the releases folder "+dir+" holds index.html; it holds only install, install.ps1 and releases/, as scripts/stage-releases.sh stages them" {
 		t.Fatalf("an extra file: %v", err)
 	}
 	empty := t.TempDir()
 	if _, err := releaseFiles(empty); err == nil || err.Error() != "the releases folder "+empty+" has no install; stage it with scripts/stage-releases.sh, or set WEFT_RELEASES_DIR" {
 		t.Fatalf("no installer: %v", err)
 	}
+	noPS := t.TempDir()
+	os.WriteFile(filepath.Join(noPS, "install"), []byte("#!/bin/sh\n"), 0o644)
+	if _, err := releaseFiles(noPS); err == nil || err.Error() != "the releases folder "+noPS+" has no install.ps1; stage it with scripts/stage-releases.sh, or set WEFT_RELEASES_DIR" {
+		t.Fatalf("no PowerShell installer: %v", err)
+	}
 	missing := filepath.Join(empty, "none")
 	if _, err := releaseFiles(missing); err == nil || !strings.HasPrefix(err.Error(), "the releases folder "+missing+" cannot be read (") {
 		t.Fatalf("no folder: %v", err)
 	}
-	// Where site/releases is empty, as in CI, only the installer is staged.
+	// Where site/releases is empty, as in CI, only the installers are staged.
 	only := t.TempDir()
 	os.WriteFile(filepath.Join(only, "install"), []byte("#!/bin/sh\n"), 0o644)
+	os.WriteFile(filepath.Join(only, "install.ps1"), []byte("# install.ps1\n"), 0o644)
 	if _, err := releaseFiles(only); err != nil {
-		t.Fatalf("the installer alone: %v", err)
+		t.Fatalf("the installers alone: %v", err)
 	}
 }
 
@@ -407,7 +415,7 @@ func TestBinaryHoldsNoReleases(t *testing.T) {
 	var m builtFiles
 	readJSON(t, dist(t), "manifest.json", &m)
 	for key := range m.Files {
-		if key == "/install" || strings.HasPrefix(key, "/releases/") {
+		if key == "/install" || key == "/install.ps1" || strings.HasPrefix(key, "/releases/") {
 			t.Errorf("the build embeds %s; releases are served from WEFT_RELEASES_DIR", key)
 		}
 	}

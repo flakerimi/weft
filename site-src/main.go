@@ -33,9 +33,9 @@ func releasesDir() string {
 }
 
 // releaseFiles opens dir, the folder scripts/stage-releases.sh stages: the
-// installer as install and the releases under releases/. Its files are served
-// at their own paths, so it may hold nothing else. It is opened as an
-// os.Root, so nothing put in it later, a symlink say, leads out of it.
+// installers as install and install.ps1 and the releases under releases/. Its
+// files are served at their own paths, so it may hold nothing else. It is
+// opened as an os.Root, so nothing put in it later, a symlink say, leads out of it.
 func releaseFiles(dir string) (fs.FS, error) {
 	root, err := os.OpenRoot(dir)
 	if err != nil {
@@ -48,20 +48,22 @@ func releaseFiles(dir string) (fs.FS, error) {
 		return nil, fmt.Errorf("the releases folder %s cannot be read (%w)", dir, err)
 	}
 	for _, e := range entries {
-		if name := e.Name(); name != "install" && name != "releases" {
+		if name := e.Name(); name != "install" && name != "install.ps1" && name != "releases" {
 			root.Close()
-			return nil, fmt.Errorf("the releases folder %s holds %s; it holds only install and releases/, as scripts/stage-releases.sh stages them", dir, name)
+			return nil, fmt.Errorf("the releases folder %s holds %s; it holds only install, install.ps1 and releases/, as scripts/stage-releases.sh stages them", dir, name)
 		}
 	}
-	if fi, err := fs.Stat(files, "install"); errors.Is(err, fs.ErrNotExist) || (err == nil && !fi.Mode().IsRegular()) {
-		root.Close()
-		return nil, fmt.Errorf("the releases folder %s has no install; stage it with scripts/stage-releases.sh, or set WEFT_RELEASES_DIR", dir)
+	for _, name := range []string{"install", "install.ps1"} {
+		if fi, err := fs.Stat(files, name); errors.Is(err, fs.ErrNotExist) || (err == nil && !fi.Mode().IsRegular()) {
+			root.Close()
+			return nil, fmt.Errorf("the releases folder %s has no %s; stage it with scripts/stage-releases.sh, or set WEFT_RELEASES_DIR", dir, name)
+		}
 	}
 	// The root stays open as long as the server serves from it.
 	return files, nil
 }
 
-// handler serves the embedded pages, and /install and /releases/ from releases.
+// handler serves the embedded pages, and /install, /install.ps1 and /releases/ from releases.
 func handler(releases fs.FS) http.Handler {
 	dist, err := fs.Sub(siteDist, "dist")
 	if err != nil {

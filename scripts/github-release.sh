@@ -58,7 +58,7 @@ pre=
 case "$version" in *-*) pre=--prerelease ;; esac
 # Every link is one weft.base.al serves once the version is pushed (the
 # release's folder itself is not a page; its SHA256SUMS is).
-notes="weft $version for darwin and linux, on amd64 and arm64: the files weft.base.al serves, with their checksums at https://weft.base.al/releases/$version/SHA256SUMS. Install it as https://weft.base.al/docs/getting-started/install says. An app this release makes requires github.com/flakerimi/weft $tag."
+notes="weft $version for darwin, linux and windows, on amd64 and arm64: the files weft.base.al serves, with their checksums at https://weft.base.al/releases/$version/SHA256SUMS. Install it as https://weft.base.al/docs/getting-started/install says. An app this release makes requires github.com/flakerimi/weft $tag."
 
 if [ -n "$dry" ]; then
 	printf 'dry run: would run: gh release create %s --repo %s --verify-tag --title %s --notes '"'"'%s'"'"'%s' "$tag" "$repo" "$tag" "$notes" "${pre:+ $pre}"
