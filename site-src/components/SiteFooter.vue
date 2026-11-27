@@ -9,7 +9,7 @@ import '../styles/site.css'
     <template #leading><SiteMark /></template>
     <template #trailing>
       MIT licensed. © 2026 Basecode LLC. Built with Weft, served by its binary.
-      <a href="https://github.com/flakerimi/weft">GitHub</a> · <a href="http://basecode.llc">basecode.llc</a>
+      <a href="https://github.com/flakerimi/weft">GitHub</a> · <a href="https://basecode.llc">basecode.llc</a>
     </template>
   </Footer>
 </template>
