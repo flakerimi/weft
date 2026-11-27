@@ -28,7 +28,7 @@ component uses. Neither is counted in the rows below.
 
 ## Per component
 
-82 components. Median: JS 2.70 KB, CSS 1.31 KB.
+82 components. Median: JS 2.70 KB, CSS 1.32 KB.
 
 | Component | JS | Later | CSS | Total |
 | --- | ---: | ---: | ---: | ---: |
@@ -103,7 +103,7 @@ component uses. Neither is counted in the rows below.
 | Stepper | 3.28 | — | 1.04 | 4.32 |
 | Switch | 1.97 | — | 1.42 | 3.39 |
 | Table | 11.70 | — | 2.79 | 14.49 |
-| Tabs | 3.99 | — | 1.31 | 5.30 |
+| Tabs | 3.99 | — | 1.34 | 5.33 |
 | Testimonials | 3.07 | — | 1.05 | 4.12 |
 | Textarea | 2.12 | — | 0.54 | 2.66 |
 | Timeline | 2.17 | — | 0.92 | 3.08 |

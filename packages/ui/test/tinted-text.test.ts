@@ -113,3 +113,58 @@ describe.each(themes.map((t) => [t.name, t] as const))('%s', (_, theme) => {
     })
   }
 })
+
+// A pill tab list draws every tab in the text colour on its tint, so the
+// selected tab must stand out by more than its raised fill (near 1:1 against
+// the list in dark schemes): its text is in its tone, and with the neutral
+// tone, whose text is the text colour, a ring in the tone marks it. Hovering
+// an unselected tab tints it further, its text still at 4.5:1.
+const PILL_SELECTED = '.weft-tabs[data-variant="pill"] .weft-tabs__tab[aria-selected="true"]'
+const PILL_NEUTRAL_SELECTED = '.weft-tabs[data-variant="pill"][data-tone="neutral"] .weft-tabs__tab[aria-selected="true"]'
+const PILL_HOVER = '.weft-tabs[data-variant="pill"] .weft-tabs__tab:not(:disabled, [aria-selected="true"]):hover'
+
+/** The value of `property` in the last rule for `selector` that sets it. */
+function valueOf(selector: string, property: string): string | undefined {
+  let found: string | undefined
+  for (const body of declarations(selector)) {
+    const m = new RegExp(`(?:^|;|\\s)${property}:\\s*([^;]+)`).exec(body)
+    if (m) found = m[1]!.trim()
+  }
+  return found
+}
+
+describe.each(themes.map((t) => [t.name, t] as const))('%s: the selected pill tab', (_, theme) => {
+  const out = themeToCss(theme)
+  const light = block(out, ':where(:root, [data-weft-scheme="light"])')
+  const schemes = { light, dark: { ...light, ...block(out, ':where([data-weft-scheme="dark"])') } }
+  for (const [scheme, v] of Object.entries(schemes)) {
+    it.each(['primary', 'danger', 'warning', 'success'])(`${scheme}: in the %s tone its text is the tone's, at 4.5:1 on its fill, and not the others' colour`, (tone) => {
+      expect(valueOf(PILL_SELECTED, 'color')).toMatch(/^var\(--weft-tone-text,/)
+      const selected = v[`color-${tone}-text`]!
+      const others = v[`color-${textToken(['.weft-tabs[data-variant="pill"] .weft-tabs__tab', '.weft-tabs__tab'])}`]!
+      expect(contrast(selected, v['color-surface-raised']!), `${selected} on surface-raised`).toBeGreaterThanOrEqual(4.5)
+      expect(selected, 'the selected text against the others').not.toBe(others)
+    })
+
+    it(`${scheme}: in the neutral tone a ring in the text colour marks it, at 3:1 against its fill and the list`, () => {
+      expect(valueOf(PILL_NEUTRAL_SELECTED, 'box-shadow')).toMatch(/inset 0 0 0 var\(--weft-border-width, 1px\) var\(--weft-tone,/)
+      const ring = v['color-text']!
+      for (const ground of ALL) {
+        const list = mix(v['color-text']!, v[`color-${ground}`]!, tintOf('.weft-tabs[data-variant="pill"] > .weft-tabs__list').share)
+        expect(contrast(ring, list), `ring on the list over ${ground}`).toBeGreaterThanOrEqual(3)
+      }
+      expect(contrast(ring, v['color-surface-raised']!)).toBeGreaterThanOrEqual(3)
+    })
+
+    it(`${scheme}: hovering an unselected one tints it, its text still at 4.5:1`, () => {
+      const { share } = tintOf(PILL_HOVER)
+      expect(share).toBeGreaterThan(0)
+      const list = tintOf('.weft-tabs[data-variant="pill"] > .weft-tabs__list').share
+      const text = v[`color-${textToken([PILL_HOVER, '.weft-tabs[data-variant="pill"] .weft-tabs__tab'])}`]!
+      for (const ground of ALL) {
+        const behind = mix(v['color-text']!, mix(v['color-text']!, v[`color-${ground}`]!, list), share)
+        expect(contrast(text, behind), `${text} hovered over ${ground}`).toBeGreaterThanOrEqual(4.5)
+      }
+    })
+  }
+})
