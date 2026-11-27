@@ -5,8 +5,10 @@ import (
 	"context"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -118,10 +120,25 @@ func sharedDevApp(t *testing.T) string {
 	return sharedDir
 }
 
+// logRunningProcesses logs active node, cmd, pnpm, weft and app processes on
+// Windows before a dev test fails waiting for weft dev's URL line, so any hang
+// shows which process is alive and with what command line.
+func logRunningProcesses(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "windows" {
+		return
+	}
+	cmd := exec.Command("powershell", "-NoProfile", "-Command",
+		"Get-CimInstance Win32_Process | Where-Object Name -Match 'node|cmd|pnpm|weft|app' | Format-Table ProcessId,ParentProcessId,Name,CommandLine -AutoSize | Out-String -Width 400")
+	out, err := cmd.CombinedOutput()
+	t.Logf("running processes (err=%v):\n%s", err, out)
+}
+
 // startDev runs weft dev with args in the current folder; it returns once
 // weft dev prints its URL line, and stops it when the test ends.
 func startDev(t *testing.T, app string, args ...string) *devRun {
 	t.Helper()
+	started := time.Now()
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &devRun{app: app, stdout: &syncBuffer{}, stderr: &syncBuffer{}, cancel: cancel, done: make(chan int, 1)}
 	done := r.done
@@ -137,20 +154,23 @@ func startDev(t *testing.T, app string, args ...string) *devRun {
 			t.Error("weft dev did not stop within 10 s of being cancelled")
 		}
 	})
-	lineRe := regexp.MustCompile(`(?m)^weft dev: (http://localhost:\d+)\n`)
+	lineRe := regexp.MustCompile(`(?m)^weft dev: (http://localhost:\d+)\r?\n`)
 	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
 		if m := lineRe.FindStringSubmatch(r.stdout.String()); m != nil {
 			r.url = m[1]
+			t.Logf("weft dev ready in %s", time.Since(started).Round(time.Millisecond))
 			return r
 		}
 		select {
 		case code := <-r.done:
 			r.done = nil
-			t.Fatalf("weft dev exited %d before its URL line: %s%s", code, r.stdout, r.stderr)
+			logRunningProcesses(t)
+			t.Fatalf("weft dev exited %d after %s before its URL line: %s%s", code, time.Since(started).Round(time.Millisecond), r.stdout, r.stderr)
 		default:
 		}
 	}
-	t.Fatalf("weft dev printed no URL line within 60 s: %s%s", r.stdout, r.stderr)
+	logRunningProcesses(t)
+	t.Fatalf("weft dev printed no URL line within 60 s (%s elapsed): %s%s", time.Since(started).Round(time.Millisecond), r.stdout, r.stderr)
 	return nil
 }
 

@@ -122,16 +122,16 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	// Each child gets its own standard input pipe whose write end weft dev
 	// holds, and never writes to, for its whole life. Two separate pipes are
-	// used because on Windows an anonymous pipe does not support overlapped
-	// I/O: if both the Go server (blocking ReadFile in untilEOF) and the page
-	// server (Node/libuv reading stdin under --exit-with-parent) shared one
-	// read handle, the first synchronous ReadFile would serialize and block
-	// the second child's read from ever starting. When weft dev dies, however
-	// it dies, SIGKILL too, the kernel closes both write ends and each child
-	// reads the end of its input and exits: the Go server under
-	// WEFT_DEV_PARENT=1, the page server under --exit-with-parent. An
-	// *os.File as Stdin is handed to the child as it is, with no goroutine
-	// copying into it.
+	// used, with only one process reading each, because on Windows an
+	// anonymous pipe does not support overlapped I/O: any synchronous call on
+	// a shared pipe handle — including GetFileType and NtQueryInformationFile
+	// during stdin setup as well as ReadFile — waits behind a pending
+	// ReadFile, so the Go server's blocking read in untilEOF would block the
+	// page server from starting. When weft dev dies, however it dies, SIGKILL
+	// too, the kernel closes both write ends and each child reads the end of
+	// its input and exits: the Go server under WEFT_DEV_PARENT=1, the page
+	// server under --exit-with-parent. An *os.File as Stdin is handed to the
+	// child as it is, with no goroutine copying into it.
 	apiIn, apiOut, err := os.Pipe()
 	if err != nil {
 		return fail(stderr, "dev", fmt.Errorf("cannot make a pipe for the servers (%v); run weft dev again", err))
@@ -258,7 +258,7 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		case <-time.After(devGrace):
 		}
 		if c == pages {
-			pageOut.flush()
+			pageOut.flush(false)
 		}
 		stopAll()
 		fmt.Fprintf(stderr, "weft dev: %s stopped; see its output above.\n", c.name)
@@ -289,7 +289,7 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			return exited(pages)
 		case <-deadline:
 			if apiReady {
-				pageOut.flush()
+				pageOut.flush(true)
 			}
 			pageOut.quiet.Store(true)
 			stopAll()
@@ -609,10 +609,10 @@ func (d *dropLine) Write(p []byte) (int, error) {
 	}
 }
 
-func (d *dropLine) flush() {
+func (d *dropLine) flush(includeDropped bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if len(d.dropped) > 0 {
+	if includeDropped && len(d.dropped) > 0 {
 		_, _ = d.w.Write(d.dropped)
 		d.dropped = nil
 	}

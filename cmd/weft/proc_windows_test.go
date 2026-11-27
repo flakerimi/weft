@@ -422,7 +422,7 @@ func TestDevStopsWhileStarting(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("weft dev did not stop within 10 s")
 	}
-	if got := out.String(); got != "" && !regexp.MustCompile(`^weft dev: http://localhost:\d+\n$`).MatchString(got) {
+	if got := out.String(); got != "" && !regexp.MustCompile(`^weft dev: http://localhost:\d+\r?\n$`).MatchString(got) {
 		t.Errorf("stdout %q", got)
 	}
 	if got := withoutSetupLink(errb.String()); got != "" {
@@ -518,6 +518,7 @@ func TestDevStopsWhenKilled(t *testing.T) {
 	cmd.Dir = app
 	cmd.Stdout, cmd.Stderr = out, errb
 	cmd.WaitDelay = time.Second
+	started := time.Now()
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -540,10 +541,18 @@ func TestDevStopsWhenKilled(t *testing.T) {
 		}
 	})
 	for deadline := time.Now().Add(60 * time.Second); !strings.Contains(out.String(), "weft dev: http://localhost:"); time.Sleep(50 * time.Millisecond) {
+		select {
+		case <-done:
+			logRunningProcesses(t)
+			t.Fatalf("weft dev exited after %s before its URL line: %s%s", time.Since(started).Round(time.Millisecond), out.String(), errb.String())
+		default:
+		}
 		if time.Now().After(deadline) {
-			t.Fatalf("no URL line within 60 s: %s%s", out.String(), errb.String())
+			logRunningProcesses(t)
+			t.Fatalf("no URL line within 60 s (%s elapsed): %s%s", time.Since(started).Round(time.Millisecond), out.String(), errb.String())
 		}
 	}
+	t.Logf("weft.exe dev ready in %s", time.Since(started).Round(time.Millisecond))
 	url := "http://localhost:" + strconv.Itoa(port)
 	if code, body := get(t, url+"/api/hello"); code != 200 || strings.TrimSpace(body) != `{"message":"Hello from Go"}` {
 		t.Fatalf("GET /api/hello = %d %q", code, body)
