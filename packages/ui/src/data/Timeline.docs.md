@@ -6,7 +6,7 @@ avoid: For steps a person moves through and can go back to, use Stepper; for a l
 adapts:
   input: Nothing changes; it is not interactive.
   surface: Nothing changes in behaviour; text follows the surface's type scale.
-  width: A horizontal timeline turns vertical when its own box is narrow, so the text keeps its width.
+  width: A horizontal timeline turns vertical when its own box is narrow, so the text keeps its width. CSS does it from `data-width`, which the page's pre-paint script sets, so a page that is never hydrated adapts too.
 ---
 `items` are `{ date, title, description, icon, value }`, oldest first;
 `reverse` lists the newest first. `date` is text as it should read ("Mar

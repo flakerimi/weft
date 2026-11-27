@@ -4422,7 +4422,7 @@
       "adapts": {
         "input": "Nothing changes between pointer and touch; links inside bring their own touch sizes (Link with `standalone`).",
         "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
-        "width": "When its own width is narrow (under 640 px) the row stacks its parts, centred."
+        "width": "When its own width is narrow (under 640 px) the row stacks its parts, centred. Before it mounts, and on a page that is never hydrated, a viewport under 640 px does."
       },
       "props": [],
       "emits": [],
@@ -6423,7 +6423,7 @@
       "adapts": {
         "input": "Every button is at least --weft-hit-min tall on touch (Button's rule).",
         "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
-        "width": "When the viewport is narrow it shows at most one page each side of the current one and drops the first and last buttons; the row wraps when it must."
+        "width": "When the viewport is narrow it shows at most one page each side of the current one and drops the first and last buttons; the row wraps when it must. Before it mounts it draws the entries of both forms and a viewport media query shows one, so a page that is never hydrated pages right too."
       },
       "props": [
         {
@@ -8184,7 +8184,7 @@
       "adapts": {
         "input": "Each step button is at least --weft-hit-min tall on touch.",
         "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
-        "width": "A horizontal stepper stacks vertically when its own width is narrow (under 640 px)."
+        "width": "A horizontal stepper stacks vertically when its own width is narrow (under 640 px). CSS does it from `data-width`, which the page's pre-paint script sets, so a page that is never hydrated adapts too; the arrow keys follow once hydrated."
       },
       "props": [
         {
@@ -8461,7 +8461,7 @@
       "adapts": {
         "input": "On touch every row is at least --weft-hit-min (44 px) tall, and its checkbox takes a 44 px press (Checkbox's rule).",
         "surface": "Nothing changes in behaviour; `size` sets the row height and text follows the surface's type scale.",
-        "width": "When its own box is narrow (under 640 px, even in a side panel on a wide screen) each row becomes a card, a list item of label–value pairs from the same columns, with a Select all checkbox and the sort buttons above the cards; wide again, it is a table again."
+        "width": "When its own box is narrow (under 640 px, even in a side panel on a wide screen) each row becomes a card, a list item of label–value pairs from the same columns, with a Select all checkbox and the sort buttons above the cards; wide again, it is a table again. The cards come once it is hydrated, in an island: before that it is a table, which scrolls sideways inside its box."
       },
       "props": [
         {
@@ -8705,7 +8705,7 @@
       "adapts": {
         "input": "Tabs are at least --weft-hit-min tall on touch; a row too long for its width scrolls sideways.",
         "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
-        "width": "A vertical tab list goes above the panels when the tabs' own width is narrow (under 640 px), and turns horizontal."
+        "width": "A vertical tab list goes above the panels when the tabs' own width is narrow (under 640 px), and turns horizontal. CSS does it from `data-width`, which the page's pre-paint script sets, so a page that is never hydrated adapts too; `aria-orientation` and the arrow keys follow once hydrated."
       },
       "props": [
         {
@@ -9088,7 +9088,7 @@
       "adapts": {
         "input": "Nothing changes; it is not interactive.",
         "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
-        "width": "A horizontal timeline turns vertical when its own box is narrow, so the text keeps its width."
+        "width": "A horizontal timeline turns vertical when its own box is narrow, so the text keeps its width. CSS does it from `data-width`, which the page's pre-paint script sets, so a page that is never hydrated adapts too."
       },
       "props": [
         {
