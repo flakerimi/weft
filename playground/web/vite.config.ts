@@ -6,5 +6,10 @@ export default defineConfig({
   // weftIcons(): the examples draw Lucide icons, inlined at build.
   plugins: [vue(), weftIcons()],
   server: { proxy: { '/api': 'http://localhost:8080' } },
-  build: { outDir: 'dist', emptyOutDir: true },
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    // Every component's example is in the app; Vue's runtime is a chunk of its own beside them.
+    rolldownOptions: { output: { codeSplitting: { groups: [{ name: 'vue', test: /[\\/]node_modules[\\/](?:\.pnpm[\\/])?(?:@vue|vue)[\\/@+]/ }] } } },
+  },
 })
