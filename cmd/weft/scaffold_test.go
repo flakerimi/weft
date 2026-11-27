@@ -579,7 +579,10 @@ func TestScaffoldWritesPages(t *testing.T) {
 	view := files["web/components/LineItemView.vue"]
 	for _, want := range []string{
 		"<script setup vapor lang=\"ts\">",
-		"import { useParams } from '@weft/ui'",
+		"import { entityProblem, useParams } from '@weft/ui'",
+		// A failure is said as the components say it: a non-Warp answer
+		// (code http) the unavailable sentence, no reach the unreachable one.
+		"else problem.value = entityProblem(e, new Set()).message",
 		"import { api, ApiError, type LineItem } from '../.weft-types/api.ts'",
 		"import { requireUser, useSession } from '../session.ts'",
 		"useParams('/line_items/:id').id",
@@ -748,7 +751,6 @@ func TestScaffoldWithoutAuthInACreatedApp(t *testing.T) {
 // The whole way, as a person goes it: weft create, weft scaffold with the
 // pages, weft build, the type check, and the pages driven in a browser.
 func TestScaffoldedPagesInBrowser(t *testing.T) {
-	t.Skip("needs DataTable and EntityDialog from @weft/ui (W5, branch w5-ui), which are not on main yet")
 	app := scaffoldedApp(t)
 	if code, out, errs := scaffold(t, "product", "name:string:required:unique", "price:float:min=0", "sale:float:nullable", "status:enum=draft,live:required"); code != 0 {
 		t.Fatalf("weft scaffold: exit %d: %s%s", code, out, errs)

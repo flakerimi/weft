@@ -66,11 +66,10 @@ What a newcomer meets first works, on every platform.
 - **W2 finished (done):** an `enum` typed as its values (comparing or assigning
   a value outside the list is now a TypeScript error; an optional non-pointer
   struct field includes `''` or `0`), `useParams()` typed from the routes.
-- **W5, scaffolding and app blocks:** `weft scaffold`, `DataTable` (server
-  paging, sorting, filtering over the list shape) and `EntityDialog`; the app
-  template takes the shop's frame (done: data, the login and its pages, and
-  `hello`, with no starter resource); `weft scaffold` (done, its pages
-  waiting on `DataTable`).
+- **W5, scaffolding and app blocks (done):** `weft scaffold`, `DataTable`
+  (server paging, sorting, filtering over the list shape) and `EntityDialog`;
+  the app template takes the shop's frame (data, the login and its pages, and
+  `hello`, with no starter resource).
 - **Landing blocks** (Weft phase 7): `Hero`, `FeatureGrid`, `Pricing`,
   `Testimonials`, `Faq`, `Cta`.
 - **The benchmark** run on a quiet machine with every series interleaved, and

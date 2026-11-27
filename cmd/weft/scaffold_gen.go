@@ -367,7 +367,7 @@ func (r *resource) viewVue() string {
 	var b strings.Builder
 	b.WriteString("<script setup vapor lang=\"ts\">\n")
 	b.WriteString(wrap("// ", fmt.Sprintf("An island on the run-time page /%s/[id]: reads the id from the address, asks api.%s.show, and shows the %s, or that there is none with that id. weft scaffold wrote it; it is yours to change.", r.Plural, r.API, human(r.Name))))
-	b.WriteString("import { onMounted, ref } from 'vue'\nimport { useParams } from '@weft/ui'\n")
+	b.WriteString("import { onMounted, ref } from 'vue'\nimport { entityProblem, useParams } from '@weft/ui'\n")
 	fmt.Fprintf(&b, "import { api, ApiError, type %s } from '../.weft-types/api.ts'\n", r.Type)
 	if r.Session {
 		b.WriteString("import { requireUser, useSession } from '../session.ts'\n")
@@ -380,7 +380,7 @@ func (r *resource) viewVue() string {
 	}
 	fmt.Fprintf(&b, "    const id = idOf(useParams('/%s/:id').id)\n    if (id === null) missing.value = true\n    else record.value = await api.%s.show(id)\n", r.Plural, r.API)
 	b.WriteString("  } catch (e) {\n    if (e instanceof ApiError && e.status === 404) missing.value = true\n")
-	b.WriteString("    else if (!(e instanceof ApiError)) {\n      console.error(e)\n      problem.value = 'Something went wrong on this page; reload it and try again.'\n    } else problem.value = e.code === 'network' ? 'The server could not be reached; check the connection and try again.' : e.message\n")
+	b.WriteString("    // Said as the components say it: no answer, a non-Warp answer, or a bug.\n    else problem.value = entityProblem(e, new Set()).message\n")
 	b.WriteString("  } finally {\n    loading.value = false\n  }\n})\n\n")
 	b.WriteString("const shown = (v: unknown) => (v == null ? '' : String(v))\nconst number = (v: number | null | undefined) => (v == null ? '' : v.toLocaleString())\nconst moment = (v: string | null | undefined) => (v == null ? '' : new Date(v).toLocaleString())\nconst yesNo = (v: boolean | null | undefined) => (v == null ? '' : v ? 'Yes' : 'No')\n")
 	b.WriteString("</script>\n\n<template>\n  <Stack :gap=\"4\">\n    <Skeleton v-if=\"loading\" height=\"8rem\" />\n")

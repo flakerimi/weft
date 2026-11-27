@@ -102,7 +102,7 @@ The modifiers, in any order after the type, are `nullable`, a pointer that may b
 | `web/components/<Plural>Table.vue`, `<Singular>View.vue` | Islands: a `DataTable` over `api.<plural>` and `schema.<Singular>Input`, and one record |
 | `web/pages/<plural>/index.vue`, `[id].vue` | The table's page and the record's run-time page |
 
-`--api` writes only the Go (and is needed for `date` and `datetime`, whose controls in the pages land in 0.2.0); until `DataTable` is in `@weft/ui` ([Coming next](../coming-next.md#scaffolding-and-app-blocks)) the pages do not build, so give it. It lists what it wrote under `Scaffolded <name> as <plural>:`.
+`--api` writes only the Go; it is needed for `date` and `datetime`, whose controls in the pages land in 0.2.0 ([Coming next](../coming-next.md#scaffolding-and-app-blocks)). It lists what it wrote under `Scaffolded <name> as <plural>:`.
 
 Nothing is written, with one sentence and exit status 1, when `app/<plural>` is there, or without `--api` the page folder or an island, or when `app/modules.go` has no `func Modules() []warp.Module` returning a `[]warp.Module{...}` with `data.Module()`. `id`, `created_at` and `updated_at` (from `data.Record`), `actions` (`DataTable`'s), a field given twice, an unknown type or modifier, or a modifier its type does not take exit 2. A later release's type exits 1 naming it, as `weft scaffold: field "maker" has type "belongs_to", and relations land in Weft 0.3.0 (W3); use a scalar type for now.`: `belongs_to`, `has_many`, `many_to_many` (0.3.0), `image`, `file` (0.4.0), `json`, `translated` (0.6.0).
 

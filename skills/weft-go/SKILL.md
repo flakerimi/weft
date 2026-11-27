@@ -115,4 +115,4 @@ Build it for the image's system, with a `.dockerignore` of `*` and `!myapp`.
 
 ## Not yet
 
-Planned, not built (https://weft.base.al/docs/coming-next): PostgreSQL, MySQL and relations; roles, registration, reset and `mail`; `DataTable`; `storage`, `events` and `live`; `jobs`, `i18n`, `middleware`, `docs`; `weft deploy`.
+Planned, not built (https://weft.base.al/docs/coming-next): PostgreSQL, MySQL and relations; roles, registration, reset and `mail`; date fields in scaffolded pages; `storage`, `events` and `live`; `jobs`, `i18n`, `middleware`, `docs`; `weft deploy`.
