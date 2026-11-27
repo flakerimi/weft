@@ -20,7 +20,7 @@ page pays before anyone touches it.
 
 | What | Brotli |
 | --- | ---: |
-| Vue runtime (Vapor), its own chunk in each build | 17.40 to 26.23 KB |
+| Vue runtime (Vapor), its own chunk in each build | 17.40 to 26.94 KB |
 | `styles/base.css`, inlined on every page by the page build | 0.32 KB |
 
 Vue's runtime is tree-shaken per build, so it varies with the Vue features a
@@ -28,7 +28,7 @@ component uses. Neither is counted in the rows below.
 
 ## Per component
 
-82 components. Median: JS 2.69 KB, CSS 1.30 KB.
+84 components. Median: JS 2.70 KB, CSS 1.31 KB.
 
 | Component | JS | Later | CSS | Total |
 | --- | ---: | ---: | ---: | ---: |
@@ -50,17 +50,19 @@ component uses. Neither is counted in the rows below.
 | Collapsible | 1.33 | — | 0.48 | 1.81 |
 | Combobox | 22.07 | — | 2.67 | 24.75 |
 | CommandPalette | 11.57 | — | 1.90 | 13.46 |
-| ConfirmDialog | 6.70 | — | 1.96 | 8.66 |
+| ConfirmDialog | 6.69 | — | 1.96 | 8.66 |
 | Container | 0.77 | — | 0.14 | 0.91 |
-| ContextMenu | 14.59 | — | 1.88 | 16.47 |
+| ContextMenu | 14.62 | — | 1.88 | 16.50 |
 | Cta | 2.37 | — | 1.79 | 4.17 |
+| DataTable | 38.26 | — | 5.64 | 43.90 |
 | DatePicker | 12.15 | 14.85 | 2.71 | 14.87 |
 | DateRangePicker | 25.47 | — | 2.72 | 28.19 |
 | Dialog | 7.85 | — | 2.27 | 10.12 |
 | Divider | 0.47 | — | 0.34 | 0.81 |
 | Drawer | 6.78 | — | 2.29 | 9.07 |
-| DropdownMenu | 14.89 | — | 2.32 | 17.21 |
+| DropdownMenu | 14.93 | — | 2.32 | 17.25 |
 | EmptyState | 2.21 | — | 1.59 | 3.80 |
+| EntityDialog | 30.23 | — | 4.61 | 34.84 |
 | ErrorState | 2.18 | — | 1.54 | 3.72 |
 | Faq | 3.78 | — | 1.11 | 4.89 |
 | FeatureGrid | 2.88 | — | 1.26 | 4.15 |
@@ -72,7 +74,7 @@ component uses. Neither is counted in the rows below.
 | Grid | 1.16 | — | 0.46 | 1.62 |
 | Header | 17.11 | — | 3.38 | 20.49 |
 | Hero | 2.39 | — | 1.67 | 4.06 |
-| Icon | 0.67 | — | 0.33 | 1.00 |
+| Icon | 0.67 | — | 0.33 | 1.01 |
 | Input | 2.42 | — | 0.97 | 3.39 |
 | InputNumber | 2.83 | — | 1.00 | 3.83 |
 | InputTags | 4.38 | — | 1.24 | 5.62 |
@@ -102,7 +104,7 @@ component uses. Neither is counted in the rows below.
 | StatCard | 2.69 | — | 1.06 | 3.75 |
 | Stepper | 3.19 | — | 1.00 | 4.20 |
 | Switch | 1.97 | — | 1.42 | 3.39 |
-| Table | 11.28 | — | 2.75 | 14.02 |
+| Table | 11.43 | — | 2.75 | 14.18 |
 | Tabs | 3.90 | — | 1.28 | 5.18 |
 | Testimonials | 3.01 | — | 1.05 | 4.06 |
 | Textarea | 2.12 | — | 0.54 | 2.66 |
@@ -111,11 +113,11 @@ component uses. Neither is counted in the rows below.
 | Toaster | 4.22 | — | 2.12 | 6.34 |
 | Toggle | 2.30 | — | 1.39 | 3.69 |
 | ToggleGroup | 3.45 | — | 1.39 | 4.84 |
-| Tooltip | 10.69 | — | 1.71 | 12.40 |
+| Tooltip | 10.71 | — | 1.71 | 12.42 |
 | Tree | 3.94 | — | 0.74 | 4.68 |
 | WeftProvider | 0.97 | — | 0.27 | 1.25 |
 
-The five heaviest: DateRangePicker (28.19 KB), Combobox (24.75 KB), Select (22.45 KB), AppShell (22.42 KB), Header (20.49 KB).
+The five heaviest: DataTable (43.90 KB), EntityDialog (34.84 KB), DateRangePicker (28.19 KB), Combobox (24.75 KB), Select (22.45 KB).
 
 ## Tree-shaking
 

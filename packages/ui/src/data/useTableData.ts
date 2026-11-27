@@ -29,7 +29,7 @@
  * shown empty. Any other page, query or `load()` asks.
  * `busy` is `loading()`, or a fetch under way, or no answer yet.
  */
-import { computed, nextTick, ref, shallowRef, watch, type ComputedRef, type Ref, type ShallowRef } from 'vue'
+import { computed, nextTick, onScopeDispose, ref, shallowRef, watch, type ComputedRef, type Ref, type ShallowRef } from 'vue'
 import { activeFilters, keyOf, sortRows, valueOf, type RowKey, type TableColumn, type TableFetch, type TableQuery } from './table.ts'
 
 export interface TableDataOptions<T> {
@@ -42,6 +42,8 @@ export interface TableDataOptions<T> {
   perPage: () => number | undefined
   /** The search text sent as `q`. */
   search?: () => string | undefined
+  /** Milliseconds to wait before asking `fetch` after a non-empty `search` change; default 250. */
+  searchDebounce?: () => number | undefined
   /** The filters sent as `filter[key]=value`. */
   filters?: () => Record<string, string> | undefined
   loading: () => boolean
@@ -81,11 +83,20 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
   const perPage = computed(() => opts.perPage() ?? (opts.fetch() ? 20 : undefined))
 
   let asked = 0
+  let searchTimer: ReturnType<typeof setTimeout> | null = null
+  function clearSearchTimer() {
+    if (searchTimer !== null) {
+      clearTimeout(searchTimer)
+      searchTimer = null
+    }
+  }
+  onScopeDispose(clearSearchTimer)
   // A move to the last page the parent has not taken: the page answered as
   // past the end, the total and the rest of the query, so that the same
   // question is not asked again.
   let moved: { from: number; total: number; rest: string } | null = null
   async function ask() {
+    clearSearchTimer()
     const fetch = opts.fetch()
     if (!fetch) return
     const mine = ++asked
@@ -141,8 +152,28 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
   // Primitive sources: asking again only when a value of the query changes.
   watch(
     [opts.active, () => opts.page.value, () => perPage.value, () => opts.sort.value, () => opts.search?.(), () => JSON.stringify(activeFilters(opts.filters?.()) ?? {}), opts.fetch],
-    ([on]) => {
-      if (on) void ask()
+    ([on, p, pp, s, q, f, fn], prev) => {
+      if (!on) return
+      clearSearchTimer()
+      const delay = opts.searchDebounce?.() ?? 250
+      const wasOn = prev?.[0]
+      const searchChanged = wasOn && q !== prev?.[4]
+      const nonSearchChanged =
+        !wasOn ||
+        (p !== prev?.[1] && !(searchChanged && p === 1)) ||
+        pp !== prev?.[2] ||
+        s !== prev?.[3] ||
+        f !== prev?.[5] ||
+        fn !== prev?.[6]
+      if (searchChanged && !nonSearchChanged && q && delay > 0) {
+        asked++
+        searchTimer = setTimeout(() => {
+          searchTimer = null
+          void ask()
+        }, delay)
+        return
+      }
+      void ask()
     },
     { immediate: true },
   )

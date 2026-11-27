@@ -2695,6 +2695,359 @@
       ]
     },
     {
+      "name": "DataTable",
+      "group": "data",
+      "file": "packages/ui/src/data/DataTable.vue",
+      "purpose": "A CRUD resource table with search, filters, EntityDialog and ConfirmDialog.",
+      "use": "For a resource table backed by a generated Warp client (`api.<plural>`) and schema (`schema.<Name>Input`), with server-paged listing, search, filters, creation, editing and deletion.",
+      "avoid": "For a read-only table over an array or a custom fetcher without CRUD dialogs, use Table; for a few key metrics, use StatCard.",
+      "adapts": {
+        "input": "Inherits Table's, Button's and the dialog controls' touch hit areas (at least 44 px).",
+        "surface": "Nothing changes in behaviour; `size` sets the row height and text follows the surface's type scale.",
+        "width": "When its own box is narrow (under 640 px), Table switches rows to cards, toolbar filter definitions with four or fewer choices switch from a horizontal RadioGroup to a Select, and EntityDialog goes full-screen."
+      },
+      "props": [
+        {
+          "name": "columns",
+          "type": "TableColumn<T>[]",
+          "required": true,
+          "default": null,
+          "description": "Table columns; `actions` is appended when `update` or `remove` is given."
+        },
+        {
+          "name": "resource",
+          "type": "DataResource<T, TInput>",
+          "required": false,
+          "default": "undefined",
+          "description": "Shorthand `{ list, create, update, remove }` (e.g. `api.products`)."
+        },
+        {
+          "name": "fetch",
+          "type": "TableFetch<T>",
+          "required": false,
+          "default": "undefined",
+          "description": "List fetcher (overrides `resource.list`)."
+        },
+        {
+          "name": "create",
+          "type": "(body: TInput) => Promise<T>",
+          "required": false,
+          "default": "undefined",
+          "description": "Create handler (overrides `resource.create`)."
+        },
+        {
+          "name": "update",
+          "type": "(id: any, body: Partial<TInput>) => Promise<T>",
+          "required": false,
+          "default": "undefined",
+          "description": "Update handler (overrides `resource.update`)."
+        },
+        {
+          "name": "remove",
+          "type": "(id: any) => Promise<unknown>",
+          "required": false,
+          "default": "undefined",
+          "description": "Delete handler (overrides `resource.remove`)."
+        },
+        {
+          "name": "schema",
+          "type": "{ [K in Name]?: EntityFieldRule }",
+          "required": false,
+          "default": "undefined",
+          "description": "Schema passed to `EntityDialog`."
+        },
+        {
+          "name": "fields",
+          "type": "Record<string, EntityFieldConfig>",
+          "required": false,
+          "default": "undefined",
+          "description": "Field overrides passed to `EntityDialog`."
+        },
+        {
+          "name": "defaults",
+          "type": "Record<string, unknown>",
+          "required": false,
+          "default": "undefined",
+          "description": "Default values for create mode."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": "'item'",
+          "description": "Singular entity name (e.g. `'product'`)."
+        },
+        {
+          "name": "idKey",
+          "type": "string",
+          "required": false,
+          "default": "'id'",
+          "description": "Primary key property; default `'id'`."
+        },
+        {
+          "name": "labelKey",
+          "type": "string",
+          "required": false,
+          "default": "'name'",
+          "description": "Display label property; default `'name'`."
+        },
+        {
+          "name": "searchable",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Show the search input; default `true`."
+        },
+        {
+          "name": "search",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "Bound with `v-model:search`."
+        },
+        {
+          "name": "defaultSearch",
+          "type": "string",
+          "required": false,
+          "default": "''",
+          "description": "Initial search string."
+        },
+        {
+          "name": "searchPlaceholder",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "Placeholder for the search input."
+        },
+        {
+          "name": "searchDebounce",
+          "type": "number",
+          "required": false,
+          "default": "250",
+          "description": "Debounce delay in ms; default `250`."
+        },
+        {
+          "name": "filterDefs",
+          "type": "DataTableFilter[]",
+          "required": false,
+          "default": "undefined",
+          "description": "Toolbar filter controls."
+        },
+        {
+          "name": "filters",
+          "type": "Record<string, string>",
+          "required": false,
+          "default": "undefined",
+          "description": "Active filter values, bound with `v-model:filters`."
+        },
+        {
+          "name": "defaultFilters",
+          "type": "Record<string, string>",
+          "required": false,
+          "default": null,
+          "description": "Initial filter values."
+        },
+        {
+          "name": "perPage",
+          "type": "number",
+          "required": false,
+          "default": "20",
+          "description": "Rows per page; default `20`."
+        },
+        {
+          "name": "page",
+          "type": "number",
+          "required": false,
+          "default": "undefined",
+          "description": "Current page, bound with `v-model:page`."
+        },
+        {
+          "name": "defaultPage",
+          "type": "number",
+          "required": false,
+          "default": "1",
+          "description": "Initial page; default `1`."
+        },
+        {
+          "name": "sort",
+          "type": "string | null",
+          "required": false,
+          "default": "undefined",
+          "description": "Current sort, bound with `v-model:sort`."
+        },
+        {
+          "name": "defaultSort",
+          "type": "string | null",
+          "required": false,
+          "default": "null",
+          "description": "Initial sort."
+        },
+        {
+          "name": "selectable",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "Enable row selection checkboxes."
+        },
+        {
+          "name": "selected",
+          "type": "RowKey[]",
+          "required": false,
+          "default": "undefined",
+          "description": "Selected row keys, bound with `v-model:selected`."
+        },
+        {
+          "name": "defaultSelected",
+          "type": "RowKey[]",
+          "required": false,
+          "default": null,
+          "description": "Initial selected row keys."
+        },
+        {
+          "name": "caption",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "Table caption."
+        },
+        {
+          "name": "hideCaption",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Visually hide the caption; default `true`."
+        },
+        {
+          "name": "emptyTitle",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "EmptyState title when there are no rows."
+        },
+        {
+          "name": "emptyDescription",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "EmptyState description when there are no rows."
+        },
+        {
+          "name": "emptyIcon",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "EmptyState icon when there are no rows."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": "'md'",
+          "description": "Row size (`'sm' | 'md' | 'lg'`)."
+        },
+        {
+          "name": "labels",
+          "type": "Partial<DataTableLabels>",
+          "required": false,
+          "default": null,
+          "description": "Labels override for i18n."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:search",
+          "payload": "[q: string]",
+          "description": "The search text changed."
+        },
+        {
+          "name": "update:filters",
+          "payload": "[filters: Record<string, string>]",
+          "description": "The active filter values changed."
+        },
+        {
+          "name": "update:sort",
+          "payload": "[sort: string | null]",
+          "description": "The sort changed."
+        },
+        {
+          "name": "update:page",
+          "payload": "[page: number]",
+          "description": "The current page changed."
+        },
+        {
+          "name": "update:selected",
+          "payload": "[keys: RowKey[]]",
+          "description": "The chosen rows changed."
+        },
+        {
+          "name": "saved",
+          "payload": "[record: T]",
+          "description": "Emitted after create or update succeeds."
+        },
+        {
+          "name": "deleted",
+          "payload": "[record: T]",
+          "description": "Emitted after delete succeeds."
+        },
+        {
+          "name": "error",
+          "payload": "[error: unknown]",
+          "description": "Emitted when `fetch`, `create`, `update`, or `remove` rejects."
+        }
+      ],
+      "slots": [
+        {
+          "name": "toolbar",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "toolbar-actions",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "dialog",
+          "props": [
+            "state",
+            "record"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "empty",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "<key>-cell",
+          "props": [
+            "row",
+            "value",
+            "index",
+            "column"
+          ],
+          "dynamic": true
+        },
+        {
+          "name": "<key>-header",
+          "props": [
+            "column"
+          ],
+          "dynamic": true
+        }
+      ],
+      "notes": "It has no stylesheet of its own: it composes `Stack`, `FormField`, `Input`,\n`RadioGroup`, `Select`, `Button`, `Table`, `EmptyState`, `EntityDialog` and\n`ConfirmDialog`.\n\n`DataTable` composes a toolbar, `Table`, `EntityDialog` and `ConfirmDialog`\naround a generated Warp resource (`{ list, create, update, remove }`) and its\nfield schema (`schema.ProductInput` from `weft gen`). Pass\n`:resource=\"api.products\"` (or individual `fetch`, `create`, `update` and\n`remove` functions) and `:schema=\"schema.ProductInput\"`.\n\n**Toolbar.** When `searchable` is true (the default), the toolbar renders a\nsearch `Input` bound to `v-model:search` and forwarded to `Table` with\n`search-debounce` (default 250 ms). Each entry in `filter-defs`\n(`{ key, label, items, control }`) renders a filter control bound into\n`v-model:filters`, prepending `labels.anyFilter` (default `\"Any\"`, value\n`\"\"`) when no item has an empty value; filters with four or fewer options\nrender a horizontal `RadioGroup` on regular and wide containers and a\n`Select` when narrow. When `create` (or `resource.create`) is present, a\n`\"New <name>\"` button at the end of the toolbar opens `EntityDialog` in\ncreate mode. The `toolbar` slot adds controls beside search and filters, and\n`toolbar-actions` adds buttons beside `\"New <name>\"`.\n\n**Columns and row actions.** `columns` takes the same typed array as `Table`,\nand every `#<key>-cell` and `#<key>-header` slot forwards directly to\n`Table`. Unslotted cells format numbers with `toLocaleString()` and booleans\nwith `labels.booleanYes` / `labels.booleanNo` (`\"Yes\"` / `\"No\"`). When\n`update` or `remove` is present and `columns` has no `actions` column,\n`DataTable` appends a trailing `Actions` column with `Edit` (opening\n`EntityDialog` with the row) and `Delete` (opening `ConfirmDialog` for the\nrow). Omitting `create`, `update` or `remove` omits the corresponding button,\nand omitting both `update` and `remove` omits the `Actions` column.\n\n**Dialogs and refresh.** Saving in `EntityDialog` emits `saved` and calls\n`refresh()` on the inner `Table`. Confirming in `ConfirmDialog` calls\n`remove(row[idKey])`, emits `deleted` and refreshes the table; if `remove`\nrejects with an `ApiError`, the dialog stays open and shows the server's\nsentence in an `Alert`. `defineExpose` provides `refresh()`, `edit(record)`\nand `askRemove(record)`.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/DataTable/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { DataTable, type EntitySchema, type TableColumn } from '@weft/ui'\n\ninterface Item {\n  id: number\n  name: string\n  status: string\n}\n\ntype ItemInput = Omit<Item, 'id'>\n\nconst schema: EntitySchema = {\n  name: { kind: 'string', required: true },\n  status: { kind: 'string', required: true, enum: ['draft', 'live'] },\n}\n\nconst columns: TableColumn<Item>[] = [\n  { key: 'name', label: 'Name', sortable: true, rowHeader: true },\n  { key: 'status', label: 'Status' },\n]\n\nlet items: Item[] = [\n  { id: 1, name: 'Kettle', status: 'live' },\n  { id: 2, name: 'Lamp', status: 'draft' },\n]\n\nconst resource = {\n  list: async () => ({ items, total: items.length }),\n  create: async (b: ItemInput) => ((items = [...items, { id: items.length + 1, ...b }]), items.at(-1)!),\n  update: async (id: number, b: Partial<ItemInput>) => ((items = items.map((r) => (r.id === id ? { ...r, ...b } : r))), items[0]!),\n  remove: async (id: number) => (items = items.filter((r) => r.id !== id)),\n}\n</script>\n\n<template>\n  <DataTable :resource=\"resource\" :schema=\"schema\" :columns=\"columns\" name=\"product\" caption=\"Products\" :per-page=\"5\" />\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "DatePicker",
       "group": "dates",
       "file": "packages/ui/src/dates/DatePicker.vue",
@@ -3684,6 +4037,165 @@
           "title": "Basic",
           "file": "packages/ui/examples/EmptyState/basic.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { EmptyState, Link } from '@weft/ui'\n</script>\n\n<template>\n  <EmptyState\n    icon=\"user-plus\"\n    title=\"No customers yet\"\n    description=\"Customers you add, or who sign up, appear here.\"\n    :level=\"2\"\n    :actions=\"[{ label: 'Add customer', icon: 'user-plus' }, { label: 'Import a CSV' }]\"\n  >\n    <template #footer><Link to=\"/docs/customers\">How customers work</Link></template>\n  </EmptyState>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "EntityDialog",
+      "group": "data",
+      "file": "packages/ui/src/data/EntityDialog.vue",
+      "purpose": "A dialog that creates or edits a record from a Weft field schema.",
+      "use": "For making or editing a resource record from a generated `schema.<Name>Input`, with client validation, diffed PATCH updates and server error mapping.",
+      "avoid": "For a confirmation with no fields, use ConfirmDialog; for a dialog whose content is not an entity form, use Dialog with Form.",
+      "adapts": {
+        "input": "Inherits Dialog's and the inner form controls' touch hit areas (at least 44 px).",
+        "surface": "Nothing changes in behaviour; text and spacing follow the surface's type scale.",
+        "width": "Full-screen when the viewport is narrow (under 640 px), and enum fields with four or fewer choices switch from a horizontal RadioGroup to a Select."
+      },
+      "props": [
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "Open or closed, bound with `v-model:open`."
+        },
+        {
+          "name": "defaultOpen",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "Whether it starts open when `v-model:open` is not bound."
+        },
+        {
+          "name": "record",
+          "type": "T | null",
+          "required": false,
+          "default": null,
+          "description": "`null` or `undefined` for create mode; a record for edit mode."
+        },
+        {
+          "name": "schema",
+          "type": "{ [K in Name]?: EntityFieldRule }",
+          "required": true,
+          "default": null,
+          "description": "The generated `schema.<Name>Input` object."
+        },
+        {
+          "name": "create",
+          "type": "(body: TInput) => Promise<T>",
+          "required": false,
+          "default": "undefined",
+          "description": "Called on create submit (`record == null`)."
+        },
+        {
+          "name": "update",
+          "type": "(id: any, body: Partial<TInput>) => Promise<T>",
+          "required": false,
+          "default": "undefined",
+          "description": "Called on edit submit (`record != null`) with only changed fields."
+        },
+        {
+          "name": "idKey",
+          "type": "string",
+          "required": false,
+          "default": "'id'",
+          "description": "Key used to read the record ID for `update`; default `'id'`."
+        },
+        {
+          "name": "labelKey",
+          "type": "string",
+          "required": false,
+          "default": "'name'",
+          "description": "Key used to read the record's display name for the edit title; default `'name'`, falling back to `idKey`."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": "'item'",
+          "description": "Singular entity name (e.g. `'product'`), used for default titles (`\"New product\"`, `\"Edit Kettle\"`)."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "Explicit dialog title override."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "Optional dialog description."
+        },
+        {
+          "name": "defaults",
+          "type": "Record<string, unknown>",
+          "required": false,
+          "default": "undefined",
+          "description": "Initial field values for create mode."
+        },
+        {
+          "name": "fields",
+          "type": "Record<string, EntityFieldConfig>",
+          "required": false,
+          "default": "undefined",
+          "description": "Per-field overrides (`label`, `hint`, `description`, `placeholder`, `control`, `step`, `rows`, `items`, `hidden`)."
+        },
+        {
+          "name": "labels",
+          "type": "Partial<EntityDialogLabels>",
+          "required": false,
+          "default": null,
+          "description": "The words it says; give some or all to translate them."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:open",
+          "payload": "[open: boolean]",
+          "description": "Opened or closed."
+        },
+        {
+          "name": "saved",
+          "payload": "[record: T]",
+          "description": "Emitted after `create` or `update` resolves (or when edit mode closes with no changes)."
+        },
+        {
+          "name": "error",
+          "payload": "[error: unknown]",
+          "description": "Emitted when `create` or `update` rejects."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [
+            "state",
+            "record",
+            "schema"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "<key>-field",
+          "props": [
+            "state",
+            "rule",
+            "config"
+          ],
+          "dynamic": true
+        }
+      ],
+      "notes": "It has no stylesheet of its own: it composes `Dialog`, `Form`, `Stack`,\n`Alert`, `FormField`, `Button` and the form controls.\n\n`EntityDialog` pairs `Dialog` and `Form` around a generated `schema`\n(`schema.ProductInput` from `weft gen`). In create mode (`record` null or\nomitted) it starts each field from `defaults` (or the schema's empty value)\nand calls `create(body)` on submit. In edit mode (`record` set) it populates\nthe form from `record`, diffs the submitted values against `record`, calls\n`update(record[idKey], changed)` with only the fields that changed, and closes\nwithout a request when nothing changed.\n\n**Controls from the schema.** Each field in `schema` renders a `FormField`\nwhose label defaults to the sentence-cased field name (`firstName` →\n`First name`, `unit_price` → `Unit price`) and whose control follows the rule:\n- `enum` (or `fields[name].items`) with four or fewer choices renders a\n  horizontal `RadioGroup` on regular and wide viewports and a `Select` when\n  narrow; five or more choices render a `Select`. An optional non-nullable\n  enum prepends `labels.noneOption` (default `\"None\"`).\n- `kind: 'boolean'` (or `type: 'boolean'`) renders a `Checkbox` (or a `Switch` with\n  `fields[name].control = 'switch'`).\n- `kind: 'number'` (or `type: 'number'`) renders an `InputNumber` with `min` and `max` from the\n  rule and `step` from `fields[name].step` when given.\n- `email: true` renders `<Input type=\"email\">`, `url: true` renders\n  `<Input type=\"url\">`, `fields[name].control = 'textarea'` renders\n  `Textarea`, and everything else renders `<Input type=\"text\">`.\n\n**Customizing fields.** `fields` configures any field by name (`label`,\n`hint`, `description`, `placeholder`, `control`, `step`, `rows`, `items`,\n`hidden`). The `#<name>-field=\"{ state, rule, config }\"` slot replaces one\nfield's control inside its `FormField`, and the default slot\n`#default=\"{ state, record, schema }\"` replaces the whole field list while\nkeeping the top `Alert` and the Cancel and Create/Save buttons.\n\n**Errors.** Before calling `create` or `update`, `Form` checks every field\nagainst `schema` (with non-nullable number fields marked required so an\nemptied number is caught before sending). When `create` or `update` rejects\nwith Warp's `ApiError` shape (`{ status, code, message, fields }`), field\nerrors matching rendered fields attach to their `FormField`s, unknown field\nkeys or a top-level `message` appear in an `Alert` at the top of the form,\n`code === 'network'` shows `labels.unreachable`, and any other error logs to\n`console.error` and shows `labels.failed`. Reopening the dialog or switching\n`record` resets the draft and clears every error.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/EntityDialog/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Button, EntityDialog, type EntitySchema } from '@weft/ui'\n\ninterface Product {\n  id: number\n  name: string\n  price: number\n  sale: number | null\n  status: 'draft' | 'live'\n}\n\nconst open = ref(false)\nconst schema: EntitySchema = {\n  name: { type: 'string', required: true },\n  price: { type: 'number', required: true, min: 0 },\n  sale: { type: 'number', min: 0, nullable: true },\n  status: { type: 'string', required: true, enum: ['draft', 'live'] },\n}\n\nasync function create(body: Omit<Product, 'id'>): Promise<Product> {\n  return { id: 1, ...body }\n}\n</script>\n\n<template>\n  <Button label=\"New product\" icon=\"plus\" @click=\"open = true\" />\n  <EntityDialog\n    v-model:open=\"open\"\n    name=\"product\"\n    :schema=\"schema\"\n    :defaults=\"{ price: 0, status: 'draft' }\"\n    :fields=\"{\n      price: { step: 0.01 },\n      sale: { step: 0.01, hint: 'Empty when it is not on sale.' },\n    }\"\n    :create=\"create\"\n  />\n</template>\n"
         }
       ]
     },
@@ -8493,6 +9005,13 @@
           "description": "The search text, sent to `fetch` as `q`; empty sends none. Does nothing without `fetch`. A new one goes to page 1."
         },
         {
+          "name": "searchDebounce",
+          "type": "number",
+          "required": false,
+          "default": "250",
+          "description": "Milliseconds to wait before asking `fetch` after a non-empty `search` change; default 250."
+        },
+        {
           "name": "filters",
           "type": "Record<string, string>",
           "required": false,
@@ -8679,7 +9198,7 @@
           "dynamic": true
         }
       ],
-      "notes": "`columns` is a typed array: `{ key, label, sortable, align, width,\naccessor, format, rowHeader }`. A cell shows `accessor(row)` (default\n`row[key]`) as text, or `format(value, row)`; the `<key>-cell` slot draws it\ninstead (`{ row, value, index, column }`), and `<key>-header` the header. A\n`rowHeader` column's cells are `th scope=\"row\"`, and its value names each\nrow's checkbox (\"Select Ada\").\n\n**Rows.** Give `rows` (an array), sorted and paged on the client (text in\nthe WeftProvider's `locale`, en-US without one, numbers and dates by\namount), or `fetch(query)`, which receives the wire format's list query\nin its names, `{ page, per_page, sort, q, filter }` (each but `page` and\n`per_page` is absent when there is none; `sort` is `name` or `-since`),\nand answers the wire format's whole list, `{ items, total, page, per_page }`\n(`page` and `per_page` are optional), so paging, sorting, searching and\nfiltering happen on the server. A list function from the generated client\nfits as it is: `:fetch=\"api.products.list\"`. Give the search text as\n`search` (sent as `q`) and the filters as `filters` (`{ plan: 'pro' }`,\nsent as `filter`); a change asks again. Clearing a filter is setting it to\nan empty string or leaving it out: a filter with no value is not sent, and\n`{ status: '' }` is the same query as `{}`. With `rows` and no `fetch`,\n`search` and `filters` do nothing.\n`tableSearch(query)` writes the query as the wire format's search\nparameters: `page=2&per_page=20&sort=-since&q=ada&filter[plan]=pro`. It asks\nonce mounted (the server draws skeleton rows), again whenever the page, the\nsort, the search or the filters change, ignores an answer a newer query\novertook, and shows a message with a Try again button (and emits `error`)\nwhen the promise rejects; `refresh()` asks again. `rowKey` (a property name\nor a function; default the row's `id`, else its place) keys the rows. The\ndata source is `useTableData`, exported for a view of its own.\n\n**Sorting.** A sortable header holds a button: ascending, descending, then\nas given. The sort is `v-model:sort` in the wire format. On the client it is\nstable (equal rows keep their order both ways), numbers and dates by amount,\ntext numeric-aware and case-blind, empty values last. A press on a header\ngoes back to page 1, as does a new `search` or new `filters` (with `fetch`); a\nparent that sets the page and the sort, the search or the filters together\nkeeps its page. The sorted header says `aria-sort`; the others say nothing (APG\nsortable table).\n\n**Selection.** `selectable` adds a checkbox per row and one in the header,\nbound with `v-model:selected` (the rows' keys). The header box is ticked\nwhen every row shown is chosen, indeterminate when some are; it chooses or\nclears the rows shown (on this page). Shift+click on a row's box sets every\nrow from the last one clicked to it, in the order shown. Keys persist\nacross pages and sorts: a row chosen on page 1 stays chosen on page 3 and\nafter a new sort. So rows from `fetch` that can be chosen need keys of their\nown, an `id` or `rowKey`; without one a row's key is its place on its page,\nand development builds warn once.\n\n**Paging.** `per-page` pages the rows with a Pagination under the table\n(`v-model:page`), shown when there is more than one page; with `fetch` it\ndefaults to 20. A fetched page past the last one, as after the last row of\nthe last page is deleted, moves the page to the last one there is, which it\nthen asks for, once. The move goes through `update:page`, so a parent that binds the\npage one way (`:page` with no handler) and keeps it gets that page shown\nempty, with the server's total, and no request until the page, the query or\na refresh changes.\n\n**States.** `loading` makes it `aria-busy` and draws skeleton rows (hidden\nfrom assistive technology, a status saying Loading) until there are rows;\nrows it already has stay, dimmed. With no rows the `empty` slot (or\n`empty`, default \"Nothing to show.\") fills the body.\n\n**Sticky header.** With `sticky` (on by default) the header stays in view.\nWith a `height` (or once windowed) the rows scroll inside the table's box\nand the header sticks at its top. Without one the box clips rather than\nscrolls once mounted, so the header sticks against the page as it scrolls,\nbelow `--weft-table-sticky-top` (set it to a sticky page header's height);\nbut a table wider than its box must scroll sideways, and then its header\nsticks only inside it: give it a `height`. Before it mounts (and on a page\nwith no island) the box scrolls, so a wide table is never cut off.\n\n**Windowing.** Past 200 rows on a page it renders only the rows in view,\nspacer rows standing for the rest (`useVirtualList`): every row is then\n`row-height` px (default by size, at least 44 on touch), its text on one\nline, the box 30rem tall unless `height` says otherwise, and the table\nstates `aria-rowcount` and each row `aria-rowindex`. The narrow cards are\nnot windowed; page long lists.\n\n**Keyboard.** By default it is a plain `<table>` (caption, `th scope`), and\neach control in it (sort buttons, checkboxes, controls in cells) is its own\ntab stop. With `keyboard` it is an APG grid, one tab stop, so Tab enters and\nleaves it in one step: arrows move between cells (mirrored right to left)\nand stop at the edges, Home and End go along the row, Ctrl+Home to the first\nheader cell and Ctrl+End to the last cell of the last row, windowed or not.\nThe focused cell scrolls into view, and a windowed table keeps its row drawn\nwhen the pointer scrolls it away, so focus is never lost. A sort button or a\ncheckbox stands in for its cell. Controls a cell slot draws leave the tab\norder (`tabindex=\"-1\"`); Enter or F2 on the cell gives them back and focuses\nthe first, keys pressed in it are its own, and Escape, or focus leaving the\ncell, takes them out again. `caption` names the table (and the\nlist of cards); `hide-caption` keeps it for assistive technology only.\n`labels` translate its words.",
+      "notes": "`columns` is a typed array: `{ key, label, sortable, align, width,\naccessor, format, rowHeader }`. A cell shows `accessor(row)` (default\n`row[key]`) as text, or `format(value, row)`; the `<key>-cell` slot draws it\ninstead (`{ row, value, index, column }`), and `<key>-header` the header. A\n`rowHeader` column's cells are `th scope=\"row\"`, and its value names each\nrow's checkbox (\"Select Ada\").\n\n**Rows.** Give `rows` (an array), sorted and paged on the client (text in\nthe WeftProvider's `locale`, en-US without one, numbers and dates by\namount), or `fetch(query)`, which receives the wire format's list query\nin its names, `{ page, per_page, sort, q, filter }` (each but `page` and\n`per_page` is absent when there is none; `sort` is `name` or `-since`),\nand answers the wire format's whole list, `{ items, total, page, per_page }`\n(`page` and `per_page` are optional), so paging, sorting, searching and\nfiltering happen on the server. A list function from the generated client\nfits as it is: `:fetch=\"api.products.list\"`. Give the search text as\n`search` (sent as `q`, debounced by `search-debounce`, default 250 ms; clearing `search` asks at once) and the filters as `filters` (`{ plan: 'pro' }`,\nsent as `filter`); a change asks again. Clearing a filter is setting it to\nan empty string or leaving it out: a filter with no value is not sent, and\n`{ status: '' }` is the same query as `{}`. With `rows` and no `fetch`,\n`search` and `filters` do nothing.\n`tableSearch(query)` writes the query as the wire format's search\nparameters: `page=2&per_page=20&sort=-since&q=ada&filter[plan]=pro`. It asks\nonce mounted (the server draws skeleton rows), again whenever the page, the\nsort, the search or the filters change, ignores an answer a newer query\novertook, and shows a message with a Try again button (and emits `error`)\nwhen the promise rejects; `refresh()` asks again. `rowKey` (a property name\nor a function; default the row's `id`, else its place) keys the rows. The\ndata source is `useTableData`, exported for a view of its own.\n\n**Sorting.** A sortable header holds a button: ascending, descending, then\nas given. The sort is `v-model:sort` in the wire format. On the client it is\nstable (equal rows keep their order both ways), numbers and dates by amount,\ntext numeric-aware and case-blind, empty values last. A press on a header\ngoes back to page 1, as does a new `search` or new `filters` (with `fetch`); a\nparent that sets the page and the sort, the search or the filters together\nkeeps its page. The sorted header says `aria-sort`; the others say nothing (APG\nsortable table).\n\n**Selection.** `selectable` adds a checkbox per row and one in the header,\nbound with `v-model:selected` (the rows' keys). The header box is ticked\nwhen every row shown is chosen, indeterminate when some are; it chooses or\nclears the rows shown (on this page). Shift+click on a row's box sets every\nrow from the last one clicked to it, in the order shown. Keys persist\nacross pages and sorts: a row chosen on page 1 stays chosen on page 3 and\nafter a new sort. So rows from `fetch` that can be chosen need keys of their\nown, an `id` or `rowKey`; without one a row's key is its place on its page,\nand development builds warn once.\n\n**Paging.** `per-page` pages the rows with a Pagination under the table\n(`v-model:page`), shown when there is more than one page; with `fetch` it\ndefaults to 20. A fetched page past the last one, as after the last row of\nthe last page is deleted, moves the page to the last one there is, which it\nthen asks for, once. The move goes through `update:page`, so a parent that binds the\npage one way (`:page` with no handler) and keeps it gets that page shown\nempty, with the server's total, and no request until the page, the query or\na refresh changes.\n\n**States.** `loading` makes it `aria-busy` and draws skeleton rows (hidden\nfrom assistive technology, a status saying Loading) until there are rows;\nrows it already has stay, dimmed. With no rows the `empty` slot (or\n`empty`, default \"Nothing to show.\") fills the body.\n\n**Sticky header.** With `sticky` (on by default) the header stays in view.\nWith a `height` (or once windowed) the rows scroll inside the table's box\nand the header sticks at its top. Without one the box clips rather than\nscrolls once mounted, so the header sticks against the page as it scrolls,\nbelow `--weft-table-sticky-top` (set it to a sticky page header's height);\nbut a table wider than its box must scroll sideways, and then its header\nsticks only inside it: give it a `height`. Before it mounts (and on a page\nwith no island) the box scrolls, so a wide table is never cut off.\n\n**Windowing.** Past 200 rows on a page it renders only the rows in view,\nspacer rows standing for the rest (`useVirtualList`): every row is then\n`row-height` px (default by size, at least 44 on touch), its text on one\nline, the box 30rem tall unless `height` says otherwise, and the table\nstates `aria-rowcount` and each row `aria-rowindex`. The narrow cards are\nnot windowed; page long lists.\n\n**Keyboard.** By default it is a plain `<table>` (caption, `th scope`), and\neach control in it (sort buttons, checkboxes, controls in cells) is its own\ntab stop. With `keyboard` it is an APG grid, one tab stop, so Tab enters and\nleaves it in one step: arrows move between cells (mirrored right to left)\nand stop at the edges, Home and End go along the row, Ctrl+Home to the first\nheader cell and Ctrl+End to the last cell of the last row, windowed or not.\nThe focused cell scrolls into view, and a windowed table keeps its row drawn\nwhen the pointer scrolls it away, so focus is never lost. A sort button or a\ncheckbox stands in for its cell. Controls a cell slot draws leave the tab\norder (`tabindex=\"-1\"`); Enter or F2 on the cell gives them back and focuses\nthe first, keys pressed in it are its own, and Escape, or focus leaving the\ncell, takes them out again. `caption` names the table (and the\nlist of cards); `hide-caption` keeps it for assistive technology only.\n`labels` translate its words.",
       "examples": [
         {
           "name": "basic",

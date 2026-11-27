@@ -50,6 +50,8 @@ const props = withDefaults(
     fetch?: TableFetch<T>
     /** The search text, sent to `fetch` as `q`; empty sends none. Does nothing without `fetch`. A new one goes to page 1. */
     search?: string
+    /** Milliseconds to wait before asking `fetch` after a non-empty `search` change; default 250. */
+    searchDebounce?: number
     /** Filters by field name, sent to `fetch` as `filter`; an empty value is no filter. Does nothing without `fetch`. New ones go to page 1. */
     filters?: Record<string, string>
     /** A row's key, for selection and rendering: a property name or a function; default the row's `id`, else its place. */
@@ -95,6 +97,7 @@ const props = withDefaults(
     rows: undefined,
     fetch: undefined,
     search: undefined,
+    searchDebounce: 250,
     filters: undefined,
     sort: undefined,
     defaultSort: null,
@@ -159,6 +162,7 @@ const data = useTableData<T>({
   page,
   perPage: () => props.perPage,
   search: () => props.search,
+  searchDebounce: () => props.searchDebounce,
   filters: () => props.filters,
   loading: () => !!props.loading,
   active: () => mounted.value,
