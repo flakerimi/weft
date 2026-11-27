@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/flakerimi/weft/warp/auth"
 	"github.com/flakerimi/weft/warp/auth/authtest"
@@ -248,4 +250,37 @@ func TestUpdateMe(t *testing.T) {
 		t.Fatalf("name not cleared: %+v", me)
 	}
 	wantError(t, c.Fork().Patch("/api/auth/me", map[string]string{"name": "x"}), 401, "unauthorized", signIn)
+}
+
+// Review I2: a sign-in with the old password, under way while the password
+// changes, never leaves a session behind. The sign-in starts at leads around
+// one hash's time into the change, the window the review timed; whatever the
+// order, the old password's session is refused or ended.
+func TestSignInRacingPasswordChange(t *testing.T) {
+	c, _ := startAuth(t, authEnv(t))
+	authtest.Owner(t, c)
+	start := time.Now()
+	login(c.Fork(), ownerEmail, authtest.Password).Want(200)
+	h := time.Since(start) // about one hash
+	for i := range 16 {
+		lead := h/2 + time.Duration(i)*h/10
+		c, _ := startAuth(t, authEnv(t))
+		authtest.Owner(t, c)
+		attacker := c.Fork()
+		var wg sync.WaitGroup
+		var changed *warptest.Response
+		wg.Go(func() {
+			changed = c.Post("/api/auth/password/change", map[string]string{"current": authtest.Password, "password": newPassword})
+		})
+		time.Sleep(lead)
+		res := attacker.Do(request(http.MethodPost, "/api/auth/login", map[string]string{"email": ownerEmail, "password": authtest.Password}, "198.51.100.9:1000"))
+		wg.Wait()
+		changed.Want(204)
+		if res.Status == 200 && attacker.Get("/api/auth/me").Status != 401 {
+			t.Fatalf("lead %v: a sign-in with the old password kept its session after the change", lead)
+		}
+		if res.Status != 200 && res.Status != 401 {
+			t.Fatalf("lead %v: the sign-in answered %d %s", lead, res.Status, res.Body)
+		}
+	}
 }

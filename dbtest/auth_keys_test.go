@@ -262,7 +262,7 @@ func TestKeyPassesCrossSiteCheck(t *testing.T) {
 func TestKeyFormatRefused(t *testing.T) {
 	c := startShop(t, keysOn(t))
 	k := makeKey(t, c, "Script", auth.RoleMember, 30)
-	secret := k.Secret[strings.LastIndex(k.Prefix, "_")+1:]
+	secret := k.Secret[len(fmt.Sprintf("wk_%d_", k.ID)):] // the secret itself may hold _
 	for _, bad := range []string{
 		"", "wk_", "wk_1_", fmt.Sprintf("wk_%d_%s", k.ID, secret[:42]), fmt.Sprintf("wk_%d_%sA", k.ID, secret),
 		fmt.Sprintf("WK_%d_%s", k.ID, secret), fmt.Sprintf("wk_x_%s", secret), fmt.Sprintf("wk_%d_%s", k.ID+1, secret),

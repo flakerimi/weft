@@ -115,8 +115,10 @@ func (m *module) expired(ctx context.Context, now time.Time) error {
 	return err
 }
 
-// signIn makes a session of the user and sets its cookie on the answer. In
-// one transaction it removes every ended session, token, invitation and key, ends the user's sessions
+// signIn makes a session of the user, as u was read when its password was
+// checked, and sets its cookie on the answer. In one transaction it refuses
+// with login's 401 when the user's password is not the one checked any more,
+// removes every ended session, token, invitation and key, ends the user's sessions
 // seen longest ago while the user has 50, and adds the new one.
 func (m *module) signIn(ctx context.Context, u userRow) error {
 	r := warp.Request(ctx)
@@ -131,6 +133,17 @@ func (m *module) signIn(ctx context.Context, u userRow) error {
 		Agent:     cutAgent(r.UserAgent()),
 	}
 	err := m.db.Tx(ctx, func(ctx context.Context) error {
+		// The password checked may have changed, or the user gone, since it
+		// was read: a sign-in under way while a password changes or is reset
+		// keeps no session. In this transaction, a change after it ends the
+		// session as it ends the others.
+		stored, err := m.users.Get(ctx, u.ID)
+		if isNotFound(err) || err == nil && stored.PasswordHash != u.PasswordHash {
+			return warp.Unauthorized(errNoMatch)
+		}
+		if err != nil {
+			return err
+		}
 		if err := m.expired(ctx, now); err != nil {
 			return err
 		}
