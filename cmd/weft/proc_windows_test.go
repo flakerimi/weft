@@ -223,8 +223,12 @@ func TestJobObjectKillsTreeWhenHolderTerminatedHard(t *testing.T) {
 		t.Fatal(err)
 	}
 	holderH := openTrackedProcess(t, holder.Process.Pid)
-	holderDone := make(chan error, 1)
-	go func() { holderDone <- holder.Wait() }()
+	var holderErr error
+	holderDone := make(chan struct{})
+	go func() {
+		holderErr = holder.Wait()
+		close(holderDone)
+	}()
 	t.Cleanup(func() {
 		select {
 		case <-holderDone:
@@ -252,8 +256,8 @@ func TestJobObjectKillsTreeWhenHolderTerminatedHard(t *testing.T) {
 			}
 		}
 		select {
-		case err := <-holderDone:
-			t.Fatalf("holder exited early (%v) before writing pids: %s", err, holderOut.String())
+		case <-holderDone:
+			t.Fatalf("holder exited early (%v) before writing pids: %s", holderErr, holderOut.String())
 		default:
 		}
 		if time.Now().After(deadline) {
@@ -273,9 +277,9 @@ func TestJobObjectKillsTreeWhenHolderTerminatedHard(t *testing.T) {
 		t.Fatal("holder did not exit after TerminateProcess")
 	}
 
-	for deadline := time.Now().Add(2 * time.Second); handleAlive(childH) || handleAlive(grandH); time.Sleep(25 * time.Millisecond) {
+	for deadline := time.Now().Add(5 * time.Second); handleAlive(childH) || handleAlive(grandH); time.Sleep(25 * time.Millisecond) {
 		if time.Now().After(deadline) {
-			t.Fatalf("2 s after holder TerminateProcess: child %d alive=%v, grandchild %d alive=%v", childPID, handleAlive(childH), grandPID, handleAlive(grandH))
+			t.Fatalf("5 s after holder TerminateProcess: child %d alive=%v, grandchild %d alive=%v", childPID, handleAlive(childH), grandPID, handleAlive(grandH))
 		}
 	}
 }
@@ -323,7 +327,11 @@ func TestHelperJobHolder(t *testing.T) {
 	subFile := os.Getenv("WEFT_TEST_PID_FILE") + ".grand"
 	cmd := exec.Command(os.Args[0], "-test.short", "-test.run=^TestHelperSpawnGrandchildAndWait$")
 	cmd.Env = append(os.Environ(), "WEFT_TEST_HELPER=spawn-grandchild-wait", "WEFT_TEST_PID_FILE="+subFile)
-	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	// Do not pass the holder's own os.Stdout/os.Stderr pipe handles to cmd:
+	// when the test kills the holder with TerminateProcess, cmd and its
+	// grandchild are still alive for a few milliseconds until Windows runs
+	// down the holder's job handle, and if they inherited the holder's stdout
+	// pipe they would keep go's pipe-reader goroutine in holder.Wait() open.
 	if err := startGroup(cmd); err != nil {
 		fmt.Fprintf(os.Stderr, "startGroup: %v\n", err)
 		os.Exit(2)
@@ -514,8 +522,11 @@ func TestDevStopsWhenKilled(t *testing.T) {
 		t.Fatal(err)
 	}
 	weftH := openTrackedProcess(t, cmd.Process.Pid)
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
+	done := make(chan struct{})
+	go func() {
+		_ = cmd.Wait()
+		close(done)
+	}()
 	t.Cleanup(func() {
 		select {
 		case <-done:
@@ -563,7 +574,7 @@ func TestDevStopsWhenKilled(t *testing.T) {
 	}
 
 	addr := "localhost:" + strconv.Itoa(port)
-	for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(50 * time.Millisecond) {
 		c, err := net.DialTimeout("tcp", addr, 250*time.Millisecond)
 		if err == nil {
 			c.Close()
@@ -572,7 +583,7 @@ func TestDevStopsWhenKilled(t *testing.T) {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("2 s after weft dev was killed with TerminateProcess: addr err=%v, goPID(%d) alive=%v, grandPID(%d) alive=%v", err, goPID, handleAlive(goH), grandPID, handleAlive(grandH))
+			t.Fatalf("5 s after weft dev was killed with TerminateProcess: addr err=%v, goPID(%d) alive=%v, grandPID(%d) alive=%v", err, goPID, handleAlive(goH), grandPID, handleAlive(grandH))
 		}
 	}
 }

@@ -59,7 +59,13 @@ func installedApp(t *testing.T) string {
 // made, and returns the copy's absolute path.
 func copyApp(t *testing.T, dir string) string {
 	t.Helper()
-	src := installedApp(t)
+	return copyInstalledTree(t, installedApp(t), dir, "myapp")
+}
+
+// copyInstalledTree copies an installed app at src into dir/name, keeping the
+// symlinks pnpm made, and returns the copy's absolute path.
+func copyInstalledTree(t *testing.T, src, dir, name string) string {
+	t.Helper()
 	dir, err := filepath.Abs(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -68,14 +74,14 @@ func copyApp(t *testing.T, dir string) string {
 		if out, err := exec.Command("cp", "-a", src, dir).CombinedOutput(); err != nil {
 			t.Fatalf("cp: %v: %s", err, out)
 		}
-		return filepath.Join(dir, "myapp")
+		return filepath.Join(dir, name)
 	}
 	// On Windows pnpm links node_modules with junctions, which Git Bash's cp
 	// copies as folders (so Node finds @weft/vite's TypeScript under
 	// node_modules and will not strip its types) and whose targets are
 	// absolute, naming the installed app. The copy is made without any
 	// node_modules, and pnpm links the copy's own from its store, offline.
-	dst := filepath.Join(dir, "myapp")
+	dst := filepath.Join(dir, name)
 	err = filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err

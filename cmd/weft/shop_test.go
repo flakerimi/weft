@@ -134,7 +134,7 @@ var (
 )
 
 // builtShop returns a copy of examples/shop that weft build has run in,
-// made once for this test binary; tests copy it with cp -a rather than
+// made once for this test binary; tests copy it with shopCopy rather than
 // change it. It must be called after inTempDir, which sets WEFT_BUNDLE.
 func builtShop(t *testing.T) string {
 	t.Helper()
@@ -174,15 +174,13 @@ func builtShop(t *testing.T) string {
 }
 
 // shopCopy copies the built shop into a temp folder of the test's own and
-// returns the copy's path.
+// returns the copy's path. Like copyApp, on Windows it copies without
+// node_modules and runs pnpm install --offline --frozen-lockfile, because
+// Git Bash's cp -a turns pnpm's junctions into real folders under
+// node_modules (where Node refuses to strip types from @weft/vite's .ts files).
 func shopCopy(t *testing.T) string {
 	t.Helper()
-	src := builtShop(t)
-	dir := t.TempDir()
-	if out, err := exec.Command("cp", "-a", src, dir).CombinedOutput(); err != nil {
-		t.Fatalf("cp: %v: %s", err, out)
-	}
-	return filepath.Join(dir, "shop")
+	return copyInstalledTree(t, builtShop(t), t.TempDir(), "shop")
 }
 
 // inShop runs name with args in app and returns its output.
