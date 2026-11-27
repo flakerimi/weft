@@ -60,20 +60,20 @@ function getRaw(base: string, path: string): Promise<{ status: number; body: str
   })
 }
 
-/** The body's text, without its tags. */
 /**
- * Waits until `messages` has had no new entry for 600 ms (at most 5 s). The
+ * Waits until `messages` has had no new entry for 600 ms (at most about 5 s). The
  * file watcher can report the fixture's own files, copied just before the
  * server started, some time later (macOS's FSEvents does): a test that counts
  * reloads waits for those to pass first.
  */
 async function quiet(messages: unknown[]) {
-  for (let seen = -1, i = 0; i < 20 && seen !== messages.length; i++) {
+  for (let seen = -1, i = 0; i < 8 && seen !== messages.length; i++) {
     seen = messages.length
     await new Promise((r) => setTimeout(r, 600))
   }
 }
 
+/** The body's text, without its tags. */
 const text = (html: string) => html.replace(/<style>[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/g, '').replace(/<[^>]+>/g, '')
 
 describe('devSite', { timeout: 30_000 }, () => {
