@@ -3,9 +3,11 @@
    `link` underlines the selected tab in its tone (a line at the inline end
    when vertical). Each tab is a control height tall, at least --weft-hit-min
    on touch. A horizontal list too long for its width scrolls sideways,
-   without a scrollbar drawn. */
+   without a scrollbar drawn. A vertical list whose own box is narrow
+   (`data-width`, which the pre-paint script sets before hydration) is drawn
+   as a horizontal one, above the panels. */
 .weft-tabs { display: flex; flex-direction: column; gap: var(--weft-space-3, 12px); min-inline-size: 0; }
-.weft-tabs[data-orientation="vertical"] { flex-direction: row; align-items: flex-start; }
+.weft-tabs[data-orientation="vertical"]:where(:not([data-width="narrow"])) { flex-direction: row; align-items: flex-start; }
 
 .weft-tabs__list {
   display: flex;
@@ -14,15 +16,15 @@
   overflow-x: auto;
   scrollbar-width: none;
 }
-.weft-tabs[data-orientation="vertical"] > .weft-tabs__list { flex-direction: column; flex: none; overflow: visible; }
+.weft-tabs[data-orientation="vertical"]:where(:not([data-width="narrow"])) > .weft-tabs__list { flex-direction: column; flex: none; overflow: visible; }
 .weft-tabs[data-variant="pill"] > .weft-tabs__list {
   padding: var(--weft-space-1, 4px);
   border-radius: var(--weft-radius-control, 8px);
   background: color-mix(in srgb, var(--weft-color-text, CanvasText) 6%, transparent);
 }
-.weft-tabs[data-variant="pill"][data-orientation="horizontal"] > .weft-tabs__list { align-self: flex-start; }
-.weft-tabs[data-variant="link"][data-orientation="horizontal"] > .weft-tabs__list { border-block-end: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText); gap: var(--weft-space-3, 12px); }
-.weft-tabs[data-variant="link"][data-orientation="vertical"] > .weft-tabs__list { border-inline-end: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText); }
+.weft-tabs[data-variant="pill"]:is([data-orientation="horizontal"], [data-width="narrow"]) > .weft-tabs__list { align-self: flex-start; }
+.weft-tabs[data-variant="link"]:is([data-orientation="horizontal"], [data-width="narrow"]) > .weft-tabs__list { border-block-end: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText); gap: var(--weft-space-3, 12px); }
+.weft-tabs[data-variant="link"][data-orientation="vertical"]:where(:not([data-width="narrow"])) > .weft-tabs__list { border-inline-end: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText); }
 
 .weft-tabs__tab {
   display: inline-flex;
@@ -45,21 +47,28 @@
 }
 .weft-tabs[data-size="sm"] .weft-tabs__tab { min-block-size: max(var(--weft-control-sm, 28px), var(--weft-hit-min, 24px)); padding-inline: var(--weft-space-2, 8px); font-size: 0.9em; }
 .weft-tabs[data-size="lg"] .weft-tabs__tab { min-block-size: max(var(--weft-control-lg, 40px), var(--weft-hit-min, 24px)); padding-inline: var(--weft-space-4, 16px); }
-.weft-tabs[data-orientation="vertical"] .weft-tabs__tab { justify-content: flex-start; }
+.weft-tabs[data-orientation="vertical"]:where(:not([data-width="narrow"])) .weft-tabs__tab { justify-content: flex-start; }
 .weft-tabs__tab:focus-visible { outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight); outline-offset: calc(-1 * var(--weft-focus-width, 2px)); }
 .weft-tabs__tab:disabled { opacity: 0.5; cursor: not-allowed; }
 @media (hover: hover) {
   .weft-tabs__tab:not(:disabled):hover { color: var(--weft-color-text, CanvasText); }
+  .weft-tabs[data-variant="pill"] .weft-tabs__tab:not(:disabled, [aria-selected="true"]):hover { background: color-mix(in srgb, var(--weft-color-text, CanvasText) 6%, transparent); }
 }
 .weft-tabs__tab[aria-selected="true"] { color: var(--weft-tone-text, CanvasText); }
+/* On the pill list's tint every tab is in the text colour (muted text does not
+   reach 4.5:1 there), a hovered one tinted further; the selected one is on its
+   raised fill, its text in its tone, and with the neutral tone (whose text is
+   the text colour) ringed in it, since the fill alone is near 1:1 in dark. */
+.weft-tabs[data-variant="pill"] .weft-tabs__tab { color: var(--weft-color-text, CanvasText); }
 .weft-tabs[data-variant="pill"] .weft-tabs__tab[aria-selected="true"] {
   background: var(--weft-color-surface-raised, Canvas);
-  color: var(--weft-color-text, CanvasText);
+  color: var(--weft-tone-text, CanvasText);
   box-shadow: var(--weft-shadow-control, 0 1px 2px color-mix(in srgb, CanvasText 25%, transparent));
 }
+.weft-tabs[data-variant="pill"][data-tone="neutral"] .weft-tabs__tab[aria-selected="true"] { box-shadow: inset 0 0 0 var(--weft-border-width, 1px) var(--weft-tone, CanvasText), var(--weft-shadow-control, 0 1px 2px color-mix(in srgb, CanvasText 25%, transparent)); }
 .weft-tabs[data-variant="link"] .weft-tabs__tab { border-radius: 0; padding-inline: var(--weft-space-1, 4px); }
-.weft-tabs[data-variant="link"][data-orientation="horizontal"] .weft-tabs__tab { margin-block-end: calc(-1 * var(--weft-border-width, 1px)); border-block-end: var(--weft-border-width-strong, 2px) solid transparent; }
-.weft-tabs[data-variant="link"][data-orientation="vertical"] .weft-tabs__tab { margin-inline-end: calc(-1 * var(--weft-border-width, 1px)); padding-inline: var(--weft-space-2, 8px) var(--weft-space-3, 12px); border-inline-end: var(--weft-border-width-strong, 2px) solid transparent; }
+.weft-tabs[data-variant="link"]:is([data-orientation="horizontal"], [data-width="narrow"]) .weft-tabs__tab { margin-block-end: calc(-1 * var(--weft-border-width, 1px)); border-block-end: var(--weft-border-width-strong, 2px) solid transparent; }
+.weft-tabs[data-variant="link"][data-orientation="vertical"]:where(:not([data-width="narrow"])) .weft-tabs__tab { margin-inline-end: calc(-1 * var(--weft-border-width, 1px)); padding-inline: var(--weft-space-2, 8px) var(--weft-space-3, 12px); border-inline-end: var(--weft-border-width-strong, 2px) solid transparent; }
 .weft-tabs[data-variant="link"] .weft-tabs__tab[aria-selected="true"] { border-color: var(--weft-tone, CanvasText); }
 .weft-tabs__icon { flex: none; inline-size: 16px; block-size: 16px; }
 .weft-tabs__label { overflow: hidden; text-overflow: ellipsis; }

@@ -5,6 +5,7 @@ import { splitBar } from '../../src/shell/appShell.ts'
 import { mount } from '../mount.ts'
 import { press as pressKey } from '../keyboard.ts'
 import { installResizeObserver } from '../resize-observer.ts'
+import { DEFAULT_VIEWPORT, setViewport } from '../viewport.ts'
 import { loadStyles, mediaRule, ruleFor } from '../styles.ts'
 import { px } from '../forms/helpers.ts'
 import { $, $$, active, overlays, reset, settle } from '../overlays/helpers.ts'
@@ -12,6 +13,7 @@ import { $, $$, active, overlays, reset, settle } from '../overlays/helpers.ts'
 let unmount: (() => void) | undefined
 let ro: ReturnType<typeof installResizeObserver> | undefined
 afterEach(() => {
+  setViewport(DEFAULT_VIEWPORT)
   unmount?.()
   unmount = undefined
   ro?.restore()
@@ -27,7 +29,7 @@ async function mountAt(component: typeof ShellCases, props: Record<string, unkno
   unmount = m.unmount
   await settle()
   if (viewport) {
-    ro.report(document.documentElement, viewport)
+    setViewport(viewport)
     await settle()
   }
   return m
@@ -168,7 +170,7 @@ describe('AppShell on a narrow touch screen', () => {
     ;(m.exposed as { input: string }).input = 'pointer'
     await settle()
     expect(shell().dataset.layout).toBe('drawer')
-    ro!.report(document.documentElement, 1200)
+    setViewport(1200)
     await settle()
     expect(shell().dataset.layout).toBe('sidebar')
   })
@@ -223,14 +225,14 @@ describe('AppShell across a change of layout', () => {
     const sheet = $('[role="dialog"]', overlays()!)
     const inbox = $$<HTMLElement>('.weft-nav__item', sheet).find((el) => el.textContent!.includes('Inbox'))!
     inbox.focus()
-    ro!.report(document.documentElement, 1200)
+    setViewport(1200)
     await settle()
     await settle()
     expect(shell().dataset.layout).toBe('sidebar')
     expect($('[role="dialog"]')).toBeNull()
     expect(active()!.closest('.weft-app-shell__sidebar')).not.toBeNull()
     expect(active()!.textContent).toContain('Inbox')
-    ro!.report(document.documentElement, 400)
+    setViewport(400)
     await settle()
     await settle()
     expect(shell().dataset.layout).toBe('drawer')
@@ -255,7 +257,7 @@ describe('AppShell across a change of layout', () => {
   it('moves focus from the collapse toggle to the menu button when the viewport narrows', async () => {
     await mountAt(ShellCases, {})
     toggle().focus()
-    ro!.report(document.documentElement, 400)
+    setViewport(400)
     await settle()
     await settle()
     expect(active()).toBe($('.weft-app-shell__menu button'))
@@ -265,7 +267,7 @@ describe('AppShell across a change of layout', () => {
     await mountAt(ShellCases, {})
     expect($$('.weft-app-shell__title')).toHaveLength(1)
     expect($$('.user')).toHaveLength(1)
-    ro!.report(document.documentElement, 400)
+    setViewport(400)
     await settle()
     expect(sidebar()).toBeNull()
     expect($$('.weft-app-shell__title')).toHaveLength(1)
@@ -316,12 +318,12 @@ describe('Header', () => {
     $<HTMLButtonElement>('.weft-header__menu button').click()
     await settle()
     $('.menu-link', overlays()!).focus()
-    ro!.report(document.documentElement, 1200)
+    setViewport(1200)
     await settle()
     await settle()
     expect($('[role="dialog"]')).toBeNull()
     expect(active()).toBe($('.weft-header__center .center-link'))
-    ro!.report(document.documentElement, 400)
+    setViewport(400)
     await settle()
     await settle()
     expect($('[role="dialog"]')).toBeNull()
@@ -330,7 +332,7 @@ describe('Header', () => {
   it('moves focus from the middle to the menu button when the viewport narrows', async () => {
     await mountAt(HeaderCases as typeof ShellCases, { menu: true })
     $('.weft-header__center .center-link').focus()
-    ro!.report(document.documentElement, 400)
+    setViewport(400)
     await settle()
     await settle()
     expect(active()).toBe($('.weft-header__menu button'))

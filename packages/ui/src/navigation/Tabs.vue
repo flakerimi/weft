@@ -9,8 +9,9 @@
 // panel's content renders while it is selected (lazy), or from its first
 // visit on with `keep-alive`. With `hash`, the address's #fragment names the
 // selected tab, both ways (a disabled tab or an unknown name is ignored);
-// one Tabs per page owns the hash, the first mounted. A vertical list goes above the panels when narrow;
-// on touch every tab is at least --weft-hit-min tall.
+// one Tabs per page owns the hash, the first mounted. A vertical list goes
+// above the panels when its own box is narrow, in CSS from `data-width` (so
+// before hydration too); on touch every tab is at least --weft-hit-min tall.
 import { computed, onMounted, onScopeDispose, shallowRef, useAttrs, useTemplateRef, watch } from 'vue'
 import Badge from '../basics/Badge.vue'
 import Icon from '../basics/Icon.vue'
@@ -100,7 +101,14 @@ const selectedIndex = computed(() => props.items.findIndex((t, i) => valueOf(t, 
 const id = useId('tabs')
 const root = useTemplateRef<HTMLElement>('root')
 const list = useTemplateRef<HTMLElement>('list')
-const width = useWidth(root, { prepaint: false })
+// Only a vertical tab list depends on its width. It says its width class in
+// `data-width`, which the page's pre-paint script keeps current before
+// hydration, and CSS puts the list above the panels on
+// `[data-width="narrow"]`, so a static page adapts too; `aria-orientation`
+// and the arrow keys follow once mounted.
+const adapts = props.orientation === 'vertical'
+const width = useWidth(root, { prepaint: adapts })
+const widthId = width.id
 const orientation = computed(() => (props.orientation === 'vertical' && width.value !== 'narrow' ? 'vertical' : 'horizontal'))
 const roving = useRovingFocus(list, {
   get orientation() {
@@ -183,6 +191,8 @@ let hashOwner: object | undefined
     v-bind="rootAttrs"
     class="weft-tabs"
     :data-orientation="orientation"
+    :data-width="adapts ? width : undefined"
+    :data-weft-w="widthId"
     :data-variant="variant"
     :data-size="size"
     :data-tone="tone"

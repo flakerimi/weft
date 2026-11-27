@@ -6,7 +6,7 @@ avoid: To move between pages, use NavigationMenu or links; for sections a reader
 adapts:
   input: Tabs are at least --weft-hit-min tall on touch; a row too long for its width scrolls sideways.
   surface: Nothing changes in behaviour; text follows the surface's type scale.
-  width: A vertical tab list goes above the panels when the tabs' own width is narrow (under 640 px), and turns horizontal.
+  width: A vertical tab list goes above the panels when the tabs' own width is narrow (under 640 px), and turns horizontal. CSS does it from `data-width`, which the page's pre-paint script sets, so a page that is never hydrated adapts too; `aria-orientation` and the arrow keys follow once hydrated.
 ---
 `items` are `{ label, value, icon, badge, content, disabled, slot }`; a tab's
 value is its `value`, else its index. Bind the selected tab with `v-model`.

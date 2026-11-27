@@ -38,6 +38,10 @@ const exceptions: Exception[] = [
     reason: 'an invalid switch\'s danger line, inset as wide as the hairline because the track has no border; not elevation',
   },
   {
+    file: 'styles/tabs.css', property: 'box-shadow', value: 'inset 0 0 0 var(--weft-border-width, 1px) var(--weft-tone, CanvasText), var(--weft-shadow-control, 0 1px 2px color-mix(in srgb, CanvasText 25%, transparent))',
+    reason: 'the selected neutral pill tab\'s ring in its tone, as wide as the hairline, before its control shadow (the token): its mark, since its text is the others\' colour',
+  },
+  {
     file: 'styles/toast.css', property: 'border-inline-start', value: '4px solid var(--weft-tone, CanvasText)',
     reason: 'the tone\'s accent bar, a mark of its own and not a hairline',
   },

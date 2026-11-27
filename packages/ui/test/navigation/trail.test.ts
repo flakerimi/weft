@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import TrailCases from '../fixtures/navigation/TrailCases.vue'
-import { pageRange } from '../../src/navigation/pagination.ts'
+import { pageRange, pageRangeBoth } from '../../src/navigation/pagination.ts'
 import { mount } from '../mount.ts'
 import { press as pressKey } from '../keyboard.ts'
 import { installResizeObserver } from '../resize-observer.ts'
+import { DEFAULT_VIEWPORT, setViewport } from '../viewport.ts'
 import { loadStyles } from '../styles.ts'
 import { px } from '../forms/helpers.ts'
 import { $, $$, reset, settle } from '../overlays/helpers.ts'
@@ -12,6 +13,7 @@ let unmount: (() => void) | undefined
 afterEach(() => {
   unmount?.()
   unmount = undefined
+  setViewport(DEFAULT_VIEWPORT)
   reset()
   history.replaceState(null, '', '/')
 })
@@ -94,6 +96,39 @@ describe('pageRange', () => {
   })
 })
 
+describe('pageRangeBoth', () => {
+  it('holds the narrow and the wide pages in one list: leaving out one form\'s entries gives the other\'s pageRange', () => {
+    for (const edges of [false, true]) {
+      for (let siblings = 0; siblings <= 3; siblings++) {
+        for (let count = 0; count <= 24; count++) {
+          for (let page = 1; page <= Math.max(1, count); page++) {
+            const both = pageRangeBoth(page, count, siblings, edges)
+            const at = `page ${page} of ${count}, ${siblings} siblings, edges ${edges}`
+            expect(both.filter((s) => s.only !== 'wide').map((s) => s.entry), at).toEqual(pageRange(page, count, Math.min(siblings, 1), edges))
+            expect(both.filter((s) => s.only !== 'narrow').map((s) => s.entry), at).toEqual(pageRange(page, count, siblings, edges))
+          }
+        }
+      }
+    }
+  })
+
+  it('marks only what differs: a page or gap in both forms is drawn once, unmarked, and a gap that ends at another page once per form', () => {
+    expect(pageRangeBoth(10, 20, 2, true)).toEqual([
+      { entry: 1 },
+      { entry: 'ellipsis', only: 'wide' },
+      { entry: 8, only: 'wide' },
+      { entry: 'ellipsis', only: 'narrow' },
+      { entry: 9 },
+      { entry: 10 },
+      { entry: 11 },
+      { entry: 12, only: 'wide' },
+      { entry: 'ellipsis' },
+      { entry: 20 },
+    ])
+    expect(pageRangeBoth(5, 20, 1, true).every((s) => s.only === undefined)).toBe(true)
+  })
+})
+
 describe('Pagination', () => {
   const pages = () => $$<HTMLElement>('.weft-pagination__page')
   const control = (name: string) => $<HTMLButtonElement>(`[aria-label="${name}"]`)
@@ -163,15 +198,27 @@ describe('Pagination', () => {
   })
 
   it('shows fewer pages and no first and last controls when the viewport is narrow', async () => {
+    await cases({ siblingCount: 2 })
+    expect(pages()).toHaveLength(5)
+    setViewport(400)
+    await settle()
+    expect(pages().map((p) => p.textContent!.trim())).toEqual(['4', '5', '6'])
+    expect(control('First page')).toBeNull()
+    expect(control('Next page')).not.toBeNull()
+    setViewport(900)
+    await settle()
+    expect(pages()).toHaveLength(5)
+  })
+
+  it('takes the viewport as its media query does, scrollbar included: 645 px wide with a 628 px root is not narrow', async () => {
     const ro = installResizeObserver()
     try {
+      setViewport(645)
       await cases({ siblingCount: 2 })
-      expect(pages()).toHaveLength(5)
-      ro.report(document.documentElement, 400)
+      ro.report(document.documentElement, 628)
       await settle()
-      expect(pages().map((p) => p.textContent!.trim())).toEqual(['4', '5', '6'])
-      expect(control('First page')).toBeNull()
-      expect(control('Next page')).not.toBeNull()
+      expect(pages()).toHaveLength(5)
+      expect(control('First page')).not.toBeNull()
     } finally {
       ro.restore()
     }

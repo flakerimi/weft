@@ -71,3 +71,7 @@
 .weft-menu__chevron { color: var(--weft-color-text-muted, GrayText); }
 [dir="rtl"] .weft-menu__chevron { scale: -1 1; }
 .weft-menu__back { color: var(--weft-color-text-muted, GrayText); font-weight: var(--weft-weight-heading, 600); }
+/* On a focused or open item's tint its muted text is in the text colour: muted text does not reach 4.5:1 there. */
+.weft-menu__item:focus .weft-menu__description,
+.weft-menu__item[aria-expanded="true"] .weft-menu__description,
+.weft-menu__back:focus { color: var(--weft-color-text, CanvasText); }

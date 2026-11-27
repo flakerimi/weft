@@ -4,7 +4,7 @@
 // package.json of its own, and `node_modules` one folder up. The folder's
 // name has a space and a non-ASCII letter (Review Focus 1).
 import { spawn, type ChildProcess } from 'node:child_process'
-import { cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { closeSync, cpSync, mkdirSync, mkdtempSync, openSync, rmSync, symlinkSync, writeFileSync, writeSync } from 'node:fs'
 import { createServer as createHTTPServer, request, type Server } from 'node:http'
 import { createServer as createNetServer, type AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -329,6 +329,55 @@ describe('devSite', { timeout: 30_000 }, () => {
       await new Promise((r) => setTimeout(r, 300))
       expect(messages.filter((m) => m.type !== 'custom').map((m) => m.type), file).toEqual(['full-reload'])
     }
+  })
+
+  it('sends one full reload for a save written in two steps, as an editor or a busy machine writes one', async () => {
+    const root = site('dev-site')
+    const dev = await start(root)
+    const client = await get(dev.url + '@vite/client')
+    const token = /const wsToken = "([^"]+)"/.exec(client.body)![1]!
+    const socket = new WebSocket(`${dev.url.replace('http', 'ws')}?token=${token}`, 'vite-hmr')
+    closers.push(() => socket.close())
+    const messages: { type: string }[] = []
+    socket.addEventListener('message', (e) => messages.push(JSON.parse(String(e.data))))
+    for (let i = 0; i < 200 && !messages.some((m) => m.type === 'connected'); i++) await new Promise((r) => setTimeout(r, 25))
+    expect((await get(dev.url + 'counter')).status).toBe(200)
+    for (const file of ['components/Counter.vue', 'content/posts.json']) {
+      for (let round = 0; round < 3; round++) {
+        messages.length = 0
+        // Emptied first, written a moment later: the watcher sees two changes.
+        const fd = openSync(join(root, file), 'w')
+        await new Promise((r) => setTimeout(r, 30))
+        writeSync(fd, file.endsWith('.json') ? `["first", "round ${round}"]\n` : `<template><b>round ${round}</b></template>\n`)
+        closeSync(fd)
+        await new Promise((r) => setTimeout(r, 500))
+        expect(messages.filter((m) => m.type === 'full-reload'), `${file}, round ${round}`).toHaveLength(1)
+      }
+    }
+  })
+
+  it('reloads at most about a second after the first change, however long files keep changing', async () => {
+    const root = site('dev-site')
+    const dev = await start(root)
+    const client = await get(dev.url + '@vite/client')
+    const token = /const wsToken = "([^"]+)"/.exec(client.body)![1]!
+    const socket = new WebSocket(`${dev.url.replace('http', 'ws')}?token=${token}`, 'vite-hmr')
+    closers.push(() => socket.close())
+    const reloads: number[] = []
+    socket.addEventListener('message', (e) => JSON.parse(String(e.data)).type === 'full-reload' && reloads.push(Date.now()))
+    const opened = await new Promise<boolean>((done) => socket.addEventListener('open', () => done(true)))
+    expect(opened).toBe(true)
+    expect((await get(dev.url + 'counter')).status).toBe(200)
+    // A writer that never pauses for the quiet period: every 60 ms for 2.4 s.
+    const start0 = Date.now()
+    for (let i = 0; i < 40; i++) {
+      writeFileSync(join(root, 'content/posts.json'), `["first", "write ${i}"]\n`)
+      await new Promise((r) => setTimeout(r, 60))
+    }
+    await new Promise((r) => setTimeout(r, 600))
+    expect(reloads.length, 'a reload while the writes go on, and one after').toBeGreaterThanOrEqual(2)
+    // The watcher adds its own latency (up to about 120 ms) to the second.
+    expect(reloads[0]! - start0, 'the first reload').toBeLessThan(1500)
   })
 
   it('says when the port is taken', async () => {

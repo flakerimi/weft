@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import ModalCases from '../fixtures/overlays/ModalCases.vue'
 import { mount } from '../mount.ts'
 import { installResizeObserver } from '../resize-observer.ts'
+import { DEFAULT_VIEWPORT, setViewport } from '../viewport.ts'
 import { px } from '../forms/helpers.ts'
 import { press as pressKey } from '../keyboard.ts'
 import { loadStyles, ruleFor } from '../styles.ts'
@@ -9,6 +10,7 @@ import { $, $$, active, key, locked, overlays, press, reset, settle } from './he
 
 let unmount: (() => void) | undefined
 afterEach(() => {
+  setViewport(DEFAULT_VIEWPORT)
   unmount?.()
   unmount = undefined
   reset()
@@ -213,10 +215,10 @@ describe('Dialog', () => {
       await openFromTrigger()
       const dialog = $('[role="dialog"]')
       expect(dialog.hasAttribute('data-fullscreen')).toBe(false)
-      ro.report(document.documentElement, 500) // the viewport's width
+      setViewport(500)
       await settle()
       expect(dialog.dataset.fullscreen).toBe('true')
-      ro.report(document.documentElement, 900)
+      setViewport(900)
       await settle()
       expect(dialog.hasAttribute('data-fullscreen')).toBe(false)
     } finally {
