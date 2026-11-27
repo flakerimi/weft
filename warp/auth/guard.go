@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/flakerimi/weft/warp"
 )
@@ -42,7 +41,7 @@ func Can(permission string) warp.RouteOption {
 				warp.WriteError(w, r, errors.New("auth: a route guarded by auth.Can was asked with no auth module; list auth.Module() in app/modules.go."))
 				return
 			}
-			u, err := m.signedIn(r)
+			u, _, err := m.signedIn(r)
 			if err != nil {
 				warp.WriteError(w, r, err)
 				return
@@ -80,30 +79,4 @@ func Per(resource string) func(action string) []warp.RouteOption {
 		}
 		return []warp.RouteOption{Can(resource + ":" + verb)}
 	}
-}
-
-// signedIn returns the user of r's session cookie, or the 401 when there is
-// no cookie, it is not good, or its user is gone or was made at another
-// moment. Over HTTPS only __Host-session is read, over HTTP only session.
-func (m *module) signedIn(r *http.Request) (User, error) {
-	c, err := r.Cookie(cookieFor(m.app.IsHTTPS(r)))
-	if err != nil {
-		return User{}, warp.Unauthorized(errNoSession)
-	}
-	s, ok := readSession(m.secret, c.Value, time.Now())
-	if !ok {
-		return User{}, warp.Unauthorized(errNoSession)
-	}
-	row, err := m.users.Get(r.Context(), s.id)
-	var e *warp.Error
-	if errors.As(err, &e) && e.Status == http.StatusNotFound {
-		return User{}, warp.Unauthorized(errNoSession)
-	}
-	if err != nil {
-		return User{}, err
-	}
-	if row.CreatedAt.UnixNano() != s.made { // another user with that id: the database was replaced
-		return User{}, warp.Unauthorized(errNoSession)
-	}
-	return row.user(), nil
 }

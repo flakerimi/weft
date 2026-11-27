@@ -51,6 +51,8 @@ func (m *module) setup(ctx context.Context, in SetupInput) (Me, error) {
 		return Me{}, err
 	}
 	m.endSetup()
-	m.signIn(ctx, row)
+	if err := m.signIn(ctx, row); err != nil {
+		return Me{}, err
+	}
 	return m.meOf(row.user()), nil
 }

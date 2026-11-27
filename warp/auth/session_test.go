@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"strconv"
 	"strings"
 	"testing"
@@ -20,89 +21,116 @@ var (
 	testMade   = time.Date(2026, 11, 20, 9, 30, 15, 123456789, time.UTC)
 )
 
-func TestSessionRoundTrip(t *testing.T) {
-	expires := testNow.Add(30 * 24 * time.Hour)
-	v := sessionValue(testSecret, 7, testMade, expires)
-	parts := strings.Split(v, ".")
-	made := strconv.FormatInt(testMade.UnixNano(), 10)
-	if len(parts) != 4 || parts[0] != "7" || parts[1] != made || parts[2] != strconv.FormatInt(expires.Unix(), 10) {
-		t.Fatalf("value = %q, want 7.<created_at ns>.<expiry>.<mac>", v)
+// testToken is a session token as signIn makes one: 43 base64url characters.
+var testToken = base64.RawURLEncoding.EncodeToString([]byte("thirty-two bytes of a test token"))
+
+// signedValue is id.token with the mac over it under testSecret.
+func signedValue(id, token string) string {
+	m := hmac.New(sha256.New, testSecret)
+	m.Write([]byte(id + "." + token))
+	return id + "." + token + "." + base64.RawURLEncoding.EncodeToString(m.Sum(nil))
+}
+
+func TestCookieValueRoundTrip(t *testing.T) {
+	if len(testToken) != 43 {
+		t.Fatalf("the test token is %d characters", len(testToken))
 	}
-	mac := hmac.New(sha256.New, testSecret)
-	mac.Write([]byte(parts[0] + "." + parts[1] + "." + parts[2]))
-	if parts[3] != base64.RawURLEncoding.EncodeToString(mac.Sum(nil)) {
-		t.Fatalf("mac = %q, want HMAC-SHA256 over the first three parts in base64url", parts[3])
+	v := sessionValue(testSecret, 7, testToken)
+	if want := signedValue("7", testToken); v != want {
+		t.Fatalf("value = %q, want 7.<token>.<HMAC-SHA256 over 7.<token> in base64url>, %q", v, want)
 	}
-	s, ok := readSession(testSecret, v, testNow)
-	if !ok || s.id != 7 || s.made != testMade.UnixNano() {
-		t.Fatalf("readSession = %+v, %v; want 7 made at %d", s, ok, testMade.UnixNano())
+	id, token, ok := readSession(testSecret, v)
+	if !ok || id != 7 || token != testToken {
+		t.Fatalf("readSession = %d, %q, %v; want 7 and the token", id, token, ok)
 	}
-	if s, ok := readSession(testSecret, v, expires.Add(-time.Second)); !ok || s.id != 7 {
-		t.Fatalf("a second before expiry: %+v, %v", s, ok)
+	// A token is 32 random bytes, so two are never alike.
+	a, b := newToken(), newToken()
+	if len(a) != 43 || a == b || strings.ContainsAny(a, "+/=") {
+		t.Fatalf("newToken = %q and %q", a, b)
 	}
 }
 
-func TestSessionRefusesTamperedAndExpired(t *testing.T) {
-	expires := testNow.Add(time.Hour)
-	v := sessionValue(testSecret, 7, testMade, expires)
+func TestCookieValueRefusesTamperedShortAndLong(t *testing.T) {
+	v := sessionValue(testSecret, 7, testToken)
 	parts := strings.Split(v, ".")
-	made, exp, mac := parts[1], parts[2], parts[3]
-	signed := func(fields ...string) string {
+	mac := parts[2]
+	other := base64.RawURLEncoding.EncodeToString([]byte("thirty-two other bytes, a token!"))
+	made := strconv.FormatInt(testMade.UnixNano(), 10)
+	exp := strconv.FormatInt(testNow.Add(time.Hour).Unix(), 10)
+	slice := func(fields ...string) string { // the slice's form, signed right
 		m := hmac.New(sha256.New, testSecret)
 		m.Write([]byte(strings.Join(fields, ".")))
 		return strings.Join(fields, ".") + "." + base64.RawURLEncoding.EncodeToString(m.Sum(nil))
 	}
 	cases := map[string]string{
-		"another id":                "8." + made + "." + exp + "." + mac,
-		"another making":            "7." + strconv.FormatInt(testMade.UnixNano()+1, 10) + "." + exp + "." + mac,
-		"a later expiry":            "7." + made + "." + strconv.FormatInt(expires.Unix()+86400, 10) + "." + mac,
-		"another mac":               "7." + made + "." + exp + "." + base64.RawURLEncoding.EncodeToString(make([]byte, 32)),
-		"a cut mac":                 "7." + made + "." + exp + "." + mac[:len(mac)-2],
-		"a mac that is not b64":     "7." + made + "." + exp + ".!!!",
-		"no mac":                    "7." + made + "." + exp + ".",
-		"three parts, signed":       signed("7", exp),
-		"three parts":               "7." + exp + "." + mac,
-		"five parts":                v + ".x",
-		"empty":                     "",
-		"a signed sign":             signed("+7", made, exp),
-		"a signed negative id":      signed("-7", made, exp),
-		"a signed zero id":          signed("0", made, exp),
-		"a signed id of letters":    signed("seven", made, exp),
-		"a signed empty id":         signed("", made, exp),
-		"a signed negative making":  signed("7", "-"+made, exp),
-		"a signed empty making":     signed("7", "", exp),
-		"a signed spaced expiry":    signed("7", made, " "+exp),
-		"a signed huge id":          signed("99999999999999999999", made, exp),
-		"a signed huge making":      signed("7", "99999999999999999999", exp),
-		"a signed expiry of text":   signed("7", made, "soon"),
-		"too long":                  signed(strings.Repeat("1", 300), made, exp),
-		"another secret's":          sessionValue([]byte("another secret of thirty-two b!!"), 7, testMade, expires),
-		"a signed value with a dot": signed("7", made, exp+".5"),
+		"another id":                 "8." + testToken + "." + mac,
+		"another token":              "7." + other + "." + mac,
+		"another mac":                "7." + testToken + "." + base64.RawURLEncoding.EncodeToString(make([]byte, 32)),
+		"a cut mac":                  "7." + testToken + "." + mac[:42],
+		"a long mac":                 "7." + testToken + "." + mac + "A",
+		"a mac that is not b64":      "7." + testToken + "." + strings.Repeat("!", 43),
+		"no mac":                     "7." + testToken + ".",
+		"a cut token, signed":        signedValue("7", testToken[:42]),
+		"a long token, signed":       signedValue("7", testToken+"A"),
+		"a token not b64, signed":    signedValue("7", strings.Repeat("+", 43)),
+		"a padded token, signed":     signedValue("7", testToken[:42]+"="),
+		"two parts":                  "7." + testToken,
+		"four parts":                 v + ".x",
+		"the slice's four parts":     slice("7", made, exp),
+		"empty":                      "",
+		"a signed sign":              signedValue("+7", testToken),
+		"a signed negative id":       signedValue("-7", testToken),
+		"a signed zero id":           signedValue("0", testToken),
+		"a signed id of letters":     signedValue("seven", testToken),
+		"a signed empty id":          signedValue("", testToken),
+		"a signed huge id":           signedValue("99999999999999999999", testToken),
+		"another secret's":           sessionValue([]byte("another secret of thirty-two b!!"), 7, testToken),
+		"a signed value with a dot":  signedValue("7", testToken+".5"),
+		"a signed value with spaces": signedValue(" 7", testToken),
 	}
 	for name, value := range cases {
-		if s, ok := readSession(testSecret, value, testNow); ok {
-			t.Errorf("%s (%q) is a session of %+v", name, value, s)
+		if id, token, ok := readSession(testSecret, value); ok {
+			t.Errorf("%s (%q) is the session %d, %q", name, value, id, token)
 		}
 	}
-	if _, ok := readSession(testSecret, v, expires); ok {
-		t.Error("a session is good at its expiry")
-	}
-	if _, ok := readSession(testSecret, v, expires.Add(time.Hour)); ok {
-		t.Error("a session is good after its expiry")
-	}
-	// The limit is on the value as sent: 256 bytes pass to the signature
-	// check, 257 do not.
-	pad := maxSession - len(signed("7", made, exp))
-	at := signed(strings.Repeat("0", pad)+"7", made, exp)
-	over := signed(strings.Repeat("0", pad+1)+"7", made, exp)
+	// The limit is on the value as sent: 256 bytes pass to the mac check,
+	// 257 do not.
+	pad := maxSession - len(signedValue("7", testToken))
+	at := signedValue(strings.Repeat("0", pad)+"7", testToken)
+	over := signedValue(strings.Repeat("0", pad+1)+"7", testToken)
 	if len(at) != maxSession || len(over) != maxSession+1 {
 		t.Fatalf("test values are %d and %d bytes, want %d and %d", len(at), len(over), maxSession, maxSession+1)
 	}
-	if s, ok := readSession(testSecret, at, testNow); !ok || s.id != 7 {
-		t.Errorf("a signed value of exactly %d bytes: %+v, %v; want 7, true", maxSession, s, ok)
+	if id, _, ok := readSession(testSecret, at); !ok || id != 7 {
+		t.Errorf("a signed value of exactly %d bytes: %d, %v; want 7, true", maxSession, id, ok)
 	}
-	if _, ok := readSession(testSecret, over, testNow); ok {
+	if _, _, ok := readSession(testSecret, over); ok {
 		t.Errorf("a signed value of %d bytes is read", maxSession+1)
+	}
+}
+
+// A session's token is kept as its SHA-256, and compared in constant time.
+func TestTokenHashOfSession(t *testing.T) {
+	sum := sha256.Sum256([]byte(testToken))
+	if got := tokenHash(testToken); got != hex.EncodeToString(sum[:]) {
+		t.Fatalf("tokenHash = %q", got)
+	}
+	if !hashIs(testToken, tokenHash(testToken)) || hashIs(testToken+"x", tokenHash(testToken)) || hashIs(testToken, "") {
+		t.Fatal("hashIs does not compare a token to its hash")
+	}
+}
+
+// An agent is kept to 200 bytes, cut where a character ends.
+func TestAgentIsCut(t *testing.T) {
+	if got := cutAgent(strings.Repeat("a", 300)); got != strings.Repeat("a", 200) {
+		t.Fatalf("cutAgent of 300 bytes = %d bytes", len(got))
+	}
+	long := strings.Repeat("a", 199) + "é" // é is two bytes, across the cut
+	if got := cutAgent(long); got != strings.Repeat("a", 199) {
+		t.Fatalf("cutAgent split a character: %q", got[190:])
+	}
+	if got := cutAgent("Mozilla/5.0"); got != "Mozilla/5.0" {
+		t.Fatalf("cutAgent of a short agent = %q", got)
 	}
 }
 
@@ -130,12 +158,11 @@ func TestCanWithoutTheModule(t *testing.T) {
 // signs nothing that readSession takes, however Start was skipped.
 func TestShortKeyReadsNoSession(t *testing.T) {
 	for _, secret := range [][]byte{nil, {}, []byte("short"), testSecret[:31]} {
-		value := sessionValue(secret, 1, testNow.Add(-time.Hour), testNow.Add(time.Hour))
-		if _, ok := readSession(secret, value, testNow); ok {
+		if _, _, ok := readSession(secret, sessionValue(secret, 1, testToken)); ok {
 			t.Errorf("a key of %d bytes read its own session", len(secret))
 		}
 	}
-	if _, ok := readSession(testSecret, sessionValue(testSecret, 1, testNow.Add(-time.Hour), testNow.Add(time.Hour)), testNow); !ok {
+	if _, _, ok := readSession(testSecret, sessionValue(testSecret, 1, testToken)); !ok {
 		t.Error("a key of 32 bytes read no session")
 	}
 }

@@ -1,7 +1,8 @@
 // Package auth signs people in to a Warp app: users kept through warp/data,
-// passwords hashed with PBKDF2-HMAC-SHA256, a session in a signed cookie,
-// the routes to sign in and out, a guard for other modules' routes, and the
-// one-time setup of the owner, the first user.
+// passwords hashed with PBKDF2-HMAC-SHA256, sessions kept in a table and
+// named by a signed cookie, the routes to sign in and out, four roles with
+// permissions and a guard for other modules' routes, and the one-time setup
+// of the owner, the first user.
 //
 // It is configured in .env: AUTH_SECRET (32 bytes or more) keys the cookie,
 // AUTH_SESSION_DAYS (1 to 365, default 30) is how long a session lasts, and
@@ -65,12 +66,13 @@ func Module(opts ...Option) warp.Module {
 }
 
 type module struct {
-	app   *warp.App
-	db    *data.DB
-	users *data.Store[userRow]
-	opts  options
-	roles *roles // set by Register
-	known known  // the permissions Me may list
+	app      *warp.App
+	db       *data.DB
+	users    *data.Store[userRow]
+	sessions *data.Store[sessionRow]
+	opts     options
+	roles    *roles // set by Register
+	known    known  // the permissions Me may list
 
 	perKey     *limiter      // tries per email and address
 	perAddress *limiter      // tries per address, across emails
@@ -142,6 +144,7 @@ func (m *module) Register(app *warp.App) error {
 	m.roles = r
 	m.db = data.For(app)
 	m.users = data.NewStore[userRow](m.db, "users")
+	m.sessions = data.NewStore[sessionRow](m.db, "sessions")
 	m.find = func(ctx context.Context, email string) (userRow, bool, error) {
 		return m.users.First(ctx, "email", email)
 	}
@@ -178,6 +181,9 @@ func (m *module) Start(ctx context.Context) error {
 	}
 	m.secret, m.maxAge, m.owner = []byte(secret), days*24*60*60, owner
 
+	if err := m.expired(ctx, m.now()); err != nil {
+		return fmt.Errorf("the sessions table cannot be written (%v); check the database DB_URL names.", err)
+	}
 	n, err := m.users.Count(ctx)
 	if err != nil {
 		return fmt.Errorf("the users table cannot be read (%v); check the database DB_URL names.", err)
@@ -273,9 +279,8 @@ func AddUser(ctx context.Context, app *warp.App, email, password, role string) (
 	return row.user(), nil
 }
 
-// RemoveUser removes the user with the id, whose sessions end at once, since
-// every guarded request reads the user. A user no one has is a
-// warp.NotFound. It is for tools and tests, after the app has started, as
+// RemoveUser removes the user with the id and, in the same transaction,
+// every session of theirs. A user no one has is a warp.NotFound. It is for tools and tests, after the app has started, as
 // AddUser is. It may remove the last user, the owner included: the running
 // app then has no setup link, and the next start, finding no user, logs a
 // new one.
@@ -284,5 +289,10 @@ func RemoveUser(ctx context.Context, app *warp.App, id int64) error {
 	if m == nil {
 		return errors.New("auth: RemoveUser was given an app without the auth module; list auth.Module() in app/modules.go.")
 	}
-	return m.users.Delete(ctx, id)
+	return m.db.Tx(ctx, func(ctx context.Context) error {
+		if _, err := m.sessions.DeleteBy(ctx, "user_id", id); err != nil {
+			return err
+		}
+		return m.users.Delete(ctx, id)
+	})
 }

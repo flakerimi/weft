@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"github.com/flakerimi/weft/warp"
 )
@@ -29,12 +28,15 @@ const (
 	errNotSetup          = "This setup link is not valid; restart the app to get a new one."
 )
 
-// routes adds login, logout, me and setup under /auth.
+// routes adds the login's routes under /auth.
 func (m *module) routes() {
 	warp.Post(m.app, "/auth/login", m.login, warp.Name("login"), warp.Status(http.StatusOK))
 	warp.Post(m.app, "/auth/logout", m.logout, warp.Name("logout"))
+	warp.Post(m.app, "/auth/logout/everywhere", m.logoutEverywhere, warp.Name("logout_everywhere"))
 	warp.Get(m.app, "/auth/me", m.me, warp.Name("me"))
 	warp.Post(m.app, "/auth/setup", m.setup, warp.Name("setup"))
+	warp.Get(m.app, "/auth/sessions", m.listSessions, warp.Name("sessions"))
+	warp.Delete(m.app, "/auth/sessions/{id}", m.endSession, warp.Name("end_session"))
 }
 
 // login signs a user in. A wrong email and a wrong password get one answer,
@@ -45,7 +47,9 @@ func (m *module) login(ctx context.Context, in LoginInput) (Me, error) {
 	if err != nil {
 		return Me{}, err
 	}
-	m.signIn(ctx, row)
+	if err := m.signIn(ctx, row); err != nil {
+		return Me{}, err
+	}
 	return m.meOf(row.user()), nil
 }
 
@@ -106,28 +110,9 @@ func (m *module) attempt(ctx context.Context, email, password, ip string) (userR
 	return row, nil
 }
 
-// signIn sets the session cookie of the user on the answer.
-func (m *module) signIn(ctx context.Context, row userRow) {
-	r := warp.Request(ctx)
-	https := m.app.IsHTTPS(r)
-	value := sessionValue(m.secret, row.ID, row.CreatedAt, time.Now().Add(time.Duration(m.maxAge)*time.Second))
-	warp.ResponseHeader(ctx).Add("Set-Cookie", cookie(https, value, m.maxAge).String())
-}
-
-// logout clears the session cookie. It needs a session. The cookie's value
-// stays good until it expires, for anyone who copied it.
-func (m *module) logout(ctx context.Context, _ warp.None) (warp.None, error) {
-	r := warp.Request(ctx)
-	if _, err := m.signedIn(r); err != nil {
-		return warp.None{}, err
-	}
-	warp.ResponseHeader(ctx).Add("Set-Cookie", cookie(m.app.IsHTTPS(r), "", -1).String())
-	return warp.None{}, nil
-}
-
 // me answers the signed-in user with their permissions, or the 401.
 func (m *module) me(ctx context.Context, _ warp.None) (Me, error) {
-	u, err := m.signedIn(warp.Request(ctx))
+	u, _, err := m.signedIn(warp.Request(ctx))
 	if err != nil {
 		return Me{}, err
 	}

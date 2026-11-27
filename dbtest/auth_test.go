@@ -106,7 +106,7 @@ func wantError(t *testing.T, res *warptest.Response, status int, code, message s
 	}
 }
 
-var sessionCookie = regexp.MustCompile(`^session=1\.(\d+)\.(\d+)\.[A-Za-z0-9_-]{43}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax$`)
+var sessionCookie = regexp.MustCompile(`^session=(\d+)\.[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax$`)
 
 func TestSetupThenLogin(t *testing.T) {
 	c, logged := startAuth(t, authEnv(t))
@@ -144,12 +144,15 @@ func TestSetupThenLogin(t *testing.T) {
 	if cm == nil {
 		t.Fatalf("Set-Cookie = %q", cookies[0])
 	}
-	if cm[1] != strconv.FormatInt(owner.CreatedAt.UnixNano(), 10) {
-		t.Fatalf("the cookie names the making %s, want the owner's created_at, %d", cm[1], owner.CreatedAt.UnixNano())
+	if cm[1] != "1" {
+		t.Fatalf("the cookie names the session %s, want 1", cm[1])
 	}
-	expiry, _ := strconv.ParseInt(cm[2], 10, 64)
-	if d := time.Until(time.Unix(expiry, 0)); d < 30*24*time.Hour-time.Minute || d > 30*24*time.Hour+time.Minute {
-		t.Fatalf("the session ends in %v, want 30 days", d)
+	var ends string
+	if err := data.For(c.App).QueryRow(ctx, `SELECT "expires_at" FROM "sessions" WHERE "id" = 1 AND "user_id" = 1`).Scan(&ends); err != nil {
+		t.Fatal(err)
+	}
+	if expiry, err := time.Parse(time.RFC3339Nano, ends); err != nil || time.Until(expiry) < 30*24*time.Hour-time.Minute || time.Until(expiry) > 30*24*time.Hour+time.Minute {
+		t.Fatalf("the session ends at %s (%v), want in 30 days", ends, err)
 	}
 
 	var me auth.User
@@ -463,7 +466,7 @@ func TestSecureCookieBehindProxy(t *testing.T) {
 		at := fmt.Sprintf("TRUST_PROXY=%q, X-Forwarded-Proto %q", tc.proxy, tc.proto)
 		u := c.Fork()
 		cookie := send(u, http.MethodPost, "/api/auth/login", map[string]string{"email": ownerEmail, "password": authtest.Password}).Want(200).Header.Get("Set-Cookie")
-		if !strings.HasPrefix(cookie, name+"=1.") || !strings.HasSuffix(cookie, "; Path=/; Max-Age=2592000"+attrs) || strings.Contains(cookie, "Domain") {
+		if !strings.HasPrefix(cookie, name+"=2.") || !strings.HasSuffix(cookie, "; Path=/; Max-Age=2592000"+attrs) || strings.Contains(cookie, "Domain") {
 			t.Errorf("%s: login's Set-Cookie %q, want %s=… ending %q", at, cookie, name, "; Path=/; Max-Age=2592000"+attrs)
 		}
 		send(u, http.MethodGet, "/api/auth/me", nil).Want(200)
@@ -493,9 +496,9 @@ func TestSecureCookieBehindProxy(t *testing.T) {
 	h.Do(httpsMe).Want(200)
 }
 
-// A cookie names its user's id and the moment the user was made, so a cookie
-// of another database with the same secret, whose user 1 is someone else, is
-// no session; nor is the old form, which named only the id.
+// A cookie names a session of its database, so a cookie of another database
+// with the same secret, whose session 1 is someone else's, is no session; nor
+// is the first form, which named only the id and an expiry.
 func TestSessionIsBoundToItsUser(t *testing.T) {
 	first, _ := startAuth(t, authEnv(t))
 	authtest.Owner(t, first)
@@ -661,10 +664,13 @@ func TestDescribeHidesTheHash(t *testing.T) {
 		}
 	}
 	want := map[string]string{
-		"login":  "POST /api/auth/login 200",
-		"logout": "POST /api/auth/logout 204",
-		"me":     "GET /api/auth/me 200",
-		"setup":  "POST /api/auth/setup 201",
+		"login":             "POST /api/auth/login 200",
+		"logout":            "POST /api/auth/logout 204",
+		"logout_everywhere": "POST /api/auth/logout/everywhere 204",
+		"me":                "GET /api/auth/me 200",
+		"setup":             "POST /api/auth/setup 201",
+		"sessions":          "GET /api/auth/sessions 200",
+		"end_session":       "DELETE /api/auth/sessions/{id} 204",
 	}
 	if !maps.Equal(routes, want) {
 		t.Fatalf("auth's routes are %v, want %v", routes, want)
