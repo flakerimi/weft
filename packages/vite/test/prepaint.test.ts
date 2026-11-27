@@ -98,12 +98,19 @@ describe('pre-paint snippets', () => {
     expect(page('adapts')).toContain('data-weft-prepaint')
   })
 
-  it('come from none of the width-adaptive components whose layout does not follow their own box: a vertical Stepper, a vertical Timeline, a horizontal Tabs, Pagination, Table, Footer (a Footer in an island gets data-weft-w so it reads its pre-paint width back on hydration)', async () => {
+  it('come from none of the width-adaptive components whose layout does not follow their own box: a vertical Stepper, a vertical Timeline, a horizontal Tabs, Pagination, Table, Footer', async () => {
     const { html, prePaint } = await renderPage({ root, page: 'pages/fixed.vue' })
     expect(prePaint).toEqual([])
     expect(html).not.toMatch(/class="weft-(stepper|timeline|tabs)"[^>]*data-width/)
     expect(html).not.toContain('data-weft-w=')
     expect(page('fixed')).not.toContain('data-weft-prepaint')
+  })
+
+  it('register no pre-paint script when a Footer is rendered alone inside an island, while giving Footer data-weft-w so hydration reads its width back', async () => {
+    const { html, prePaint } = await renderPage({ root, page: 'pages/footer-island.vue' })
+    expect(prePaint).toEqual([])
+    expect(html).toMatch(/<footer [^>]*data-weft-w="w-i0-\d+"[^>]*id="ft"/)
+    expect(page('footer-island')).not.toContain('data-weft-prepaint')
   })
 
   it('are not needed by Pagination, which draws both its forms before mounting for the viewport to choose, or the one a WeftProvider gives', async () => {
