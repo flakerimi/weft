@@ -132,6 +132,13 @@ func TestInstallUnsupportedPlatform(t *testing.T) {
 	if code != 1 || errs != "weft install: no build for plan9/amd64; Weft supports darwin, linux and windows on amd64 and arm64\n" {
 		t.Fatalf("exit %d, stderr %q", code, errs)
 	}
+	for _, u := range []string{"MINGW64_NT-10.0-22631", "MSYS_NT-10.0-22631", "CYGWIN_NT-10.0-22631"} {
+		code, _, errs := runInstaller(t, srv.URL, bin, "WEFT_TEST_UNAME_S="+u, "WEFT_TEST_UNAME_M=x86_64")
+		want := "weft install: this is Windows; in PowerShell, run irm " + srv.URL + "/install.ps1 | iex\n"
+		if code != 1 || errs != want {
+			t.Fatalf("%s: exit %d, stderr %q, want %q", u, code, errs, want)
+		}
+	}
 }
 
 func TestInstallKeepsOldBinaryOnFailure(t *testing.T) {
@@ -221,8 +228,10 @@ func TestInstallPowerShellScript(t *testing.T) {
 		"try {\n\t& {",
 		"if ($PSCommandPath) { exit 1 }",
 		`throw "weft install: $msg"`,
+		`-replace '^(?!weft install: )', 'weft install: '`,
 		"SecurityProtocolType]::Tls12",
 		"GetUnresolvedProviderPathFromPSPath",
+		"Is64BitProcess",
 		"OSArchitecture",
 		"WEFT_BASE",
 		"WEFT_VERSION",
@@ -243,6 +252,9 @@ func TestInstallPowerShellScript(t *testing.T) {
 		if !strings.Contains(s, want) {
 			t.Errorf("site/install.ps1 does not contain %q", want)
 		}
+	}
+	if strings.Contains(s, "\n\t$msg =") {
+		t.Error("site/install.ps1 sets $msg in the outer catch, which leaks into the user's session under iex")
 	}
 	if strings.Contains(s, "'Machine'") || strings.Contains(s, `"Machine"`) || strings.Contains(s, "HKLM:") {
 		t.Error("site/install.ps1 touches the Machine Path; it must only touch HKCU:\\Environment")
@@ -370,36 +382,61 @@ func TestInstallPowerShell(t *testing.T) {
 			})
 
 			t.Run("relative WEFT_BIN_DIR resolved to full path", func(t *testing.T) {
-				dir, bin := t.TempDir(), t.TempDir()
+				dir, work := t.TempDir(), t.TempDir()
 				releaseTreeFor(t, dir, "0.0.1", "windows", "amd64", false)
 				srv := httptest.NewServer(http.FileServer(http.Dir(dir)))
 				defer srv.Close()
-				relBin, err := filepath.Rel(".", bin)
+				scriptPath, err := filepath.Abs("../../site/install.ps1")
 				if err != nil {
-					t.Skipf("cannot make relative path to temp dir: %v", err)
+					t.Fatal(err)
 				}
-				code, out, errs := runPowerShellInstaller(t, ps, srv.URL, relBin, "WEFT_TEST_ARCH=AMD64")
-				if code != 0 {
-					t.Fatalf("exit %d, stderr %q", code, errs)
+				cmd := exec.Command(ps, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath)
+				cmd.Dir = work
+				cmd.Env = append(os.Environ(), "WEFT_BASE="+srv.URL, "WEFT_BIN_DIR=bin", "WEFT_NO_MODIFY_PATH=1", "WEFT_TEST_ARCH=AMD64")
+				var outb, errb bytes.Buffer
+				cmd.Stdout, cmd.Stderr = &outb, &errb
+				if err := cmd.Run(); err != nil {
+					t.Fatalf("err %v, stderr %q", err, errb.String())
 				}
-				target := filepath.Join(bin, "weft.exe")
-				if !strings.Contains(out, "Installed weft 0.0.1 to "+target+"\n") || !strings.Contains(out, "Add "+bin+" to your PATH to run weft.\n") {
-					t.Fatalf("stdout %q, want resolved full path %s", out, target)
+				out := strings.ReplaceAll(outb.String(), "\r\n", "\n")
+				lines := strings.Split(strings.TrimSpace(out), "\n")
+				if len(lines) < 2 {
+					t.Fatalf("stdout %q, want 2 lines", out)
+				}
+				const prefix = "Installed weft 0.0.1 to "
+				if !strings.HasPrefix(lines[0], prefix) {
+					t.Fatalf("line 0 = %q, want prefix %q", lines[0], prefix)
+				}
+				printedExe := strings.TrimPrefix(lines[0], prefix)
+				if !filepath.IsAbs(printedExe) {
+					t.Fatalf("printed target %q is not an absolute path", printedExe)
+				}
+				wantExe := filepath.Join(work, "bin", "weft.exe")
+				fi1, err1 := os.Stat(printedExe)
+				fi2, err2 := os.Stat(wantExe)
+				if err1 != nil || err2 != nil || !os.SameFile(fi1, fi2) {
+					t.Fatalf("printed %q (%v) and %q (%v) are not the same file", printedExe, err1, wantExe, err2)
+				}
+				printedDir := filepath.Dir(printedExe)
+				if lines[1] != "Add "+printedDir+" to your PATH to run weft." {
+					t.Fatalf("line 1 = %q, want %q", lines[1], "Add "+printedDir+" to your PATH to run weft.")
 				}
 			})
 
-			t.Run("arm64", func(t *testing.T) {
+			t.Run("arm64 and 32-bit WOW64 on Arm64", func(t *testing.T) {
 				dir, bin := t.TempDir(), t.TempDir()
 				releaseTreeFor(t, dir, "0.0.2", "windows", "arm64", false)
 				srv := httptest.NewServer(http.FileServer(http.Dir(dir)))
 				defer srv.Close()
-				code, out, errs := runPowerShellInstaller(t, ps, srv.URL, bin, "WEFT_TEST_ARCH=ARM64")
-				if code != 0 {
-					t.Fatalf("exit %d, stderr %q", code, errs)
-				}
-				target := filepath.Join(bin, "weft.exe")
-				if !strings.Contains(out, "Installed weft 0.0.2 to "+target+"\n") {
-					t.Fatalf("stdout %q", out)
+				for _, raw := range []string{"ARM64", "aarch64", "arm64"} {
+					code, out, errs := runPowerShellInstaller(t, ps, srv.URL, bin, "WEFT_TEST_ARCH="+raw)
+					if code != 0 {
+						t.Fatalf("%s: exit %d, stderr %q", raw, code, errs)
+					}
+					target := filepath.Join(bin, "weft.exe")
+					if !strings.Contains(out, "Installed weft 0.0.2 to "+target+"\n") {
+						t.Fatalf("%s: stdout %q", raw, out)
+					}
 				}
 			})
 
@@ -452,7 +489,7 @@ func TestInstallPowerShell(t *testing.T) {
 
 			t.Run("iex failure does not close session or leak scope", func(t *testing.T) {
 				script := "Get-Content -Raw ../../site/install.ps1 | Invoke-Expression; " +
-					"[Console]::Out.WriteLine(\"after eap=$ErrorActionPreference base=$base fn=$(Test-Path Function:\\Get-WeftArch)\")"
+					"[Console]::Out.WriteLine(\"after eap=$ErrorActionPreference pp=$ProgressPreference msg=$msg base=$base fn=$(Test-Path Function:\\Get-WeftArch)\")"
 				code, out, errs := runPowerShellCommand(t, ps, script,
 					"WEFT_TEST_ARCH=x86", "WEFT_NO_MODIFY_PATH=1")
 				if code != 0 {
@@ -461,7 +498,7 @@ func TestInstallPowerShell(t *testing.T) {
 				if errs != "weft install: no build for windows/x86; Weft supports darwin, linux and windows on amd64 and arm64\n" {
 					t.Fatalf("stderr %q", errs)
 				}
-				if out != "after eap=Continue base= fn=False\n" {
+				if out != "after eap=Continue pp=Continue msg= base= fn=False\n" {
 					t.Fatalf("stdout %q, want session alive with clean scope", out)
 				}
 			})
@@ -472,13 +509,13 @@ func TestInstallPowerShell(t *testing.T) {
 				srv := httptest.NewServer(http.FileServer(http.Dir(dir)))
 				defer srv.Close()
 				script := "Get-Content -Raw ../../site/install.ps1 | Invoke-Expression; " +
-					"[Console]::Out.WriteLine(\"after eap=$ErrorActionPreference base=$base target=$target fn=$(Test-Path Function:\\Get-WeftChecksum)\")"
+					"[Console]::Out.WriteLine(\"after eap=$ErrorActionPreference pp=$ProgressPreference msg=$msg base=$base target=$target fn=$(Test-Path Function:\\Get-WeftChecksum)\")"
 				code, out, errs := runPowerShellCommand(t, ps, script,
 					"WEFT_BASE="+srv.URL, "WEFT_BIN_DIR="+bin, "WEFT_TEST_ARCH=AMD64", "WEFT_NO_MODIFY_PATH=1")
 				if code != 0 || errs != "" {
 					t.Fatalf("exit %d, stderr %q, stdout %q", code, errs, out)
 				}
-				if !strings.HasSuffix(out, "after eap=Continue base= target= fn=False\n") {
+				if !strings.HasSuffix(out, "after eap=Continue pp=Continue msg= base= target= fn=False\n") {
 					t.Fatalf("stdout %q, want clean scope after iex install", out)
 				}
 			})

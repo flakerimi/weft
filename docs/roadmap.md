@@ -18,7 +18,7 @@ the owner; each milestone gets its own design or plan before it is built.
   client, `warp/data` on SQLite, `warp/auth` with one owner, `warptest`, and an
   example shop that uses all of it.
 - **Runs on:** macOS, Linux and Windows (the full suite passes on all three on
-  GitHub's runners).
+  GitHub's runners; Windows installs from the next release).
 - **Distributed:** from weft.base.al (installer, releases with checksums,
   `weft update`); the repository is public since 2026-11-26.
 - **Not stable:** every 0.0.x may change any name. Vue is pinned to

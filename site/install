@@ -21,6 +21,7 @@ uname_m="${WEFT_TEST_UNAME_M:-$(uname -m)}"
 case "$uname_s" in
 	Darwin) os=darwin ;;
 	Linux) os=linux ;;
+	MINGW* | MSYS* | CYGWIN*) fail "this is Windows; in PowerShell, run irm $base/install.ps1 | iex" ;;
 	*) os=$(printf '%s' "$uname_s" | tr '[:upper:]' '[:lower:]') ;;
 esac
 case "$uname_m" in

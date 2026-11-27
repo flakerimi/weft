@@ -55,6 +55,8 @@ try {
 
 		$rawArch = if ($env:WEFT_TEST_ARCH) {
 			$env:WEFT_TEST_ARCH
+		} elseif (-not [Environment]::Is64BitProcess -and $env:PROCESSOR_ARCHITEW6432) {
+			$env:PROCESSOR_ARCHITEW6432
 		} else {
 			try {
 				[System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
@@ -195,11 +197,7 @@ try {
 		}
 	}
 } catch {
-	$msg = $_.Exception.Message
-	if (-not $msg.StartsWith('weft install: ')) {
-		$msg = "weft install: $msg"
-	}
-	[Console]::Error.WriteLine($msg)
+	[Console]::Error.WriteLine(($_.Exception.Message -replace '^(?!weft install: )', 'weft install: '))
 	# Run as a file (the tests, powershell -File): exit 1. Under irm | iex, exit would close the window.
 	if ($PSCommandPath) { exit 1 }
 }

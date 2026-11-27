@@ -46,7 +46,7 @@ Replaces the running `weft` with another release from `weft.base.al`.
 | Flag | What it does |
 | --- | --- |
 | `--check` | Only says whether the latest release differs from yours, and changes nothing. After a rollback of the site the latest may be older than yours. |
-| `--version X` | Installs release `X` instead of the latest, older ones included |
+| `--version X` | Installs release `X` instead of the latest, older ones included (on Windows, from the next release on) |
 
 It downloads your platform's archive and `SHA256SUMS`, checks one against the other, and renames the new binary into place (through a symlink to the real file), the old one whole until then. It says `weft X is up to date.` or `Updated weft X → Y.`; a failure is one sentence (exit 1), an unknown flag exits 2, and a development build says to run the installer. `WEFT_BASE` is where the releases are (default `https://weft.base.al`).
 
@@ -91,7 +91,7 @@ A field's type is written, never guessed from its name; with none it is `string`
 | `date`, `datetime` | `time.Time`, RFC 3339 | | `sort`; with `--api` only, until 0.2.0 |
 | `enum=a,b` | `string` | `enum=a\|b` | `sort,filter` |
 
-The modifiers, in any order after the type, are `nullable`, a pointer that may be `null` (`sale:float:nullable` is `*float64`); `required` (not on `bool` or with `nullable`); `unique` (not on `bool`, `text`, `date`, `datetime`); and `min=N` and `max=N`, in characters for text (not on `bool`, `date`, `datetime`, `enum`); a field has only the rules written. Enum choices are separated by commas: `|` or `(` is refused with `weft scaffold: write enum choices separated by commas after enum=, as in status:enum=draft,live.`, and a `?` with the `:nullable` form.
+The modifiers, in any order after the type, are `nullable`, a pointer that may be `null` (`sale:float:nullable` is `*float64`); `required` (not on `bool` or with `nullable`); `unique` (not on `bool`, `text`, `date`, `datetime`); and `min=N` and `max=N`, in characters for text (not on `bool`, `date`, `datetime`, `enum`); a field has only the rules written. Enum choices are separated by commas: `|` or `(` is refused (`weft scaffold: write enum choices separated by commas after enum=, as in status:enum=draft,live.`), and `?` with `:nullable`.
 
 | It writes | What it is |
 | --- | --- |
@@ -118,7 +118,7 @@ Every 300 ms it looks for a changed `.go` file outside `.weft/`, `.git/`, `node_
 
 The Go server must answer on `PORT` within 30 s, as must the page server, or `weft dev` stops both, saying which and what to check (exit 1). The app has 5 s to describe itself after each build, else `weft dev` says so and goes on with `web/.weft-types/api.ts` as it was.
 
-Ctrl-C, SIGTERM, SIGHUP or SIGQUIT stops both servers (exit 0); killed, `weft dev` leaves neither running, as each exits when its standard input, a pipe `weft dev` holds, ends (on Windows each is in a Job Object that ends its process tree). If one server stops by itself, `weft dev` stops the other and says `weft dev: the page server stopped; see its output above.` (or `the Go server`, exit 1). A port in use is `weft dev: port <n> is in use; stop what is using it or pass --port.`, checked first. Wrong usage exits 2.
+Ctrl-C, SIGTERM, SIGHUP or SIGQUIT stops both servers (exit 0); killed, `weft dev` leaves neither running, as each exits when its standard input, a pipe `weft dev` holds, ends (on Windows each is in a Job Object that ends its process tree). If one server stops by itself, `weft dev` stops the other and says `weft dev: the page server stopped; see its output above.` (or `the Go server`); exit 1. A port in use is `weft dev: port <n> is in use; stop what is using it or pass --port.`, checked first. Wrong usage exits 2.
 
 ### weft build
 
@@ -137,7 +137,7 @@ It adds `CGO_ENABLED=0` for a static binary, unless the environment sets it. `GO
 It prints the build's output, then `Built <file>`. First it checks the app:
 
 - An app recorded at another Weft version is refused: `weft build: this app is on Weft <a> and this weft is <b>; run weft upgrade to move the app, or weft update --version <a> to match it.` For an app on a newer Weft than this `weft`, which `weft upgrade` would refuse, the sentence ends `run weft update --version <a> to match it.` alone. An app whose `"weft"` object has no `version` is refused with a sentence saying what to add.
-- When `.weft/` is missing or holds another version, as in a fresh clone, it unpacks the packages into it and runs `pnpm install`; a `weft` built from the repository (`0.0.0-dev`) also when the bundle's files changed (`.weft/VERSION` holds their hash). It runs `pnpm install` too when `node_modules/` is missing or older than `.weft/`, and `go mod download` when `go.sum` lacks Warp's module. A `.weft/` without the `VERSION` file is not `weft`'s and is left alone, with a sentence. While it unpacks it holds `.weft.lock`, which a second `weft` waits for.
+- When `.weft/` is missing or holds another version, as in a fresh clone, it unpacks the packages into it and runs `pnpm install`; a `weft` built from the repository (`0.0.0-dev`) also when the bundle's files changed (`.weft/VERSION` holds their hash). It runs `pnpm install` too when `node_modules/` is missing or older than `.weft/`, and `go mod download` when `go.sum` lacks Warp's module. A `.weft/` without `VERSION` is not `weft`'s and is left alone, with a sentence. While unpacking it holds `.weft.lock`, which a second `weft` waits for.
 - After an install, or when `web/.weft-types/components.d.ts` is missing, it writes that file with [weft-types](page-tools.md#weft-types), so `pnpm typecheck` checks the components' props before any build.
 
 Outside an app it says `weft build: no Weft app here; run it in a folder made by weft create.` Any failure is one sentence on standard error (exit 1); wrong usage exits 2.
@@ -172,7 +172,7 @@ DELETE  /api/products/{id}  products  remove  products:delete
 
 ### weft upgrade
 
-Moves an app to the Weft version of the `weft` you run: it rewrites `weft.version` in `package.json`, changing no other byte, moves `go.mod`'s require of Warp's module to that release, dropping a replace into `./.weft/go` (another is kept, and named), unpacks that version's packages into `.weft/`, and runs `pnpm install` and `go mod download`. It prints `Moved <name> from Weft <a> to <b>`, or `<name> is already on Weft <b>` when there is nothing to do. It never moves an app backwards: an app on a newer Weft is refused (exit 1), saying to run `weft update`; `0.0.0-dev` is older than any release. `--no-install` skips `pnpm install` and `go mod download`.
+Moves an app to the Weft version of the `weft` you run: it rewrites `weft.version` in `package.json`, changing no other byte, moves `go.mod`'s require of Warp's module to that release, dropping a replace into `./.weft/go` (another is kept, and named), unpacks that version's packages into `.weft/`, and runs `pnpm install` and `go mod download`. It prints `Moved <name> from Weft <a> to <b>`, or `<name> is already on Weft <b>`. It never moves an app backwards: an app on a newer Weft is refused (exit 1), saying to run `weft update`; `0.0.0-dev` is older than any release. `--no-install` skips `pnpm install` and `go mod download`.
 
 #### Moving an app to Warp
 
@@ -219,7 +219,7 @@ An unknown name prints nothing for the others and exits 1, naming up to three co
 
 ## The installer
 
-`curl -fsSL https://weft.base.al/install | sh` installs the latest release on macOS and Linux (needs `curl`, and `sha256sum` or `shasum`); on Windows (from 0.0.20), `irm https://weft.base.al/install.ps1 | iex` in PowerShell installs `weft.exe` in `$HOME\.local\bin` and adds that folder to your user `PATH`, each on arm64 and amd64.
+`curl -fsSL https://weft.base.al/install | sh` installs the latest release on macOS and Linux (needs `curl`, and `sha256sum` or `shasum`); on Windows (from the next release), `irm https://weft.base.al/install.ps1 | iex` in PowerShell installs `weft.exe` in `$HOME\.local\bin` and adds that folder to your user `PATH`, each on arm64 and amd64.
 
 | Variable | What it does | Default |
 | --- | --- | --- |
