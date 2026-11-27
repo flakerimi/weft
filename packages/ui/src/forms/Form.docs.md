@@ -89,8 +89,7 @@ page.
 
 A site with a Content-Security-Policy must allow the page's inline
 pre-paint script, `<script data-weft-prepaint>`, and its inline
-`<script type="speculationrules">`, by their SHA-256 hashes (or
-`'inline-speculation-rules'` for the speculation rules) or with
+`<script type="speculationrules">`, by their SHA-256 hashes or with
 `'unsafe-inline'` (a nonce needs a server that writes one into each answer,
 which a built page does not have). The build wraps each pre-paint snippet in
 `(function(){…})()`, so a page whose only pre-paint component is Form has

@@ -23,11 +23,12 @@ defineSlots<{
 }>()
 
 const root = useTemplateRef<HTMLElement>('root')
-const width = useWidth(root, { prepaint: false })
+const width = useWidth(root, { prepaint: false, hydrateId: true })
+const widthId = width.id
 </script>
 
 <template>
-  <footer ref="root" class="weft-footer" :data-width="width">
+  <footer ref="root" class="weft-footer" :data-width="width" :data-weft-w="widthId">
     <div v-if="$slots.top" class="weft-footer__top"><slot name="top" /></div>
     <div class="weft-footer__row">
       <div v-if="$slots.leading" class="weft-footer__leading"><slot name="leading" /></div>

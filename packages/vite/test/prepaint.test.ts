@@ -98,7 +98,7 @@ describe('pre-paint snippets', () => {
     expect(page('adapts')).toContain('data-weft-prepaint')
   })
 
-  it('come from none of the width-adaptive components whose layout does not follow their own box: a vertical Stepper, a vertical Timeline, a horizontal Tabs, Pagination, Table, Footer', async () => {
+  it('come from none of the width-adaptive components whose layout does not follow their own box: a vertical Stepper, a vertical Timeline, a horizontal Tabs, Pagination, Table, Footer (a Footer in an island gets data-weft-w so it reads its pre-paint width back on hydration)', async () => {
     const { html, prePaint } = await renderPage({ root, page: 'pages/fixed.vue' })
     expect(prePaint).toEqual([])
     expect(html).not.toMatch(/class="weft-(stepper|timeline|tabs)"[^>]*data-width/)

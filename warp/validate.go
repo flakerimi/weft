@@ -376,6 +376,9 @@ func parseEnumChoice(ft reflect.Type, item string) (float64, string) {
 	k := ft.Kind()
 	switch {
 	case k >= reflect.Int && k <= reflect.Int64:
+		if strings.HasPrefix(item, "+") || strings.HasPrefix(item, "-0") {
+			return 0, "write whole numbers separated by | after enum="
+		}
 		n, err := strconv.ParseInt(item, 10, ft.Bits())
 		if err != nil {
 			if ft.Bits() < 64 && errors.Is(err, strconv.ErrRange) {
@@ -385,6 +388,9 @@ func parseEnumChoice(ft reflect.Type, item string) (float64, string) {
 		}
 		return float64(n), ""
 	case k >= reflect.Uint && k <= reflect.Uint64:
+		if strings.HasPrefix(item, "+") || strings.HasPrefix(item, "-0") {
+			return 0, "write whole numbers separated by | after enum="
+		}
 		n, err := strconv.ParseUint(item, 10, ft.Bits())
 		if err != nil {
 			isSignedInt := false
@@ -393,10 +399,8 @@ func parseEnumChoice(ft reflect.Type, item string) (float64, string) {
 				isSignedInt = sErr == nil || errors.Is(sErr, strconv.ErrRange)
 			}
 			if errors.Is(err, strconv.ErrRange) || isSignedInt {
-				if ft.Bits() < 64 {
-					return 0, fmt.Sprintf("write whole numbers from 0 to %d separated by | after enum=", uint64(1)<<ft.Bits()-1)
-				}
-				return 0, "write whole numbers 0 or more separated by | after enum="
+				max := uint64(math.MaxUint64) >> (64 - ft.Bits())
+				return 0, fmt.Sprintf("write whole numbers from 0 to %d separated by | after enum=", max)
 			}
 			return 0, "write whole numbers separated by | after enum="
 		}

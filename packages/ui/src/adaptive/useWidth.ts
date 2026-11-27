@@ -57,6 +57,14 @@ export interface UseWidthOptions {
    * viewport uses `useViewportWidth` instead.
    */
   prepaint?: boolean
+  /**
+   * Take a hydration-stable `useId('w')` on `width.id` for `data-weft-w` so
+   * `useWidth` reads the element's pre-paint `data-width` back inside an
+   * island before Vapor's first render effect. Default `prepaint !== false`;
+   * set `true` with `prepaint: false` on a component that renders `data-width`
+   * without registering the width pre-paint script (`Footer`).
+   */
+  hydrateId?: boolean
 }
 
 export interface WidthRef extends Readonly<Ref<Width>> {
@@ -77,8 +85,8 @@ export interface WidthRef extends Readonly<Ref<Width>> {
  */
 export function useWidth(el: Readonly<Ref<HTMLElement | null>>, options?: UseWidthOptions): WidthRef {
   const prepaint = options?.prepaint !== false
-  const id = prepaint ? useId('w') : undefined
   const inIsland = hasInjectionContext() && inject<IdScope | null>(ID_SCOPE, null) !== null
+  const id = prepaint || (options?.hydrateId && inIsland) ? useId('w') : undefined
   const given = hasInjectionContext() ? inject(weftKey, null)?.width.value : undefined
   if (import.meta.env.SSR && given === undefined && prepaint) usePrePaint('weft:width', widthPrePaint)
   const initial = given ?? (!import.meta.env.SSR && inIsland && id ? preHydratedWidth(id) : undefined) ?? 'wide'

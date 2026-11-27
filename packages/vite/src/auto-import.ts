@@ -242,8 +242,14 @@ function exportsRuntimeTrue(file: string): boolean {
   }
   const trueConsts = new Set<string>()
   for (const stmt of body) {
-    if (stmt.type === 'VariableDeclaration' && stmt.kind === 'const') {
-      for (const d of stmt.declarations as Node[]) {
+    const varDecl =
+      stmt.type === 'VariableDeclaration'
+        ? stmt
+        : stmt.type === 'ExportNamedDeclaration' && (stmt.declaration as Node | null)?.type === 'VariableDeclaration'
+          ? (stmt.declaration as Node)
+          : null
+    if (varDecl && varDecl.kind === 'const') {
+      for (const d of varDecl.declarations as Node[]) {
         const id = d.id as { type?: string; name?: string } | null
         if (id?.type === 'Identifier' && id.name && isTrueLiteral(d.init)) trueConsts.add(id.name)
       }
@@ -252,7 +258,7 @@ function exportsRuntimeTrue(file: string): boolean {
   for (const stmt of body) {
     if (stmt.type !== 'ExportNamedDeclaration') continue
     const decl = stmt.declaration as Node | null
-    if (decl?.type === 'VariableDeclaration') {
+    if (decl?.type === 'VariableDeclaration' && decl.kind === 'const') {
       for (const d of decl.declarations as Node[]) {
         const id = d.id as { type?: string; name?: string } | null
         if (id?.type === 'Identifier' && id.name === 'runtime' && isTrueLiteral(d.init)) return true

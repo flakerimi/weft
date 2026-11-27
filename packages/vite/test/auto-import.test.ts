@@ -230,6 +230,14 @@ describe('weftAutoImport()', () => {
       (mkdirSync(join(site, 'pages', 'invoices'), { recursive: true }), '<script lang="ts">\nconst runtime = true satisfies boolean\nexport { runtime }\n</script>\n<template><p /></template>\n'),
     )
     writeFileSync(
+      join(site, 'pages', 'tickets', '[ticketId].vue'),
+      (mkdirSync(join(site, 'pages', 'tickets'), { recursive: true }), '<script lang="ts">\nexport const x = true\nexport { x as runtime }\n</script>\n<template><p /></template>\n'),
+    )
+    writeFileSync(
+      join(site, 'pages', 'mutated', '[id].vue'),
+      (mkdirSync(join(site, 'pages', 'mutated'), { recursive: true }), '<script lang="ts">\nexport let runtime = true\nruntime = false\nexport const getPaths = async () => [{ id: "1" }]\n</script>\n<template><p /></template>\n'),
+    )
+    writeFileSync(
       join(site, 'pages', 'blog', '[slug].vue'),
       (mkdirSync(join(site, 'pages', 'blog'), { recursive: true }), '<script lang="ts">\nexport const getPaths = async () => [{ slug: "a" }]\n</script>\n<template><p /></template>\n'),
     )
@@ -237,10 +245,11 @@ describe('weftAutoImport()', () => {
     expect(ran).toMatchObject({ status: 0, stdout: '', stderr: '' })
     const written = readFileSync(join(site, '.weft-types', 'components.d.ts'), 'utf8')
     expect(written).toContain(
-      `declare module '@weft/ui' {\n  interface WeftRouteParams {\n    "/:section/:id": { section: string; id: string }\n    "/docs/:...slug": { slug: string }\n    "/invoices/:invoiceId": { invoiceId: string }\n    "/it's a \\"quote\\"dir/:id": { id: string }\n    "/orders/:orderId": { orderId: string }\n  }\n}`,
+      `declare module '@weft/ui' {\n  interface WeftRouteParams {\n    "/:section/:id": { section: string; id: string }\n    "/docs/:...slug": { slug: string }\n    "/invoices/:invoiceId": { invoiceId: string }\n    "/it's a \\"quote\\"dir/:id": { id: string }\n    "/orders/:orderId": { orderId: string }\n    "/tickets/:ticketId": { ticketId: string }\n  }\n}`,
     )
-    // Built-ahead getPaths pages are not runtime pages, so they are omitted from WeftRouteParams.
+    // Built-ahead getPaths pages (and non-const `export let runtime = true`) are not runtime pages, so they are omitted from WeftRouteParams.
     expect(written).not.toContain('/blog/:slug')
+    expect(written).not.toContain('/mutated/:id')
 
     // Compare byte-for-byte with what the plugin writes for the same root.
     const pluginDts = join(parent, 'plugin-components.d.ts')
