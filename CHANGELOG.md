@@ -7,6 +7,16 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
 0.0.12 have no GitHub Release: they were published at weft.base.al, and
 `site/releases.txt` lists them (only 0.0.1 and 0.0.2 have a tag).
 
+## Unreleased
+
+- Vue 3.6.0-rc.17, from rc.16, and `scripts/vue-update.sh`, which moves every
+  pin to the newest 3.6 build. rc.17 writes other hydration markers in a server
+  render (`<!--[!-->` and `<!--[$-->`, every range closed by `<!--]-->`, and no
+  range around a single root that is a component), which only rc.17's runtime
+  hydrates; a build renders and bundles the same Vue, and Weft's own code reads
+  none of them. The Vapor runtime is about 0.6 KB brotli larger, and pages a
+  little smaller.
+
 ## 0.0.22
 
 - A FormField's label is a `<label for>` only over a labelable control. Over a
