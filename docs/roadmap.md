@@ -66,9 +66,10 @@ What a newcomer meets first works, on every platform.
 - **W2 finished (done):** an `enum` typed as its values (comparing or assigning
   a value outside the list is now a TypeScript error; an optional non-pointer
   struct field includes `''` or `0`), `useParams()` typed from the routes.
-- **W5, scaffolding and app blocks:** `weft scaffold`, `DataTable` (server
-  paging, sorting, filtering over the list shape) and `EntityDialog`; the app
-  template becomes the shop's shape (data, the login, one resource).
+- **W5, scaffolding and app blocks (done):** `weft scaffold`, `DataTable`
+  (server paging, sorting, filtering over the list shape) and `EntityDialog`;
+  the app template takes the shop's frame (data, the login and its pages, and
+  `hello`, with no starter resource).
 - **Landing blocks** (Weft phase 7): `Hero`, `FeatureGrid`, `Pricing`,
   `Testimonials`, `Faq`, `Cta`.
 - **The benchmark** run on a quiet machine with every series interleaved, and
@@ -84,8 +85,9 @@ What a newcomer meets first works, on every platform.
   and SMTP drivers).
 - Roles and permissions beyond the owner; a session table on the server, so a
   user can sign out everywhere and one session can be ended.
-- `useSession()`, a login page in the template, `perm` on `Button` and row
-  actions, and a route guard in Vue.
+- `useSession()` in `@weft/ui` (the template has its own `web/session.ts` and
+  login page), `perm` on `Button` and row actions, and a route guard in Vue.
+- Date and time fields in `EntityDialog` and the pages `weft scaffold` writes.
 - From W7, brought forward because accounts need them: the `middleware` module's
   security headers, request logging, a rate limit and API keys; body-read and
   idle timeouts on the server.

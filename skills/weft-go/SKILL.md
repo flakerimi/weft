@@ -22,7 +22,7 @@ func main() {
 }
 ```
 
-- `dist` embeds `web/dist`, and is nil under `-tags dev`, as `weft dev` builds it: `go test -tags dev ./...` until the first `weft build`.
+- `dist` embeds `web/dist`, nil under `-tags dev` (`weft dev`); until the first `weft build` it is an empty marker a binary refuses to start on.
 - `app/modules.go` lists the modules in the order they start; a new one is `app/<name>/` with a `Module()`, added there.
 - A module is `Name() string` and `Register(app *warp.App) error`, and may add `Migrate`, `Start` and `Stop(ctx) error`: in order before serving, stop in reverse after.
 - `go.mod` requires Warp (`github.com/flakerimi/weft`) at the release's tag, from GitHub; `weft upgrade` moves it. Never edit `.weft/`.
@@ -47,7 +47,7 @@ func (module) Register(app *warp.App) error {
 - Each exported input field takes one tag: `json` (the body: POST, PUT, PATCH only), `body:"json"` (the whole body, on one struct field), `query` (text, bool, numbers, a pointer to one, `[]string`, `map[string]string` for `filter[k]`) or `path` (`{name}`).
 - A body is `application/json` (else 415), with no field the input lacks (400).
 - Rules: `required`, `email`, `url`, `min=N`, `max=N`, `enum=a|b`, `unique` (a `data` store checks it), `readonly` (never read). All rules but `required` pass an empty value; a non-nil pointer was sent. On `Patch` rules run only on sent fields (`warp.Sent`). A failure is 422. A `Validate(ctx) error` method checks across fields.
-- `GET /products` and `GET /products/{id}` are both named `products`: give each a `warp.Name`. A mistake is one sentence from `app.Err()`, and `Serve` will not start.
+- `GET /products` and `GET /products/{id}` are both named `products`: give each a `warp.Name`. A mistake is one sentence from `app.Err()`; `Serve` will not start.
 - `warp.Request(ctx)` is the request, `warp.ResponseHeader(ctx)` the answer's headers. `app.Handle("GET /export.csv", h)` mounts a plain handler; `app.Wrap(mw)` wraps every API request, `warp.With(mw)` one route.
 
 ## Errors and configuration
@@ -58,8 +58,9 @@ Errors are `{"error":{"code":"…","message":"…","fields":{…}}}`. Return `wa
 
 ## Data, login and types
 
-- `data.Module()` first in `app/modules.go`, `DB_DRIVER=sqlite` and `DB_URL=file:data/app.db` in `.env`, `_ "modernc.org/sqlite"` in `main.go`, then `go mod tidy` to add the driver to `go.mod`. A model embeds `data.Record`; `data.Resource(app, "/products", data.NewStore[Product](data.For(app), "products"), data.PerAction(auth.Per("products")))` gives five routes. `data:"sort,filter,search"` opens fields to `?sort=-price&q=lamp&filter[status]=live`.
-- `auth.Module()` after data: `AUTH_SECRET` (32+ bytes), `AUTH_OWNER_EMAIL`; the log prints `<APP_URL>/setup#token=…`, a 404 until the app writes `web/pages/setup.vue` and a `/login`: copy both from [the login guide](https://weft.base.al/docs/guides/login#the-pages). `auth.Can("x:edit")` guards a route; `auth.UserOf(ctx)`.
+- `weft create` lists `data.Module()`, `auth.Module()` and `hello.Module()`, with SQLite (`DB_DRIVER`, `DB_URL` in `.env`; the driver in `main.go`). A model embeds `data.Record`; `data.Resource(app, "/products", data.NewStore[Product](data.For(app), "products"), data.PerAction(auth.Per("products")))` gives five routes. `data:"sort,filter,search"` opens fields to `?sort=-price&q=lamp&filter[status]=live`.
+- `auth.Module()` after data: `AUTH_SECRET` (`weft create` writes one), `AUTH_OWNER_EMAIL`; the first start logs `<APP_URL>/setup#token=…`, the app's `/setup` page. `auth.Can("x:edit")` guards a route; `auth.UserOf(ctx)`.
+- `weft scaffold item title done:bool` writes `app/items/` (model, routes, story test), its line in `app/modules.go` and the pages; `--api` for Go only. [Types](https://weft.base.al/docs/reference/cli#weft-scaffold).
 - `weft dev` and `weft build` run `weft gen`, which writes `web/.weft-types/api.ts`: `api.<module>.<name>()`, `ApiError`, and `schema` for `Form`.
 
 ## Testing a module
@@ -68,7 +69,7 @@ Test `app.Handler()` with `httptest` after checking `app.Err()`; `app.Start(ctx)
 
 ## What Serve answers
 
-`/api` goes to the API. Any other path gets its page, else a listed file, else the app's `index.html` under `--app-prefix`, else a run-time page whose pattern matches, else `pages/404.vue` with 404. Serve sends the stored brotli or gzip and the build's `ETag`, caches hashed files for a year, sends `103 Early Hints` to a navigation over HTTP/2 or through a proxy, and answers only `GET` and `HEAD`. It panics at start if the build is incomplete.
+`/api` goes to the API. Any other path gets its page, else a listed file, else the app's `index.html` under `--app-prefix`, else a run-time page whose pattern matches, else `pages/404.vue` with 404. Serve sends the stored brotli or gzip and the build's `ETag`, caches hashed files for a year, sends `103 Early Hints` over HTTP/2 or a proxy, and answers `GET` and `HEAD` only. It panics at start if the build is incomplete.
 
 ## Files from disk
 
@@ -84,7 +85,7 @@ if err := server.Serve(dist, warp.WithFiles("/files/", files.FS())); err != nil 
 }
 ```
 
-Each file is read once at start for its ETag; one changed since gets 500, a new one is not served. A symlink or dotfile panics. `weft dev` does not serve the files.
+Each file is read once at start for its ETag: one changed since gets 500, a new one is not served, a symlink or dotfile panics. Not under `weft dev`.
 
 ## One binary
 
@@ -103,7 +104,7 @@ EXPOSE 8080
 ENTRYPOINT ["/myapp"]
 ```
 
-Build it for the image's system, with a `.dockerignore` of `*` and `!myapp`.
+Build for the image's system; `.dockerignore`: `*`, `!myapp`.
 
 ## Do not
 
@@ -114,4 +115,4 @@ Build it for the image's system, with a `.dockerignore` of `*` and `!myapp`.
 
 ## Not yet
 
-Planned, not built (see https://weft.base.al/docs/coming-next): PostgreSQL, MySQL and relations; roles, registration, reset and `mail`; `weft scaffold`; `storage`, `events` and `live`; `jobs`, `i18n`, `middleware`, `docs`; `weft deploy`.
+Planned, not built (https://weft.base.al/docs/coming-next): PostgreSQL, MySQL and relations; roles, registration, reset and `mail`; date fields in scaffolded pages; `storage`, `events` and `live`; `jobs`, `i18n`, `middleware`, `docs`; `weft deploy`.

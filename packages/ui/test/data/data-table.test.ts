@@ -124,6 +124,22 @@ describe('DataTable', () => {
     expect(combo).not.toBeNull()
     const statusLabel = [...dtRoot.querySelectorAll('label')].find((l) => l.textContent!.trim() === 'Status')!
     expect(statusLabel.getAttribute('for')).toBe(combo.id)
+    // The empty filter is the Any choice, which the Select shows, not a blank.
+    expect(combo.textContent!.trim()).toBe('Any')
+  })
+
+  it('shows the all choice in a Select filter, labels.anyFilter or allLabel, at any width', async () => {
+    const { resource } = makeResource()
+    const m = await cases({
+      resource,
+      filterDefs: [
+        { key: 'kind', label: 'Kind', items: ['a', 'b', 'c', 'd', 'e'] },
+        { key: 'size', label: 'Size', items: ['s', 'm'], control: 'select', allLabel: 'Every size' },
+      ],
+      labels: { anyFilter: 'Alle' },
+    })
+    const combos = [...m.el.querySelectorAll<HTMLElement>('.weft-data-table [role="combobox"]')]
+    expect(combos.map((c) => c.textContent!.trim())).toEqual(['Alle', 'Every size'])
   })
 
   it('gives row Edit and Delete buttons aria-labels with the item name, and uses md size on touch input', async () => {

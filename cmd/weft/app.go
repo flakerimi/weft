@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -241,6 +242,9 @@ func unpackCmd(args []string, stdout, stderr io.Writer) int {
 			return err
 		}
 		did, err := refreshWeft(appDir, cfg.Version)
+		if err == nil {
+			err = keepDist(appDir)
+		}
 		switch {
 		case err != nil:
 			return err
@@ -278,6 +282,9 @@ func ensure(appDir string, stdout, stderr io.Writer) (appConfig, error) {
 	}
 	install, err := refreshWeft(appDir, cfg.Version)
 	if err != nil {
+		return cfg, err
+	}
+	if err := keepDist(appDir); err != nil {
 		return cfg, err
 	}
 	if staleInstall(appDir) {
@@ -331,6 +338,29 @@ func writeTypes(appDir string, stdout, stderr io.Writer) error {
 func pnpmInstall(appDir string, stdout, stderr io.Writer) error {
 	if err := runIn(appDir, stdout, stderr, "pnpm", "install"); err != nil {
 		return fmt.Errorf("pnpm install did not finish in %s; fix what its output above says and run the command again", appDir)
+	}
+	return nil
+}
+
+// keepDist writes weft create's empty page build marker into web/dist when
+// the app embeds that folder (it has dist.go) and it is missing, as in a
+// fresh clone, which git leaves without it, or empty, which embeds nothing
+// either: go test ./... then builds, and a binary built so refuses to start
+// until weft build builds the pages.
+func keepDist(appDir string) error {
+	if !isFile(filepath.Join(appDir, "dist.go")) {
+		return nil
+	}
+	dir := filepath.Join(appDir, "web", "dist")
+	if _, err := os.Lstat(dir); err == nil {
+		if entries, err := os.ReadDir(dir); err != nil || len(entries) > 0 {
+			return nil
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err := writeUnbuilt(appDir); err != nil {
+		return fmt.Errorf("cannot write %s (%v); make the app's folder writable and run the command again", filepath.Join(appDir, "web", "dist", ".weft-build"), err)
 	}
 	return nil
 }

@@ -29,6 +29,10 @@ const stopLimit = 10 * time.Second
 // API alone. Nothing listens while the modules migrate and start; a port that
 // is taken stops the modules it started.
 //
+// A dist that is only the empty page build marker weft create writes into
+// web/dist (the pages not built) is refused with a sentence, before anything
+// starts.
+//
 // Under weft dev (WEFT_DEV_PARENT=1) it logs nothing, and it also stops when
 // standard input closes, which is when weft dev is gone.
 //
@@ -44,6 +48,9 @@ func (a *App) Serve(dist fs.FS, opts ...ServeOption) error {
 	if err := a.Err(); err != nil {
 		return err
 	}
+	if dist != nil && unbuilt(dist) {
+		return errUnbuilt
+	}
 	ctx, stop := notifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	// Once the first signal ends ctx, the signals are no longer taken, so a
@@ -57,6 +64,16 @@ func (a *App) Serve(dist fs.FS, opts ...ServeOption) error {
 	// The app starts before it listens, so nothing answers on the port while
 	// the modules migrate, and a start that fails never says it listens.
 	if err := a.Start(ctx); err != nil {
+		// Stopped while the modules started, such as while one opened the
+		// database: asked to stop, it is a clean exit, not a failed start;
+		// but a module Start undid that could not stop is still said. Start
+		// joins its cause first, then the undo's errors.
+		if ctx.Err() != nil {
+			if j, ok := err.(interface{ Unwrap() []error }); ok && len(j.Unwrap()) > 1 {
+				return errors.Join(j.Unwrap()[1:]...)
+			}
+			return nil
+		}
 		return err
 	}
 	addr := net.JoinHostPort(a.cfg.Host, a.cfg.Port)

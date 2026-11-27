@@ -11,12 +11,11 @@ Check here whether something you want is built yet: this is what Weft's design p
 | Command | What it will do | Phase |
 | --- | --- | --- |
 | `weft db` | Show how the database differs from the app's records | W3 |
-| `weft scaffold` | Write a resource from a name and typed fields: its Go module, its tests and a page to list and edit it | W5 |
 | `weft check` | Run Weft's lint rules and type checks | 6 |
 | `weft mcp` | Serve the catalogue and `check` to agents over MCP | 6 |
 | `weft deploy` | Publish an app | 6b |
 
-The commands that make, run, build and upgrade an app, `weft gen` and `weft routes`, and `weft catalog`, which prints the component catalogue, work today: see the [CLI reference](reference/cli.md).
+The commands that make, run, build and upgrade an app, `weft scaffold`, `weft gen` and `weft routes`, and `weft catalog`, which prints the component catalogue, work today: see the [CLI reference](reference/cli.md).
 
 ## App routes
 
@@ -43,14 +42,13 @@ The `auth` module works today, with one role, the owner ([Login](guides/login.md
 - registration, invitations and password reset, with the `mail` module, which sends email through SMTP or prints it to the log;
 - roles other than the owner, and permissions given to them;
 - a session table on the server, for signing out everywhere and ending one session;
-- `useSession()`, a login page, `perm` on `Button` and row actions, and a route guard in Vue. The example shop writes its own in `web/session.ts`.
+- `useSession()` in `@weft/ui`, `perm` on `Button` and row actions, and a route guard in Vue. An app `weft create` makes has its own `web/session.ts`, with its login and setup pages.
 
 ## Scaffolding and app blocks
 
-`DataTable`, with server-side paging, sorting, debounced search and filtering over the list shape, and `EntityDialog`, which creates and edits records from a form schema, work today ([Components](/components)). Not yet, phase W5:
+`weft scaffold`, the app template, `DataTable` (server-side paging, sorting, debounced search and filtering over the list shape) and `EntityDialog` (creating and editing records from a form schema) work today ([CLI](reference/cli.md#weft-scaffold), [Components](/components)). Not yet, Weft 0.2.0:
 
-- `weft scaffold`, which writes `app/<name>/` (the model, the routes and their tests), adds it to `app/modules.go`, and writes a page for it;
-- the app template `weft create` writes taking the shop's shape: `data`, `auth` and a resource. It writes the `hello` app today.
+- date and time fields in `EntityDialog` and in the pages `weft scaffold` writes: a date control, and the schema saying a field is a time. Until then `weft scaffold` takes `date` and `datetime` only with `--api`.
 
 ## The browser's rules and Go's
 

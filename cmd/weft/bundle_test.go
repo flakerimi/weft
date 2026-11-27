@@ -493,6 +493,35 @@ func TestUnpackCommand(t *testing.T) {
 	if !exists(t, ".weft/go/go.mod") || exists(t, "node_modules") {
 		t.Error(".weft/go/go.mod is missing, or something was installed")
 	}
+	// No dist.go, so no web/dist to embed: none is made.
+	if exists(t, "web/dist") {
+		t.Error("weft unpack made web/dist in an app with no dist.go")
+	}
+	// A fresh clone of an app has no web/dist, which git ignores: unpack
+	// puts back the empty marker, so go test ./... works before a build.
+	os.WriteFile("dist.go", []byte("package main\n"), 0o644)
+	if code, _, errs := runCmd("unpack"); code != 0 || errs != "" {
+		t.Fatalf("with dist.go: exit %d, stderr %q", code, errs)
+	}
+	if b, err := os.ReadFile("web/dist/.weft-build"); err != nil || string(b) != unbuiltMarker {
+		t.Errorf("web/dist/.weft-build = %q, %v; want the empty marker", b, err)
+	}
+	// An empty web/dist embeds nothing either: the marker goes in.
+	os.Remove("web/dist/.weft-build")
+	if code, _, errs := runCmd("unpack"); code != 0 || errs != "" {
+		t.Fatalf("empty web/dist: exit %d, stderr %q", code, errs)
+	}
+	if b, err := os.ReadFile("web/dist/.weft-build"); err != nil || string(b) != unbuiltMarker {
+		t.Errorf("an empty web/dist: .weft-build = %q, %v; want the empty marker", b, err)
+	}
+	// A web/dist that is there, a build's, is left as it is.
+	os.WriteFile("web/dist/.weft-build", []byte("built\n"), 0o644)
+	if code, out, _ := runCmd("unpack"); code != 0 || out != ".weft is current (Weft 0.0.0-dev)\n" {
+		t.Errorf("again: exit %d, stdout %q", code, out)
+	}
+	if b, _ := os.ReadFile("web/dist/.weft-build"); string(b) != "built\n" {
+		t.Errorf("weft unpack rewrote a web/dist that was there: %q", b)
+	}
 	if code, out, _ := runCmd("unpack"); code != 0 || out != ".weft is current (Weft 0.0.0-dev)\n" {
 		t.Errorf("again: exit %d, stdout %q", code, out)
 	}

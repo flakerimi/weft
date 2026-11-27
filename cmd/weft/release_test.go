@@ -85,6 +85,15 @@ func TestReleasedBinaryCreatesAndBuilds(t *testing.T) {
 		}
 	}
 	env = append(env, moduleProxy(t, "v0.0.0-test", repoModule(t))...)
+	// The app requires the SQLite driver too, which the proxy in a folder
+	// does not serve: after it, the module cache this machine has, which
+	// go mod download in dbtest fills with the driver at the version the
+	// template requires, serves it offline.
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "GOPROXY=") {
+			env[i] = kv + "," + fileProxyURL(filepath.ToSlash(filepath.Join(sqliteCache(t), "cache", "download")))
+		}
+	}
 	weftIn := func(dir string, args ...string) string {
 		t.Helper()
 		cmd := exec.Command(bin, args...)
@@ -102,7 +111,7 @@ func TestReleasedBinaryCreatesAndBuilds(t *testing.T) {
 	}
 	weftIn(work, "create", "demo")
 	app := filepath.Join(work, "demo")
-	if got, want := readFile(t, filepath.Join(app, "go.mod")), "module demo\n\ngo 1.26\n\nrequire github.com/flakerimi/weft v0.0.0-test\n"; got != want {
+	if got, want := readFile(t, filepath.Join(app, "go.mod")), strings.Replace(templateGoMod("v0.0.0-test", false), "module myapp", "module demo", 1); got != want {
 		t.Errorf("demo/go.mod = %q, want %q", got, want)
 	}
 	if exists(t, filepath.Join(app, ".weft", "go")) {
@@ -125,5 +134,28 @@ func TestReleasedBinaryCreatesAndBuilds(t *testing.T) {
 	if err != nil || cfg.Version != "0.0.0-test" {
 		t.Errorf("readApp = %+v, %v", cfg, err)
 	}
+	// From the app's folder, whose .env has the settings data and auth need.
+	t.Chdir(app)
 	assertServes(t, filepath.Join(app, "demo"))
+}
+
+// sqliteCache is this machine's module cache, holding the SQLite driver and
+// the modules it needs, as dbtest/go.mod requires them.
+func sqliteCache(t *testing.T) string {
+	t.Helper()
+	dl := exec.Command("go", "mod", "download", "modernc.org/sqlite")
+	dl.Dir = filepath.Join("..", "..", "dbtest")
+	if out, err := dl.CombinedOutput(); err != nil {
+		t.Fatalf("go mod download modernc.org/sqlite in dbtest: %v\n%s", err, out)
+	}
+	list := exec.Command("go", "list", "-deps", "-test", "./...")
+	list.Dir = dl.Dir
+	if out, err := list.CombinedOutput(); err != nil {
+		t.Fatalf("go list in dbtest, which downloads what the driver needs: %v\n%s", err, out)
+	}
+	out, err := exec.Command("go", "env", "GOMODCACHE").Output()
+	if err != nil {
+		t.Fatalf("go env GOMODCACHE: %v", err)
+	}
+	return strings.TrimSpace(string(out))
 }
