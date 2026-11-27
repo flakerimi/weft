@@ -41,13 +41,16 @@ describe('Textarea', () => {
     expect(area.getAttribute('aria-describedby')).toBe(field.querySelector('.weft-form-field__hint')!.id)
   })
 
-  it('updates the DOM id when the id prop changes after mount', async () => {
+  it('updates the DOM id when the id prop changes after mount, falling back to a generated id when cleared', async () => {
     const m = cases({ case: 'textarea' })
     const area = m.el.querySelector<HTMLTextAreaElement>('textarea.dynamic-id')!
     expect(area.id).toBe('first')
     m.exposed.dynamicId = 'second'
     await nextTick()
     expect(area.id).toBe('second')
+    m.exposed.dynamicId = undefined
+    await nextTick()
+    expect(area.id).toMatch(/^textarea-/)
   })
 
   describe('autoresize', () => {
@@ -237,13 +240,16 @@ describe('InputNumber', () => {
     expect(f.querySelector('label')!.htmlFor).toBe(f.querySelector('input')!.id)
   })
 
-  it('updates the DOM id when the id prop changes after mount', async () => {
+  it('updates the DOM id when the id prop changes after mount, falling back to a generated id when cleared', async () => {
     const m = cases({ case: 'number' })
     const input = field(m.el, '.dynamic-id')
     expect(input.id).toBe('first')
     m.exposed.dynamicId = 'second'
     await nextTick()
     expect(input.id).toBe('second')
+    m.exposed.dynamicId = undefined
+    await nextTick()
+    expect(input.id).toMatch(/^input-number-/)
   })
 })
 

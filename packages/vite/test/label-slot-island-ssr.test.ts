@@ -20,10 +20,10 @@ it('renders the label slots of an island with ids of their own', async () => {
   const doc = win.document as unknown as Document
   const ids = [...doc.querySelectorAll('[id]')].map((e) => e.id)
   expect(ids.filter((id, i) => ids.indexOf(id) !== i), 'ids used twice').toEqual([])
-  // The island counts its ids as if the labels held nothing (the slider and
-  // the radio group take one each); what a label holds counts in the label's
-  // own scope.
-  expect([...doc.querySelectorAll('.weft-form-field__label')].map((l) => l.id)).toEqual([0, 2, 4, 5].map((i) => `field-i0-${i}-label`))
+  // The island counts its ids as if the labels held nothing (the slider,
+  // the radio group and the input take one each); what a label holds counts
+  // in the label's own scope.
+  expect([...doc.querySelectorAll('.weft-form-field__label')].map((l) => l.id)).toEqual([0, 2, 4, 6].map((i) => `field-i0-${i}-label`))
   const box = doc.querySelector<HTMLInputElement>('.weft-form-field__label .weft-checkbox__input')!
   expect(box.id).toBe('checkbox-field-i0-2-label-0')
   // The Checkbox in the Plan label is its own: the radio group keeps the field's id and name.

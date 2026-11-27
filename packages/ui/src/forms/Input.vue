@@ -69,8 +69,8 @@ defineSlots<{
 
 const f = useField(props)
 const { own, box, describedBy } = useControlAttrs(f)
-const fallback = f.id.value || f.name.value ? undefined : useId('input')
-const id = computed(() => f.id.value ?? (f.name.value ? undefined : fallback))
+const fallback = useId('input')
+const id = computed(() => f.id.value ?? fallback)
 
 const input = useTemplateRef<HTMLInputElement>('input')
 

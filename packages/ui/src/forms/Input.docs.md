@@ -24,8 +24,8 @@ stays editable (a lookup runs as it is typed).
 **In a FormField** the input takes the field's id (so the label points to
 it), its name, `aria-describedby` (the description, the hint and the error; an
 `aria-describedby` of its own comes first), `aria-invalid` and
-`aria-required`. Standalone, with no `id` or `name`, it takes a generated id.
-In a FieldGroup it takes the group's size.
+`aria-required`. Outside a FormField, with no `id` prop, it takes a generated
+id. In a FieldGroup it takes the group's size.
 
 **For other components:** a template ref's `focus()` focuses the text, and
 `input` is the element; Select, Combobox and DatePicker build on this box.

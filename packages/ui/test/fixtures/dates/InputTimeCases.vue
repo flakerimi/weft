@@ -21,25 +21,31 @@ const props = withDefaults(defineProps<{
   readonly?: boolean
   range?: boolean
   standalone?: boolean
+  twoNamed?: boolean
   id?: string
   name?: string
 }>(), { initial: undefined })
 const input = ref<Input | undefined>(props.input)
 const value = ref(((props.initial ?? null) as TimeInput | TimeRange | null))
 const dynamicId = ref<string | undefined>(props.id)
+const isRange = ref(!!props.range)
 const submitted = ref<string | null>(null)
 function onSubmit(event: Event) {
   event.preventDefault()
   const data = new FormData(event.target as HTMLFormElement)
-  submitted.value = props.range ? `${data.get('at[start]')}–${data.get('at[end]')}` : (data.get('at') as string | null)
+  submitted.value = isRange.value ? `${data.get('at[start]')}–${data.get('at[end]')}` : (data.get('at') as string | null)
 }
-defineExpose({ input, value, dynamicId, submitted })
+defineExpose({ input, value, dynamicId, isRange, submitted })
 </script>
 
 <template>
   <WeftProvider :input="input" :locale="locale">
     <div :dir="dir">
-      <InputTime v-if="standalone" :id="dynamicId" v-model="value as never" :range="range" :name="name" />
+      <div v-if="twoNamed">
+        <InputTime name="first_at" :range="isRange" />
+        <InputTime name="second_at" :range="isRange" />
+      </div>
+      <InputTime v-else-if="standalone" :id="dynamicId" v-model="value as never" :range="isRange" :name="name" />
       <form v-else @submit="onSubmit">
         <FormField label="Start time" name="at" description="Local time">
           <InputTime
@@ -52,7 +58,7 @@ defineExpose({ input, value, dynamicId, submitted })
             :value-format="valueFormat"
             :disabled="disabled"
             :readonly="readonly"
-            :range="range"
+            :range="isRange"
           />
         </FormField>
         <button class="submit" type="submit">Save</button>

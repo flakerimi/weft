@@ -91,8 +91,8 @@ defineSlots<{
 
 const f = useField(props)
 const { own, box, describedBy } = useControlAttrs(f)
-const fallback = !props.range && (f.id.value || f.name.value) ? undefined : useId('input-time')
-const ownId = computed(() => (props.range ? fallback : (f.id.value ?? (f.name.value ? undefined : fallback))))
+const fallback = useId('input-time')
+const ownId = computed(() => f.id.value ?? fallback)
 const model = useControllable(props, 'modelValue', emit, () => props.defaultValue)
 const weft = useWeft()
 const touch = computed(() => weft.input.value === 'touch')
