@@ -20,7 +20,7 @@ page pays before anyone touches it.
 
 | What | Brotli |
 | --- | ---: |
-| Vue runtime (Vapor), its own chunk in each build | 17.40 to 26.94 KB |
+| Vue runtime (Vapor), its own chunk in each build | 17.67 to 27.18 KB |
 | `styles/base.css`, inlined on every page by the page build | 0.32 KB |
 
 Vue's runtime is tree-shaken per build, so it varies with the Vue features a
@@ -34,90 +34,90 @@ component uses. Neither is counted in the rows below.
 | --- | ---: | ---: | ---: | ---: |
 | Accordion | 2.79 | — | 0.76 | 3.55 |
 | Alert | 2.70 | — | 1.72 | 4.42 |
-| AppShell | 18.47 | — | 3.79 | 22.25 |
+| AppShell | 18.47 | — | 3.79 | 22.26 |
 | Avatar | 1.33 | — | 0.52 | 1.85 |
-| AvatarGroup | 1.34 | — | 0.40 | 1.74 |
+| AvatarGroup | 1.35 | — | 0.40 | 1.74 |
 | Badge | 0.86 | — | 0.80 | 1.66 |
 | Banner | 2.88 | — | 1.56 | 4.44 |
 | Breadcrumb | 1.53 | — | 0.57 | 2.09 |
-| Button | 1.38 | — | 1.39 | 2.77 |
-| Calendar | 11.04 | — | 1.32 | 12.36 |
+| Button | 1.39 | — | 1.39 | 2.78 |
+| Calendar | 11.03 | — | 1.32 | 12.35 |
 | Card | 1.45 | — | 1.37 | 2.83 |
 | Checkbox | 1.80 | — | 0.91 | 2.71 |
 | CheckboxGroup | 2.37 | — | 1.00 | 3.38 |
 | Chip | 1.55 | — | 1.07 | 2.62 |
-| CloseButton | 0.62 | — | 0.54 | 1.16 |
+| CloseButton | 0.64 | — | 0.54 | 1.18 |
 | Collapsible | 1.33 | — | 0.48 | 1.81 |
-| Combobox | 22.31 | — | 2.69 | 25.00 |
-| CommandPalette | 11.57 | — | 1.92 | 13.48 |
+| Combobox | 22.32 | — | 2.69 | 25.01 |
+| CommandPalette | 11.59 | — | 1.92 | 13.50 |
 | ConfirmDialog | 6.51 | — | 1.96 | 8.47 |
-| Container | 0.77 | — | 0.14 | 0.91 |
-| ContextMenu | 14.62 | — | 1.90 | 16.51 |
-| Cta | 2.52 | — | 1.79 | 4.32 |
-| DataTable | 39.54 | — | 5.70 | 45.25 |
-| DatePicker | 12.38 | 14.87 | 2.72 | 15.11 |
-| DateRangePicker | 25.70 | — | 2.73 | 28.43 |
-| Dialog | 7.91 | — | 2.27 | 10.19 |
+| Container | 0.77 | — | 0.14 | 0.92 |
+| ContextMenu | 14.60 | — | 1.90 | 16.50 |
+| Cta | 2.52 | — | 1.79 | 4.31 |
+| DataTable | 39.50 | — | 5.70 | 45.21 |
+| DatePicker | 12.39 | 14.84 | 2.72 | 15.12 |
+| DateRangePicker | 25.67 | — | 2.73 | 28.40 |
+| Dialog | 7.90 | — | 2.27 | 10.17 |
 | Divider | 0.47 | — | 0.34 | 0.81 |
 | Drawer | 6.78 | — | 2.29 | 9.07 |
-| DropdownMenu | 14.93 | — | 2.34 | 17.27 |
+| DropdownMenu | 14.92 | — | 2.34 | 17.26 |
 | EmptyState | 2.21 | — | 1.60 | 3.81 |
-| EntityDialog | 30.91 | — | 4.63 | 35.54 |
+| EntityDialog | 30.92 | — | 4.63 | 35.55 |
 | ErrorState | 2.18 | — | 1.55 | 3.73 |
 | Faq | 3.91 | — | 1.11 | 5.02 |
-| FeatureGrid | 3.01 | — | 1.26 | 4.28 |
-| FieldGroup | 2.49 | — | 1.63 | 4.11 |
-| FileUpload | 6.56 | — | 2.23 | 8.79 |
+| FeatureGrid | 3.02 | — | 1.26 | 4.28 |
+| FieldGroup | 2.48 | — | 1.63 | 4.11 |
+| FileUpload | 6.57 | — | 2.23 | 8.80 |
 | Footer | 1.70 | — | 0.55 | 2.25 |
-| Form | 6.95 | — | 2.13 | 9.08 |
+| Form | 6.96 | — | 2.13 | 9.09 |
 | FormField | 2.92 | — | 1.13 | 4.05 |
 | Grid | 1.30 | — | 0.46 | 1.76 |
-| Header | 16.94 | — | 3.38 | 20.32 |
+| Header | 16.95 | — | 3.38 | 20.32 |
 | Hero | 2.53 | — | 1.67 | 4.20 |
 | Icon | 0.67 | — | 0.33 | 1.01 |
-| Input | 2.70 | — | 0.97 | 3.67 |
-| InputNumber | 3.08 | — | 1.00 | 4.08 |
+| Input | 2.71 | — | 0.97 | 3.67 |
+| InputNumber | 3.08 | — | 1.00 | 4.07 |
 | InputTags | 4.65 | — | 1.24 | 5.89 |
-| InputTime | 6.38 | — | 0.95 | 7.33 |
+| InputTime | 6.37 | — | 0.95 | 7.32 |
 | Island | 0.77 | — | 0.25 | 1.03 |
 | Kbd | 0.59 | — | 0.27 | 0.86 |
-| Link | 0.88 | — | 0.32 | 1.20 |
+| Link | 0.87 | — | 0.32 | 1.20 |
 | Listbox | 8.67 | — | 1.54 | 10.21 |
 | NavigationMenu | 16.63 | — | 3.03 | 19.66 |
 | OverlayPanel | 1.85 | — | 1.51 | 3.36 |
 | Page | 1.70 | — | 1.39 | 3.09 |
 | Pagination | 3.08 | — | 1.41 | 4.48 |
-| PinInput | 2.94 | — | 0.53 | 3.47 |
-| Popover | 13.48 | — | 2.55 | 16.03 |
-| Pricing | 5.81 | — | 2.23 | 8.03 |
+| PinInput | 2.93 | — | 0.53 | 3.46 |
+| Popover | 13.46 | — | 2.55 | 16.01 |
+| Pricing | 5.80 | — | 2.23 | 8.02 |
 | Progress | 0.78 | — | 0.85 | 1.63 |
 | RadioGroup | 3.07 | — | 0.99 | 4.06 |
 | ScrollArea | 1.02 | — | 0.56 | 1.58 |
 | Section | 1.45 | — | 1.30 | 2.75 |
-| Select | 20.26 | — | 2.44 | 22.70 |
+| Select | 20.28 | — | 2.44 | 22.72 |
 | Separator | 1.67 | — | 1.49 | 3.16 |
 | Sheet | 6.41 | — | 2.26 | 8.67 |
 | Skeleton | 0.53 | — | 0.45 | 0.97 |
 | Slider | 3.37 | — | 1.02 | 4.39 |
-| Spinner | 0.52 | — | 0.53 | 1.05 |
+| Spinner | 0.51 | — | 0.53 | 1.04 |
 | Stack | 0.35 | — | 0.27 | 0.62 |
 | StatCard | 2.83 | — | 1.06 | 3.88 |
 | Stepper | 3.36 | — | 1.04 | 4.40 |
-| Switch | 1.99 | — | 1.42 | 3.41 |
-| Table | 11.93 | — | 2.79 | 14.73 |
+| Switch | 2.00 | — | 1.42 | 3.41 |
+| Table | 11.93 | — | 2.79 | 14.72 |
 | Tabs | 4.06 | — | 1.34 | 5.40 |
-| Testimonials | 3.15 | — | 1.05 | 4.21 |
+| Testimonials | 3.15 | — | 1.05 | 4.20 |
 | Textarea | 2.39 | — | 0.54 | 2.93 |
-| Timeline | 2.25 | — | 0.92 | 3.16 |
+| Timeline | 2.25 | — | 0.92 | 3.17 |
 | Toast | 3.19 | — | 1.94 | 5.13 |
-| Toaster | 4.22 | — | 2.12 | 6.34 |
+| Toaster | 4.23 | — | 2.12 | 6.35 |
 | Toggle | 2.31 | — | 1.39 | 3.70 |
-| ToggleGroup | 3.54 | — | 1.39 | 4.93 |
-| Tooltip | 10.71 | — | 1.71 | 12.42 |
-| Tree | 3.94 | — | 0.74 | 4.68 |
-| WeftProvider | 0.97 | — | 0.27 | 1.25 |
+| ToggleGroup | 3.54 | — | 1.39 | 4.92 |
+| Tooltip | 10.68 | — | 1.71 | 12.39 |
+| Tree | 3.95 | — | 0.74 | 4.69 |
+| WeftProvider | 0.98 | — | 0.27 | 1.25 |
 
-The five heaviest: DataTable (45.25 KB), EntityDialog (35.54 KB), DateRangePicker (28.43 KB), Combobox (25.00 KB), Select (22.70 KB).
+The five heaviest: DataTable (45.21 KB), EntityDialog (35.55 KB), DateRangePicker (28.40 KB), Combobox (25.01 KB), Select (22.72 KB).
 
 ## Tree-shaking
 
