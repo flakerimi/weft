@@ -35,6 +35,7 @@ const GROUPS: [string, string][] = [
   ['disclosure', 'Disclosure'],
   ['feedback', 'Feedback'],
   ['data', 'Data'],
+  ['session', 'Session'],
   ['shell', 'Shell'],
   ['landing', 'Landing'],
   ['adaptive', 'Adaptive'],

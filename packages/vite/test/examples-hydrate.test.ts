@@ -39,14 +39,14 @@ beforeAll(async () => {
   server = JSON.parse(stdout) as Record<string, string>
 }, 120_000)
 
-// No server answers here: GET /api/auth/me, which an example with `perm` asks, is
-// answered as the gallery's would be, with no one signed in; any other request
-// is a mistake of the example's.
+// No server answers here: GET /api/auth/me, which an example with `perm` or a
+// Guard asks, is answered as the gallery's server answers it, a site with no API
+// (warp.Serve's 404); any other request is a mistake of the example's.
 let strays: string[] = []
 beforeEach(() => {
   strays = []
   vi.stubGlobal('fetch', async (url: string) => {
-    if (url === '/api/auth/me') return new Response(JSON.stringify({ error: { code: 'unauthorized', message: 'Sign in to do that.' } }), { status: 401 })
+    if (url === '/api/auth/me') return new Response(JSON.stringify({ error: { code: 'not_found', message: 'This app has no API.' } }), { status: 404 })
     strays.push(String(url))
     throw new TypeError('Failed to fetch')
   })

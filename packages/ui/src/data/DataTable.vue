@@ -201,7 +201,7 @@ const selected = useControllable<{ selected?: RowKey[] }, 'selected'>(props, 'se
 
 const can = useCan()
 /** Without `perm`, every action; with it, the ones the session allows on that resource, once mounted. */
-const allowed = (action: 'create' | 'edit' | 'delete') => !props.perm || can(`${props.perm}:${action}`)
+const allowed = (action: 'create' | 'edit' | 'delete') => !props.perm || can.value(`${props.perm}:${action}`)
 const hasDialog = computed(() => Boolean(props.schema || slots.dialog))
 const fetchFn = computed(() => props.fetch ?? props.resource?.list)
 const createFn = computed(() => (hasDialog.value && allowed('create') ? (props.create ?? props.resource?.create) : undefined))

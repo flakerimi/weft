@@ -30,7 +30,7 @@ const member = {
   permissions: ['products:create', 'products:edit', 'products:read'],
 }
 
-it('hydrates perm buttons and row actions with no mismatch, then draws what the session allows', async () => {
+it('hydrates perm buttons, row actions and Guards with no mismatch, then draws what the session allows', async () => {
   const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
   const error = vi.spyOn(console, 'error').mockImplementation(() => {})
   let answer!: () => void
@@ -44,9 +44,14 @@ it('hydrates perm buttons and row actions with no mismatch, then draws what the 
   vi.stubGlobal('fetch', fetchMock)
   document.body.innerHTML = `<main>${sessionIsland}${lateIsland}</main>`
   const [first, second] = document.querySelectorAll('weft-island')
-  const before = (island: Element) =>
-    Array.from(island.querySelectorAll('*')).filter((e) => e.tagName !== 'SCRIPT' && !e.closest('tbody') && !(e instanceof SVGElement && !(e instanceof SVGSVGElement)))
-  const kept = [...before(first!), ...before(second!)]
+  // Every element the server drew, bar the props script, the remote rows its answer replaces and,
+  // in the island that wakes with the session known, the Guard's loading, which goes once it has mounted.
+  const before = (island: Element, also: (e: Element) => boolean) =>
+    Array.from(island.querySelectorAll('*')).filter(
+      (e) => e.tagName !== 'SCRIPT' && !e.closest('tbody') && !(e instanceof SVGElement && !(e instanceof SVGSVGElement)) && !also(e),
+    )
+  const keptFirst = before(first!, () => false)
+  const keptSecond = before(second!, (e) => !!e.closest('.weft-spinner'))
   let wake!: () => void
   const late = new Promise<Component>((resolve) => (wake = () => resolve(Late as Component)))
   startIslands({ Session: () => Promise.resolve(Session as Component), Late: () => late })
@@ -54,24 +59,32 @@ it('hydrates perm buttons and row actions with no mismatch, then draws what the 
 
   // The first island hydrated while the session was loading: nothing more is drawn.
   expect(first!.querySelector('script')).toBeNull()
+  for (const el of keptFirst) expect(el.isConnected, el.outerHTML).toBe(true)
   expect([...first!.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Always'])
+  expect(first!.querySelectorAll('.weft-spinner')).toHaveLength(2)
   expect(fetchMock).toHaveBeenCalledTimes(1)
 
-  // The session comes; the first island draws Edit, not Users.
+  // The session comes; the first island draws Edit, not Users, and the Guard for products:edit opens.
   answer()
   await settle()
   expect([...first!.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Always', 'Edit'])
+  expect(first!.querySelector('.weft-spinner')).toBeNull()
+  expect(first!.querySelector('.stock')!.textContent).toBe('Stock')
+  expect(first!.querySelector('.people')).toBeNull()
+  expect(first!.querySelector('.weft-alert')!.textContent).toBe('Your account cannot see this; ask an administrator.')
 
   // The second island wakes now, with the session known, and still hydrates the server's markup.
   wake()
   await settle()
   await settle()
   expect(second!.querySelector('script')).toBeNull()
-  for (const el of kept) expect(el.isConnected, el.outerHTML).toBe(true)
+  for (const el of keptSecond) expect(el.isConnected, el.outerHTML).toBe(true)
   expect(warn).not.toHaveBeenCalled()
   expect(error).not.toHaveBeenCalled()
 
-  // Then it draws what the member may do: Export, New and Edit; no Delete.
+  // Then it draws what the member may do: the Guard's content, Export, New and Edit; no Delete.
+  expect(second!.querySelector('.signed-in')!.textContent).toBe('Signed in')
+  expect(second!.querySelector('.weft-spinner')).toBeNull()
   const labels = [...second!.querySelectorAll('button')].map((b) => b.textContent!.trim())
   expect(labels).toEqual(expect.arrayContaining(['Export', 'New product', 'Edit']))
   expect(second!.querySelector('[data-weft-row-action="delete"]')).toBeNull()

@@ -5255,6 +5255,64 @@
       ]
     },
     {
+      "name": "Guard",
+      "group": "session",
+      "file": "packages/ui/src/session/Guard.vue",
+      "purpose": "A route guard: what it holds is shown only to a signed-in user with perm.",
+      "use": "Around an island's content that only some accounts may see, such as a users page for users:read; it sends a visitor with no session to sign in and back.",
+      "avoid": "For one button or action, use Button's or DataTable's perm; for what the server must refuse, guard the route with auth.Per, which Guard never replaces.",
+      "adapts": {
+        "input": "Nothing changes.",
+        "surface": "Nothing changes; the Alert and Spinner follow the surface's type scale.",
+        "width": "Nothing changes."
+      },
+      "props": [
+        {
+          "name": "perm",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A permission, such as `reports:read`, the user must have; without it, any signed-in user."
+        },
+        {
+          "name": "signIn",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Where a visitor with no session is sent, with `?next=` this page; `/login` by default."
+        }
+      ],
+      "emits": [],
+      "slots": [
+        {
+          "name": "default",
+          "props": [
+            "user"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "denied",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "loading",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "It has no stylesheet of its own: it draws `Spinner` and `Alert`.\n\n`perm` is a permission such as `perm=\"users:read\"`; without it, any\nsigned-in user passes. Who is signed in comes from `useSession()`, which asks\n`GET /api/auth/me` once for the whole page, and `can(perm)` is always true for\nthe role `owner`.\n\n**What it shows.** Pages are built with no session, so the server renders the\n`loading` slot (a `Spinner` that says Loading), and so does the browser's\nfirst render, so hydration always matches. Once mounted it calls\n`requireSession({ perm, signIn })`:\n\n- a visitor with no session is sent to `sign-in` (default `/login`) with\n  `?next=` this page's path and query, and `loading` stays while the browser\n  leaves;\n- a user without `perm` sees the `denied` slot, by default an `Alert`:\n  \"Your account cannot see this; ask an administrator.\";\n- a session that could not be read (the server cannot be reached, or answers\n  an error) shows why in an `Alert` with `role=\"alert\"`, and sends no one\n  away;\n- otherwise the default slot, given `{ user }`, the signed-in user.\n\nIt follows the session: after `useSession().refresh()` a role that lost the\npermission sees `denied`. It hides what it holds and guards nothing: the\nserver's routes must still check, as `auth.Per` does, and send nothing a\nviewer may not read.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Guard/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Guard } from '@weft/ui'\n</script>\n\n<template>\n  <!--\n    Shown only to a signed-in user with users:read. A visitor with no session is sent to /login and\n    back; here, where no API answers, it says so.\n  -->\n  <Guard perm=\"users:read\">\n    <template #default=\"{ user }\">\n      <p>Signed in as {{ user.email }}.</p>\n    </template>\n  </Guard>\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "Header",
       "group": "shell",
       "file": "packages/ui/src/shell/Header.vue",
