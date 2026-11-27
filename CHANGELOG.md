@@ -16,6 +16,12 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
   carry the Windows `.zip` archives alongside the tarballs; `weft update` names
   the PowerShell installer on Windows; and the docs cover Windows.
 
+## 0.0.20
+
+- On a phone (under 640 px) the landing's phone picture follows the install
+  command closely, 64 px below the copy, over a shorter band of the weave
+  (700 px), in place of a 180 px gap over an 816 px band.
+
 ## 0.0.19
 
 - On Windows, `weft dev` and the commands that run child processes put each
