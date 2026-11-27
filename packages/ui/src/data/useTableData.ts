@@ -128,19 +128,17 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
     fetching.value = true
     try {
       const answer = await fetch(query)
-      if (mine !== asked) {
-        if (inflight) await inflight
-        return
-      }
+      if (mine !== asked) return
       const last = Math.max(1, Math.ceil(answer.total / Math.max(1, query.per_page)))
       if (answer.items.length === 0 && answer.total > 0 && query.page > last && opts.setPage) {
+        const prevInflight = inflight
         const kept = (moved = { from: query.page, total: answer.total, rest })
         opts.setPage(last) // the watcher asks for it, once
         // A parent that took the move has the page by the next tick; one that
         // keeps its own has put it back by then.
         await nextTick()
         if (moved === kept && opts.page.value === last) moved = null
-        if (mine !== asked && inflight) await inflight
+        if (mine !== asked && inflight && inflight !== prevInflight) await inflight
         return
       }
       if (moved?.total !== answer.total) moved = null

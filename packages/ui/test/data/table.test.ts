@@ -700,6 +700,21 @@ describe('Table', () => {
         vi.advanceTimersByTime(300)
         await nextTick()
         expect(answers).toHaveLength(4)
+
+        // Calling refresh() and then typing a search while refresh() is in flight does not hang the refresh() promise.
+        const refreshPromise = (m.exposed as { table: { refresh(): Promise<void> } }).table.refresh()
+        await nextTick()
+        expect(answers).toHaveLength(5)
+        exposed.searchText = 'Ada2'
+        await nextTick()
+        let settled = false
+        void refreshPromise.then(() => {
+          settled = true
+        })
+        answers[4]!.resolve({ items: PEOPLE, total: 5 })
+        await Promise.resolve()
+        await nextTick()
+        expect(settled).toBe(true)
       } finally {
         vi.useRealTimers()
       }
