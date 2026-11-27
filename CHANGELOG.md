@@ -7,7 +7,7 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
 0.0.12 have no GitHub Release: they were published at weft.base.al, and
 `site/releases.txt` lists them (only 0.0.1 and 0.0.2 have a tag).
 
-## Unreleased
+## 0.0.23
 
 - Vue 3.6.0-rc.17, from rc.16, and `scripts/vue-update.sh`, which moves every
   pin to the newest 3.6 build. rc.17 writes other hydration markers in a server
