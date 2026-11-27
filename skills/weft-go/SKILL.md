@@ -25,7 +25,7 @@ func main() {
 - `dist` embeds `web/dist`, and is nil under `-tags dev`, as `weft dev` builds it: `go test -tags dev ./...` until the first `weft build`.
 - `app/modules.go` lists the modules in the order they start; a new one is `app/<name>/` with a `Module()`, added there.
 - A module is `Name() string` and `Register(app *warp.App) error`, and may add `Migrate`, `Start` and `Stop(ctx) error`: in order before serving, stop in reverse after.
-- Never edit `.weft/`, in which `go.mod` finds Warp.
+- `go.mod` requires Warp (`github.com/flakerimi/weft`) at the release's tag, fetched from GitHub; `weft upgrade` moves it. Never edit `.weft/`.
 
 ## Typed routes
 

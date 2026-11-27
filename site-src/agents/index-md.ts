@@ -107,7 +107,7 @@ export function indexMd({ docs, skills, components, version, appAgents }: IndexI
     'weft dev             # runs until stopped: start it in the background',
     '```',
     '',
-    '`weft create` writes the app and runs `pnpm install`. `weft dev` prints the address to open, such as `weft dev: http://localhost:5173`: use `localhost`, not `127.0.0.1`, as the page server may listen on `::1` only. It builds the Go code again when a `.go` file or `.env` changes, and reloads the browser when a file in `web/` does. Then read the app\'s `AGENTS.md`: the layout, the commands and the rules of that app.',
+    '`weft create` writes the app and runs `pnpm install` and `go mod download`: `go.mod` requires Warp, `github.com/flakerimi/weft`, at the release\'s tag, which Go fetches from GitHub. `weft dev` prints the address to open, such as `weft dev: http://localhost:5173`: use `localhost`, not `127.0.0.1`, as the page server may listen on `::1` only. It builds the Go code again when a `.go` file or `.env` changes, and reloads the browser when a file in `web/` does. Then read the app\'s `AGENTS.md`: the layout, the commands and the rules of that app.',
     '',
     '## 3. Build what was asked',
     '',

@@ -2,8 +2,10 @@
 # Build release binaries into RELEASES/<version>/, and name it in
 # RELEASES/latest; RELEASES is site/releases unless given (a dry run builds
 # elsewhere, leaving site/releases as it was). Does not tag, publish or list it
-# in site/releases.txt. Each binary carries the bundle (the packages, the Go
-# package, the catalogue and the app template): scripts/bundle.sh stages it
+# in site/releases.txt (scripts/publish-site.sh tags it and makes its GitHub
+# Release). Each binary carries the bundle (the packages, the catalogue and
+# the app template; not the Go package, which a release's apps require at the
+# tag v<version> from GitHub): scripts/bundle.sh stages it
 # into cmd/weft/bundle for go:embed, and afterwards, failed or not, it is moved
 # out to a temporary folder, so the folder holds only its README.md again.
 # WEFT_TARGETS names the systems to build, space-separated os/arch pairs; it

@@ -15,7 +15,7 @@ Weft is one UI system for Go and Vue apps. It has four parts:
 - **Warp, the Go package** `github.com/flakerimi/weft/warp`: an app made of modules, with typed routes that check their input and answer in one error shape, records in SQLite, a login, and `warp.Serve`, which serves the page build from memory next to that API, in one binary.
 - **The `weft` command**: it makes an app, runs it while you work, writes the TypeScript types and client from its Go, builds it into one binary, and updates itself. It carries the other three parts.
 
-Weft is pre-alpha. Its packages are not published to npm: the `weft` command puts them in each app it makes. The repository is private for now.
+Weft is pre-alpha. Its packages are not published to npm: the `weft` command puts them in each app it makes. Warp, the Go module, comes from GitHub, where the repository is public.
 
 ## Where to start
 
