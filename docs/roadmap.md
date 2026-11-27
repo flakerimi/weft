@@ -37,7 +37,7 @@ the owner; each milestone gets its own design or plan before it is built.
 3. **Three platforms**, each on amd64 and arm64: macOS, Linux and Windows, with
    the whole suite passing on every push.
 4. **On pinned, tested dependencies:** Go's current stable release, Node's
-   active LTS, and Vue pinned to the exact 3.6 build Weft is tested with. By
+   active LTS, and Vue pinned to `3.6.0-rc.16`, the build Weft is tested with. By
    the owner's decision of 2026-11-28, 1.0.0 does not wait for Vue 3.6 to be
    stable: it ships on the pinned release candidate, and moving to Vue 3.6
    stable is an ordinary 1.x update when Vue publishes it.
@@ -138,9 +138,9 @@ No new features; only what 1.0.0 promises.
 - Every exported name, prop and command reviewed once more and renamed now if
   it is wrong, since after 1.0.0 it cannot be.
 - The security review and the accessibility audit, and their findings fixed.
-- Vue: the newest 3.6 build that passes the suite, pinned exactly; 3.6 stable
-  is adopted in a 1.x release once Vue publishes it (the owner's decision of
-  2026-11-28: 1.0.0 does not wait for it).
+- Vue stays pinned to `3.6.0-rc.16`, the build Weft is tested with; 3.6
+  stable is adopted in a 1.x release once Vue publishes it (the owner's
+  decision of 2026-11-28: 1.0.0 does not wait for it).
 - `weft upgrade` tested from 0.9.0 and across the 0.9.x releases.
 - Release candidates (`1.0.0-rc.N`) used to build the example apps and the
   site, and one outside app, before 1.0.0 is tagged.
