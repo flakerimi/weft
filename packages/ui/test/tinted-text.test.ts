@@ -4,7 +4,9 @@
 // WCAG AA (4.5:1) in every theme and scheme. The muted colour does not, on
 // those tints, so the text there is drawn in the full text colour. Each case
 // reads, from the stylesheets, the colour the text takes in that state (the
-// first of its selectors that sets one) and the tint behind it.
+// first of its selectors that sets one: the text's own rule for that state,
+// else its own rule, else the rule of the item it inherits from) and the
+// tint behind it.
 import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -73,8 +75,8 @@ const cases: { name: string; text: string[]; tint: string; grounds: readonly str
   { name: 'Tabs pill: an unselected tab on the list', text: ['.weft-tabs[data-variant="pill"] .weft-tabs__tab', '.weft-tabs__tab'], tint: '.weft-tabs[data-variant="pill"] > .weft-tabs__list', grounds: ALL },
   { name: 'EmptyState soft: the description', text: ['.weft-empty-state[data-variant="soft"] .weft-empty-state__description', '.weft-empty-state__description'], tint: '.weft-empty-state[data-variant="soft"]', grounds: ALL },
   { name: 'EmptyState soft: the footer', text: ['.weft-empty-state[data-variant="soft"] .weft-empty-state__footer', '.weft-empty-state__footer'], tint: '.weft-empty-state[data-variant="soft"]', grounds: ALL },
-  { name: 'NavigationMenu: a hovered item\'s description', text: [`.weft-nav .weft-nav__item${HOVER} .weft-nav__description`, '.weft-nav__description'], tint: `.weft-nav .weft-nav__item${HOVER}`, grounds: ALL },
-  { name: 'NavigationMenu: the current item\'s description', text: ['.weft-nav .weft-nav__item[aria-current="page"] .weft-nav__description', '.weft-nav__description'], tint: '.weft-nav__panel .weft-nav__item[aria-current="page"]', grounds: ALL },
+  { name: 'NavigationMenu: a hovered item\'s description', text: ['.weft-nav__description', `.weft-nav .weft-nav__item${HOVER}`], tint: `.weft-nav .weft-nav__item${HOVER}`, grounds: ALL },
+  { name: 'NavigationMenu: the current item\'s description', text: ['.weft-nav__description', '.weft-nav .weft-nav__item[aria-current="page"]'], tint: '.weft-nav__panel .weft-nav__item[aria-current="page"]', grounds: ALL },
   { name: 'Listbox: the active option\'s description', text: ['.weft-listbox__option[data-active] .weft-listbox__description', '.weft-listbox__description'], tint: '.weft-listbox__option[data-active]', grounds: RAISED },
   { name: 'Listbox: the active option\'s leading text', text: ['.weft-listbox__option[data-active] .weft-listbox__leading', '.weft-listbox__leading'], tint: '.weft-listbox__option[data-active]', grounds: RAISED },
   { name: 'Listbox: the active "Create …" option', text: ['.weft-listbox__create[data-active]', '.weft-listbox__create'], tint: '.weft-listbox__option[data-active]', grounds: RAISED },
