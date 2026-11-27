@@ -72,7 +72,11 @@ to `<file>` and leaves `results/` and this page alone.
   pause and one untimed round of every target; each round visits the targets in an order shuffled from a fixed
   seed (in the JSON as `ttfb_order`), so no server is always timed first or after the same one. The median and
   quartiles of all 150 requests. Since 2026-11-27; before, each target had one series, in a fixed order, Weft's
-  straight after the last Chrome quit. Like the load, these requests get no 103 from Weft since 2026-11-26.
+  straight after the last Chrome quit. A known limit, left for the next run: the seed is fixed, so every run puts
+  the same target first in round 1 (Astro with no framework under `astro preview`), and the series that opens round
+  1 is still often the slowest of a target's three, even after the untimed round. That raises one target's median a
+  little, the same way in every run; it does not touch Weft against the pre-compressed server. Like the load, these
+  requests get no 103 from Weft since 2026-11-26.
 - **Lighthouse.** Lighthouse 13.6.0, the default mobile preset (simulated throttling), headless Chrome, a fresh
   profile each run, five runs per target interleaved so drift hits all targets alike. Median and range.
 - **Bytes.** The resources a Lighthouse run loaded (status 200), each fetched again. Text is counted as brotli
@@ -107,7 +111,7 @@ Machine: Apple M4, 10 cores (4 performance), 32 GB, macOS 27.2.1 (26B131). Node 
 | SvelteKit | Go static + gzip, GOMAXPROCS=1 | 2.0 KB | 34.9 KB | 530 B | 95.3 KB | 13 | 0.22 [0.22–0.24] | 100 [100–100] | 1503 [1503–1503] | 12,772 [12,756–12,786] | 5.03 / 8.71 |
 | SvelteKit | Go, pre-compressed in memory, GOMAXPROCS=1 | 2.0 KB | 34.9 KB | 530 B | 95.3 KB | 13 | 0.15 [0.14–0.16] | 100 [100–100] | 1501 [1501–1501] | 133,423 [131,913–136,785] | 0.46 / 1.07 |
 
-Bytes: KB is 1024 B. Text is counted as brotli quality 11 (what the Weft build stores), whatever the server sends; the image as it is. TTFB: median of 3 rounds of 50 requests on new connections, the targets interleaved, [p25–p75] of all 150. Lighthouse and LCP: median of 5 mobile runs, [min–max]. Load: 64 connections, 2s warm-up, 10s measured, median of 3 rounds [min–max]; p50 and p99 are the medians of the rounds' own. No errors unless noted. The Go servers (Weft, Go static, Go pre-compressed) run at GOMAXPROCS=1; the frameworks' own servers are Node and are not held to one core.
+Bytes: KB is 1024 B. Text is counted as brotli quality 11 (what the Weft build stores), whatever the server sends; the image as it is. TTFB: median of all 150 requests on new connections, pooled from 3 interleaved rounds of 50, [p25–p75]. Lighthouse and LCP: median of 5 mobile runs, [min–max]. Load: 64 connections, 2s warm-up, 10s measured, median of 3 rounds [min–max]; p50 and p99 are the medians of the rounds' own. No errors unless noted. The Go servers (Weft, Go static, Go pre-compressed) run at GOMAXPROCS=1; the frameworks' own servers are Node and are not held to one core.
 
 What each server really sent (Accept-Encoding: br, gzip):
 
@@ -163,19 +167,26 @@ The numbers in the prose below are from the run in the table (2026-11-27).
   1576–2251 ms (Nuxt, slowest behind its own uncompressed server), 1930–2010 ms (Next.js). The LCP column is
   Lighthouse's simulation (Lantern), not a load on a throttled device; see the side experiment.
 - **TTFB** is a fraction of a millisecond everywhere on loopback. Weft's binary and the pre-compressed Go server
-  are level at 0.15 ms (0.146 to 0.148 ms in the JSON, with quartiles of 0.14 to 0.16 that overlap); the Go server
-  that gzips on the fly takes 0.22 to 0.27 ms, and the frameworks' Node servers 0.23 (SvelteKit) to 0.52 ms
-  (`next start`). Too small to matter on a real network.
+  are level within the noise at 0.15 ms: 0.1460 to 0.1475 ms in the JSON, with Weft's 0.1475 at the top of that
+  range beside SvelteKit's and the other four 0.4 to 1.5 µs lower, against quartiles of 0.14 to 0.16 that overlap.
+  The Go server that gzips on the fly takes 0.22 to 0.27 ms, and the frameworks' Node servers 0.23 (SvelteKit) to
+  0.52 ms (`next start`). Too small to matter on a real network.
 - **Weft's page changed since the run of 2026-11-20**: it now loads a third script, `boot-*.js` (553 B as brotli),
   so it makes five requests where it made four, and its simulated LCP is 1276 ms where it was 1200 ms. Its script
   files are 21.4 KB (21,900 B) where they were 20.8 KB (21,301 B) on 2026-11-25, after the changes to Weft between
   that run and the one of 2026-11-26 (`857f786` to `6c8cb2d`); that difference is not broken down here. Between
-  `6c8cb2d` and this run's `ceb987c` only the benchmark and comments changed.
-- **The machine was not idle.** This run started at 01:05 with a 1-minute load average of 2.0, which rose to 8
-  during the load test, the benchmark's own heaviest part. Beside it ran an iOS Simulator with an app open, a
-  virtual machine, WhatsApp, the owner's Chrome and other agent sessions, each at a few percent of a core or less
-  when sampled once a minute. Machines differ from run to run in this way, so compare servers within one run, not
-  across runs.
+  `6c8cb2d` and this run's `ceb987c` only the benchmark, comments in `warp/manifest.go` and one docs page
+  (`site-src/content/docs/guides/go-serving.md`) changed; nothing the benchmark's page is built from.
+- **The machine was not idle.** The run went from 01:05 to 01:28, sampled once a minute; the 1-minute load average
+  was 2.0 at the start. It peaked at 8.6 at 01:09, during the Lighthouse runs (about 01:06 to 01:18), when macOS's
+  Contacts service (`contactsd`, about 65 percent of a core) and Phone app (about 44 percent) ran from 01:09 to
+  01:11. Also during Lighthouse, a renderer of the owner's own Chrome used 86 percent of a core at 01:08 and 121 percent
+  at 01:15, `mediaanalysisd` 78 percent at 01:15, and an app-distribution service 39 percent at 01:07; Lighthouse's
+  LCP is simulated, and its ranges stayed tight. The TTFB rounds ran between 01:18 and 01:19, when nothing else
+  sampled above a fifth of a core. During the load test, from about 01:19, the load average was 5 to 8, most of it
+  the benchmark's own load generator and servers. Beside the run were also an iOS Simulator with an app open, a
+  virtual machine, WhatsApp and other agent sessions, each at a few percent of a core or less. The machine's load
+  differs from run to run, so compare servers within one run, not across runs.
 
 ## Where Weft loses
 
@@ -184,17 +195,20 @@ In the run of 2026-11-27:
 | Measure | Weft | Who is ahead | Why, as best we can tell | Next step |
 |---|--:|---|---|---|
 | Requests per second | 133,704 [128,948–139,077] | One of the five sites behind the pre-compressed Go server: Astro with no framework, 135,867. Astro's Vue page (133,701), SvelteKit (133,423), Nuxt (133,385) and Next.js (131,992) are behind Weft. | Within the noise: the ranges of three rounds overlap, and the difference is 1.6 percent. The 103 Early Hints that made the gap of 2026-11-25 is no longer sent to this client (below). | More rounds, interleaved, before reading a difference this small: the investigation below used five. |
+| TTFB | 0.1475 ms [0.1405–0.1547] | Four of the five sites behind the pre-compressed Go server: Nuxt 0.1460, Astro with no framework 0.1466, Next.js 0.1470, Astro's Vue page 0.1471 ms. SvelteKit's is level, 0.1475. | Within the noise: 0.4 to 1.5 µs, about 1 percent at most, against quartiles about 15 µs wide. The 0.20 ms against 0.11 to 0.13 ms of the runs before was the measuring order (below). | As for requests per second: more rounds before reading a difference this small. |
 | HTML and CSS | 3.1 KB br | Astro with no framework (1.7 KB), Nuxt (1.9 KB), SvelteKit (2.0 KB) | Weft inlines its theme and the stylesheets of the components the page renders; the others carry one hand-written stylesheet. See the HTML and CSS row below. | As below. |
 | JavaScript, total transfer, requests, LCP | 21.4 KB, 83.0 KB, 5, 1276 ms | Astro with no framework island: 237 B inline, 60.2 KB, 2, 750 ms | Astro's default island ships no framework. See the table below. | As below. |
 
-Weft does not lose to Astro with a Vue island, Nuxt, Next.js or SvelteKit in JavaScript, total transfer, LCP or
-requests per second, and its TTFB is level with theirs behind the pre-compressed Go server. It loses to Nuxt and
-SvelteKit only in HTML and CSS.
+Behind the pre-compressed Go server, Weft is level with the other sites within the noise in both requests per
+second and TTFB. In requests per second Astro with no framework is ahead by 1.6 percent (135,867 against 133,704),
+and the other four are behind, Astro's Vue page by 3 requests a second. In TTFB four are ahead by 0.4 to 1.5 µs and
+SvelteKit is level. Weft does not lose to Astro with a Vue island, Nuxt, Next.js or SvelteKit in JavaScript, total
+transfer or LCP; beyond the two rows within the noise, it loses to Nuxt and SvelteKit only in HTML and CSS.
 
 **TTFB, before 2026-11-27.** The runs of 2026-11-25 and 2026-11-26 had Weft at 0.20 ms against 0.11 to 0.13 ms
 for the pre-compressed server because `tools/measure.mjs` timed one series per target in a fixed order, Weft's
 first, straight after the last Chrome quit; it now times three interleaved rounds after a pause and an untimed
-round (see [Fairness rules](#fairness-rules)), and in this run they measure the same.
+round (see [Fairness rules](#fairness-rules)), and in this run they are within 1.5 µs of each other.
 
 **Requests per second, from 2026-11-25 to 2026-11-26.** In the run of 2026-11-25 Weft's binary answered 111,249
 [108,824–123,643] requests a second against 126,285 to 131,974 for the other sites behind the pre-compressed Go

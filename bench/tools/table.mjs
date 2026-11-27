@@ -44,7 +44,7 @@ lines.push(
   'Bytes: KB is 1024 B. Text is counted as brotli quality 11 (what the Weft build stores), whatever the server sends; the image as it is. ' +
     'TTFB: median of ' +
     (r.method.ttfb_runs
-      ? `${r.method.ttfb_runs} rounds of ${r.method.ttfb_requests} requests on new connections, the targets interleaved, [p25–p75] of all ${r.method.ttfb_runs * r.method.ttfb_requests}. `
+      ? `all ${r.method.ttfb_runs * r.method.ttfb_requests} requests on new connections, pooled from ${r.method.ttfb_runs} interleaved rounds of ${r.method.ttfb_requests}, [p25–p75]. `
       : `${r.method.ttfb_requests} requests on new connections, [p25–p75]. `) +
     `Lighthouse and LCP: median of ${r.method.lighthouse_runs} mobile runs, [min–max]. ` +
     `Load: ${r.method.load.connections} connections, ${r.method.load.warmup} warm-up, ${r.method.load.duration} measured, ` +
