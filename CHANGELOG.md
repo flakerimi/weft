@@ -7,6 +7,12 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
 0.0.12 have no GitHub Release: they were published at weft.base.al, and
 `site/releases.txt` lists them (only 0.0.1 and 0.0.2 have a tag).
 
+## Unreleased
+
+- On a phone (under 640 px) the landing's phone picture follows the install
+  command closely, 64 px below the copy, over a shorter band of the weave
+  (700 px), in place of a 180 px gap over an 816 px band.
+
 ## 0.0.19
 
 - On Windows, `weft dev` and the commands that run child processes put each

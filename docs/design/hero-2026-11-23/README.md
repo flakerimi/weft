@@ -8,7 +8,7 @@ Its own ground (about `#0F172F`) is the band's `#0F1530` within a shade, so the 
 
 - From 1280 px up, where the copy and the frames sit side by side, it is a 1024 px square at the hero's bottom end, its pegged edge rising clear above the two frames, which are drawn at 80 % and set low in their column. Every screen gets `weave-1024`: a 1× screen needs 1024 px, and 1024 px is the whole source, so a 2× screen gets the most there is.
 - From 901 to 1279 px (the copy above the frames) it is a square as tall as the hero, at most 920 px, at the bottom end: `weave-1024`.
-- At 900 px and under it covers a band under the phone and the gap above it (`cover`): 708 px tall from 641 to 900 px, and 816 px from 640 px down, where the gap between the copy and the phone is 180 px, so a band of weave shows in a phone's first screen. A 1× screen gets `weave-640`, a 2× or 3× screen `weave-1024`.
+- At 900 px and under it covers a band under the phone and the gap above it (`cover`): 708 px tall from 641 to 900 px, and 700 px from 640 px down, where the gap between the copy and the phone is 64 px, so the phone follows the install command closely: the weave starts where the copy ends, fades in over that gap, its pegs rising above the phone, and is whole behind and beside it, within a phone's first screen. A 1× screen gets `weave-640`, a 2× or 3× screen `weave-1024`.
 
 Each served file is at most 60 KB (`landingImageLimit` in `site-src/landing_test.go`).
 
