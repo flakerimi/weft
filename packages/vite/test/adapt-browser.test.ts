@@ -403,6 +403,25 @@ describe.skipIf(!browserPath)('width-adaptive components on a static page, in a 
     expect(after).toMatchObject({ stepper: 'column', timeline: 'column', tabs: 'column/row', pg5: 'Previous page 1 … 4 5 6 … 20 Next page', scrollWidth: 375 })
   })
 
+  it('the pre-paint script and a mounted component measure the same box: a padded Footer is measured once, and no width from 360 to 1000 px logs a ResizeObserver loop error', async () => {
+    for (let width = 360; width <= 1000; width += 10) {
+      await openAt('/static', width, 150)
+      expect(await evaluate<string[]>('window.__pageErrors'), `at ${width}`).toEqual([])
+    }
+    for (let width = 630; width <= 680; width += 10) {
+      await openAt('/static', width, 300)
+      const res = await evaluate<{ footer: string[]; pageErrors: string[]; padding: string }>(`({
+        footer: window.__widths.ft ?? [],
+        pageErrors: window.__pageErrors,
+        padding: getComputedStyle(document.getElementById('ft')).paddingInlineStart,
+      })`)
+      expect(res.padding, 'the Footer is padded').not.toBe('0px')
+      // The border box, everywhere: 630 px is narrow and 640 px and up regular, written once.
+      expect(res.footer, `footer at ${width}`).toEqual(width < 640 ? ['wide>narrow'] : ['wide>regular'])
+      expect(res.pageErrors, `at ${width}`).toEqual([])
+    }
+  })
+
   it('in a 360 px box on a 1440 px page they lay out narrow, in a 900 px box regular, and nothing leaves its box', async () => {
     await openAt('/box', 1440)
     const res = await evaluate<Record<string, unknown>>(`(() => {
@@ -483,6 +502,27 @@ describe.skipIf(!browserPath)('width-adaptive components on a static page, in a 
       expect({ st: res.widths.st ?? [], tl: res.widths.tl ?? [], tb: res.widths.tb ?? [] }, `data-width at ${width}`).toEqual({ st: w, tl: w, tb: w })
       expect(res.cls, `cls at ${width}`).toBeLessThan(width === 375 ? 0.1 : 0.001)
       expect(res.pageErrors).toEqual([])
+    }
+  })
+
+  it('Pagination, hydrating in an island, switches where its media query does: a classic scrollbar (here a 17 px narrower root) does not flip it at 645 px', async () => {
+    const { identifier } = (await send('Page.addScriptToEvaluateOnNewDocument', {
+      source: `new MutationObserver((_, mo) => { if (document.documentElement) { document.documentElement.style.cssText += ';width: calc(100% - 17px) !important'; mo.disconnect() } }).observe(document, { childList: true })`,
+    })) as { identifier: string }
+    try {
+      for (const width of [630, 645, 660]) {
+        await openAt('/island', width, 400)
+        const res = await evaluate<{ root: number; painted: string[]; hydrated: boolean }>(`({
+          root: Math.round(document.documentElement.getBoundingClientRect().width),
+          painted: window.__painted.pg5,
+          hydrated: document.querySelector('#st').hasAttribute('data-weft-width'),
+        })`)
+        expect(res.root, 'the root is narrower than the viewport').toBe(width - 17)
+        expect(res.hydrated).toBe(true)
+        expect(res.painted, `pg5 at ${width}`).toEqual([width < 640 ? 'Previous page 1 … 4 5 6 … 20 Next page' : 'First page Previous page 1 2 3 4 5 6 7 … 20 Next page Last page'])
+      }
+    } finally {
+      await send('Page.removeScriptToEvaluateOnNewDocument', { identifier })
     }
   })
 

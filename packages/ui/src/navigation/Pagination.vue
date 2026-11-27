@@ -13,7 +13,7 @@
 import { computed, onMounted, shallowRef } from 'vue'
 import Button from '../basics/Button.vue'
 import { useWeft } from '../adaptive/context.ts'
-import { useWidth } from '../adaptive/useWidth.ts'
+import { useViewportWidth } from '../adaptive/useWidth.ts'
 import { useControllable } from '../headless/useControllable.ts'
 import type { Size, Tone, Variant } from '../types.ts'
 import { PAGINATION_LABELS, pageRange, pageRangeBoth, type PageSlot, type PaginationLabels } from './pagination.ts'
@@ -77,17 +77,15 @@ const page = useControllable(props, 'page', emit, () => props.defaultPage)
 const t = computed<PaginationLabels>(() => ({ ...PAGINATION_LABELS, ...props.labels }))
 const count = computed(() => Math.max(0, Math.ceil(props.total / Math.max(1, props.itemsPerPage))))
 
-// Narrow is the viewport's width: the root element's.
-const viewport = shallowRef<HTMLElement | null>(null)
+// The viewport's width class, as the `@media` fallback before mounting sees it.
+const width = useViewportWidth()
 const mounted = shallowRef(false)
 onMounted(() => {
-  viewport.value = document.documentElement
   mounted.value = true
 })
 // A WeftProvider's `width` says which form to draw before mounting; without
 // one, both are drawn and CSS picks from the viewport until mounted.
 const given = useWeft().width.value
-const width = useWidth(viewport, { prepaint: false })
 const narrow = computed(() => width.value === 'narrow')
 const both = computed(() => !mounted.value && given === undefined)
 const entries = computed<PageSlot[]>(() =>

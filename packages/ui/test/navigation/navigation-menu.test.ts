@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import NavCases from '../fixtures/navigation/NavCases.vue'
 import { mount } from '../mount.ts'
 import { installResizeObserver } from '../resize-observer.ts'
+import { DEFAULT_VIEWPORT, setViewport } from '../viewport.ts'
 import { loadStyles, mediaRule, ruleFor } from '../styles.ts'
 import { px } from '../forms/helpers.ts'
 import { $, $$, active, key, moveFocus, overlays, press, reset, settle } from '../overlays/helpers.ts'
@@ -9,6 +10,7 @@ import { $, $$, active, key, moveFocus, overlays, press, reset, settle } from '.
 let unmount: (() => void) | undefined
 let ro: ReturnType<typeof installResizeObserver> | undefined
 afterEach(() => {
+  setViewport(DEFAULT_VIEWPORT)
   unmount?.()
   unmount = undefined
   ro?.restore()
@@ -22,7 +24,7 @@ async function cases(props: Record<string, unknown> = {}, viewport?: number) {
   unmount = m.unmount
   await settle()
   if (viewport) {
-    ro.report(document.documentElement, viewport)
+    setViewport(viewport)
     await settle()
   }
   return m

@@ -5,8 +5,8 @@
 // the close button close it, and focus returns to the trigger. Full-screen
 // when the viewport is narrow (under 640 px), or always with `fullscreen`.
 // It fades out when it closes, unless motion is reduced.
-import { computed, onMounted, shallowRef } from 'vue'
-import { useWidth } from '../adaptive/useWidth.ts'
+import { computed } from 'vue'
+import { useViewportWidth } from '../adaptive/useWidth.ts'
 import { overlayRoot } from './overlay.ts'
 import { useModal } from './modal.ts'
 import OverlayPanel from './OverlayPanel.vue'
@@ -64,10 +64,8 @@ defineSlots<{
 
 const m = useModal(props, emit, { prefix: 'dialog' })
 const open = m.open
-// Narrow is the viewport's width: the root element's.
-const viewport = shallowRef<HTMLElement | null>(null)
-onMounted(() => (viewport.value = document.documentElement))
-const width = useWidth(viewport, { prepaint: false })
+// The viewport's width class, as the `@media` fallback before mounting sees it.
+const width = useViewportWidth()
 const full = computed(() => props.fullscreen || width.value === 'narrow')
 </script>
 

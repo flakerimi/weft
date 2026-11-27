@@ -14,7 +14,7 @@
 import { computed, nextTick, onMounted, shallowRef, useTemplateRef, watch } from 'vue'
 import Button from '../basics/Button.vue'
 import Link from '../basics/Link.vue'
-import { useWidth } from '../adaptive/useWidth.ts'
+import { useViewportWidth } from '../adaptive/useWidth.ts'
 import { focus, focused, tabbables } from '../headless/dom.ts'
 import { useControllable } from '../headless/useControllable.ts'
 import { useId } from '../headless/useId.ts'
@@ -54,14 +54,12 @@ const slots = defineSlots<{
   menu?: (props: { close: () => void }) => unknown
 }>()
 
-// Narrow is the viewport's width: the root element's.
-const viewport = shallowRef<HTMLElement | null>(null)
+// The viewport's width class, as the `@media` fallback before mounting sees it.
+const width = useViewportWidth()
 const mounted = shallowRef(false)
 onMounted(() => {
-  viewport.value = document.documentElement
   mounted.value = true
 })
-const width = useWidth(viewport, { prepaint: false })
 const compact = computed(() => width.value === 'narrow' && !!slots.menu)
 const open = useControllable(props, 'open', emit, false)
 const id = useId('header')

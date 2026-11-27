@@ -16,9 +16,9 @@ On the server, `Grid` (and the landing blocks `Hero`, `FeatureGrid`,
 `Pricing`, `Testimonials`, `Faq` and `Cta`) registers `useWidth`'s pre-paint
 observer (`widthPrePaint`), which the page build wraps in `(function(){…})()`
 inside `<script data-weft-prepaint>` in `<head>` (its SHA-256 CSP hash when
-alone is `'sha256-9BDYcqAvUSo5sGyREfywnuaJMRGECCNSMPtWf2EQYPM='`):
+alone is `'sha256-iNtcuTghwj4FD4cClz4HdWeY2ACaeNPFjXtP7CUdMP0='`):
 
-    (function(){if(typeof ResizeObserver<"u"){var o=new Set,d=function(t,w){if(w>0)t.setAttribute("data-width",w<640?"narrow":w<1024?"regular":"wide")},r=window.__weftWidthRo=new ResizeObserver(function(e){for(var i=0;i<e.length;i++){var t=e[i].target;if(t.hasAttribute("data-weft-width"))r.unobserve(t);else d(t,e[i].contentRect.width)}}),s=function(){var l=document.querySelectorAll("[data-width]:not([data-weft-width])"),n=[],w=[],i;for(i=0;i<l.length;i++)if(!o.has(l[i])){o.add(l[i]);n.push(l[i]);w.push(l[i].getBoundingClientRect().width)}for(i=0;i<n.length;i++){d(n[i],w[i]);r.observe(n[i])}};s();if(document.readyState==="loading"){var m=new MutationObserver(s);m.observe(document,{childList:true,subtree:true});addEventListener("DOMContentLoaded",function(){m.disconnect();s()},{once:true})}}})()
+    (function(){if(typeof ResizeObserver<"u"){var o=new Set,d=function(t,w){if(w>0)t.setAttribute("data-width",w<640?"narrow":w<1024?"regular":"wide")},r=window.__weftWidthRo=new ResizeObserver(function(e){for(var i=0;i<e.length;i++){var t=e[i].target;if(t.hasAttribute("data-weft-width"))r.unobserve(t);else d(t,b(e[i]))}}),b=function(x){var z=x.borderBoxSize;return z?(z[0]||z).inlineSize:x.target.getBoundingClientRect().width},s=function(){var l=document.querySelectorAll("[data-width]:not([data-weft-width])"),n=[],w=[],i;for(i=0;i<l.length;i++)if(!o.has(l[i])){o.add(l[i]);n.push(l[i]);w.push(l[i].getBoundingClientRect().width)}for(i=0;i<n.length;i++){d(n[i],w[i]);r.observe(n[i],{box:"border-box"})}};s();if(document.readyState==="loading"){var m=new MutationObserver(s);m.observe(document,{childList:true,subtree:true});addEventListener("DOMContentLoaded",function(){m.disconnect();s()},{once:true})}}})()
 
 It observes `[data-width]` elements added while the page parses until
 `DOMContentLoaded`; `[data-width]` markup inserted after `DOMContentLoaded`

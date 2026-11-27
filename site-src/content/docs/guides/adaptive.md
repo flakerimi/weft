@@ -63,13 +63,13 @@ Which components adapt to the width on a page that is never hydrated, and how:
 | --- | --- | --- |
 | `Grid`, `Hero`, `FeatureGrid`, `Pricing`, `Testimonials`, `Faq`, `Cta` | Yes, from their own box | The pre-paint script sets `data-width`; CSS lays them out from it. |
 | `Stepper` (horizontal), `Timeline` (horizontal) | Yes, from their own box | The same: narrow, CSS draws them vertical. A vertical one does not depend on its width and registers no script. |
-| `Tabs` (vertical) | Yes, from their own box | The same: narrow, CSS puts the tab list above the panels. Until it is hydrated the list keeps `aria-orientation="vertical"`, which only the arrow keys use, and they need hydration anyway. A horizontal one registers no script. |
-| `Header`, `AppShell`, `NavigationMenu`, `Footer` | Yes, from the viewport | They span the page: a viewport `@media` query lays them out until they mount, choosing between the forms the server drew (`Header`'s menu button or its links, say). |
+| `Tabs` (vertical) | Yes, from their own box | The same: narrow, CSS puts the tab list above the panels. Until it is hydrated the list keeps `aria-orientation="vertical"`, which assistive technology is told too; the tabs and the panel are the same, and switching tabs needs hydration anyway. A horizontal one registers no script. |
+| `Header`, `AppShell`, `NavigationMenu`, `Footer` | Yes, from the viewport | They span the page: a viewport `@media` query lays them out until they mount, choosing between the forms the server drew (`Header`'s menu button or its links, say). `Footer` measures its own box once mounted, and before that too on a page that carries the pre-paint script. |
 | `Pagination` | Yes, from the viewport | It draws the pages of both forms, each entry of one form only marked `data-only`, and a viewport `@media` query shows the one that fits until it mounts. |
 | `Dialog` | Not needed | It draws only once open, which takes a script; open, it fills the screen under 640 px. |
 | `Table` | No: only once hydrated | Its cards are other markup, not other CSS. Drawing both forms on the server would double the HTML and the work of hydrating it (each cell's slot drawn twice, selection checkboxes and sort buttons twice), so it stays a table, which scrolls sideways inside its own box, until it is hydrated in an island. |
 
-With scripts off, the components that measure their own box fall back to their `wide` layout (or the `width` their `WeftProvider` set); those that follow the viewport still adapt, since a media query needs no script. Give `useWidth` `{ prepaint: false }` only in a component that measures the viewport or switches its markup in JavaScript.
+With scripts off, the components that measure their own box fall back to their `wide` layout (or the `width` their `WeftProvider` set); those that follow the viewport still adapt, since a media query needs no script. Give `useWidth` `{ prepaint: false }` only in a component that measures the viewport, whose layout does not depend on its width (a vertical `Stepper` or `Timeline`, a horizontal `Tabs`), or that switches its markup in JavaScript.
 
 ## Read the axes yourself
 

@@ -4,6 +4,7 @@ import { pageRange, pageRangeBoth } from '../../src/navigation/pagination.ts'
 import { mount } from '../mount.ts'
 import { press as pressKey } from '../keyboard.ts'
 import { installResizeObserver } from '../resize-observer.ts'
+import { DEFAULT_VIEWPORT, setViewport } from '../viewport.ts'
 import { loadStyles } from '../styles.ts'
 import { px } from '../forms/helpers.ts'
 import { $, $$, reset, settle } from '../overlays/helpers.ts'
@@ -12,6 +13,7 @@ let unmount: (() => void) | undefined
 afterEach(() => {
   unmount?.()
   unmount = undefined
+  setViewport(DEFAULT_VIEWPORT)
   reset()
   history.replaceState(null, '', '/')
 })
@@ -196,15 +198,27 @@ describe('Pagination', () => {
   })
 
   it('shows fewer pages and no first and last controls when the viewport is narrow', async () => {
+    await cases({ siblingCount: 2 })
+    expect(pages()).toHaveLength(5)
+    setViewport(400)
+    await settle()
+    expect(pages().map((p) => p.textContent!.trim())).toEqual(['4', '5', '6'])
+    expect(control('First page')).toBeNull()
+    expect(control('Next page')).not.toBeNull()
+    setViewport(900)
+    await settle()
+    expect(pages()).toHaveLength(5)
+  })
+
+  it('takes the viewport as its media query does, scrollbar included: 645 px wide with a 628 px root is not narrow', async () => {
     const ro = installResizeObserver()
     try {
+      setViewport(645)
       await cases({ siblingCount: 2 })
-      expect(pages()).toHaveLength(5)
-      ro.report(document.documentElement, 400)
+      ro.report(document.documentElement, 628)
       await settle()
-      expect(pages().map((p) => p.textContent!.trim())).toEqual(['4', '5', '6'])
-      expect(control('First page')).toBeNull()
-      expect(control('Next page')).not.toBeNull()
+      expect(pages()).toHaveLength(5)
+      expect(control('First page')).not.toBeNull()
     } finally {
       ro.restore()
     }
