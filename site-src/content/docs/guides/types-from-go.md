@@ -63,7 +63,7 @@ Then `api`, a function for each typed route, under its module's name and the rou
 
 Path parameters come first, in the path's order, then the body, then the query, which may be left out: `api.products.list({ page: 2, sort: '-price', filter: { status: 'live' } })`. A `PATCH` takes a `Partial` body. A route that answers `warp.None` resolves to `undefined`.
 
-Text and times are `string`, numbers `number`, a field or parameter with `enum=a|b` its literal values (`'a' | 'b'` for text, `1 | 2` for numbers), a pointer `T | null`, a list `T[]` and a map `Record<string, T>`. A pointer field may be left out, `name?:`, and so may an answered field tagged `omitempty` or `omitzero`, and a field an answered type has from an embedded pointer, which a nil pointer leaves out. A list, a map or bytes is never `null` on the wire, since [the server never answers one so](routes.md#a-route), except in a field typed `any`.
+Text and times are `string`, numbers `number`, a field or parameter with `enum=a|b` its literal values (`'a' | 'b'` for text, `1 | 2` for numbers; on a struct field without `required` that is not a pointer, the server accepts and answers the zero value, so `''` or `0` is included too — add `required` for the listed values alone, and note that comparing or assigning a value outside the union is a TypeScript error after `weft upgrade` or `weft gen`), a pointer `T | null`, a list `T[]` and a map `Record<string, T>`. A pointer field may be left out, `name?:`, and so may an answered field tagged `omitempty` or `omitzero`, and a field an answered type has from an embedded pointer, which a nil pointer leaves out. A list, a map or bytes is never `null` on the wire, since [the server never answers one so](routes.md#a-route), except in a field typed `any`.
 
 - A 64-bit integer is `number`, which is exact only up to 2^53: an id above 9007199254740991 is read as another.
 - A fixed-size array, `[3]int`, is `number[]`; the server takes a list of exactly 3.
@@ -124,8 +124,8 @@ A field that is a pointer in Go is `nullable` in `schema`, so a `Form` given it 
 
 | Value | `Form` in the browser | Go |
 | --- | --- | --- |
-| `0` for a `required` number | filled in, so it passes | empty, so it fails (`This is required.`) unless the field is a pointer |
-| `0` for a number with `min=1` | checked, so it fails | empty, so it passes unless the field is a pointer |
+| `0` for a `required` number (including `required,enum=0\|1`) | filled in, so it passes | empty, so it fails (`This is required.`) unless the field is a pointer |
+| `0` for a number with `min=1` or `enum=1\|2` (without `required`) | checked, so it fails | empty, so it passes unless the field is a pointer |
 | `""`, `false` or `[]` for a `required` pointer field | empty, so it fails | sent, since a pointer that is not nil says sent, so it passes |
 | `""` for a pointer field with `min`, `email` or `enum` | empty, so it passes | sent, so it is checked and fails |
 | an empty object, or a zero time, for `required` | filled in | empty, so it fails |

@@ -19,20 +19,20 @@
  *   nor ends with a hyphen. Nothing is trimmed.
  * - `url`: the text must be an absolute web address: `http:` or `https:`
  *   with a host.
- * - `enum`: the text must be one of these values (`enum: ['draft', 'live']`).
+ * - `enum`: the text or number must be one of these values (`enum: ['draft', 'live']`, `enum: ['1', '2']`).
  * - `message`: one sentence to show in place of any of the sentences below.
  * - `nullable`: not a check: null is the field's empty value, so a Form sends
  *   an emptied one (null, or '') as null; every other null it leaves out.
  *
  * By the value's type at run time:
  *
- * | value          | required | min, max          | pattern, email      | url, enum   |
- * |----------------|----------|-------------------|---------------------|-------------|
- * | text           | yes      | length, in chars  | the text            | the text    |
- * | number         | yes      | the number itself | the number written  | not checked |
- * |                |          |                   | out (`String(n)`)   |             |
- * | list (array)   | yes      | how many          | not checked         | not checked |
- * | anything else  | yes      | not checked       | not checked         | not checked |
+ * | value          | required | min, max          | pattern, email      | url         | enum              |
+ * |----------------|----------|-------------------|---------------------|-------------|-------------------|
+ * | text           | yes      | length, in chars  | the text            | the text    | the text          |
+ * | number         | yes      | the number itself | the number written  | not checked | the number itself |
+ * |                |          |                   | out (`String(n)`)   |             | (`Number(item)`)  |
+ * | list (array)   | yes      | how many          | not checked         | not checked | not checked       |
+ * | anything else  | yes      | not checked       | not checked         | not checked | not checked       |
  *
  * (A boolean, a date, a file: only `required` applies.)
  *
@@ -51,7 +51,7 @@ export interface FieldRule {
   email?: boolean
   /** The text must be an absolute `http:` or `https:` address with a host. */
   url?: boolean
-  /** The text must be one of these values. */
+  /** The text or number must be one of these values. */
   enum?: string[]
   message?: string
   /**
@@ -130,7 +130,7 @@ function textRules(text: string, rule: FieldRule, fail: (sentence: string) => st
   return undefined
 }
 
-/** `url` and `enum`, for text only (as the Go side checks them). */
+/** `url` and `enum` for text (as the Go side checks them; numeric `enum` is checked in the number branch above). */
 function webRules(text: string, rule: FieldRule, fail: (sentence: string) => string): string | undefined {
   if (rule.url && !isWebAddress(text)) {
     return fail('Enter a web address that starts with http:// or https://.')

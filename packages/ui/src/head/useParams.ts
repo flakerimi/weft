@@ -47,12 +47,16 @@ function clean(path: string): string[] {
 }
 
 /**
- * Each dynamic page's route pattern (`/products/:id`, `/docs/:...rest`) mapped
- * to the parameter names it has (`{ id: string }`, `{ rest: string }`).
+ * Each runtime dynamic page's route pattern (`/products/:id`, `/docs/:...rest`)
+ * mapped to the parameter names it has (`{ id: string }`, `{ rest: string }`).
  * `@weft/vite`'s `weftAutoImport()` and `weft-types` augment this interface
- * in `.weft-types/components.d.ts` from `pages/`.
+ * in `.weft-types/components.d.ts` from the pages under `pages/` that export
+ * `runtime = true`.
  */
 export interface WeftRouteParams {}
+
+let warnedBuiltAhead = false
+const warnedMismatch = new Set<string>()
 
 /**
  * The params of the page's address, on a page whose paths are known only at
@@ -68,14 +72,12 @@ export interface WeftRouteParams {}
  * param. A catch-all (`[...rest]`) gets the rest of the path without its
  * leading slash, or `''` when there is none. It is `{}` on any other page, on
  * an address the pattern does not match, and on the server, which renders the
- * page once with every param empty. It is not reactive: the page loads once
- * per address. In development, called in the browser on a page built ahead
- * (with getPaths, or no params at all), or with a `route` argument that differs
- * from the page's own `data-weft-route`, it says so once in the console.
+ * page once with every param empty (so a property read on the returned object
+ * is `undefined` there; call it in `onMounted`). It is not reactive: the page
+ * loads once per address. In development, called in the browser on a page built
+ * ahead (with getPaths, or no params at all), or with a `route` argument that
+ * differs from the page's own `data-weft-route`, it says so once in the console.
  */
-let warnedBuiltAhead = false
-const warnedMismatch = new Set<string>()
-
 export function useParams<P extends keyof WeftRouteParams>(route: P): WeftRouteParams[P]
 export function useParams(route?: undefined): Record<string, string>
 export function useParams(route?: string): Record<string, string> {

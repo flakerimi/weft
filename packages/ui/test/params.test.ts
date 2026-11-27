@@ -111,3 +111,15 @@ it('in development, warns once and returns {} when given a pattern that differs 
     'useParams: asked for the params of "/orders/:id" on a page whose route is "/products/:id"; pass "/products/:id" or call useParams() with no argument.',
   )
 })
+
+it('in production, returns {} without warning when given a pattern that differs from the page\'s route', async () => {
+  vi.stubEnv('DEV', false)
+  vi.resetModules()
+  const fresh = (await import('../src/head/useParams.ts')).useParams as (route?: string) => Record<string, string>
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  open('/products/:id', '/products/42')
+  expect(fresh('/orders/:id')).toEqual({})
+  open(undefined, '/about')
+  expect(fresh()).toEqual({})
+  expect(warn).not.toHaveBeenCalled()
+})

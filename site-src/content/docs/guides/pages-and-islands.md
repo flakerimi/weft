@@ -72,7 +72,7 @@ import { useParams } from '@weft/ui'
 const id = ref('')
 // In the browser only: at build the page has no address, and useParams() is {}.
 onMounted(() => {
-  id.value = useParams('/products/:id').id ?? ''
+  id.value = useParams('/products/:id').id
 })
 </script>
 
@@ -81,7 +81,7 @@ onMounted(() => {
 </template>
 ```
 
-`useParams()` runs in the browser only; on the server it returns `{}`. Passing the page's pattern (`useParams('/products/:id')`) types the returned object's parameter names from `pages/` (written into `.weft-types/components.d.ts` by `weftAutoImport()` and `weft-types`); converting a string parameter to a number stays the page's job, as the example shop's `productId` does.
+`useParams()` runs in the browser only; on the server, on another page or on an address the pattern does not match it returns `{}`, so reading a property on it is `undefined` outside `onMounted` on the matching page. Passing the page's pattern (`useParams('/products/:id')`) types the returned object's parameter names from the runtime pages under `pages/` (written into `.weft-types/components.d.ts` by `weftAutoImport()` and `weft-types`); converting a string parameter to a number stays the page's job, as the example shop's `productId` does.
 
 The build makes the page once, as a shell, with every param the empty string, and writes it to `pages/products/[id]/index.html`. The Go server answers every path that matches `/products/:id` with that shell and status 200, when no other page and no file has the path: `/products/new` from `pages/products/new.vue` wins. `[id]` matches one segment that is not empty, and `[...rest]` the rest of the path, or none of it. A record that does not exist is the API's 404, which the page shows; the page itself is always 200. `weft dev` serves the page the same way.
 
@@ -214,7 +214,7 @@ Your own names come first. A tag gets no import when:
 
 A component with only a plain `<script>`, and no `<script setup>`, is left as it is.
 
-For your editor and `vue-tsc`, the build writes `.weft-types/components.d.ts` in the site, which tells TypeScript what each name is. Add it to the `include` of your `tsconfig.json`, and keep it out of git: it is rewritten on each build, whenever the list changes. In an app, `weft create` and `weft build` write it too before any build, with `weft-types --root web`, so `pnpm typecheck` checks the components' props from the start.
+For your editor and `vue-tsc`, the build writes `.weft-types/components.d.ts` in the site, which tells TypeScript what each name is and maps each runtime page's pattern in `WeftRouteParams`. Add it to the `include` of your `tsconfig.json`, and keep it out of git: it is rewritten on each build, whenever the list changes. In an app, `weft create`, `weft gen` and `weft build` write it too before any type check or build, with `weft-types --root web`, so `pnpm typecheck` and `weft build` check the components' props and `useParams(pattern)` from the start.
 
 ## Before the first paint
 

@@ -1,6 +1,7 @@
 package warp
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -363,6 +364,50 @@ func isNumberKind(k reflect.Kind) bool {
 	return false
 }
 
+// decimalNum matches a decimal number both Go and JavaScript's Number() parse
+// the same way: an optional + or -, digits with an optional fractional part,
+// and an optional e or E exponent. No 0x, 0b, 0o, _, Inf or NaN.
+var decimalNum = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$`)
+
+// parseEnumChoice parses one enum= choice for a number field of type ft, and
+// returns its value as toFloat(v) reads it and "" on success, or the sentence
+// tail for a choice the field cannot hold.
+func parseEnumChoice(ft reflect.Type, item string) (float64, string) {
+	k := ft.Kind()
+	switch {
+	case k >= reflect.Int && k <= reflect.Int64:
+		n, err := strconv.ParseInt(item, 10, ft.Bits())
+		if err != nil {
+			if ft.Bits() < 64 && errors.Is(err, strconv.ErrRange) {
+				return 0, fmt.Sprintf("write whole numbers from %d to %d separated by | after enum=", -(int64(1) << (ft.Bits() - 1)), int64(1)<<(ft.Bits()-1)-1)
+			}
+			return 0, "write whole numbers separated by | after enum="
+		}
+		return float64(n), ""
+	case k >= reflect.Uint && k <= reflect.Uint64:
+		n, err := strconv.ParseUint(item, 10, ft.Bits())
+		if err != nil {
+			if ft.Bits() < 64 && errors.Is(err, strconv.ErrRange) {
+				return 0, fmt.Sprintf("write whole numbers from 0 to %d separated by | after enum=", uint64(1)<<ft.Bits()-1)
+			}
+			return 0, "write whole numbers separated by | after enum="
+		}
+		return float64(n), ""
+	default:
+		if !decimalNum.MatchString(item) {
+			return 0, "write numbers separated by | after enum="
+		}
+		n, err := strconv.ParseFloat(item, ft.Bits())
+		if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
+			return 0, "write numbers separated by | after enum="
+		}
+		if k == reflect.Float32 {
+			n = float64(float32(n))
+		}
+		return n, ""
+	}
+}
+
 func toFloat(v reflect.Value) float64 {
 	switch {
 	case v.CanInt():
@@ -673,7 +718,10 @@ func parseRules(owner reflect.Type, f reflect.StructField, tag string) ([]rule, 
 			}
 		case "enum":
 			if !isText && !isNumber {
-				problems = append(problems, fmt.Sprintf("%s has the rule %q, which is for text and numbers; remove it or make the field a string or a number.", at, name))
+				if !seenEnum {
+					seenEnum = true
+					problems = append(problems, fmt.Sprintf("%s has the rule %q, which is for text and numbers; remove it or make the field a string or a number.", at, name))
+				}
 				continue
 			}
 			if seenEnum {
@@ -691,17 +739,17 @@ func parseRules(owner reflect.Type, f reflect.StructField, tag string) ([]rule, 
 				continue
 			}
 			if isNumber {
-				bad := false
+				why := ""
 				for _, item := range r.items {
-					n, err := strconv.ParseFloat(item, 64)
-					if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
-						bad = true
+					n, problem := parseEnumChoice(ft, item)
+					if problem != "" {
+						why = problem
 						break
 					}
 					r.nums = append(r.nums, n)
 				}
-				if bad {
-					problems = append(problems, fmt.Sprintf("%s has %q; write numbers separated by | after enum=.", at, part))
+				if why != "" {
+					problems = append(problems, fmt.Sprintf("%s has %q; %s.", at, part, why))
 					continue
 				}
 			}

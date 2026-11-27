@@ -163,6 +163,9 @@ func gen(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if !ok {
 		return code
 	}
+	if err := writeTypes(appDir, stdout, stderr); err != nil {
+		return fail(stderr, "gen", err)
+	}
 	wrote, err := genTypes(ctx, "gen", appDir, stderr)
 	if errors.Is(err, errKeptClient) {
 		return fail(stderr, "gen", err)
@@ -789,7 +792,7 @@ func generate(d description) ([]byte, error) {
 			if f.Optional {
 				opt = "?"
 			}
-			fmt.Fprintf(&b, "  %s%s: %s\n", key(f.Name), opt, enumTS(f.TS, f.Rules))
+			fmt.Fprintf(&b, "  %s%s: %s\n", key(f.Name), opt, enumTS(f.TS, f.Rules, true))
 		}
 		b.WriteString("}\n")
 	}
@@ -936,7 +939,7 @@ func checkParams(r routeInfo, where string) error {
 func writeRoute(b *strings.Builder, name string, r routeInfo) {
 	types := map[string]string{}
 	for _, p := range r.PathParams {
-		types[p.Name] = enumTS(p.TS, p.Rules)
+		types[p.Name] = enumTS(p.TS, p.Rules, false)
 	}
 	var params []string
 	var path strings.Builder // a template literal's text
@@ -981,7 +984,7 @@ func writeRoute(b *strings.Builder, name string, r routeInfo) {
 	if len(r.Query) > 0 {
 		fields := make([]string, len(r.Query))
 		for i, q := range r.Query {
-			fields[i] = key(q.Name) + "?: " + enumTS(q.TS, q.Rules)
+			fields[i] = key(q.Name) + "?: " + enumTS(q.TS, q.Rules, false)
 		}
 		params = append(params, "query?: { "+strings.Join(fields, "; ")+" }")
 		path.WriteString("${search(query)}")
@@ -1098,12 +1101,19 @@ func fieldRules(f fieldInfo) []string {
 
 // enumTS refines a string or number TypeScript type with an enum rule into a
 // literal union of its values ('draft' | 'live' or 1 | 2 | 3), keeping | null
-// for a pointer.
-func enumTS(ts string, rules []ruleInfo) string {
+// for a pointer. On a struct field that is not required and not a pointer, the
+// server accepts and answers the zero value ('' or 0), so it is included first.
+func enumTS(ts string, rules []ruleInfo, field bool) string {
 	nullable := strings.HasSuffix(ts, " | null")
 	base := strings.TrimSuffix(ts, " | null")
 	if base != "string" && base != "number" {
 		return ts
+	}
+	required := false
+	for _, r := range rules {
+		if r.Name == "required" {
+			required = true
+		}
 	}
 	for _, r := range rules {
 		if r.Name != "enum" {
@@ -1124,6 +1134,15 @@ func enumTS(ts string, rules []ruleInfo) string {
 		}
 		if len(literals) == 0 {
 			continue
+		}
+		if field && !required && !nullable {
+			zero := "''"
+			if base == "number" {
+				zero = "0"
+			}
+			if !slices.Contains(literals, zero) {
+				literals = append([]string{zero}, literals...)
+			}
 		}
 		union := strings.Join(literals, " | ")
 		if nullable {

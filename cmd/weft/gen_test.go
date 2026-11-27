@@ -208,18 +208,21 @@ func TestGenerateEdges(t *testing.T) {
 		Types: []typeInfo{{Name: "Thing", Go: "example.com/x.Thing", Fields: []fieldInfo{
 			{Name: "x-y", TS: "string", Rules: []ruleInfo{{Name: "required"}, {Name: "unique"}, {Name: "later", Arg: "1"}}},
 			{Name: "it's", TS: "string", Rules: []ruleInfo{{Name: "enum", Arg: `a'b|c\d`}}},
+			{Name: "req_enum", TS: "string", Rules: []ruleInfo{{Name: "required"}, {Name: "enum", Arg: "draft|live"}}},
+			{Name: "opt_tier", TS: "number", Rules: []ruleInfo{{Name: "enum", Arg: "1|2|5"}}},
+			{Name: "req_tier", TS: "number", Rules: []ruleInfo{{Name: "required"}, {Name: "enum", Arg: "1|2|5"}}},
 			{Name: "tier", TS: "number | null", Optional: true, Rules: []ruleInfo{{Name: "min", Arg: "1"}, {Name: "enum", Arg: "1|2|5"}}},
 			{Name: "__proto__", TS: "string"},
 		}}},
 	}
 	got := mustGenerate(t, d)
 	for _, want := range []string{
-		"  'x-y': string\n  'it\\'s': 'a\\'b' | 'c\\\\d'\n  tier?: 1 | 2 | 5 | null\n",
+		"  'x-y': string\n  'it\\'s': '' | 'a\\'b' | 'c\\\\d'\n  req_enum: 'draft' | 'live'\n  opt_tier: 0 | 1 | 2 | 5\n  req_tier: 1 | 2 | 5\n  tier?: 1 | 2 | 5 | null\n",
 		"    async show(class_: 1 | 2 | 3, search_: 'fast' | 'full', query?: { 'sort-by'?: 'name' | '-name' }): Promise<(Thing | null)[]> {\n" +
 			"      return send('GET', `/api/x/${segment('class', class_)}/${segment('search', search_)}/${search(query)}`)\n",
 		"    async count(): Promise<number> {\n      return send('GET', '/api/x/count')\n",
 		"    async putX(body_: string, body: Thing): Promise<Thing> {\n      return send('PUT', `/api/x/${segment('body', body_)}`, { body })\n",
-		"    'x-y': { kind: 'string', required: true },\n    'it\\'s': { kind: 'string', enum: ['a\\'b', 'c\\\\d'] },\n    tier: { kind: 'number', min: 1, enum: ['1', '2', '5'], nullable: true },\n",
+		"    'x-y': { kind: 'string', required: true },\n    'it\\'s': { kind: 'string', enum: ['a\\'b', 'c\\\\d'] },\n    req_enum: { kind: 'string', required: true, enum: ['draft', 'live'] },\n    opt_tier: { kind: 'number', enum: ['1', '2', '5'] },\n    req_tier: { kind: 'number', required: true, enum: ['1', '2', '5'] },\n    tier: { kind: 'number', min: 1, enum: ['1', '2', '5'], nullable: true },\n",
 		"  __proto__: string\n",
 		"    ['__proto__']: { kind: 'string' },\n",
 	} {
@@ -830,6 +833,27 @@ func TestGenInApp(t *testing.T) {
 	if err == nil || !strings.Contains(string(out2), "typed.vue") || !strings.Contains(string(out2), "message") {
 		t.Errorf("pnpm typecheck passed a page reading a field the Go type no longer has: %v\n%s", err, out2)
 	}
+	os.Remove(filepath.Join(app, "web", "pages", "typed.vue"))
+
+	// C1: adding a runtime page that calls useParams('/items/:id') and running
+	// weft gen refreshes components.d.ts so pnpm typecheck passes without weft dev.
+	if err := os.MkdirAll(filepath.Join(app, "web", "pages", "items"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	itemIsland := "<script setup vapor lang=\"ts\">\nimport { useParams } from '@weft/ui'\nconst id: string = useParams('/items/:id').id\n</script>\n<template><span>{{ id }}</span></template>\n"
+	if err := os.WriteFile(filepath.Join(app, "web", "components", "ItemView.vue"), []byte(itemIsland), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	itemPage := "<script lang=\"ts\">\nexport const runtime = true\n</script>\n<script setup vapor lang=\"ts\">\nimport { Island } from '@weft/ui'\nimport ItemView from '../../components/ItemView.vue'\n</script>\n<template><Island when=\"load\" :component=\"ItemView\" /></template>\n"
+	if err := os.WriteFile(filepath.Join(app, "web", "pages", "items", "[id].vue"), []byte(itemPage), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, errs := runCmd("gen"); code != 0 {
+		t.Fatalf("gen after adding runtime page: exit %d: %s%s", code, out, errs)
+	}
+	if out, err := exec.Command("pnpm", "typecheck").CombinedOutput(); err != nil {
+		t.Fatalf("pnpm typecheck after weft gen with new runtime page: %v\n%s", err, out)
+	}
 }
 
 // An app with a warp.App that does not describe itself, whether it fails to
@@ -1093,6 +1117,26 @@ func TestBuildTypeChecks(t *testing.T) {
 		t.Fatalf("exit %d: %s%s", code, out, errs)
 	}
 	os.Remove(filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS)))
+
+	// C1: adding a runtime page that calls useParams('/orders/:id') after an
+	// initial weft build and running weft build again (with no weft dev in
+	// between) refreshes components.d.ts before vue-tsc runs.
+	if err := os.MkdirAll(filepath.Join(app, "web", "pages", "orders"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	orderIsland := "<script setup vapor lang=\"ts\">\nimport { useParams } from '@weft/ui'\nconst id: string = useParams('/orders/:id').id\n</script>\n<template><span>{{ id }}</span></template>\n"
+	if err := os.WriteFile(filepath.Join(app, "web", "components", "OrderView.vue"), []byte(orderIsland), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	orderPage := "<script lang=\"ts\">\nexport const runtime = true\n</script>\n<script setup vapor lang=\"ts\">\nimport { Island } from '@weft/ui'\nimport OrderView from '../../components/OrderView.vue'\n</script>\n<template><Island when=\"load\" :component=\"OrderView\" /></template>\n"
+	if err := os.WriteFile(filepath.Join(app, "web", "pages", "orders", "[id].vue"), []byte(orderPage), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, errs := build(t); code != 0 {
+		t.Fatalf("weft build after adding runtime page without weft dev: exit %d: %s%s", code, out, errs)
+	}
+	os.Remove(filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS)))
+
 	routes := filepath.Join(app, "app", "hello", "routes.go")
 	goSrc, _ := os.ReadFile(routes)
 	os.WriteFile(routes, []byte(strings.Replace(string(goSrc), "`json:\"message\"`", "`json:\"text\"`", 1)), 0o644)

@@ -62,6 +62,10 @@ func buildCmd(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
+	if err := writeTypes(appDir, stdout, stderr); err != nil {
+		return fail(stderr, "build", err)
+	}
+
 	// The app's TypeScript, whatever web/tsconfig.json includes (the pages,
 	// and tests too), is type-checked against that client, so a page that
 	// reads a Go field that was renamed stops the build, not the browser. An

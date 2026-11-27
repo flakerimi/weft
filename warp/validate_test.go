@@ -57,6 +57,9 @@ func TestValidateMessages(t *testing.T) {
 	type EnFloat struct {
 		Rate float64 `json:"rate" warp:"enum=0.25|0.5|1"`
 	}
+	type EnFloat32 struct {
+		Rate float32 `json:"rate" warp:"enum=0.1|0.5|1"`
+	}
 	type Mn struct {
 		Name string `json:"name" warp:"min=3"`
 	}
@@ -95,6 +98,7 @@ func TestValidateMessages(t *testing.T) {
 		{"enum", En{Status: "other"}, "status", "Choose one of: draft, live, gone."},
 		{"enum number", EnNum{Tier: 3}, "tier", "Choose one of: 1, 2, 5."},
 		{"enum float", EnFloat{Rate: 0.75}, "rate", "Choose one of: 0.25, 0.5, 1."},
+		{"enum float32", EnFloat32{Rate: 0.2}, "rate", "Choose one of: 0.1, 0.5, 1."},
 		{"query key", Q{Page: 10}, "page", "Enter 9 or less."},
 		{"path key", P{}, "id", "This is required."},
 		{"required bool", B{}, "on", "This is required."},
@@ -111,7 +115,7 @@ func TestValidateMessages(t *testing.T) {
 	ok := []any{
 		S{Name: "abcde"}, N{Age: 0.5}, I{Qty: 3}, L{Tags: []string{"a", "b"}},
 		E{Email: "ada@example.com"}, U{Site: "https://example.com/x"},
-		En{Status: "live"}, EnNum{Tier: 2}, EnNum{}, EnFloat{Rate: 0.5}, B{On: true}, T{At: time.Now()},
+		En{Status: "live"}, EnNum{Tier: 2}, EnNum{}, EnFloat{Rate: 0.5}, EnFloat32{Rate: 0.1}, B{On: true}, T{At: time.Now()},
 	}
 	for _, v := range ok {
 		if got := fieldsOf(t, v); got != nil {
@@ -254,7 +258,13 @@ func TestCheckRules(t *testing.T) {
 		Flag   bool    `json:"flag" warp:"min=1"`
 		Site   int     `json:"site" warp:"url"`
 		Kind   bool    `json:"kind" warp:"enum=a|b"`
+		Bool2  bool    `json:"bool2" warp:"enum=a,enum=b"`
 		Tier   int     `json:"tier" warp:"enum=1|two"`
+		Half   int     `json:"half" warp:"enum=1|1.5"`
+		Small  uint8   `json:"small" warp:"enum=1|300"`
+		Neg    uint    `json:"neg" warp:"enum=0|-3"`
+		Hex    float64 `json:"hex" warp:"enum=0x1p4|2"`
+		Score  int     `json:"score" warp:"enum=1_0|2"`
 		Twice  string  `json:"twice" warp:"enum=a|b,enum=b|c"`
 		Tags   []int   `json:"tags" warp:"unique"`
 		Dec    string  `json:"dec" warp:"min=1.5"`
@@ -270,7 +280,13 @@ func TestCheckRules(t *testing.T) {
 		`Product.Flag has the rule "min", which is for text, numbers and lists; remove it.`,
 		`Product.Site has the rule "url", which is for text; remove it or make the field a string.`,
 		`Product.Kind has the rule "enum", which is for text and numbers; remove it or make the field a string or a number.`,
-		`Product.Tier has "enum=1|two"; write numbers separated by | after enum=.`,
+		`Product.Bool2 has the rule "enum", which is for text and numbers; remove it or make the field a string or a number.`,
+		`Product.Tier has "enum=1|two"; write whole numbers separated by | after enum=.`,
+		`Product.Half has "enum=1|1.5"; write whole numbers separated by | after enum=.`,
+		`Product.Small has "enum=1|300"; write whole numbers from 0 to 255 separated by | after enum=.`,
+		`Product.Neg has "enum=0|-3"; write whole numbers separated by | after enum=.`,
+		`Product.Hex has "enum=0x1p4|2"; write numbers separated by | after enum=.`,
+		`Product.Score has "enum=1_0|2"; write whole numbers separated by | after enum=.`,
 		`Product.Twice has the rule "enum" more than once; list every value in one enum=a|b.`,
 		`Product.Tags has the rule "unique", which is for text and numbers; remove it.`,
 		`Product.Dec has "min=1.5"; write a number after min=.`,

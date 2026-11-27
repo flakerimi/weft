@@ -32,12 +32,13 @@
  * `siteConfig` adds this plugin to every page build and render server; an
  * app built with plain Vite adds `weftAutoImport()` to its plugins.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import MagicString, { type SourceMap } from 'magic-string'
 import { normalizePath, type Plugin } from 'vite'
 import { babelParse, parse, type SFCScriptBlock } from 'vue/compiler-sfc'
+import { listPageFilesSync, patternParams, toPath } from './routes.ts'
 
 export interface AutoImportOptions {
   /** Where to write the components' declaration file, from the root; `false` for none. */
@@ -210,44 +211,57 @@ interface RouteParamEntry {
   params: string[]
 }
 
+/** Whether a dynamic page's plain `<script>` exports `runtime = true` (so it is a runtime page, not a built-ahead `getPaths()` page). */
+function exportsRuntimeTrue(file: string): boolean {
+  let code: string
+  try {
+    code = readFileSync(file, 'utf8')
+  } catch {
+    return false
+  }
+  const { descriptor, errors } = parse(code, { filename: file, sourceMap: false })
+  if (errors.length || !descriptor.script) return false
+  const lang = descriptor.script.lang ?? 'js'
+  const plugins: ('typescript' | 'jsx')[] = []
+  if (/^tsx?$/.test(lang)) plugins.push('typescript')
+  if (/x$/.test(lang)) plugins.push('jsx')
+  let body: Node[]
+  try {
+    body = (babelParse(descriptor.script.content, { sourceType: 'module', plugins }) as unknown as { program: { body: Node[] } }).program.body
+  } catch {
+    return false
+  }
+  for (const stmt of body) {
+    if (stmt.type !== 'ExportNamedDeclaration') continue
+    const decl = stmt.declaration as Node | null
+    if (decl?.type === 'VariableDeclaration') {
+      for (const d of decl.declarations as Node[]) {
+        const id = d.id as { type?: string; name?: string } | null
+        const init = d.init as { type?: string; value?: unknown } | null
+        if (id?.type === 'Identifier' && id.name === 'runtime' && init?.type === 'BooleanLiteral' && init.value === true) return true
+      }
+    }
+  }
+  return false
+}
+
 /**
- * The dynamic page patterns under `<root>/pages` (`/products/:id`, `/docs/:...slug`)
- * and their parameter names, in sorted order, for `WeftRouteParams` in
- * `.weft-types/components.d.ts`.
+ * The runtime dynamic page patterns under `<root>/pages` (`/products/:id`,
+ * `/docs/:...slug`) and their parameter names, in sorted order, for
+ * `WeftRouteParams` in `.weft-types/components.d.ts`.
  */
 function routeParamEntries(root: string): RouteParamEntry[] {
   const pagesDir = join(root, 'pages')
-  if (!existsSync(pagesDir)) return []
-  const files: string[] = []
-  const walk = (dir: string, prefix: string) => {
-    let entries
-    try {
-      entries = readdirSync(dir, { withFileTypes: true })
-    } catch {
-      return
-    }
-    for (const e of entries) {
-      if (e.name.startsWith('_') || e.name.startsWith('.') || e.isSymbolicLink()) continue
-      if (e.isDirectory()) walk(join(dir, e.name), `${prefix}${e.name}/`)
-      else if (e.isFile() && e.name.endsWith('.vue')) files.push(`${prefix}${e.name}`)
-    }
-  }
-  walk(pagesDir, '')
   const byPattern = new Map<string, string[]>()
-  for (const file of files.sort()) {
-    const parts = file.slice(0, -'.vue'.length).split('/')
-    if (parts[parts.length - 1] === 'index') parts.pop()
-    const rest = parts.findIndex((p) => /^\[\.\.\..+\]$/.test(p))
-    if (rest !== -1 && rest !== parts.length - 1) continue
-    const params: string[] = []
-    const segs = parts.map((p) => {
-      const m = /^\[(\.\.\.)?(.+)\]$/.exec(p)
-      if (!m) return p
-      params.push(m[2]!)
-      return `:${m[1] ?? ''}${m[2]!}`
-    })
-    if (!params.length) continue
-    const pattern = '/' + segs.join('/')
+  for (const file of listPageFilesSync(pagesDir)) {
+    let pattern: string
+    try {
+      pattern = toPath(file)
+    } catch {
+      continue
+    }
+    const params = patternParams(pattern)
+    if (!params.length || !exportsRuntimeTrue(join(pagesDir, file))) continue
     if (!byPattern.has(pattern)) byPattern.set(pattern, params)
   }
   return [...byPattern.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([pattern, params]) => ({ pattern, params }))
@@ -259,7 +273,7 @@ const tsProp = (s: string) => (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(s) ? s : JSON.s
 function declaration(names: string[], routes: RouteParamEntry[] = []): string {
   const lines = [...names].sort().map((n) => `    ${n}: typeof import('${SOURCE}')['${n}']`)
   const routeLines = routes.map(
-    ({ pattern, params }) => `    ${JSON.stringify(pattern).replace(/^"|"$/g, "'")}: { ${params.map((p) => `${tsProp(p)}: string`).join('; ')} }`,
+    ({ pattern, params }) => `    ${JSON.stringify(pattern)}: { ${params.map((p) => `${tsProp(p)}: string`).join('; ')} }`,
   )
   return [
     "// Written by @weft/vite's weftAutoImport() on each build: do not edit.",
@@ -332,6 +346,7 @@ export function weftAutoImport(opts: AutoImportOptions = {}): Plugin {
     },
     configureServer(server) {
       server.watcher.on('add', (f) => f.endsWith('.vue') && refreshTypes())
+      server.watcher.on('change', (f) => f.endsWith('.vue') && refreshTypes())
       server.watcher.on('unlink', (f) => f.endsWith('.vue') && refreshTypes())
     },
     transform(code, id) {
