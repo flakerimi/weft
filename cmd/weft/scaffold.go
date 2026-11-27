@@ -39,7 +39,7 @@ type scaffoldSpec struct {
 
 // scaffoldField is one field: its snake_case name, its type (string, text,
 // email, url, int, float, bool, date, datetime or enum), whether it may be
-// null (a ? after the type), the enum's choices, and its modifiers. Min and
+// null (the modifier nullable), the enum's choices, and its modifiers. Min and
 // Max are as written, "" when not given.
 type scaffoldField struct {
 	Name, Type       string
@@ -281,6 +281,10 @@ func parseField(arg string) (scaffoldField, *scaffoldError) {
 	if strings.ContainsAny(arg, "|(") {
 		return f, refuse(2, "write enum choices separated by commas after enum=, as in status:enum=draft,live.")
 	}
+	// A ? is a pattern to zsh, so it only arrives quoted: one form, the modifier.
+	if strings.Contains(arg, "?") {
+		return f, refuse(2, "write a field that may be null with the modifier nullable, as in sale:float:nullable.")
+	}
 	parts := strings.Split(arg, ":")
 	f.Name, f.Type = parts[0], "string"
 	if !snakeName.MatchString(f.Name) {
@@ -297,9 +301,6 @@ func parseField(arg string) (scaffoldField, *scaffoldError) {
 	mods := parts[1:]
 	if len(parts) > 1 {
 		f.Type, mods = parts[1], parts[2:]
-		if t, ok := strings.CutSuffix(f.Type, "?"); ok {
-			f.Type, f.Null = t, true
-		}
 		if rest, ok := strings.CutPrefix(f.Type, "enum="); ok {
 			f.Type = "enum"
 			if rest == "" {
@@ -338,10 +339,9 @@ func parseField(arg string) (scaffoldField, *scaffoldError) {
 			if f.Type == "bool" {
 				return f, refuse(2, "field %q is a bool, which is always true or false, so it cannot be required; remove :required.", f.Name)
 			}
-			if f.Null {
-				return f, refuse(2, "field %q is %s?, which may be empty, so it cannot be required; remove the ? or :required.", f.Name, f.Type)
-			}
 			f.Required = true
+		case m == "nullable":
+			f.Null = true
 		case m == "unique":
 			if f.Type == "bool" || f.Type == "text" || f.Type == "date" || f.Type == "datetime" {
 				return f, refuse(2, "field %q is %s, and unique is for string, email, url, enum, int and float; remove :unique.", f.Name, a)
@@ -373,8 +373,11 @@ func parseField(arg string) (scaffoldField, *scaffoldError) {
 				f.Max = value
 			}
 		default:
-			return f, refuse(2, "field %q has the modifier %q; use required, unique, min=N or max=N.", f.Name, m)
+			return f, refuse(2, "field %q has the modifier %q; use required, nullable, unique, min=N or max=N.", f.Name, m)
 		}
+	}
+	if f.Required && f.Null {
+		return f, refuse(2, "field %q is nullable, which may be empty, so it cannot be required; remove :nullable or :required.", f.Name)
 	}
 	if f.Min != "" && f.Max != "" {
 		lo, _ := strconv.ParseFloat(f.Min, 64)

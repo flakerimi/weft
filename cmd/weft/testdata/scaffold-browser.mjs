@@ -1,5 +1,6 @@
 // Drives an app weft create made, with a products resource weft scaffold
-// wrote (name, price, status), in a real browser (headless Chrome or
+// wrote (weft scaffold product name:string:required:unique price:float:min=0
+// sale:float:nullable status:enum=draft,live:required), in a real browser (headless Chrome or
 // Chromium, over the DevTools protocol), as a person would: the setup link,
 // the table, New product, the record's page, Edit and Delete. It fails on the
 // first step that does not show what it should. cmd/weft/scaffold_test.go

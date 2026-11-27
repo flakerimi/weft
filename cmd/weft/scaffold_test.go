@@ -40,7 +40,7 @@ func TestPluralOf(t *testing.T) {
 // The spec's example: each field's Go type and its three tags, the data tag
 // from the type alone.
 func TestScaffoldParsesFields(t *testing.T) {
-	s, err := parseScaffold([]string{"product", "name:string:required:max=120:unique", "price:float:min=0", "sale:float?", "status:enum=draft,live:required"})
+	s, err := parseScaffold([]string{"product", "name:string:required:max=120:unique", "price:float:min=0", "sale:float:nullable", "status:enum=draft,live:required"})
 	if err != nil {
 		t.Fatalf("parseScaffold: %v", err.msg)
 	}
@@ -63,26 +63,27 @@ func TestScaffoldParsesFields(t *testing.T) {
 	}
 }
 
-// Every type, with and without ?, and a field with no type, which is a string.
+// Every type, nullable or not, and a field with no type, which is a string.
 func TestScaffoldTypes(t *testing.T) {
 	for arg, want := range map[string]struct{ goType, tag string }{
-		"title":               {"string", `json:"title" data:"sort,search"`},
-		"title:string?":       {"*string", `json:"title" data:"sort,search"`},
-		"body:text":           {"string", `json:"body" data:"search"`},
-		"body:text?:max=5000": {"*string", `json:"body" warp:"max=5000" data:"search"`},
-		"mail:email:required": {"string", `json:"mail" warp:"required,email" data:"sort,search"`},
-		"site:url?":           {"*string", `json:"site" warp:"url" data:"sort,search"`},
-		"count:int:min=-3":    {"int64", `json:"count" warp:"min=-3" data:"sort"`},
-		"count:int?":          {"*int64", `json:"count" data:"sort"`},
-		"score:float:max=9.5": {"float64", `json:"score" warp:"max=9.5" data:"sort"`},
-		"live:bool":           {"bool", `json:"live" data:"sort,filter"`},
-		"live:bool?":          {"*bool", `json:"live" data:"sort,filter"`},
-		"on:date":             {"time.Time", `json:"on" data:"sort"`},
-		"at:datetime?":        {"*time.Time", `json:"at" data:"sort"`},
-		"kind:enum=a,b,c":     {"string", `json:"kind" warp:"enum=a|b|c" data:"sort,filter"`},
-		"kind:enum=a,b?":      {"*string", `json:"kind" warp:"enum=a|b" data:"sort,filter"`},
-		"code:string:unique":  {"string", `json:"code" warp:"unique" data:"sort,search"`},
-		"n:int:unique:min=1":  {"int64", `json:"n" warp:"min=1,unique" data:"sort"`},
+		"title":                       {"string", `json:"title" data:"sort,search"`},
+		"title:string:nullable":       {"*string", `json:"title" data:"sort,search"`},
+		"body:text":                   {"string", `json:"body" data:"search"`},
+		"body:text:nullable:max=5000": {"*string", `json:"body" warp:"max=5000" data:"search"`},
+		"body:text:max=5000:nullable": {"*string", `json:"body" warp:"max=5000" data:"search"`},
+		"mail:email:required":         {"string", `json:"mail" warp:"required,email" data:"sort,search"`},
+		"site:url:nullable":           {"*string", `json:"site" warp:"url" data:"sort,search"`},
+		"count:int:min=-3":            {"int64", `json:"count" warp:"min=-3" data:"sort"`},
+		"count:int:nullable":          {"*int64", `json:"count" data:"sort"`},
+		"score:float:max=9.5":         {"float64", `json:"score" warp:"max=9.5" data:"sort"`},
+		"live:bool":                   {"bool", `json:"live" data:"sort,filter"`},
+		"live:bool:nullable":          {"*bool", `json:"live" data:"sort,filter"`},
+		"on:date":                     {"time.Time", `json:"on" data:"sort"`},
+		"at:datetime:nullable":        {"*time.Time", `json:"at" data:"sort"`},
+		"kind:enum=a,b,c":             {"string", `json:"kind" warp:"enum=a|b|c" data:"sort,filter"`},
+		"kind:enum=a,b:nullable":      {"*string", `json:"kind" warp:"enum=a|b" data:"sort,filter"`},
+		"code:string:unique":          {"string", `json:"code" warp:"unique" data:"sort,search"`},
+		"n:int:unique:min=1":          {"int64", `json:"n" warp:"min=1,unique" data:"sort"`},
 	} {
 		s, err := parseScaffold([]string{"thing", arg})
 		if err != nil {
@@ -127,10 +128,17 @@ func TestScaffoldRefuses(t *testing.T) {
 		{[]string{"product", "constructor"}, 2, `weft scaffold: field "constructor" has the name of a property every JavaScript object has, which the generated client cannot check; rename it.`},
 		{[]string{"product", "price:money"}, 2, `weft scaffold: field "price" has the type "money", which weft scaffold does not know; ` + types + "."},
 		{[]string{"product", "price:"}, 2, `weft scaffold: field "price" has the type "", which weft scaffold does not know; ` + types + "."},
-		{[]string{"product", "price:float:big"}, 2, `weft scaffold: field "price" has the modifier "big"; use required, unique, min=N or max=N.`},
+		{[]string{"product", "price:float:big"}, 2, `weft scaffold: field "price" has the modifier "big"; use required, nullable, unique, min=N or max=N.`},
 		{[]string{"product", "price:float:required:required"}, 2, `weft scaffold: field "price" has the modifier "required" twice; give it once.`},
 		{[]string{"product", "live:bool:required"}, 2, `weft scaffold: field "live" is a bool, which is always true or false, so it cannot be required; remove :required.`},
-		{[]string{"product", "sale:float?:required"}, 2, `weft scaffold: field "sale" is float?, which may be empty, so it cannot be required; remove the ? or :required.`},
+		{[]string{"product", "sale:float:nullable:required"}, 2, `weft scaffold: field "sale" is nullable, which may be empty, so it cannot be required; remove :nullable or :required.`},
+		{[]string{"product", "sale:float:required:nullable"}, 2, `weft scaffold: field "sale" is nullable, which may be empty, so it cannot be required; remove :nullable or :required.`},
+		{[]string{"product", "live:bool:nullable:required"}, 2, `weft scaffold: field "live" is a bool, which is always true or false, so it cannot be required; remove :required.`},
+		{[]string{"product", "sale:float:nullable:nullable"}, 2, `weft scaffold: field "sale" has the modifier "nullable" twice; give it once.`},
+		// ? is a pattern in zsh: one form, a modifier.
+		{[]string{"product", "sale:float?"}, 2, "weft scaffold: write a field that may be null with the modifier nullable, as in sale:float:nullable."},
+		{[]string{"product", "sale?:float"}, 2, "weft scaffold: write a field that may be null with the modifier nullable, as in sale:float:nullable."},
+		{[]string{"product", "kind:enum=a,b?"}, 2, "weft scaffold: write a field that may be null with the modifier nullable, as in sale:float:nullable."},
 		{[]string{"product", "live:bool:unique"}, 2, `weft scaffold: field "live" is a bool, and unique is for string, email, url, enum, int and float; remove :unique.`},
 		{[]string{"product", "body:text:unique"}, 2, `weft scaffold: field "body" is a text, and unique is for string, email, url, enum, int and float; remove :unique.`},
 		{[]string{"product", "on:date:unique"}, 2, `weft scaffold: field "on" is a date, and unique is for string, email, url, enum, int and float; remove :unique.`},
@@ -157,7 +165,7 @@ func TestScaffoldRefuses(t *testing.T) {
 		{[]string{"product", "parts:has_many"}, 1, `weft scaffold: field "parts" has type "has_many", and relations land in Weft 0.3.0 (W3); use a scalar type for now.`},
 		{[]string{"product", "tags:many_to_many"}, 1, `weft scaffold: field "tags" has type "many_to_many", and relations land in Weft 0.3.0 (W3); use a scalar type for now.`},
 		{[]string{"product", "photo:image"}, 1, `weft scaffold: field "photo" has type "image", and file attachments land in Weft 0.4.0 (W6); use a scalar type for now.`},
-		{[]string{"product", "manual:file?"}, 1, `weft scaffold: field "manual" has type "file", and file attachments land in Weft 0.4.0 (W6); use a scalar type for now.`},
+		{[]string{"product", "manual:file:nullable"}, 1, `weft scaffold: field "manual" has type "file", and file attachments land in Weft 0.4.0 (W6); use a scalar type for now.`},
 		{[]string{"product", "extra:json"}, 1, `weft scaffold: field "extra" has type "json", which lands in Weft 0.6.0 (W7); use a scalar type for now.`},
 		{[]string{"product", "title:translated"}, 1, `weft scaffold: field "title" has type "translated", which lands in Weft 0.6.0 (W7); use a scalar type for now.`},
 	} {
@@ -371,7 +379,7 @@ func planned(t *testing.T, modules string, session bool, args ...string) (map[st
 
 // The Go weft scaffold writes is gofmt's, and says what the spec says.
 func TestScaffoldWritesGo(t *testing.T) {
-	files, p := planned(t, templateModules, true, "product", "name:string:required:max=120:unique", "price:float:min=0", "sale:float?", "status:enum=draft,live:required", "published_at:datetime?")
+	files, p := planned(t, templateModules, true, "product", "name:string:required:max=120:unique", "price:float:min=0", "sale:float:nullable", "status:enum=draft,live:required", "published_at:datetime:nullable")
 	if !p.auth {
 		t.Error("the plan does not see auth.Module() in app/modules.go")
 	}
@@ -487,7 +495,7 @@ func TestScaffoldEditsModules(t *testing.T) {
 // Without --api, the islands and the two pages, against DataTable's props
 // and the generated client; the session is waited on when the app has one.
 func TestScaffoldWritesPages(t *testing.T) {
-	files, _ := planned(t, templateModules, true, "line_item", "name:string:required", "body:text", "qty:int:min=1", "price:float?", "live:bool", "kind:enum=a,b_c", "on:date?", "at:datetime")
+	files, _ := planned(t, templateModules, true, "line_item", "name:string:required", "body:text", "qty:int:min=1", "price:float:nullable", "live:bool", "kind:enum=a,b_c", "on:date:nullable", "at:datetime")
 	table := files["web/components/LineItemsTable.vue"]
 	for _, want := range []string{
 		"<script setup vapor lang=\"ts\">",
@@ -599,7 +607,7 @@ func goIn(t *testing.T, dir string, args ...string) string {
 // five routes and the schema.
 func TestScaffoldInACreatedApp(t *testing.T) {
 	app := scaffoldedApp(t)
-	code, out, errs := scaffold(t, "product", "name:string:required:max=120:unique", "price:float:min=0", "sale:float?", "status:enum=draft,live:required")
+	code, out, errs := scaffold(t, "product", "name:string:required:max=120:unique", "price:float:min=0", "sale:float:nullable", "status:enum=draft,live:required")
 	if code != 0 {
 		t.Fatalf("exit %d: %s%s", code, out, errs)
 	}
@@ -646,7 +654,7 @@ func TestScaffoldInACreatedApp(t *testing.T) {
 // story passes, the pointers sent and the times kept.
 func TestScaffoldEveryTypeAPI(t *testing.T) {
 	app := scaffoldedApp(t)
-	code, out, errs := scaffold(t, "entry", "title", "body:text?:max=500", "mail:email:required:unique", "site:url?", "count:int:min=1:max=9", "score:float?:min=-1.5", "live:bool", "seen:bool?", "on:date", "at:datetime?", "kind:enum=a,b,c:required", "mood:enum=up,down?", "--api", "--plural", "journal")
+	code, out, errs := scaffold(t, "entry", "title", "body:text:nullable:max=500", "mail:email:required:unique", "site:url:nullable", "count:int:min=1:max=9", "score:float:nullable:min=-1.5", "live:bool", "seen:bool:nullable", "on:date", "at:datetime:nullable", "kind:enum=a,b,c:required", "mood:enum=up,down:nullable", "--api", "--plural", "journal")
 	if code != 0 {
 		t.Fatalf("exit %d: %s%s", code, out, errs)
 	}
@@ -688,7 +696,7 @@ func TestScaffoldWithoutAuthInACreatedApp(t *testing.T) {
 func TestScaffoldedPagesInBrowser(t *testing.T) {
 	t.Skip("needs DataTable and EntityDialog from @weft/ui (W5, branch w5-ui), which are not on main yet")
 	app := scaffoldedApp(t)
-	if code, out, errs := scaffold(t, "product", "name:string:required:unique", "price:float:min=0", "status:enum=draft,live:required"); code != 0 {
+	if code, out, errs := scaffold(t, "product", "name:string:required:unique", "price:float:min=0", "sale:float:nullable", "status:enum=draft,live:required"); code != 0 {
 		t.Fatalf("weft scaffold: exit %d: %s%s", code, out, errs)
 	}
 	if out, err := exec.Command("pnpm", "typecheck").CombinedOutput(); err != nil {

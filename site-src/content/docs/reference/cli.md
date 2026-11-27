@@ -80,7 +80,7 @@ Writes one resource into an app `weft create` made, then runs `weft gen`.
 
 ```text
 weft scaffold <name> <field[:type[:modifier...]]>... [--plural <word>] [--api]
-weft scaffold product name:string:required:max=120:unique price:float:min=0 'sale:float?' status:enum=draft,live:required
+weft scaffold product name:string:required:max=120:unique price:float:min=0 sale:float:nullable status:enum=draft,live:required
 ```
 
 `<name>` is singular snake_case (`line_item`). Its plural, made by a fixed rule (`person` → `people`, `category` → `categories`, `box` → `boxes`, else `s`) or given with `--plural`, names the package `app/<plural>`, the table, `/api/<plural>` and the permissions. `data`, `auth`, `warp`, `app`, `web`, `test`, `main`, Go's own words, `user` and `users` are refused.
@@ -97,7 +97,7 @@ A field's type is written, never guessed from its name; with none it is `string`
 | `date`, `datetime` | `time.Time` | | `sort` |
 | `enum=a,b` | `string` | `enum=a\|b` | `sort,filter` |
 
-`?` after the type makes a pointer, which may be `null` (`float?` is `*float64`; quote it in zsh). The modifiers are `required` (not on `bool` or `?`), `unique` (not on `bool`, `text`, `date`, `datetime`), and `min=N` and `max=N`, in characters for text (not on `bool`, `date`, `datetime`, `enum`); a field has only the rules written. Enum choices are separated by commas: `|` or `(` is refused with `weft scaffold: write enum choices separated by commas after enum=, as in status:enum=draft,live.`
+The modifiers, in any order after the type, are `nullable`, a pointer that may be `null` (`sale:float:nullable` is `*float64`); `required` (not on `bool` or with `nullable`); `unique` (not on `bool`, `text`, `date`, `datetime`); and `min=N` and `max=N`, in characters for text (not on `bool`, `date`, `datetime`, `enum`); a field has only the rules written. Enum choices are separated by commas: `|` or `(` is refused with `weft scaffold: write enum choices separated by commas after enum=, as in status:enum=draft,live.`, and a `?` with the `:nullable` form.
 
 | It writes | What it is |
 | --- | --- |
