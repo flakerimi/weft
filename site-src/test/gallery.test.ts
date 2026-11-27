@@ -82,12 +82,12 @@ describe('the gallery model', () => {
   })
 
   it('hydrates an example only when it needs JavaScript', () => {
-    const source = (file: string) => catalog.components.flatMap((c) => c.examples).find((e) => e.file.endsWith(file))!.source
+    const source = (file: string) => catalog.components.flatMap((c) => c.examples).find((e) => e.file.endsWith(`/${file}`))!.source
     expect(isInteractive(source('Button/basic.vue'))).toBe(false)
     expect(isInteractive(source('Button/variants-and-tones.vue'))).toBe(false)
     expect(isInteractive(source('Button/loading.vue'))).toBe(true)
     expect(isInteractive(source('Select/basic.vue'))).toBe(true)
-    expect(isInteractive(source('Grid/basic.vue'))).toBe(true)
+    expect(isInteractive(source('Grid/basic.vue'))).toBe(false)
     // A comment in the template is not markup.
     expect(isInteractive('<template>\n  <!-- <Select /> @click -->\n  <Badge label="a" />\n</template>\n')).toBe(false)
     expect(isInteractive('<script setup vapor lang="ts">\nimport { Badge } from \'@weft/ui\'\n</script>\n\n<template>\n  <Badge label="a" @click="go" />\n</template>\n')).toBe(true)

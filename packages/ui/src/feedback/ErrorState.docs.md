@@ -1,6 +1,6 @@
 ---
 group: feedback
-purpose: What a list or a page shows when loading it failed, with the error's message and a way to try again.
+purpose: What a list or page shows when loading failed, with the error and retry button.
 use: In place of a Table, a chart or a page whose request failed; it reads an Error, a string or the wire format's error body.
 avoid: For a form field's error, use FormField; for a failure the person can fix in the page, use Alert; for nothing to show, use EmptyState.
 adapts:

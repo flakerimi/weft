@@ -67,7 +67,7 @@ const open = m.open
 // Narrow is the viewport's width: the root element's.
 const viewport = shallowRef<HTMLElement | null>(null)
 onMounted(() => (viewport.value = document.documentElement))
-const width = useWidth(viewport)
+const width = useWidth(viewport, { prepaint: false })
 const full = computed(() => props.fullscreen || width.value === 'narrow')
 </script>
 

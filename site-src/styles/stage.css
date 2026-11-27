@@ -55,6 +55,7 @@
 .gallery-canvas[data-width] { margin-block: 20px; border: var(--weft-border-width, 1px) solid var(--weft-color-border); border-radius: 12px; }
 .gallery-example { display: grid; justify-items: center; }
 .gallery-example > * { max-inline-size: 100%; }
-/* A table takes the stage's width, as it takes a page's: centred, it would
-   shrink to its content, measure narrow and draw its cards at every width. */
-.gallery-example > .weft-table { justify-self: stretch; }
+/* A table, grid or landing block takes the stage's width, as it takes a
+   page's: centred, it would shrink to its content, measure narrow and draw
+   its narrow form at every width. */
+.gallery-example > :is(.weft-table, .weft-grid, .weft-faq, .weft-feature-grid, .weft-pricing, .weft-testimonials, .weft-hero, .weft-cta) { justify-self: stretch; }

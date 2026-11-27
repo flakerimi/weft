@@ -50,7 +50,7 @@ defineSlots<{
 
 const t = computed<TimelineLabels>(() => ({ ...TIMELINE_LABELS, ...props.labels }))
 const root = useTemplateRef<HTMLElement>('root')
-const width = useWidth(root)
+const width = useWidth(root, { prepaint: false })
 const layout = computed(() => (props.orientation === 'horizontal' && width.value !== 'narrow' ? 'horizontal' : 'vertical'))
 const value = computed(() => props.modelValue ?? props.defaultValue)
 /** The current item's place in `items`, -1 for none. */

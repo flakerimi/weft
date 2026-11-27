@@ -46,6 +46,11 @@
   border-radius: 16px;
 }
 .gallery-preview > *, .gallery-preview > weft-island > * { max-inline-size: 100%; }
+.gallery-preview > :is(weft-island, .weft-grid, .weft-faq, .weft-feature-grid, .weft-pricing, .weft-testimonials, .weft-hero, .weft-cta),
+.gallery-preview > weft-island > :is(.weft-grid, .weft-faq, .weft-feature-grid, .weft-pricing, .weft-testimonials, .weft-hero, .weft-cta) {
+  justify-self: stretch;
+  inline-size: 100%;
+}
 
 /* A table scrolls on its own when it is wider than the column, so the page never does. */
 .gallery-table { max-inline-size: 100%; overflow-x: auto; }

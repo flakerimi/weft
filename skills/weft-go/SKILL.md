@@ -15,7 +15,7 @@ Warp (`github.com/flakerimi/weft/warp`, standard library only) is an app's Go ha
 func main() {
 	server := warp.New(warp.FromEnv())
 	server.Use(app.Modules()...)
-	// Serve returns nil once it was asked to stop: that is a clean exit.
+	// nil once asked to stop: clean exit.
 	if err := server.Serve(dist); err != nil {
 		log.Fatal(err)
 	}
@@ -25,7 +25,7 @@ func main() {
 - `dist` embeds `web/dist`, and is nil under `-tags dev`, as `weft dev` builds it: `go test -tags dev ./...` until the first `weft build`.
 - `app/modules.go` lists the modules in the order they start; a new one is `app/<name>/` with a `Module()`, added there.
 - A module is `Name() string` and `Register(app *warp.App) error`, and may add `Migrate`, `Start` and `Stop(ctx) error`: in order before serving, stop in reverse after.
-- `go.mod` requires Warp (`github.com/flakerimi/weft`) at the release's tag, fetched from GitHub; `weft upgrade` moves it. Never edit `.weft/`.
+- `go.mod` requires Warp (`github.com/flakerimi/weft`) at the release's tag, from GitHub; `weft upgrade` moves it. Never edit `.weft/`.
 
 ## Typed routes
 
@@ -38,13 +38,13 @@ type CreateIn struct {
 
 func (module) Register(app *warp.App) error {
 	warp.Get(app, "/products/{id}", show) // func(ctx context.Context, in ShowIn) (Product, error)
-	warp.Post(app, "/products", create)   // answers 201
+	warp.Post(app, "/products", create)   // 201
 	return nil
 }
 ```
 
 - 200, `Post` 201, `warp.Status(200)` to change it; `warp.None` reads nothing, or answers 204.
-- Each exported input field takes exactly one tag: `json` (the body: POST, PUT, PATCH only), `body:"json"` (the whole body, on one struct field), `query` (text, bool, numbers, a pointer to one, `[]string`, `map[string]string` for `filter[k]`) or `path` (a `{name}` wildcard).
+- Each exported input field takes one tag: `json` (the body: POST, PUT, PATCH only), `body:"json"` (the whole body, on one struct field), `query` (text, bool, numbers, a pointer to one, `[]string`, `map[string]string` for `filter[k]`) or `path` (`{name}`).
 - A body is `application/json` (else 415), with no field the input lacks (400).
 - Rules: `required`, `email`, `url`, `min=N`, `max=N`, `enum=a|b`, `unique` (a `data` store checks it), `readonly` (never read). All rules but `required` pass an empty value; a non-nil pointer was sent. On `Patch` rules run only on sent fields (`warp.Sent`). A failure is 422. A `Validate(ctx) error` method checks across fields.
 - `GET /products` and `GET /products/{id}` are both named `products`: give each a `warp.Name`. A mistake is one sentence from `app.Err()`, and `Serve` will not start.
@@ -89,11 +89,11 @@ Each file is read once at start for its ETag; one changed since gets 500, a new 
 ## One binary
 
 ```sh
-weft build  # the pages into web/dist, then ./<name>
+weft build  # web/dist, then ./<name>
 GOOS=linux GOARCH=arm64 weft build -o myapp-linux-arm64
 ```
 
-The binary is built with `-trimpath -ldflags "-s -w"` and `CGO_ENABLED=0` unless set. It needs nothing beside it and runs on `FROM scratch`:
+Built with `-trimpath -ldflags "-s -w"` and `CGO_ENABLED=0` unless set. It needs nothing beside it and runs on `FROM scratch`:
 
 ```dockerfile
 FROM scratch
@@ -103,7 +103,7 @@ EXPOSE 8080
 ENTRYPOINT ["/myapp"]
 ```
 
-Build it for the image's system, using a `.dockerignore` of `*` and `!myapp`.
+Build it for the image's system, with a `.dockerignore` of `*` and `!myapp`.
 
 ## Do not
 

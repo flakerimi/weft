@@ -111,15 +111,17 @@ export function iconTags(root: string): string[] {
 
 /**
  * The page's pre-paint snippets in one blocking inline script, or none.
- * A snippet that would end the script early is refused in a sentence that
- * `who` starts.
+ * Each snippet is wrapped in `(function(){…})()` so its top-level variables
+ * never leak into the global scope or collide with another snippet's or the
+ * page's own scripts. A snippet that would end the script early is refused in
+ * a sentence that `who` starts.
  */
 export function prePaintTag(snippets: string[], who = 'buildSite'): string[] {
   if (!snippets.length) return []
   for (const code of snippets) {
     if (/<\/script|<!--/i.test(code)) throw new Error(`${who}: a pre-paint snippet holds "</script" or "<!--", which would break the page's <head>: ${code.slice(0, 60)}`)
   }
-  return [`<script data-weft-prepaint>${snippets.join('\n')}</script>`]
+  return [`<script data-weft-prepaint>${snippets.map((c) => `(function(){${c}})()`).join(';\n')}</script>`]
 }
 
 export function pageHTML(p: {

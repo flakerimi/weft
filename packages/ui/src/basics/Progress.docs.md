@@ -1,6 +1,6 @@
 ---
 group: basics
-purpose: A bar showing how far a task has got, or that it is under way when that is unknown.
+purpose: A bar showing how far a task has got, or that it is under way when unknown.
 use: For uploads, imports, multi-step work and quotas, where the reader waits or watches.
 avoid: For a short wait inside a control, use Spinner; for loading content, use Skeleton.
 adapts:

@@ -47,9 +47,9 @@ Replaces the running `weft` with another release from `weft.base.al`.
 | `--check` | Only says whether the latest release differs from yours, and changes nothing. After a rollback of the site the latest may be older than yours. |
 | `--version X` | Installs release `X` instead of the latest, older ones included |
 
-It downloads the archive for your platform and `SHA256SUMS`, checks the archive against it, writes the new binary beside the running one and renames it into place, so the old one stays whole until the new one is complete. It follows a symlink to the real file.
+It downloads the archive for your platform and `SHA256SUMS`, checks the archive against it, writes the new binary beside the running one and renames it into place, keeping the old one whole until the new one is complete. It follows a symlink to the real file.
 
-It says `weft X is up to date.` when there is nothing to do, and `Updated weft X → Y.` when it is done. Any failure is one sentence on standard error, with exit status 1; an unknown flag exits with status 2. A development build refuses to update and says to run the installer.
+It says `weft X is up to date.` when there is nothing to do, and `Updated weft X → Y.` when done. Any failure is one sentence on standard error (exit status 1); an unknown flag exits 2. A development build refuses to update and says to run the installer.
 
 | Variable | What it does |
 | --- | --- |
@@ -146,7 +146,7 @@ An app made by Weft 0.0.6 or before calls `weft.Serve` in `main.go`, which is no
 		return warp.Serve(dist, api.Handler())
 ```
 
-The `listen` function stays as it is. Such an app has no `warp.App`, so `weft build` and `weft gen` give it a client with no routes at once. An app made by 0.0.7 has one, so after `weft upgrade` they write its routes. To use modules and typed routes, build a `warp.App` and serve it with its own `Serve`, as a new app's `main.go` does (see [Warp, the Go side](../guides/warp.md)); then they write its routes. An App passed to `warp.Serve` stops them, saying to call its own `Serve`.
+The `listen` function stays as it is. Such an app has no `warp.App`, so `weft build` and `weft gen` give it a client with no routes at once; an app made by 0.0.7 has one, so after `weft upgrade` they write its routes. To use modules and typed routes, build a `warp.App` and serve it with its own `Serve`, as a new app's `main.go` does ([Warp, the Go side](../guides/warp.md)). An App passed to `warp.Serve` stops them, saying to call its own `Serve`.
 
 ### weft catalog
 
@@ -199,9 +199,9 @@ Notes:
 
 ```text
 $ weft catalog --find week
-  Calendar        A month of dates to choose one, several or a range from, in the locale's names, digits and first day of the week.
-  DatePicker      A date field where a date is typed as the locale writes it or chosen from a calendar that opens beside it.
-  WeftProvider    Sets how the part of the page inside it is used, its input and its surface, for every Weft component within.
+  Calendar        A month of dates to choose one, several or a range from, in the current locale.
+  DatePicker      A date field where a date is typed in the locale or chosen from a calendar.
+  WeftProvider    Sets the input, surface and width context for every Weft component inside it.
 ```
 
 When nothing matches it says `weft catalog: nothing matches "<words>"; run weft catalog to list them.`, with exit status 1. `--find` with no words, or only blank ones, is wrong usage.

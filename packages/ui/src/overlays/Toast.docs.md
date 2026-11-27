@@ -1,6 +1,6 @@
 ---
 group: overlays
-purpose: One short message that appears for a moment, with an optional action: saved, sent, undone.
+purpose: One short message that appears briefly, with an optional action button.
 use: Rendered by Toaster from useToast(); render one yourself only inside a live region of your own.
 avoid: To show a toast, call useToast().add and put a Toaster in the layout; for a message that must stay, use an inline alert.
 adapts:

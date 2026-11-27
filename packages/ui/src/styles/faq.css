@@ -1,0 +1,63 @@
+/* Faq: a titled section wrapping an Accordion, stacked (`vertical`) or split
+   side-by-side (`horizontal`) when its own box is `wide` (1024 px and up,
+   data-width="wide"). */
+.weft-faq {
+  inline-size: 100%;
+  max-inline-size: var(--weft-page-max, 1200px);
+  margin-inline: auto;
+  padding-block: clamp(var(--weft-space-6, 24px), 5vw, var(--weft-space-8, 32px));
+  padding-inline: clamp(var(--weft-space-4, 16px), 4%, var(--weft-space-8, 32px));
+  color: var(--weft-color-text, CanvasText);
+  overflow-wrap: anywhere;
+}
+:is(.weft-page, .weft-section, .weft-container) .weft-faq {
+  padding: 0;
+}
+.weft-faq__inner {
+  display: grid;
+  gap: var(--weft-space-6, 24px);
+  align-items: start;
+}
+.weft-faq[data-orientation="horizontal"][data-width="wide"] .weft-faq__inner {
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: var(--weft-space-8, 32px);
+}
+.weft-faq__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-2, 8px);
+  min-inline-size: 0;
+}
+.weft-faq[data-orientation="vertical"][data-align="center"] .weft-faq__header {
+  justify-self: center;
+  align-items: center;
+  text-align: center;
+}
+.weft-faq__headline {
+  font-size: 0.875em;
+  font-weight: var(--weft-weight-heading, 600);
+  color: var(--weft-color-primary-text, LinkText);
+}
+.weft-faq__title {
+  margin: 0;
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  font-weight: var(--weft-weight-title, 700);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-faq[data-width="narrow"] .weft-faq__title {
+  font-size: 1.5rem;
+}
+.weft-faq__description {
+  margin: 0;
+  max-inline-size: 60ch;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-faq__aside {
+  margin-block-start: var(--weft-space-2, 8px);
+  font-size: 0.875em;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-faq__accordion { min-inline-size: 0; }

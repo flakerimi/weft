@@ -185,6 +185,10 @@ export function parseDocs(text: string, file: string): Docs {
     if (!(key in top)) throw new Error(`${file} is missing ${key} in its frontmatter.`)
     if (key !== 'adapts' && !top[key]) throw new Error(`${file} gives ${key} no text.`)
   }
+  const purposeLen = Array.from(top.purpose!).length
+  if (purposeLen > 80) {
+    throw new Error(`${file} has a purpose of ${purposeLen} characters; shorten purpose to at most 80 characters so weft catalog stays compact.`)
+  }
   for (const axis of AXES) {
     if (!adapts[axis]) {
       throw new Error(`${file} is missing adapts.${axis}; say what the component does between ${AXIS_WORDS[axis]}, even if nothing changes.`)

@@ -1,6 +1,6 @@
 ---
 group: selection
-purpose: A text field that searches a list as you type and chooses from it, one value or several, with items given, created or loaded.
+purpose: A text field that searches a list as you type to choose one or several items.
 use: For a choice from a list people search (a person, a city, a tag), from many options or ones loaded from the server, or where a typed value may become a new option; Nuxt UI's InputMenu, and as a button its SelectMenu.
 avoid: For a short list nobody searches, use Select; for free text with no list, Input; for running commands, CommandPalette.
 adapts:

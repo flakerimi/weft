@@ -1,6 +1,6 @@
 ---
 group: layout
-purpose: A box whose content scrolls inside it, with the browser's own scrolling and thin themed scrollbars.
+purpose: A box whose content scrolls inside it with thin themed scrollbars.
 use: For a long list in a fixed-height panel, a wide strip of cards that scrolls sideways, a code block or a log.
 avoid: For the page itself, let the page scroll; for thousands of rows, use Table or Listbox, which render only those in view.
 adapts:

@@ -1,6 +1,6 @@
 ---
 group: overlays
-purpose: A menu of actions opened from a button, with groups, checkbox and radio items, links and submenus.
+purpose: A menu of actions opened from a button, with groups, choices and submenus.
 use: For the actions on one thing (a row's More button), a user menu, view options.
 avoid: To choose a value for a form, use a select; for navigation between pages, links or navigation components.
 adapts:

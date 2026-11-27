@@ -1,6 +1,6 @@
 ---
 group: overlays
-purpose: The inside of a modal panel: a header with the heading, actions and close button, a body that scrolls, and a footer.
+purpose: The inside of a modal panel: header, close button, scrolling body and footer.
 use: Inside a modal surface of your own that should look like Dialog, Sheet and Drawer, which render it themselves.
 avoid: To open a dialog, use Dialog, Sheet or Drawer; for a card on the page, Card.
 adapts:

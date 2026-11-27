@@ -1,6 +1,6 @@
 ---
 group: data
-purpose: One figure that matters on a card, with how it changed and an optional sparkline.
+purpose: One key figure on a card, with how it changed and an optional sparkline.
 use: In a row of key figures at the top of a dashboard (revenue, active customers, open tickets); it replaces the hand-built stat cards of admin panels such as Negenet's.
 avoid: For many figures to compare, use Table; for a figure inside a sentence, write the sentence.
 adapts:

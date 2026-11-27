@@ -1,7 +1,7 @@
 // Each page inlines the CSS of what it renders, not all of @weft/ui: the
 // theme, then base.css, then the stylesheets of the components it renders
 // (and those they import), each once.
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -203,5 +203,17 @@ describe('per-page CSS', () => {
     // Button draws a Spinner; its own rules come after the spinner's.
     const css = styleOf('dialog-island')
     expect(css.search(/\.weft-button\s*\{/)).toBeGreaterThan(css.search(/\.weft-spinner\s*\{/))
+  })
+
+  it('keeps component CSS when the site root is reached through a symlink (such as macOS tmpdir)', async () => {
+    const linkParent = mkdtempSync(join(tmpdir(), 'weft-css-link-'))
+    try {
+      const symlinkRoot = join(linkParent, 'site-link')
+      symlinkSync(root, symlinkRoot)
+      const { css } = await renderPage({ root: symlinkRoot, page: 'pages/button.vue' })
+      expect(css).toMatch(/\.weft-button\s*\{/)
+    } finally {
+      rmSync(linkParent, { recursive: true, force: true })
+    }
   })
 })

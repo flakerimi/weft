@@ -1,6 +1,6 @@
 ---
 group: shell
-purpose: The frame of an app: navigation, a header and the main content, laid out for the screen.
+purpose: The frame of an app: navigation, header and main content laid out for the page.
 use: As the root of an app's pages (a dashboard, an admin, a client portal).
 avoid: For a marketing or docs site, use Header and Footer around the page; for a panel that slides in, Sheet.
 adapts:

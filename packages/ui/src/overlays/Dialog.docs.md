@@ -1,6 +1,6 @@
 ---
 group: overlays
-purpose: A modal window over the page, for a task or message that needs the user's attention before going back.
+purpose: A modal window over the page for a task or message that needs attention.
 use: For a short form, a decision or details that interrupt the page on purpose: rename, invite, settings of one thing.
 avoid: To confirm an action, use ConfirmDialog; for a panel at the edge (navigation, filters), Sheet; for a hint, Tooltip or Popover.
 adapts:

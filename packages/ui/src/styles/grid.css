@@ -1,4 +1,16 @@
+/* Grid: adapts its columns from its own width class (data-width, kept updated
+   before paint by useWidth's pre-paint observer and after hydration by
+   useWidth): narrow under 640 px, regular under 1024 px, wide 1024 px and up. */
 .weft-grid {
   display: grid;
   grid-template-columns: repeat(var(--weft-grid-cols, 1), minmax(0, 1fr));
+}
+.weft-grid[data-width="narrow"] {
+  grid-template-columns: repeat(var(--weft-grid-cols-narrow, var(--weft-grid-cols, 1)), minmax(0, 1fr));
+}
+.weft-grid[data-width="regular"] {
+  grid-template-columns: repeat(var(--weft-grid-cols-regular, var(--weft-grid-cols, 2)), minmax(0, 1fr));
+}
+.weft-grid[data-width="wide"] {
+  grid-template-columns: repeat(var(--weft-grid-cols-wide, var(--weft-grid-cols, 3)), minmax(0, 1fr));
 }

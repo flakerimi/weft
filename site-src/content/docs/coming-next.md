@@ -88,6 +88,6 @@ Lint rules (`@weft/eslint-plugin`) that flag a raw `<button>` where a Weft compo
 
 An `<Image>` component, actions, environment values, a development overlay and `weft deploy`. Phase 6b. Content collections, the first of these, already work: see [Markdown content](guides/markdown.md).
 
-## Landing blocks
+## More landing blocks
 
-`Hero`, `FeatureGrid`, `Pricing`, `Testimonials`, `Faq` and `Cta`. Phase 7, with the first public release, `0.1.0`.
+`Hero`, `FeatureGrid`, `Pricing`, `Testimonials`, `Faq` and `Cta` work today ([Components](/components)). Not yet, phase 7: `Carousel`, `Marquee`, `FooterColumns`, `PageCard`, `PageColumns`, `PageList`, `PageLogos` and `PricingTable`.

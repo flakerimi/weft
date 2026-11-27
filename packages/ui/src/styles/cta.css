@@ -1,0 +1,132 @@
+/* Cta: a call-to-action panel in card, soft, solid or plain form. Vertical
+   stacks copy and actions; horizontal puts the copy at the inline start and
+   the actions or aside at the inline end when regular or wide (640 px and up,
+   data-width="regular" or "wide"), stacking when narrow. */
+.weft-cta {
+  inline-size: 100%;
+  max-inline-size: var(--weft-page-max, 1200px);
+  margin-inline: auto;
+  padding-inline: clamp(var(--weft-space-4, 16px), 4%, var(--weft-space-8, 32px));
+  color: var(--weft-color-text, CanvasText);
+  overflow-wrap: anywhere;
+}
+.weft-cta__box {
+  display: grid;
+  gap: var(--weft-space-6, 24px);
+  align-items: center;
+  padding: clamp(var(--weft-space-6, 24px), 5vw, 48px);
+  border-radius: var(--weft-radius-panel, 16px);
+}
+.weft-cta[data-width="narrow"] .weft-cta__box {
+  padding: var(--weft-space-6, 24px);
+}
+.weft-cta[data-variant="card"] .weft-cta__box {
+  background: var(--weft-color-surface-raised, Canvas);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
+  box-shadow: var(--weft-shadow-card, none);
+}
+.weft-cta[data-variant="soft"] .weft-cta__box {
+  background: color-mix(in srgb, var(--weft-tone, LinkText) 14%, var(--weft-color-surface, Canvas));
+  border: var(--weft-border-width, 1px) solid color-mix(in srgb, var(--weft-tone, LinkText) 30%, var(--weft-color-border, GrayText));
+}
+.weft-cta[data-variant="solid"] .weft-cta__box {
+  background: var(--weft-tone, LinkText);
+  color: var(--weft-tone-fg, Canvas);
+}
+.weft-cta[data-variant="plain"] .weft-cta__box {
+  padding-inline: 0;
+}
+.weft-cta[data-orientation="horizontal"]:is([data-width="regular"], [data-width="wide"]) .weft-cta__box {
+  grid-template-columns: minmax(0, 1fr) auto;
+  justify-content: space-between;
+}
+.weft-cta[data-orientation="horizontal"]:is([data-width="regular"], [data-width="wide"]) .weft-cta__actions--end {
+  justify-content: flex-end;
+}
+.weft-cta__copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--weft-space-3, 12px);
+  min-inline-size: 0;
+}
+.weft-cta[data-align="center"] .weft-cta__copy {
+  align-items: center;
+  text-align: center;
+  margin-inline: auto;
+}
+.weft-cta__headline {
+  color: var(--weft-tone-text, LinkText);
+  font-size: 0.875em;
+  font-weight: var(--weft-weight-heading, 600);
+}
+.weft-cta[data-variant="solid"] .weft-cta__headline {
+  color: inherit;
+}
+.weft-cta__title {
+  margin: 0;
+  max-inline-size: 28ch;
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  font-weight: var(--weft-weight-title, 700);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+.weft-cta[data-width="narrow"] .weft-cta__title {
+  font-size: 1.5rem;
+}
+.weft-cta__description {
+  margin: 0;
+  max-inline-size: 54ch;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-cta[data-variant="soft"] .weft-cta__description {
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-cta[data-variant="solid"] .weft-cta__description {
+  color: inherit;
+}
+.weft-cta__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--weft-space-3, 12px);
+  margin-block-start: var(--weft-space-1, 4px);
+  max-inline-size: 100%;
+}
+.weft-cta__actions .weft-button {
+  white-space: normal;
+  block-size: auto;
+  min-block-size: max(var(--weft-control-lg, 44px), var(--weft-hit-min, 24px));
+  padding-block: var(--weft-space-2, 8px);
+  text-align: center;
+  max-inline-size: 100%;
+}
+.weft-cta[data-align="center"] .weft-cta__actions {
+  justify-content: center;
+}
+.weft-cta__actions--end {
+  margin-block-start: 0;
+}
+/* On a solid fill, an outlined or ghost button draws in the fill's foreground
+   so it stays readable across every theme and scheme, at rest and on hover,
+   and the focus ring uses the foreground colour so it contrasts with the fill. */
+.weft-cta[data-variant="solid"] :focus-visible {
+  outline-color: var(--weft-tone-fg, Canvas);
+}
+.weft-cta[data-variant="solid"] .weft-button[data-variant="outline"] {
+  color: var(--weft-tone-fg, Canvas);
+  border-color: color-mix(in srgb, var(--weft-tone-fg, Canvas) 55%, transparent);
+}
+.weft-cta[data-variant="solid"] .weft-button[data-variant="ghost"] {
+  color: var(--weft-tone-fg, Canvas);
+}
+@media (hover: hover) {
+  .weft-cta[data-variant="solid"] .weft-button:not(:disabled, [aria-disabled="true"]):hover:is([data-variant="outline"], [data-variant="ghost"]) {
+    background: var(--weft-tone-hover, var(--weft-tone, LinkText));
+    border-color: var(--weft-tone-fg, Canvas);
+  }
+}
+.weft-cta__aside {
+  min-inline-size: 0;
+}

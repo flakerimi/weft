@@ -133,7 +133,7 @@ const t = computed<TableLabels>(() => ({ ...TABLE_LABELS, ...props.labels }))
 const root = useTemplateRef<HTMLElement>('root')
 const scroller = useTemplateRef<HTMLElement>('scroller')
 const table = useTemplateRef<HTMLTableElement>('table')
-const width = useWidth(root)
+const width = useWidth(root, { prepaint: false })
 const cards = computed(() => width.value === 'narrow')
 
 const sort = useControllable(props, 'sort', emit, () => props.defaultSort)

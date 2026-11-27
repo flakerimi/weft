@@ -1,0 +1,173 @@
+/* Pricing: plan cards in a responsive Grid with an optional ToggleGroup cycle
+   switch and highlighted tier. */
+.weft-pricing {
+  inline-size: 100%;
+  max-inline-size: var(--weft-page-max, 1200px);
+  margin-inline: auto;
+  padding-block: clamp(var(--weft-space-6, 24px), 5vw, var(--weft-space-8, 32px));
+  padding-inline: clamp(var(--weft-space-4, 16px), 4%, var(--weft-space-8, 32px));
+  color: var(--weft-color-text, CanvasText);
+  overflow-wrap: anywhere;
+}
+:is(.weft-page, .weft-section, .weft-container) .weft-pricing {
+  padding: 0;
+}
+.weft-pricing__inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-6, 24px);
+}
+.weft-pricing__header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--weft-space-3, 12px);
+}
+.weft-pricing[data-align="center"] .weft-pricing__header {
+  align-self: center;
+  align-items: center;
+  text-align: center;
+}
+.weft-pricing__headline {
+  font-size: 0.875em;
+  font-weight: var(--weft-weight-heading, 600);
+  color: var(--weft-tone-text, var(--weft-color-primary-text, LinkText));
+}
+.weft-pricing__title {
+  margin: 0;
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  font-weight: var(--weft-weight-title, 700);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-pricing__description {
+  margin: 0;
+  max-inline-size: 60ch;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-pricing__cycles {
+  margin-block-start: var(--weft-space-1, 4px);
+  padding: var(--weft-space-1, 4px);
+  background: var(--weft-color-surface, Canvas);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-control, 8px);
+}
+.weft-pricing__cycle-badge { margin-inline-start: var(--weft-space-1, 4px); }
+/* When the cycle button is pressed (solid fill), draw its badge as an opaque
+   pill in the button's foreground with the tone text on it, so it reaches
+   WCAG AA across every theme and scheme. */
+.weft-pricing__cycle-badge[data-pressed="true"] {
+  background: var(--weft-tone-fg, Canvas);
+  color: var(--weft-tone-text, CanvasText);
+}
+.weft-pricing__plan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-4, 16px);
+  padding: var(--weft-space-6, 24px);
+  background: var(--weft-color-surface, Canvas);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-card, 12px);
+  box-shadow: var(--weft-shadow-card, none);
+  min-inline-size: 0;
+}
+.weft-pricing__plan[data-highlight="true"] {
+  border-width: var(--weft-border-width-strong, 2px);
+  border-color: var(--weft-tone, var(--weft-color-primary, Highlight));
+}
+.weft-pricing__plan-top {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-2, 8px);
+  min-inline-size: 0;
+}
+.weft-pricing__plan-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--weft-space-2, 8px);
+  min-inline-size: 0;
+}
+.weft-pricing__plan-title {
+  margin: 0;
+  min-inline-size: 0;
+  font-size: 1.125em;
+  font-weight: var(--weft-weight-heading, 600);
+  line-height: 1.25;
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-pricing__plan-description {
+  margin: 0;
+  font-size: 0.875em;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-pricing__price-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-1, 4px);
+  min-block-size: var(--weft-control-lg, 40px);
+  min-inline-size: 0;
+}
+.weft-pricing__price-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--weft-space-1, 4px);
+  min-inline-size: 0;
+}
+.weft-pricing__price {
+  font-size: 2em;
+  font-weight: var(--weft-weight-title, 700);
+  line-height: 1.1;
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-pricing__period {
+  font-size: 0.875em;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-pricing__note {
+  font-size: 0.75em;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-pricing__features {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-2, 8px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex: 1;
+  min-inline-size: 0;
+}
+.weft-pricing__feature {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--weft-space-2, 8px);
+  font-size: 0.875em;
+  color: var(--weft-color-text, CanvasText);
+  min-inline-size: 0;
+}
+.weft-pricing__feature-icon {
+  display: inline-flex;
+  flex: none;
+  margin-block-start: var(--weft-space-1, 4px);
+  color: var(--weft-tone-text, var(--weft-color-primary-text, Highlight));
+}
+.weft-pricing__feature-text { min-inline-size: 0; }
+.weft-pricing__action { margin-block-start: auto; min-inline-size: 0; }
+/* Allow a long action label inside a full-width plan card button to wrap rather than spill. */
+.weft-pricing__button {
+  white-space: normal;
+  block-size: auto;
+  min-block-size: max(var(--weft-control-md, 36px), var(--weft-hit-min, 24px));
+  padding-block: var(--weft-space-2, 8px);
+  text-align: center;
+}
+.weft-pricing__footer {
+  font-size: 0.875em;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-pricing[data-align="center"] .weft-pricing__footer { text-align: center; }

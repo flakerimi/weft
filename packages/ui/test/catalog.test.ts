@@ -366,6 +366,7 @@ describe('docs frontmatter', () => {
     ['a missing axis', DOCS.replace('  width: Nothing changes.\n', ''), 'X.docs.md is missing adapts.width; say what the component does between narrow, regular and wide, even if nothing changes.'],
     ['an unknown axis', DOCS.replace('  width:', '  height:'), 'X.docs.md has the unknown axis "height" under adapts; the axes are input, surface and width.'],
     ['a line that is not key: value', DOCS.replace('use:', 'just words\nuse:'), 'X.docs.md line 4 is not "key: value"; write each frontmatter entry on its own line.'],
+    ['a purpose over 80 characters', DOCS.replace('purpose: A thing.', `purpose: ${'a'.repeat(81)}.`), 'X.docs.md has a purpose of 82 characters; shorten purpose to at most 80 characters so weft catalog stays compact.'],
   ])('refuses %s, in one sentence', (_, text, sentence) => {
     expect(() => parseDocs(text, f)).toThrow(sentence)
   })

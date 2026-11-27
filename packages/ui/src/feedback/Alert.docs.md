@@ -1,6 +1,6 @@
 ---
 group: feedback
-purpose: A message in the page that asks for attention, in a tone, with actions and a close button.
+purpose: An inline message asking for attention, in a tone, with actions and close.
 use: Above a form that failed, at the top of a page whose data is stale, beside a setting with a consequence (a trial ending, a payment declined).
 avoid: For news about the whole site or app, use Banner; for a passing confirmation, use a Toast; for a page with nothing to show, use EmptyState or ErrorState.
 adapts:

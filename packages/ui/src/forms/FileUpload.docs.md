@@ -1,6 +1,6 @@
 ---
 group: forms
-purpose: Files to send with a form, dropped, pasted or chosen, listed with previews, sizes and, with an upload function, progress.
+purpose: Files to send with a form, dropped, pasted or chosen, with previews and sizes.
 use: For attachments, a photo or a document in a form - a profile picture, receipts, a CV - bound as File objects or sent as each is added.
 avoid: For a link to a file somewhere else, use Input with type url; for picking among files already uploaded, Select or Listbox.
 adapts:

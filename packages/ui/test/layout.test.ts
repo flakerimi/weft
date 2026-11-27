@@ -28,8 +28,13 @@ describe('Grid', () => {
   beforeEach(() => { ro = installResizeObserver() })
   afterEach(() => ro.restore())
 
-  it('picks columns for its own width', async () => {
+  it('picks columns for its own width and emits per-width column variables on its single grid root', async () => {
     const g = first('grid-default', '.weft-grid')
+    expect(g.style.getPropertyValue('--weft-grid-cols-narrow')).toBe('1')
+    expect(g.style.getPropertyValue('--weft-grid-cols-regular')).toBe('2')
+    expect(g.style.getPropertyValue('--weft-grid-cols-wide')).toBe('3')
+    expect(g.getAttribute('data-gap')).toBe('4')
+    expect(g.querySelector('.weft-grid__inner')).toBeNull()
     ro.report(g, 500)
     await nextTick()
     expect(g.dataset.width).toBe('narrow')
@@ -41,6 +46,9 @@ describe('Grid', () => {
   })
   it('falls back to the nearest smaller width given', async () => {
     const g = first('grid-partial', '.weft-grid')
+    expect(g.style.getPropertyValue('--weft-grid-cols-narrow')).toBe('2')
+    expect(g.style.getPropertyValue('--weft-grid-cols-regular')).toBe('2')
+    expect(g.style.getPropertyValue('--weft-grid-cols-wide')).toBe('2')
     for (const w of [500, 800, 1100]) {
       ro.report(g, w)
       await nextTick()
@@ -49,6 +57,9 @@ describe('Grid', () => {
   })
   it('keeps a fixed column count at every width', async () => {
     const g = first('grid-fixed', '.weft-grid')
+    expect(g.style.getPropertyValue('--weft-grid-cols-narrow')).toBe('4')
+    expect(g.style.getPropertyValue('--weft-grid-cols-regular')).toBe('4')
+    expect(g.style.getPropertyValue('--weft-grid-cols-wide')).toBe('4')
     for (const w of [500, 800, 1100]) {
       ro.report(g, w)
       await nextTick()

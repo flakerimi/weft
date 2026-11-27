@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { buildSite } from '../src/build.ts'
+import { prePaintTag } from '../src/document.ts'
 import { renderPage } from '../src/render.ts'
 
 const root = fileURLToPath(new URL('./fixtures/prepaint-site', import.meta.url))
@@ -24,10 +25,11 @@ beforeAll(async () => {
 afterAll(() => rmSync(join(out, '..'), { recursive: true, force: true }))
 
 describe('pre-paint snippets', () => {
-  it('are written once, at the top of <head> before the CSS, on a page that renders an AppShell', () => {
+  it('are written once, wrapped in their own function scope at the top of <head> before the CSS, on a page that renders an AppShell', () => {
     const h = head('shell')
     expect(snippets(h)).toHaveLength(1)
     expect(h.indexOf('data-weft-prepaint')).toBeLessThan(h.indexOf('<style>'))
+    expect(snippets(h)[0]).toMatch(/^\(function\(\)\{[\s\S]*\}\)\(\)$/)
     expect(snippets(h)[0]).toContain('"weft:app-shell:collapsed"')
   })
 
@@ -81,5 +83,14 @@ describe('pre-paint snippets', () => {
     const { html, prePaint } = await renderPage({ root, page: 'pages/shell.vue' })
     expect(prePaint).toHaveLength(1)
     expect(html).not.toContain('<script')
+  })
+
+  it('N8: separates multiple wrapped snippets with ";\\n" so every snippet runs in order without throwing', () => {
+    const tag = prePaintTag(['var x=1;ran.push("a",x)', 'var x=2;ran.push("b",x)', 'var x=3;ran.push("c",x)'])[0]!
+    const code = tag.replace(/^<script data-weft-prepaint>|<\/script>$/g, '')
+    expect(code).toBe('(function(){var x=1;ran.push("a",x)})();\n(function(){var x=2;ran.push("b",x)})();\n(function(){var x=3;ran.push("c",x)})()')
+    const ran: (string | number)[] = []
+    new Function('ran', code)(ran)
+    expect(ran).toEqual(['a', 1, 'b', 2, 'c', 3])
   })
 })

@@ -90,10 +90,14 @@ page.
 A site with a Content-Security-Policy must allow the page's inline
 pre-paint script, `<script data-weft-prepaint>`, by its hash or with
 `'unsafe-inline'` (a nonce needs a server that writes one into each answer,
-which a built page does not have). The Form's part of it is exactly
+which a built page does not have). The build wraps each snippet in
+`(function(){…})()`, so a page whose only pre-paint component is Form has
+exactly (`'sha256-tx8/QjztXL6iQA+dqwGLMSVBWxKaWIfL8huD/H0v4SY='`)
 
-    window.addEventListener("submit",function(e){var t=e.target;if(t&&t.classList&&t.classList.contains("weft-form"))e.preventDefault()},true)
+    (function(){window.addEventListener("submit",function(e){var t=e.target;if(t&&t.classList&&t.classList.contains("weft-form"))e.preventDefault()},true)})()
 
-and a page whose other components register pre-paint code too (AppShell
-with `persist`, a closable Banner with an `id`) has it joined into the same
-script, one snippet a line, so the hash depends on the page's components.
+and a page whose other components register pre-paint code too (Grid or the
+landing blocks Hero, FeatureGrid, Pricing, Testimonials, Faq and Cta via
+`useWidth`, AppShell with `persist`, or a closable Banner with an `id`) has
+each wrapped snippet joined into the same script with `;\n`, one per line, so
+the hash depends on the page's components.

@@ -1,6 +1,6 @@
 ---
 group: overlays
-purpose: A menu for an area, opened in place of the browser's own by a right press, the context menu key or a long press.
+purpose: A menu for an area, opened by right-click, the context menu key or long press.
 use: For actions on an item that a power user expects on right press (a file, a row, a canvas), alongside a visible way to reach them.
 avoid: As the only way to an action, since nothing shows that it is there; give the item a DropdownMenu button too.
 adapts:

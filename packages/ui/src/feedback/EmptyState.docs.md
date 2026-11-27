@@ -1,6 +1,6 @@
 ---
 group: feedback
-purpose: What a list, a search or a page shows when it has nothing yet, with the actions that would fill it.
+purpose: What a list, search or page shows when empty, with actions that would fill it.
 use: In a Table's empty slot, for a new account with no records, for a search with no results; it replaces the hand-built empty states of admin panels such as Negenet's.
 avoid: When loading failed, use ErrorState; while loading, use Skeleton rows or the Table's loading state.
 adapts:

@@ -1,3 +1,4 @@
+import { existsSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -107,8 +108,11 @@ export async function renderPage(opts: RenderOptions): Promise<RenderResult> {
     const modules = await pageModules(vite, file)
     const islandFiles = findIslandFiles(modules, root, file, islands)
     await transformOnDemand(vite, Object.values(islandFiles))
-    // Vite's module files are posix paths, on Windows too.
-    const rendered = new Set([...(ctx.modules ?? [])].map((m) => normalizePath(resolve(root, m))))
+    // Vite's module files are posix paths, on Windows too, under the real root Vite resolved.
+    const realRoot = existsSync(root) ? realpathSync(root) : root
+    const rendered = new Set(
+      [...(ctx.modules ?? [])].flatMap((m) => [normalizePath(resolve(root, m)), normalizePath(resolve(realRoot, m))]),
+    )
     const used = await pageModules(vite, file, { rendered, islands: new Set(Object.values(islandFiles).map(normalizePath)) })
     refuseBundles(used, opts.bundleCSS ?? [], root, opts.page)
     return {

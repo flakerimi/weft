@@ -127,7 +127,7 @@
       "name": "Alert",
       "group": "feedback",
       "file": "packages/ui/src/feedback/Alert.vue",
-      "purpose": "A message in the page that asks for attention, in a tone, with actions and a close button.",
+      "purpose": "An inline message asking for attention, in a tone, with actions and close.",
       "use": "Above a form that failed, at the top of a page whose data is stale, beside a setting with a consequence (a trial ending, a payment declined).",
       "avoid": "For news about the whole site or app, use Banner; for a passing confirmation, use a Toast; for a page with nothing to show, use EmptyState or ErrorState.",
       "adapts": {
@@ -250,7 +250,7 @@
       "name": "AppShell",
       "group": "shell",
       "file": "packages/ui/src/shell/AppShell.vue",
-      "purpose": "The frame of an app: navigation, a header and the main content, laid out for the screen.",
+      "purpose": "The frame of an app: navigation, header and main content laid out for the page.",
       "use": "As the root of an app's pages (a dashboard, an admin, a client portal).",
       "avoid": "For a marketing or docs site, use Header and Footer around the page; for a panel that slides in, Sheet.",
       "adapts": {
@@ -380,7 +380,7 @@
       "name": "Avatar",
       "group": "basics",
       "file": "packages/ui/src/basics/Avatar.vue",
-      "purpose": "A person or thing as a small round picture, falling back to initials, then to an icon.",
+      "purpose": "A person or thing as a small round picture, falling back to initials or an icon.",
       "use": "Beside a name in a list, a comment or a menu, and in an AvatarGroup for the people on something.",
       "avoid": "For a logo or a photo that is content, use an img; for a status on the avatar, wrap it in a Chip.",
       "adapts": {
@@ -573,7 +573,7 @@
       "name": "Banner",
       "group": "feedback",
       "file": "packages/ui/src/feedback/Banner.vue",
-      "purpose": "A strip across the top of a page or app for news that concerns everyone, which can be closed for good.",
+      "purpose": "A strip across the top of a page or app for site-wide news, closable for good.",
       "use": "For maintenance windows, a new feature, a policy change: above the Header, on every page, until read.",
       "avoid": "For a message about one part of a page, use Alert; for a confirmation of something the person did, use a Toast.",
       "adapts": {
@@ -941,7 +941,7 @@
       "name": "Calendar",
       "group": "dates",
       "file": "packages/ui/src/dates/Calendar.vue",
-      "purpose": "A month of dates to choose one, several or a range from, in the locale's names, digits and first day of the week.",
+      "purpose": "A month of dates to choose one, several or a range from, in the current locale.",
       "use": "For a date chosen in view of the month around it (a booking, a schedule, a range of nights), shown inline on the page or inside a DatePicker.",
       "avoid": "For a date people know and type (a birthday), use DatePicker, whose field takes typing; for a time of day, InputTime.",
       "adapts": {
@@ -1198,7 +1198,7 @@
       "name": "Card",
       "group": "layout",
       "file": "packages/ui/src/layout/Card.vue",
-      "purpose": "A bordered surface holding related content, with an optional header, actions and footer.",
+      "purpose": "A bordered surface holding related content, with header, actions and footer.",
       "use": "To group a few things that belong together, a plan, a summary, a small form, so they read as one unit.",
       "avoid": "For a page region with a heading, use Section; for content that needs a focused task, use a dialog.",
       "adapts": {
@@ -1259,7 +1259,7 @@
       "name": "Checkbox",
       "group": "forms",
       "file": "packages/ui/src/forms/Checkbox.vue",
-      "purpose": "A box to tick on its own or as one of a CheckboxGroup, which can also be indeterminate.",
+      "purpose": "A box to tick on its own or in a CheckboxGroup, with indeterminate support.",
       "use": "For a yes or no that is sent with a form (accept the terms), or a choice among several that are all allowed.",
       "avoid": "For a setting that takes effect at once, use Switch; for one choice among several, use RadioGroup.",
       "adapts": {
@@ -1697,7 +1697,7 @@
       "name": "Combobox",
       "group": "selection",
       "file": "packages/ui/src/selection/Combobox.vue",
-      "purpose": "A text field that searches a list as you type and chooses from it, one value or several, with items given, created or loaded.",
+      "purpose": "A text field that searches a list as you type to choose one or several items.",
       "use": "For a choice from a list people search (a person, a city, a tag), from many options or ones loaded from the server, or where a typed value may become a new option; Nuxt UI's InputMenu, and as a button its SelectMenu.",
       "avoid": "For a short list nobody searches, use Select; for free text with no list, Input; for running commands, CommandPalette.",
       "adapts": {
@@ -2148,7 +2148,7 @@
       "name": "CommandPalette",
       "group": "selection",
       "file": "packages/ui/src/selection/CommandPalette.vue",
-      "purpose": "A search field over grouped commands, found by fuzzy matching and run from the keyboard, with recent commands and pages of sub-commands.",
+      "purpose": "A search field over grouped commands, with fuzzy matching and recent items.",
       "use": "For a Cmd+K launcher in a Dialog, or a search-first menu of everything an app can do or go to.",
       "avoid": "For a value in a form, use Combobox; for a handful of actions on one thing, DropdownMenu.",
       "adapts": {
@@ -2361,7 +2361,7 @@
       "name": "ConfirmDialog",
       "group": "overlays",
       "file": "packages/ui/src/overlays/ConfirmDialog.vue",
-      "purpose": "Asks the user to confirm an action before it goes ahead, with Cancel and a confirm button.",
+      "purpose": "Asks the user to confirm an action before proceeding, with Cancel and Confirm.",
       "use": "Before an action that is hard to undo: delete, discard changes, leave without saving.",
       "avoid": "For an action that can be undone, do it and offer Undo in a toast; for a form, use Dialog.",
       "adapts": {
@@ -2513,7 +2513,7 @@
       "name": "ContextMenu",
       "group": "overlays",
       "file": "packages/ui/src/overlays/ContextMenu.vue",
-      "purpose": "A menu for an area, opened in place of the browser's own by a right press, the context menu key or a long press.",
+      "purpose": "A menu for an area, opened by right-click, the context menu key or long press.",
       "use": "For actions on an item that a power user expects on right press (a file, a row, a canvas), alongside a visible way to reach them.",
       "avoid": "As the only way to an action, since nothing shows that it is there; give the item a DropdownMenu button too.",
       "adapts": {
@@ -2569,10 +2569,136 @@
       ]
     },
     {
+      "name": "Cta",
+      "group": "landing",
+      "file": "packages/ui/src/landing/Cta.vue",
+      "purpose": "A closing call-to-action band or card prompting the next step.",
+      "use": "Near the foot of a landing or marketing page to prompt the visitor to install, start a trial or get in touch.",
+      "avoid": "For the top of a landing page, use Hero; for a short notice across the top of a page, use Banner; for an empty list, use EmptyState.",
+      "adapts": {
+        "input": "Action buttons use size lg, at least --weft-hit-min (44 px) tall on pointer and touch alike.",
+        "surface": "On a landing surface its container is capped at --weft-page-max (1200 px) with the landing type scale; in an app it runs full width.",
+        "width": "Measured from the block's own box (useWidth, before paint and on resize); a horizontal CTA puts its copy and actions (or aside) side by side when regular or wide (640 px and up), and stacks them when narrow."
+      },
+      "props": [
+        {
+          "name": "headline",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Short eyebrow text above the title; the headline slot replaces it."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The call-to-action heading, rendered as an h2 by default (or `h${level}`)."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A sentence under the title."
+        },
+        {
+          "name": "actions",
+          "type": "ActionItem[]",
+          "required": false,
+          "default": null,
+          "description": "Buttons: `{ label, onClick, to, icon, tone, variant }`; the first is solid, the rest outlined."
+        },
+        {
+          "name": "variant",
+          "type": "'card' | 'soft' | 'solid' | 'plain'",
+          "required": false,
+          "default": "'card'",
+          "description": "`card` (bordered raised surface, default), `soft` (tinted in `tone`), `solid` (filled in `tone`), or `plain` (no box)."
+        },
+        {
+          "name": "tone",
+          "type": "'neutral' | 'primary' | 'danger' | 'warning' | 'success'",
+          "required": false,
+          "default": "'primary'",
+          "description": "The colour of `soft` and `solid`, and of the first button otherwise."
+        },
+        {
+          "name": "orientation",
+          "type": "'vertical' | 'horizontal'",
+          "required": false,
+          "default": "'vertical'",
+          "description": "`vertical` (default: copy above actions) or `horizontal` (copy at the start, actions or aside at the end when regular or wide, stacked when narrow)."
+        },
+        {
+          "name": "align",
+          "type": "'start' | 'center'",
+          "required": false,
+          "default": "undefined",
+          "description": "Alignment when vertical: `center` (default when vertical) or `start` (default when horizontal)."
+        },
+        {
+          "name": "level",
+          "type": "2 | 3 | 4 | 5 | 6",
+          "required": false,
+          "default": "2",
+          "description": "The heading level, 2 to 6, to fit the page's outline."
+        }
+      ],
+      "emits": [],
+      "slots": [
+        {
+          "name": "headline",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "title",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "description",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "actions",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "aside",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "`title` renders as an `h2` by default (`level` changes it to 2–6 to fit the\npage's outline), with `headline` above and `description` below. `actions`\nare `Button`s (`{ label, onClick, to, icon, tone, variant }`), the first\nsolid and the rest outlined; the `actions` slot replaces them (for a copyable\ninstall command or newsletter form).\n\n`variant` is `card` (a bordered raised panel, the default), `soft` (tinted in\n`tone`), `solid` (filled in `tone`, where buttons default to the `neutral`\ntone for contrast) or `plain` (unboxed). `orientation` is `vertical` (the\nfixed default: copy and actions stacked, centred unless `align=\"start\"`) or\n`horizontal` (copy at the start, actions or the `aside` slot at the end when\nregular or wide, stacked when narrow).",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Cta/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Cta } from '@weft/ui'\n</script>\n\n<template>\n  <Cta\n    headline=\"Ready in a minute\"\n    title=\"Create your first Weft app\"\n    description=\"One command scaffolds the Go module, the page build and the first route.\"\n    :actions=\"[\n      { label: 'Install Weft', to: '/docs/getting-started/install' },\n      { label: 'View the docs', to: '/docs' },\n    ]\"\n  />\n</template>\n"
+        },
+        {
+          "name": "horizontal",
+          "title": "Horizontal",
+          "file": "packages/ui/examples/Cta/horizontal.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Cta } from '@weft/ui'\n</script>\n\n<template>\n  <Cta\n    orientation=\"horizontal\"\n    variant=\"soft\"\n    title=\"Move your back office to one binary\"\n    description=\"Keep your SQLite database, login and pages together without a separate Node server in production.\"\n    :actions=\"[{ label: 'See the example shop', to: '/docs' }]\"\n  />\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "DatePicker",
       "group": "dates",
       "file": "packages/ui/src/dates/DatePicker.vue",
-      "purpose": "A date field where a date is typed as the locale writes it or chosen from a calendar that opens beside it.",
+      "purpose": "A date field where a date is typed in the locale or chosen from a calendar.",
       "use": "For one date in a form - a due date, a birthday, a start date - bound as an ISO string the server reads.",
       "avoid": "For a range of dates, use DateRangePicker; for a calendar always in view, Calendar; for a time of day, InputTime.",
       "adapts": {
@@ -2815,7 +2941,7 @@
       "name": "DateRangePicker",
       "group": "dates",
       "file": "packages/ui/src/dates/DateRangePicker.vue",
-      "purpose": "A field for a range of dates, a start and an end, typed in the locale or chosen in a calendar of two months.",
+      "purpose": "A field for a start and end date range, typed in the locale or in a calendar.",
       "use": "For a stay, a report period or a leave request in a form, bound as two ISO dates the server reads.",
       "avoid": "For one date, use DatePicker; for a range always in view, Calendar with range.",
       "adapts": {
@@ -3059,7 +3185,7 @@
       "name": "Dialog",
       "group": "overlays",
       "file": "packages/ui/src/overlays/Dialog.vue",
-      "purpose": "A modal window over the page, for a task or message that needs the user's attention before going back.",
+      "purpose": "A modal window over the page for a task or message that needs attention.",
       "use": "For a short form, a decision or details that interrupt the page on purpose: rename, invite, settings of one thing.",
       "avoid": "To confirm an action, use ConfirmDialog; for a panel at the edge (navigation, filters), Sheet; for a hint, Tooltip or Popover.",
       "adapts": {
@@ -3373,7 +3499,7 @@
       "name": "DropdownMenu",
       "group": "overlays",
       "file": "packages/ui/src/overlays/DropdownMenu.vue",
-      "purpose": "A menu of actions opened from a button, with groups, checkbox and radio items, links and submenus.",
+      "purpose": "A menu of actions opened from a button, with groups, choices and submenus.",
       "use": "For the actions on one thing (a row's More button), a user menu, view options.",
       "avoid": "To choose a value for a form, use a select; for navigation between pages, links or navigation components.",
       "adapts": {
@@ -3462,7 +3588,7 @@
       "name": "EmptyState",
       "group": "feedback",
       "file": "packages/ui/src/feedback/EmptyState.vue",
-      "purpose": "What a list, a search or a page shows when it has nothing yet, with the actions that would fill it.",
+      "purpose": "What a list, search or page shows when empty, with actions that would fill it.",
       "use": "In a Table's empty slot, for a new account with no records, for a search with no results; it replaces the hand-built empty states of admin panels such as Negenet's.",
       "avoid": "When loading failed, use ErrorState; while loading, use Skeleton rows or the Table's loading state.",
       "adapts": {
@@ -3565,7 +3691,7 @@
       "name": "ErrorState",
       "group": "feedback",
       "file": "packages/ui/src/feedback/ErrorState.vue",
-      "purpose": "What a list or a page shows when loading it failed, with the error's message and a way to try again.",
+      "purpose": "What a list or page shows when loading failed, with the error and retry button.",
       "use": "In place of a Table, a chart or a page whose request failed; it reads an Error, a string or the wire format's error body.",
       "avoid": "For a form field's error, use FormField; for a failure the person can fix in the page, use Alert; for nothing to show, use EmptyState.",
       "adapts": {
@@ -3687,6 +3813,296 @@
       ]
     },
     {
+      "name": "Faq",
+      "group": "landing",
+      "file": "packages/ui/src/landing/Faq.vue",
+      "purpose": "A titled FAQ section pairing a header with an until-found Accordion.",
+      "use": "On a landing or pricing page to answer common questions without leaving every answer expanded at once.",
+      "avoid": "When you only need the bare collapsible list without a section heading or side-by-side layout, use Accordion directly.",
+      "adapts": {
+        "input": "Each question header is a full-width Accordion button, at least --weft-hit-min (44 px) tall on touch.",
+        "surface": "On a landing surface its container is capped at --weft-page-max (1200 px) with its own block and inline padding (omitted inside a Page, Section or Container); in an app it runs full width.",
+        "width": "Measured from the block's own box (useWidth, before paint and on resize); a horizontal FAQ places the header and aside in a column beside the questions when wide (1024 px and up) and stacks them above when regular or narrow."
+      },
+      "props": [
+        {
+          "name": "headline",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Short eyebrow text above the section title; the headline slot replaces it."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The section's heading, rendered as an h2 by default (or `h${level}`)."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A lead sentence under the title."
+        },
+        {
+          "name": "items",
+          "type": "FaqItem[]",
+          "required": false,
+          "default": "() => []",
+          "description": "The questions and answers (`AccordionItem[]`: `{ label, content, value, icon, trailingIcon, disabled, slot }`)."
+        },
+        {
+          "name": "type",
+          "type": "'single' | 'multiple'",
+          "required": false,
+          "default": "'single'",
+          "description": "`single` (one question open at a time, default) or `multiple` (any number)."
+        },
+        {
+          "name": "modelValue",
+          "type": "string | string[] | null",
+          "required": false,
+          "default": "undefined",
+          "description": "The open question's value (`single`; null when none is), or the open values (`multiple`), bound with `v-model`."
+        },
+        {
+          "name": "defaultValue",
+          "type": "string | string[] | null",
+          "required": false,
+          "default": "undefined",
+          "description": "The open question or questions when `v-model` is not bound."
+        },
+        {
+          "name": "collapsible",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "With `single`: the open question closes again when its header is pressed."
+        },
+        {
+          "name": "orientation",
+          "type": "'vertical' | 'horizontal'",
+          "required": false,
+          "default": "'vertical'",
+          "description": "`vertical` (heading above the questions, default) or `horizontal` (heading beside the questions when wide)."
+        },
+        {
+          "name": "align",
+          "type": "'start' | 'center'",
+          "required": false,
+          "default": "'start'",
+          "description": "Alignment of the header when `orientation=\"vertical\"`: `start` (default) or `center`."
+        },
+        {
+          "name": "level",
+          "type": "2 | 3 | 4 | 5 | 6",
+          "required": false,
+          "default": "2",
+          "description": "The section's heading level, 2 to 6; question headings in the Accordion render one level deeper."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:modelValue",
+          "payload": "[value: string | string[] | null]",
+          "description": "A question opened or closed."
+        }
+      ],
+      "slots": [
+        {
+          "name": "headline",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "header",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "aside",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "label",
+          "props": [
+            "item",
+            "index",
+            "open"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "content",
+          "props": [
+            "item",
+            "index",
+            "open"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "<key>",
+          "props": [
+            "item",
+            "index",
+            "open"
+          ],
+          "dynamic": true
+        }
+      ],
+      "notes": "`items` uses `Accordion`'s item shape (`FaqItem = AccordionItem`: `{ label,\ncontent, value, icon, trailingIcon, disabled, slot }`), so the same array\nworks in both and there is one way to write it. The section's `title` renders\nas an `h2` by default (`level` changes it to 2–6), and each question header\nin the `Accordion` renders one heading level deeper (`h3` under `h2`).\n\n`orientation` is `vertical` (the default: header above the questions) or\n`horizontal` (header and the `aside` slot in a column beside the questions\nwhen wide, stacked above when narrow or regular). `type` (`single` or\n`multiple`), `v-model`, `defaultValue` and `collapsible` work as on\n`Accordion`, and every answer panel is rendered on the server too with\n`hidden=\"until-found\"` so browser find-in-page reveals a closed answer when\nits text matches.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Faq/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Faq, type FaqItem } from '@weft/ui'\n\nconst items: FaqItem[] = [\n  {\n    label: 'Does a page ship JavaScript by default?',\n    content: 'No. Pages pre-render to HTML at build time and ship client JavaScript only for components wrapped in an Island.',\n  },\n  {\n    label: 'Can I use an existing Go net/http middleware?',\n    content: 'Yes. Warp builds on the standard library http.ServeMux and accepts standard http.Handler middleware.',\n  },\n  {\n    label: 'How are closed answers found by browser search?',\n    content: 'Each answer panel uses hidden=\"until-found\", so the browser can match text inside a closed question and open it automatically.',\n  },\n]\n</script>\n\n<template>\n  <Faq\n    headline=\"FAQ\"\n    title=\"Common questions\"\n    description=\"Everything you need to know before building your first app.\"\n    :items=\"items\"\n  />\n</template>\n"
+        },
+        {
+          "name": "horizontal",
+          "title": "Horizontal",
+          "file": "packages/ui/examples/Faq/horizontal.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Faq, Link, type FaqItem } from '@weft/ui'\n\nconst items: FaqItem[] = [\n  {\n    label: 'Why is there no npm package to install?',\n    content: 'The weft binary carries @weft/ui, @weft/vite, @weft/themes and the Go package so every part of an app stays in lockstep.',\n  },\n  {\n    label: 'How do I update an existing app?',\n    content: 'Run weft upgrade inside the project root to unpack the latest bundle and install its packages; weft gen refreshes the generated API types.',\n  },\n]\n</script>\n\n<template>\n  <Faq\n    orientation=\"horizontal\"\n    title=\"Questions and answers\"\n    description=\"When wide, the heading sits in a column beside the accordion.\"\n    :items=\"items\"\n  >\n    <template #aside>\n      Need more detail? Read the <Link to=\"/docs\">documentation</Link>.\n    </template>\n  </Faq>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "FeatureGrid",
+      "group": "landing",
+      "file": "packages/ui/src/landing/FeatureGrid.vue",
+      "purpose": "A titled grid of capabilities, each with an icon, heading, text and link.",
+      "use": "On a landing page to highlight what a product does, each capability in its own card or column.",
+      "avoid": "For key numbers on a dashboard, use StatCard in a Grid; for tabular records, use Table.",
+      "adapts": {
+        "input": "Any item link (`to`, with or without `linkLabel`) renders as a standalone Link, reaching --weft-hit-min (44 px) on touch.",
+        "surface": "On a landing surface its container is capped at --weft-page-max (1200 px) with its own block and inline padding (omitted inside a Page, Section or Container); in an app it runs full width.",
+        "width": "The inner Grid measures its own box (useWidth, before paint and on resize), reflowing by default from 1 column narrow (under 640 px) to 2 regular (under 1024 px) to 3 wide."
+      },
+      "props": [
+        {
+          "name": "headline",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Short eyebrow text above the section title; the headline slot replaces it."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The section's heading, rendered as an h2 by default (or `h${level}`)."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A lead sentence under the title."
+        },
+        {
+          "name": "items",
+          "type": "FeatureItem[]",
+          "required": false,
+          "default": "() => []",
+          "description": "The features to show: `{ title, description, icon, to, linkLabel, slot }`."
+        },
+        {
+          "name": "cols",
+          "type": "number | { narrow?: number; regular?: number; wide?: number }",
+          "required": false,
+          "default": "() => ({ narrow: 1, regular: 2, wide: 3 })",
+          "description": "Columns: one number for every width, or `{ narrow, regular, wide }` of the grid's own width."
+        },
+        {
+          "name": "variant",
+          "type": "'card' | 'plain'",
+          "required": false,
+          "default": "'card'",
+          "description": "`card` (each item in a bordered box, default) or `plain` (unboxed items)."
+        },
+        {
+          "name": "tone",
+          "type": "'neutral' | 'primary' | 'danger' | 'warning' | 'success'",
+          "required": false,
+          "default": "'primary'",
+          "description": "The colour of the icon discs."
+        },
+        {
+          "name": "align",
+          "type": "'start' | 'center'",
+          "required": false,
+          "default": "'start'",
+          "description": "Alignment of the section header: `start` (default) or `center`."
+        },
+        {
+          "name": "level",
+          "type": "2 | 3 | 4 | 5 | 6",
+          "required": false,
+          "default": "2",
+          "description": "The section's heading level, 2 to 6; item titles render one level deeper."
+        }
+      ],
+      "emits": [],
+      "slots": [
+        {
+          "name": "headline",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "header",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "actions",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "item",
+          "props": [
+            "item",
+            "index"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "<key>",
+          "props": [
+            "item",
+            "index"
+          ],
+          "dynamic": true
+        }
+      ],
+      "notes": "`items` are `{ title, description, icon, to, linkLabel, slot }`. The section's\n`title` renders as an `h2` by default (`level` changes it to 2–6), and each\nitem's title renders one heading level deeper (`h3` under `h2`). `icon` draws\na Lucide icon in a disc tinted in `tone`. With `to` and `linkLabel`, a\nstandalone link sits under the description; with `to` alone, the item's title\nlinks there as a standalone link.\n\n`variant` is `card` (each item in a bordered surface box, the default) or\n`plain` (unboxed items). `cols` takes a fixed column count or `{ narrow,\nregular, wide }`, forwarded to `Grid`. The `item` slot replaces every item's\nbody, and a slot named by an item's `slot` replaces that item's body alone.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/FeatureGrid/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { FeatureGrid, type FeatureItem } from '@weft/ui'\n\nconst items: FeatureItem[] = [\n  {\n    icon: 'zap',\n    title: 'Vapor components',\n    description: 'Compiled directly to DOM operations without a virtual DOM diff.',\n  },\n  {\n    icon: 'package',\n    title: 'Single Go binary',\n    description: 'Pre-compressed HTML, assets and typed JSON routes in one executable.',\n  },\n  {\n    icon: 'shield',\n    title: 'Typed end to end',\n    description: 'Go route structs and validation rules generate the TypeScript client and form schemas.',\n  },\n]\n</script>\n\n<template>\n  <FeatureGrid\n    headline=\"Architecture\"\n    title=\"Everything an app needs, nothing it does not\"\n    description=\"Four parts designed together so your pages and your API share one vocabulary.\"\n    :items=\"items\"\n  />\n</template>\n"
+        },
+        {
+          "name": "plain",
+          "title": "Plain",
+          "file": "packages/ui/examples/FeatureGrid/plain.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { FeatureGrid, type FeatureItem } from '@weft/ui'\n\nconst items: FeatureItem[] = [\n  {\n    icon: 'smartphone',\n    title: 'Touch and pointer',\n    description: 'Menus and pickers open bottom sheets on touch and anchored popovers on pointer.',\n    to: '/docs/guides/adaptive',\n    linkLabel: 'Adaptive model',\n  },\n  {\n    icon: 'sliders-horizontal',\n    title: 'Token themes',\n    description: 'Every rule reads --weft-* custom properties with safe fallbacks.',\n    to: '/docs/guides/themes',\n    linkLabel: 'Theme tokens',\n  },\n  {\n    icon: 'database',\n    title: 'SQLite built in',\n    description: 'Schema migrations and typed stores run at startup through database/sql.',\n    to: '/docs/guides/data',\n    linkLabel: 'Data guide',\n  },\n]\n</script>\n\n<template>\n  <FeatureGrid\n    variant=\"plain\"\n    title=\"Built for the long haul\"\n    :items=\"items\"\n  />\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "FieldGroup",
       "group": "forms",
       "file": "packages/ui/src/forms/FieldGroup.vue",
@@ -3736,7 +4152,7 @@
       "name": "FileUpload",
       "group": "forms",
       "file": "packages/ui/src/forms/FileUpload.vue",
-      "purpose": "Files to send with a form, dropped, pasted or chosen, listed with previews, sizes and, with an upload function, progress.",
+      "purpose": "Files to send with a form, dropped, pasted or chosen, with previews and sizes.",
       "use": "For attachments, a photo or a document in a form - a profile picture, receipts, a CV - bound as File objects or sent as each is added.",
       "avoid": "For a link to a file somewhere else, use Input with type url; for picking among files already uploaded, Select or Listbox.",
       "adapts": {
@@ -4117,7 +4533,7 @@
           "dynamic": false
         }
       ],
-      "notes": "`state` is the values, an object the fields bind into with `v-model`;\n`schema` is a Weft field schema - plain JSON a server can send, the same\nshape `weft gen` writes as `schema` from the Go types - keyed by field name:\n\n    { email: { required: true, email: true }, age: { min: 18, message: 'You must be 18 or over.' } }\n\nEach rule is optional: `required`, `min` and `max` (a length for text and\nlists, bounds for numbers), `pattern` (matched against the whole text, as the\nHTML attribute does), `email`, `url` (an absolute `http:` or `https:`\naddress with a host: \"Enter a web address that starts with http:// or\nhttps://.\"), `enum` (a list of the values allowed: \"Choose one of: a, b.\"),\nand `message` in place of the default sentences. `required` counts text of\nonly spaces as empty; every other rule skips only a missing or empty value\n(`undefined`, `null`, `''` or an empty list), so spaces alone fail `enum`,\n`url` and `email`. Its TypeScript type is `FieldSchema`, and\n`validateFields` checks values against one anywhere.\n\n**When it checks.** On submit every field is checked. With errors, `error`\nfires with them, each FormField with a matching `name` shows its error, and\nfocus moves to the first invalid control; without, the `@submit` handler\nruns with a deep copy of the values (lists and objects too), typed as\n`state` is. A field the schema marks `nullable` (a pointer in Go, which\n`weft gen`'s schema marks) is sent as `null` when emptied, `''` included,\nwhich clears it; without the schema there is no way to tell, so every other\n`null` (an emptied number, date or choice) is left out of that copy, and\nthe server reads the field as not sent. A `required` field is stopped by\nthe rule first.\nAfter the first submit, a field is checked again when it is\nleft, and a field showing an error is checked as it changes, so the error\ngoes the moment it is fixed - but no new error appears while typing.\n\n**Server errors.** A template ref's `setErrors({ email: 'That address is\ntaken.' })` shows errors from elsewhere. Leaving such a field keeps its error\n(the server said so, and nothing changed); changing the field checks it\nagain. `validate()` checks without submitting, and `clear()` clears every\nerror.\n\nA server error on a field the schema has no rule for clears the first time\nthat field changes: there is nothing to check it against.\n\n**Its template ref.** `FormApi` is the ref's type:\n`useTemplateRef<FormApi>('form')` gives `setErrors(errors)`, `validate()`,\n`clear()`, `submit()` (as the submit button would), and `errors` and\n`loading` read as values.\n\n**Disabled.** The content sits in a `<fieldset>` with no frame, so\n`disabled` disables every control in the form at once - Weft's and native\nones, Buttons included - and a submit does nothing. A fieldset leaves links\nalone, so a Link, or a Button with `to`, in the form reads it and is\ndisabled as a disabled link is: no address, `aria-disabled`, no navigation.\n\n**Busy.** `loading`, or with `loading-auto` (on by default) a `@submit`\nhandler that returns a promise, makes the form busy until it settles: it sets\n`aria-busy`, a second press or Enter submits nothing, its fields are\ndisabled and its links have no address. The submit button is not natively\ndisabled, so it keeps focus: it shows its spinner, is `aria-busy` and\n`aria-disabled`, and ignores presses. Any other button works, so a Cancel or\nStop can abort the submit (as in Nuxt UI). Raw native controls in the form (a\nplain `<input>` or `<button>`) are not blocked while busy, only while\n`disabled`; use Weft's components to have them follow the form. A field that\nhad focus (Enter pressed in it, or focused as `loading` turned on) gets it\nback when the form is done. (`@submit` is a handler prop, as in Nuxt UI, so\nthe form can wait for it.) The native form has `novalidate`: Weft shows the\nerrors, not the browser.\n\n**Before it is live.** A Form sends only through its `@submit` handler,\nso it belongs in an island: one drawn by the page, with no island around\nit, is never live and does nothing on submit; in development its first\nsubmit says so in the console. Until its island is live it\nsends nothing: a small inline script at the top of the page's `<head>`\nstops every submit of a Weft form from the first moment, and the form is\n`method=\"post\"`, so with scripts off its own submit puts nothing in the\naddress (a submit button the app gives `formmethod=\"get\"` still does).\nIts fields stay usable meanwhile: what a person types, or a password\nmanager fills, before the island is live is kept when it hydrates and\nreaches the model. An app's own `form.submit()` fires no submit event, by\nthe platform's design, so it bypasses the script and sends a POST to the\npage.\n\nA site with a Content-Security-Policy must allow the page's inline\npre-paint script, `<script data-weft-prepaint>`, by its hash or with\n`'unsafe-inline'` (a nonce needs a server that writes one into each answer,\nwhich a built page does not have). The Form's part of it is exactly\n\n    window.addEventListener(\"submit\",function(e){var t=e.target;if(t&&t.classList&&t.classList.contains(\"weft-form\"))e.preventDefault()},true)\n\nand a page whose other components register pre-paint code too (AppShell\nwith `persist`, a closable Banner with an `id`) has it joined into the same\nscript, one snippet a line, so the hash depends on the page's components.",
+      "notes": "`state` is the values, an object the fields bind into with `v-model`;\n`schema` is a Weft field schema - plain JSON a server can send, the same\nshape `weft gen` writes as `schema` from the Go types - keyed by field name:\n\n    { email: { required: true, email: true }, age: { min: 18, message: 'You must be 18 or over.' } }\n\nEach rule is optional: `required`, `min` and `max` (a length for text and\nlists, bounds for numbers), `pattern` (matched against the whole text, as the\nHTML attribute does), `email`, `url` (an absolute `http:` or `https:`\naddress with a host: \"Enter a web address that starts with http:// or\nhttps://.\"), `enum` (a list of the values allowed: \"Choose one of: a, b.\"),\nand `message` in place of the default sentences. `required` counts text of\nonly spaces as empty; every other rule skips only a missing or empty value\n(`undefined`, `null`, `''` or an empty list), so spaces alone fail `enum`,\n`url` and `email`. Its TypeScript type is `FieldSchema`, and\n`validateFields` checks values against one anywhere.\n\n**When it checks.** On submit every field is checked. With errors, `error`\nfires with them, each FormField with a matching `name` shows its error, and\nfocus moves to the first invalid control; without, the `@submit` handler\nruns with a deep copy of the values (lists and objects too), typed as\n`state` is. A field the schema marks `nullable` (a pointer in Go, which\n`weft gen`'s schema marks) is sent as `null` when emptied, `''` included,\nwhich clears it; without the schema there is no way to tell, so every other\n`null` (an emptied number, date or choice) is left out of that copy, and\nthe server reads the field as not sent. A `required` field is stopped by\nthe rule first.\nAfter the first submit, a field is checked again when it is\nleft, and a field showing an error is checked as it changes, so the error\ngoes the moment it is fixed - but no new error appears while typing.\n\n**Server errors.** A template ref's `setErrors({ email: 'That address is\ntaken.' })` shows errors from elsewhere. Leaving such a field keeps its error\n(the server said so, and nothing changed); changing the field checks it\nagain. `validate()` checks without submitting, and `clear()` clears every\nerror.\n\nA server error on a field the schema has no rule for clears the first time\nthat field changes: there is nothing to check it against.\n\n**Its template ref.** `FormApi` is the ref's type:\n`useTemplateRef<FormApi>('form')` gives `setErrors(errors)`, `validate()`,\n`clear()`, `submit()` (as the submit button would), and `errors` and\n`loading` read as values.\n\n**Disabled.** The content sits in a `<fieldset>` with no frame, so\n`disabled` disables every control in the form at once - Weft's and native\nones, Buttons included - and a submit does nothing. A fieldset leaves links\nalone, so a Link, or a Button with `to`, in the form reads it and is\ndisabled as a disabled link is: no address, `aria-disabled`, no navigation.\n\n**Busy.** `loading`, or with `loading-auto` (on by default) a `@submit`\nhandler that returns a promise, makes the form busy until it settles: it sets\n`aria-busy`, a second press or Enter submits nothing, its fields are\ndisabled and its links have no address. The submit button is not natively\ndisabled, so it keeps focus: it shows its spinner, is `aria-busy` and\n`aria-disabled`, and ignores presses. Any other button works, so a Cancel or\nStop can abort the submit (as in Nuxt UI). Raw native controls in the form (a\nplain `<input>` or `<button>`) are not blocked while busy, only while\n`disabled`; use Weft's components to have them follow the form. A field that\nhad focus (Enter pressed in it, or focused as `loading` turned on) gets it\nback when the form is done. (`@submit` is a handler prop, as in Nuxt UI, so\nthe form can wait for it.) The native form has `novalidate`: Weft shows the\nerrors, not the browser.\n\n**Before it is live.** A Form sends only through its `@submit` handler,\nso it belongs in an island: one drawn by the page, with no island around\nit, is never live and does nothing on submit; in development its first\nsubmit says so in the console. Until its island is live it\nsends nothing: a small inline script at the top of the page's `<head>`\nstops every submit of a Weft form from the first moment, and the form is\n`method=\"post\"`, so with scripts off its own submit puts nothing in the\naddress (a submit button the app gives `formmethod=\"get\"` still does).\nIts fields stay usable meanwhile: what a person types, or a password\nmanager fills, before the island is live is kept when it hydrates and\nreaches the model. An app's own `form.submit()` fires no submit event, by\nthe platform's design, so it bypasses the script and sends a POST to the\npage.\n\nA site with a Content-Security-Policy must allow the page's inline\npre-paint script, `<script data-weft-prepaint>`, by its hash or with\n`'unsafe-inline'` (a nonce needs a server that writes one into each answer,\nwhich a built page does not have). The build wraps each snippet in\n`(function(){…})()`, so a page whose only pre-paint component is Form has\nexactly (`'sha256-tx8/QjztXL6iQA+dqwGLMSVBWxKaWIfL8huD/H0v4SY='`)\n\n    (function(){window.addEventListener(\"submit\",function(e){var t=e.target;if(t&&t.classList&&t.classList.contains(\"weft-form\"))e.preventDefault()},true)})()\n\nand a page whose other components register pre-paint code too (Grid or the\nlanding blocks Hero, FeatureGrid, Pricing, Testimonials, Faq and Cta via\n`useWidth`, AppShell with `persist`, or a closable Banner with an `id`) has\neach wrapped snippet joined into the same script with `;\\n`, one per line, so\nthe hash depends on the page's components.",
       "examples": [
         {
           "name": "basic",
@@ -4262,7 +4678,7 @@
       "adapts": {
         "input": "Nothing changes.",
         "surface": "Nothing changes.",
-        "width": "Measured from the grid itself, not the window, so a grid in a side panel stays narrow on a large screen; by default 1 column narrow (under 640 px), 2 regular (under 1024 px) and 3 wide."
+        "width": "Measured from the grid's own box (useWidth, before paint through its pre-paint observer and on resize), not the window, so a grid in a side panel or static page stays narrow on a large screen; by default 1 column narrow (under 640 px), 2 regular (under 1024 px) and 3 wide."
       },
       "props": [
         {
@@ -4288,7 +4704,7 @@
           "dynamic": false
         }
       ],
-      "notes": "`cols` is a fixed number or one per width class, `{ narrow, regular, wide }`.\nA width left out falls back to the nearest smaller one given, else to the\ndefault for it.",
+      "notes": "`cols` is a fixed number or one per width class, `{ narrow, regular, wide }`.\nA width left out falls back to the nearest smaller one given, else to the\ndefault for it.\n\nOn the server, `Grid` (and the landing blocks `Hero`, `FeatureGrid`,\n`Pricing`, `Testimonials`, `Faq` and `Cta`) registers `useWidth`'s pre-paint\nobserver (`widthPrePaint`), which the page build wraps in `(function(){…})()`\ninside `<script data-weft-prepaint>` in `<head>` (its SHA-256 CSP hash when\nalone is `'sha256-9BDYcqAvUSo5sGyREfywnuaJMRGECCNSMPtWf2EQYPM='`):\n\n    (function(){if(typeof ResizeObserver<\"u\"){var o=new Set,d=function(t,w){if(w>0)t.setAttribute(\"data-width\",w<640?\"narrow\":w<1024?\"regular\":\"wide\")},r=window.__weftWidthRo=new ResizeObserver(function(e){for(var i=0;i<e.length;i++){var t=e[i].target;if(t.hasAttribute(\"data-weft-width\"))r.unobserve(t);else d(t,e[i].contentRect.width)}}),s=function(){var l=document.querySelectorAll(\"[data-width]:not([data-weft-width])\"),n=[],w=[],i;for(i=0;i<l.length;i++)if(!o.has(l[i])){o.add(l[i]);n.push(l[i]);w.push(l[i].getBoundingClientRect().width)}for(i=0;i<n.length;i++){d(n[i],w[i]);r.observe(n[i])}};s();if(document.readyState===\"loading\"){var m=new MutationObserver(s);m.observe(document,{childList:true,subtree:true});addEventListener(\"DOMContentLoaded\",function(){m.disconnect();s()},{once:true})}}})()\n\nIt observes `[data-width]` elements added while the page parses until\n`DOMContentLoaded`; `[data-width]` markup inserted after `DOMContentLoaded`\nby code outside Vue keeps its server attribute.",
       "examples": [
         {
           "name": "basic",
@@ -4395,6 +4811,123 @@
       ]
     },
     {
+      "name": "Hero",
+      "group": "landing",
+      "file": "packages/ui/src/landing/Hero.vue",
+      "purpose": "The opening band of a landing page, with a title, lead, actions and visual.",
+      "use": "At the top of a product's or documentation site's home page to state what it is and offer the main action.",
+      "avoid": "For the top of an app page inside an AppShell, use Page; for a closing call to action lower on the page, use Cta.",
+      "adapts": {
+        "input": "Action buttons use size lg, at least --weft-hit-min (44 px) tall on pointer and touch alike.",
+        "surface": "On a landing surface its container is capped at --weft-page-max (1200 px) with the larger landing type scale; in an app it runs full width.",
+        "width": "Measured from the hero's own box (useWidth, before paint and on resize); a horizontal hero puts the copy and visual side by side when wide (1024 px and up) and stacks the copy above the visual when regular or narrow."
+      },
+      "props": [
+        {
+          "name": "headline",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Short eyebrow text above the title; the headline slot replaces it."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The main heading: an h1 by default (h2 inside an inset WeftProvider, or `h${level}`)."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A lead paragraph under the title."
+        },
+        {
+          "name": "actions",
+          "type": "ActionItem[]",
+          "required": false,
+          "default": null,
+          "description": "Call-to-action buttons: `{ label, onClick, to, icon, tone, variant }`; the first is solid primary, the rest outlined."
+        },
+        {
+          "name": "orientation",
+          "type": "'vertical' | 'horizontal'",
+          "required": false,
+          "default": "'vertical'",
+          "description": "`vertical` (default: copy above, visual below) or `horizontal` (copy beside the visual when wide, stacked when narrow or regular)."
+        },
+        {
+          "name": "align",
+          "type": "'start' | 'center'",
+          "required": false,
+          "default": "undefined",
+          "description": "Alignment of the copy and actions: `center` (default when vertical) or `start` (default when horizontal)."
+        },
+        {
+          "name": "level",
+          "type": "1 | 2 | 3 | 4 | 5 | 6",
+          "required": false,
+          "default": "undefined",
+          "description": "Heading level, 1 to 6; unset uses h1 (or h2 inside an inset WeftProvider)."
+        }
+      ],
+      "emits": [],
+      "slots": [
+        {
+          "name": "background",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "headline",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "title",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "description",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "actions",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "caption",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "`title` renders as the page's `h1` by default, or as an `h2` inside a\n`WeftProvider` marked `inset` (so a preview stage never adds a second `h1` to\nthe page around it); `level` overrides it. `headline` (or the `headline`\nslot) sits above the title, `description` below it, and `actions` renders\n`Button`s (`{ label, onClick, to, icon, tone, variant }`), the first solid\nprimary and the rest outlined; the `actions` slot replaces them (for an\ninstall command or prompt box) and `caption` adds a quiet note below.\n\n`orientation` is `vertical` (the fixed default: copy above, visual below,\ncentred unless `align=\"start\"`) or `horizontal` (copy at the inline start,\nvisual in the default slot at the inline end when wide, stacked when narrow\nor regular). The `background` slot places a decorative layer behind the\ncontainer (`aria-hidden=\"true\"`).",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Hero/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Hero } from '@weft/ui'\n</script>\n\n<template>\n  <Hero\n    headline=\"One binary\"\n    title=\"Build Go and Vue apps together\"\n    description=\"Vapor components, a pre-rendered page build and a Go server that ships in a single executable.\"\n    :actions=\"[\n      { label: 'Get started', to: '/docs/getting-started/install' },\n      { label: 'Browse components', to: '/components' },\n    ]\"\n  />\n</template>\n"
+        },
+        {
+          "name": "horizontal",
+          "title": "Horizontal",
+          "file": "packages/ui/examples/Hero/horizontal.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Card, Hero } from '@weft/ui'\n</script>\n\n<template>\n  <Hero\n    orientation=\"horizontal\"\n    headline=\"Zero virtual DOM\"\n    title=\"Pages that ship only what they render\"\n    description=\"Static sections render on the server and ship zero JavaScript; interactive islands hydrate when they enter view.\"\n    :actions=\"[{ label: 'Read the guide', to: '/docs/guides/pages-and-islands' }]\"\n  >\n    <Card>\n      <template #header>weft build</template>\n      <p>dist/pages: 14 routes pre-rendered (gzip + brotli)</p>\n    </Card>\n  </Hero>\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "Icon",
       "group": "basics",
       "file": "packages/ui/src/basics/Icon.vue",
@@ -4451,7 +4984,7 @@
       "name": "Input",
       "group": "forms",
       "file": "packages/ui/src/forms/Input.vue",
-      "purpose": "A one-line text field in a box that can hold an icon, a unit or a button before and after the text.",
+      "purpose": "A one-line text field that can hold an icon, unit or button beside the text.",
       "use": "For a short answer typed in full - a name, an email address, a search - bound with v-model, usually inside a FormField.",
       "avoid": "For text over several lines, use Textarea; for a number stepped up and down, use InputNumber; for a choice from a known list, use a select or RadioGroup.",
       "adapts": {
@@ -4758,7 +5291,7 @@
       "name": "InputTags",
       "group": "selection",
       "file": "packages/ui/src/selection/InputTags.vue",
-      "purpose": "A text field that turns what is typed into tags, each with a ×, for a list of short free values.",
+      "purpose": "A text field that turns typed entries into removable tags for a list of values.",
       "use": "For keywords, email addresses, labels: values typed rather than chosen from a list, several of them.",
       "avoid": "When the values come from a known list, use Combobox with multiple; for one value, Input.",
       "adapts": {
@@ -5171,7 +5704,7 @@
       "name": "Island",
       "group": "islands",
       "file": "packages/ui/src/islands/Island.vue",
-      "purpose": "Renders a component on the server and makes it interactive in the browser, on load, when idle, when visible or when a media query matches.",
+      "purpose": "Renders a component on the server and hydrates it in the browser when triggered.",
       "use": "For the few interactive parts of an otherwise static page, a counter, a form, a menu, so only they ship JavaScript.",
       "avoid": "For content that never changes in the browser, render the component directly; a page with no island ships no script at all.",
       "adapts": {
@@ -5371,7 +5904,7 @@
       "name": "Listbox",
       "group": "selection",
       "file": "packages/ui/src/selection/Listbox.vue",
-      "purpose": "A list of options always shown, to choose one or several from, with an optional filter field above it.",
+      "purpose": "A visible list of options to pick one or several from, with an optional filter.",
       "use": "For a choice that deserves the room of a visible list (a few to a few thousand options), in a form or a side panel; with `filter` when the list is long.",
       "avoid": "When the list should open from a field, use Select or Combobox; for two to five options, RadioGroup or CheckboxGroup; for actions, DropdownMenu or CommandPalette.",
       "adapts": {
@@ -5648,7 +6181,7 @@
       "name": "NavigationMenu",
       "group": "navigation",
       "file": "packages/ui/src/navigation/NavigationMenu.vue",
-      "purpose": "A site's or an app's main links, as a bar whose groups open as lists, or as a sidebar column.",
+      "purpose": "A site's or app's main links as a horizontal bar with menus or a sidebar column.",
       "use": "For the main navigation in a header (horizontal) or a sidebar (vertical).",
       "avoid": "For actions, use DropdownMenu; for a page's place in the site, Breadcrumb; for a whole app frame, AppShell, which draws one.",
       "adapts": {
@@ -5729,7 +6262,7 @@
       "name": "OverlayPanel",
       "group": "overlays",
       "file": "packages/ui/src/overlays/OverlayPanel.vue",
-      "purpose": "The inside of a modal panel: a header with the heading, actions and close button, a body that scrolls, and a footer.",
+      "purpose": "The inside of a modal panel: header, close button, scrolling body and footer.",
       "use": "Inside a modal surface of your own that should look like Dialog, Sheet and Drawer, which render it themselves.",
       "avoid": "To open a dialog, use Dialog, Sheet or Drawer; for a card on the page, Card.",
       "adapts": {
@@ -6148,7 +6681,7 @@
       "name": "Popover",
       "group": "overlays",
       "file": "packages/ui/src/overlays/Popover.vue",
-      "purpose": "Content that floats beside a trigger, opened by a press: filters, a short form, details.",
+      "purpose": "Content that floats beside a trigger when pressed: filters, a form or details.",
       "use": "For a small panel of controls or information tied to one button, which the user opens, uses and closes.",
       "avoid": "For a list of actions, use DropdownMenu; for a short hint on hover, Tooltip; for a task that needs the user's full attention, Dialog.",
       "adapts": {
@@ -6290,10 +6823,166 @@
       ]
     },
     {
+      "name": "Pricing",
+      "group": "landing",
+      "file": "packages/ui/src/landing/Pricing.vue",
+      "purpose": "A pricing section of plan cards, with an optional billing-cycle toggle.",
+      "use": "On a landing or upgrade page to compare plans and let a visitor switch between billing cycles such as monthly and yearly.",
+      "avoid": "For a full matrix of dozens of rows across plans, pair Pricing with a Table below it; for a single product card, use Card.",
+      "adapts": {
+        "input": "The ToggleGroup cycle buttons and each plan's call-to-action Button are at least --weft-hit-min (44 px) tall on touch.",
+        "surface": "On a landing surface its container is capped at --weft-page-max (1200 px) with its own block and inline padding (omitted inside a Page, Section or Container); in an app it runs full width.",
+        "width": "The inner Grid measures its own box (useWidth, before paint and on resize), stacking plans in 1 column when narrow, up to 2 when regular, and up to the plan count (at most 4) when wide."
+      },
+      "props": [
+        {
+          "name": "headline",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Short eyebrow text above the section title; the headline slot replaces it."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The section's heading, rendered as an h2 by default (or `h${level}`)."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A lead sentence under the title."
+        },
+        {
+          "name": "plans",
+          "type": "PricingPlan[]",
+          "required": false,
+          "default": "() => []",
+          "description": "The pricing plans: `{ id, title, description, price, period, billingNote, badge, highlight, features, action, slot }`."
+        },
+        {
+          "name": "cycles",
+          "type": "PricingCycle[]",
+          "required": false,
+          "default": "() => []",
+          "description": "Optional billing cycles (such as Monthly and Yearly), rendered as a single ToggleGroup above the plans."
+        },
+        {
+          "name": "cycle",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "The active billing cycle value, bound with `v-model:cycle`."
+        },
+        {
+          "name": "defaultCycle",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "The active billing cycle when `v-model:cycle` is not bound; defaults to the first cycle's value."
+        },
+        {
+          "name": "cycleLabel",
+          "type": "string",
+          "required": false,
+          "default": "'Billing period'",
+          "description": "Accessible label for the billing cycle ToggleGroup."
+        },
+        {
+          "name": "cols",
+          "type": "number | { narrow?: number; regular?: number; wide?: number }",
+          "required": false,
+          "default": "undefined",
+          "description": "Columns: one number for every width, or `{ narrow, regular, wide }` of the grid's own width."
+        },
+        {
+          "name": "tone",
+          "type": "'neutral' | 'primary' | 'danger' | 'warning' | 'success'",
+          "required": false,
+          "default": "'primary'",
+          "description": "The colour of the highlighted plan, badges and feature checkmarks."
+        },
+        {
+          "name": "align",
+          "type": "'start' | 'center'",
+          "required": false,
+          "default": "'center'",
+          "description": "Alignment of the section header and cycle switch: `center` (default) or `start`."
+        },
+        {
+          "name": "level",
+          "type": "2 | 3 | 4 | 5 | 6",
+          "required": false,
+          "default": "2",
+          "description": "The section's heading level, 2 to 6; plan titles render one level deeper."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:cycle",
+          "payload": "[cycle: string]",
+          "description": "The selected billing cycle changed."
+        }
+      ],
+      "slots": [
+        {
+          "name": "headline",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "header",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "plan",
+          "props": [
+            "plan",
+            "index",
+            "cycle"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "footer",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "<key>",
+          "props": [
+            "plan",
+            "index",
+            "cycle"
+          ],
+          "dynamic": true
+        }
+      ],
+      "notes": "`plans` are `{ id, title, description, price, period, billingNote, badge,\nhighlight, features, action, slot }`. The section's `title` renders as an\n`h2` by default (`level` changes it to 2–6), and each plan's `title` renders\none heading level deeper (`h3` under `h2`). A plan with `highlight: true`\ndraws an accent border in `tone` and defaults its `action` button to `solid`\n(non-highlighted plans default to `outline`).\n\n**Billing cycles.** When `cycles` (`{ label, value, badge }[]`) is passed,\n`Pricing` renders a single `ToggleGroup` above the plans, bound with\n`v-model:cycle` (or `defaultCycle`, defaulting to the first cycle's `value`),\nkeeping the active cycle selected if pressed again. Switching cycles runs in\nthe browser, so a `Pricing` with `cycles` needs an `<Island>` around it; a\nstatic `Pricing` with no `cycles` needs no island. Each plan's `price`,\n`period` and `billingNote` can be a plain string (the same for every cycle,\nsuch as `price: '$0'`) or a map keyed by cycle `value` (`price: { monthly:\n'$29', yearly: '$24' }`). A `price` or `period` map that lacks the selected\ncycle leaves that plan's price area empty (never showing another cycle's\nprice) and warns once in development naming the plan and the cycle; a\n`billingNote` map that lacks the selected cycle shows no billing note for\nthat cycle.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Pricing/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Pricing, type PricingPlan } from '@weft/ui'\n\nconst plans: PricingPlan[] = [\n  {\n    title: 'Starter',\n    description: 'For side projects and small internal tools.',\n    price: '$0',\n    period: '/month',\n    features: ['Unlimited pages', 'SQLite data store', 'Community support'],\n    action: { label: 'Start for free', to: '/docs/getting-started/install' },\n  },\n  {\n    title: 'Team',\n    description: 'For product teams running customer-facing apps.',\n    price: '$29',\n    period: '/month',\n    badge: 'Popular',\n    highlight: true,\n    features: ['Everything in Starter', 'Role permissions', 'Automated backups', 'Priority support'],\n    action: { label: 'Start free trial', to: '/docs/getting-started/install' },\n  },\n]\n</script>\n\n<template>\n  <Pricing\n    headline=\"Pricing\"\n    title=\"Simple, predictable plans\"\n    description=\"Start free and upgrade when your team grows.\"\n    :plans=\"plans\"\n  />\n</template>\n"
+        },
+        {
+          "name": "cycles",
+          "title": "Cycles",
+          "file": "packages/ui/examples/Pricing/cycles.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Pricing, type PricingCycle, type PricingPlan } from '@weft/ui'\n\nconst cycle = ref('yearly')\n\nconst cycles: PricingCycle[] = [\n  { label: 'Monthly', value: 'monthly' },\n  { label: 'Yearly', value: 'yearly', badge: 'Save 20%' },\n]\n\nconst plans: PricingPlan[] = [\n  {\n    title: 'Hobby',\n    description: 'One project for an individual.',\n    price: '$0',\n    period: '/month',\n    features: ['1 workspace', 'Daily snapshots', 'Email support'],\n    action: { label: 'Start free' },\n  },\n  {\n    title: 'Pro',\n    description: 'For growing products and teams.',\n    price: { monthly: '$30', yearly: '$24' },\n    period: '/month',\n    billingNote: { monthly: 'Billed monthly', yearly: 'Billed $288 yearly' },\n    badge: 'Recommended',\n    highlight: true,\n    features: ['Unlimited workspaces', 'Team roles and audit log', 'Priority email support'],\n    action: { label: 'Start Pro trial' },\n  },\n]\n</script>\n\n<template>\n  <Pricing\n    v-model:cycle=\"cycle\"\n    title=\"Switch between monthly and yearly billing\"\n    :cycles=\"cycles\"\n    :plans=\"plans\"\n  />\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "Progress",
       "group": "basics",
       "file": "packages/ui/src/basics/Progress.vue",
-      "purpose": "A bar showing how far a task has got, or that it is under way when that is unknown.",
+      "purpose": "A bar showing how far a task has got, or that it is under way when unknown.",
       "use": "For uploads, imports, multi-step work and quotas, where the reader waits or watches.",
       "avoid": "For a short wait inside a control, use Spinner; for loading content, use Skeleton.",
       "adapts": {
@@ -6475,7 +7164,7 @@
       "name": "ScrollArea",
       "group": "layout",
       "file": "packages/ui/src/layout/ScrollArea.vue",
-      "purpose": "A box whose content scrolls inside it, with the browser's own scrolling and thin themed scrollbars.",
+      "purpose": "A box whose content scrolls inside it with thin themed scrollbars.",
       "use": "For a long list in a fixed-height panel, a wide strip of cards that scrolls sideways, a code block or a log.",
       "avoid": "For the page itself, let the page scroll; for thousands of rows, use Table or Listbox, which render only those in view.",
       "adapts": {
@@ -6586,7 +7275,7 @@
       "name": "Select",
       "group": "selection",
       "file": "packages/ui/src/selection/Select.vue",
-      "purpose": "A button showing the chosen value that opens a list to choose one, or several, from.",
+      "purpose": "A button showing the chosen value that opens a list to pick one or several.",
       "use": "For a choice from a known list in a form (a country, a status, a size), where the list is too long for radio buttons and nobody needs to type to find an option.",
       "avoid": "When people search the list or type their own value, use Combobox; for two to five options always in view, RadioGroup; for actions, DropdownMenu.",
       "adapts": {
@@ -6957,7 +7646,7 @@
       "name": "Sheet",
       "group": "overlays",
       "file": "packages/ui/src/overlays/Sheet.vue",
-      "purpose": "A modal panel that slides in from an edge of the viewport: a slideover from the side, or a bottom sheet.",
+      "purpose": "A modal panel that slides in from a side edge or rises as a bottom sheet.",
       "use": "For navigation on small screens, filters, a detail view or a form that should keep the page visible beside it.",
       "avoid": "For a short decision, use Dialog or ConfirmDialog; for content tied to one button on a large screen, Popover.",
       "adapts": {
@@ -7384,7 +8073,7 @@
       "name": "StatCard",
       "group": "data",
       "file": "packages/ui/src/data/StatCard.vue",
-      "purpose": "One figure that matters on a card, with how it changed and an optional sparkline.",
+      "purpose": "One key figure on a card, with how it changed and an optional sparkline.",
       "use": "In a row of key figures at the top of a dashboard (revenue, active customers, open tickets); it replaces the hand-built stat cards of admin panels such as Negenet's.",
       "avoid": "For many figures to compare, use Table; for a figure inside a sentence, write the sentence.",
       "adapts": {
@@ -7766,7 +8455,7 @@
       "name": "Table",
       "group": "data",
       "file": "packages/ui/src/data/Table.vue",
-      "purpose": "Rows of data under column headers, sorted, chosen, paged and loaded from an array or from a server.",
+      "purpose": "Rows under column headers, sorted, chosen, paged and loaded from array or API.",
       "use": "For records a person compares, sorts or acts on in bulk (customers, invoices, devices), from a plain array or a server speaking the wire format.",
       "avoid": "For a few label–value pairs about one thing, use a description list or StatCard; for items a person reads one by one, use a list of Cards; for a hierarchy, use Tree.",
       "adapts": {
@@ -8167,6 +8856,105 @@
       ]
     },
     {
+      "name": "Testimonials",
+      "group": "landing",
+      "file": "packages/ui/src/landing/Testimonials.vue",
+      "purpose": "A titled grid of quotes, each a figure with blockquote, author and avatar.",
+      "use": "On a landing page to show quotes from people who use the product, with their name, role and avatar.",
+      "avoid": "For a sequence of milestones over time, use Timeline; for capability cards with icons, use FeatureGrid.",
+      "adapts": {
+        "input": "Nothing changes unless an item sets `to`, which renders as a standalone Link reaching --weft-hit-min (44 px) on touch.",
+        "surface": "On a landing surface its container is capped at --weft-page-max (1200 px) with its own block and inline padding (omitted inside a Page, Section or Container); in an app it runs full width.",
+        "width": "The inner Grid measures its own box (useWidth, before paint and on resize), reflowing by default from 1 column narrow (under 640 px) to 2 regular (under 1024 px) to 3 wide."
+      },
+      "props": [
+        {
+          "name": "headline",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Short eyebrow text above the section title; the headline slot replaces it."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "The section's heading, rendered as an h2 by default (or `h${level}`)."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A lead sentence under the title."
+        },
+        {
+          "name": "items",
+          "type": "TestimonialItem[]",
+          "required": false,
+          "default": "() => []",
+          "description": "The quotes to show: `{ quote, author, role, avatar, to }`."
+        },
+        {
+          "name": "cols",
+          "type": "number | { narrow?: number; regular?: number; wide?: number }",
+          "required": false,
+          "default": "() => ({ narrow: 1, regular: 2, wide: 3 })",
+          "description": "Columns: one number for every width, or `{ narrow, regular, wide }` of the grid's own width."
+        },
+        {
+          "name": "align",
+          "type": "'start' | 'center'",
+          "required": false,
+          "default": "'start'",
+          "description": "Alignment of the section header: `start` (default) or `center`."
+        },
+        {
+          "name": "level",
+          "type": "2 | 3 | 4 | 5 | 6",
+          "required": false,
+          "default": "2",
+          "description": "The section's heading level, 2 to 6."
+        }
+      ],
+      "emits": [],
+      "slots": [
+        {
+          "name": "headline",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "header",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "item",
+          "props": [
+            "item",
+            "index"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "default",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "`items` are `{ quote, author, role, avatar, to }`. Each renders as a\n`<figure>` holding a `<blockquote>` and a `<figcaption>` with a decorative\n`Avatar` (`avatar` image, or initials from `author`), the author's name\n(linked through `Link` when `to` is given) and `role`.\n\nThe section's `title` renders as an `h2` by default (`level` changes it to\n2–6). `cols` takes a fixed column count or `{ narrow, regular, wide }`,\nforwarded to `Grid`. The `item` slot replaces an item's quote and caption.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Testimonials/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Testimonials, type TestimonialItem } from '@weft/ui'\n\nconst items: TestimonialItem[] = [\n  {\n    quote: 'Deploying our admin tool went from three containers to one 18 MB binary on a tiny VM.',\n    author: 'Avery Quinn',\n    role: 'CTO at Northline',\n  },\n  {\n    quote: 'The forms use the exact validation rules our Go handlers declare. Drift between client and server disappeared.',\n    author: 'Morgan Patel',\n    role: 'Principal Engineer at Kestrel Labs',\n  },\n  {\n    quote: 'Our docs and marketing pages ship zero JavaScript unless a page embeds an interactive island.',\n    author: 'Rowan Lindqvist',\n    role: 'Director of Platform at Vela Cloud',\n  },\n]\n</script>\n\n<template>\n  <Testimonials\n    headline=\"In production\"\n    title=\"Teams shipping with Weft\"\n    :items=\"items\"\n  />\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "Textarea",
       "group": "forms",
       "file": "packages/ui/src/forms/Textarea.vue",
@@ -8294,7 +9082,7 @@
       "name": "Timeline",
       "group": "data",
       "file": "packages/ui/src/data/Timeline.vue",
-      "purpose": "Events in order, each a dot on a line with its date, title and description, the ones up to now marked done.",
+      "purpose": "Events in order on a line, each with its date, title, description and status.",
       "use": "For an order's progress, an account's history or a changelog: what happened, and when.",
       "avoid": "For steps a person moves through and can go back to, use Stepper; for a log to search and sort, use Table.",
       "adapts": {
@@ -8415,7 +9203,7 @@
       "name": "Toast",
       "group": "overlays",
       "file": "packages/ui/src/overlays/Toast.vue",
-      "purpose": "One short message that appears for a moment, with an optional action: saved, sent, undone.",
+      "purpose": "One short message that appears briefly, with an optional action button.",
       "use": "Rendered by Toaster from useToast(); render one yourself only inside a live region of your own.",
       "avoid": "To show a toast, call useToast().add and put a Toaster in the layout; for a message that must stay, use an inline alert.",
       "adapts": {
@@ -8547,7 +9335,7 @@
       "name": "Toaster",
       "group": "overlays",
       "file": "packages/ui/src/overlays/Toaster.vue",
-      "purpose": "Shows the toasts queued with useToast(), in a corner of the viewport, announced to assistive technology.",
+      "purpose": "Shows the toasts queued with useToast() in a corner and announces them.",
       "use": "Once, in the app's layout; then call useToast().add from anywhere in the browser.",
       "avoid": "For a message tied to a form or a section, show it there instead.",
       "adapts": {
@@ -9112,7 +9900,7 @@
       "name": "WeftProvider",
       "group": "adaptive",
       "file": "packages/ui/src/adaptive/WeftProvider.vue",
-      "purpose": "Sets how the part of the page inside it is used, its input and its surface, for every Weft component within.",
+      "purpose": "Sets the input, surface and width context for every Weft component inside it.",
       "use": "Around a layout to declare its surface (landing for marketing pages, app for tools), and to force an input for a kiosk, a preview or a test.",
       "avoid": "For choosing a component's look, use its own props; never use it to make a mobile version of something, since components adapt themselves.",
       "adapts": {

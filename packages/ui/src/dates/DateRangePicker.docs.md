@@ -1,6 +1,6 @@
 ---
 group: dates
-purpose: A field for a range of dates, a start and an end, typed in the locale or chosen in a calendar of two months.
+purpose: A field for a start and end date range, typed in the locale or in a calendar.
 use: For a stay, a report period or a leave request in a form, bound as two ISO dates the server reads.
 avoid: For one date, use DatePicker; for a range always in view, Calendar with range.
 adapts:
