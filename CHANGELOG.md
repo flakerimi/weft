@@ -7,7 +7,7 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
 0.0.12 have no GitHub Release: they were published at weft.base.al, and
 `site/releases.txt` lists them (only 0.0.1 and 0.0.2 have a tag).
 
-## Unreleased
+## 0.0.22
 
 - A FormField's label is a `<label for>` only over a labelable control. Over a
   RadioGroup, CheckboxGroup, Slider, Listbox without a filter, ToggleGroup or
