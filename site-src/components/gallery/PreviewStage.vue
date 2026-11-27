@@ -5,7 +5,10 @@
 // Stage_<Name>.vue wraps it round the example), and keeps its view in the
 // URL query (stage.ts), so a link reproduces it. The toolbar is one row:
 // input, surface and scheme, then a button whose Popover holds the theme
-// and the width, its label saying which are set.
+// and the width, its label saying which are set. The theme is the site's
+// (the header's Theme menu) unless neutral or lisa is forced on the canvas;
+// a forced theme's stylesheet is the site's own for it, which the stage
+// links when it is picked (the menu's module, /theme-menu.js).
 //
 // The server draws the default view: the example as an app shows it, filling
 // the column, in the page's scheme. Without JavaScript that stays, and the
@@ -14,8 +17,8 @@
 // container, not an iframe, so the example's useWidth sees them.
 import { computed, onMounted, ref } from 'vue'
 import { Button, Popover, ToggleGroup, WeftProvider, detectInput, type ToggleGroupItem } from '@weft/ui'
+import { THEME_MODULE } from '../../themes/menu.ts'
 import { formatView, parseView, DEFAULT_VIEW, type StageView } from './stage.ts'
-import '/.gallery/stage-themes.css'
 import '../../styles/stage.css'
 
 defineProps<{
@@ -29,8 +32,15 @@ const mounted = ref(false)
 const deviceInput = ref<'pointer' | 'touch' | null>(null)
 const pageScheme = ref<'light' | 'dark' | null>(null)
 
+/** Link a forced theme's stylesheet, once: the site's, through the Theme menu's module. */
+function linkTheme(theme: StageView['theme']) {
+  if (theme === 'site') return
+  void import(/* @vite-ignore */ THEME_MODULE).then((m: { sheet: (t: string) => void }) => m.sheet(theme))
+}
+
 onMounted(() => {
   view.value = parseView(location.search)
+  linkTheme(view.value.theme)
   deviceInput.value = detectInput().value
   const dark = matchMedia('(prefers-color-scheme: dark)')
   pageScheme.value = dark.matches ? 'dark' : 'light'
@@ -42,13 +52,14 @@ onMounted(() => {
 function set<K extends keyof StageView>(key: K, value: unknown) {
   if (value == null) return
   const next = { ...view.value, [key]: value === 'fit' ? undefined : value }
+  if (key === 'theme') linkTheme(next.theme)
   view.value = next
   history.replaceState(history.state, '', location.pathname + formatView(next) + location.hash)
 }
 
 const inputs: ToggleGroupItem[] = [{ label: 'Pointer', value: 'pointer' }, { label: 'Touch', value: 'touch' }]
 const surfaces: ToggleGroupItem[] = [{ label: 'App', value: 'app' }, { label: 'Landing', value: 'landing' }]
-const themes: ToggleGroupItem[] = [{ label: 'Neutral', value: 'neutral' }, { label: 'Lisa', value: 'lisa' }]
+const themes: ToggleGroupItem[] = [{ label: 'Site', value: 'site' }, { label: 'Neutral', value: 'neutral' }, { label: 'Lisa', value: 'lisa' }]
 const schemes: ToggleGroupItem[] = [{ label: 'Light', value: 'light' }, { label: 'Dark', value: 'dark' }]
 const widths: ToggleGroupItem[] = [
   { label: 'Fit', value: 'fit' },
@@ -63,7 +74,7 @@ const width = computed(() => view.value.width ?? 'fit')
 const canvasStyle = computed(() => (view.value.width ? { inlineSize: `${view.value.width}px` } : undefined))
 /** The More button's label: the theme and width when either is set, else what it holds. */
 const more = computed(() => {
-  const set = [view.value.theme === 'neutral' ? null : themes.find((t) => t.value === view.value.theme)?.label, view.value.width ? `${view.value.width} px` : null].filter(Boolean)
+  const set = [view.value.theme === 'site' ? null : themes.find((t) => t.value === view.value.theme)?.label, view.value.width ? `${view.value.width} px` : null].filter(Boolean)
   return set.length ? set.join(' · ') : 'Theme and width'
 })
 </script>
@@ -105,7 +116,7 @@ const more = computed(() => {
         class="gallery-canvas"
         data-weft-no-prefetch
         data-site-picture
-        :data-theme="view.theme"
+        :data-theme="view.theme === 'site' ? undefined : view.theme"
         :data-weft-scheme="view.scheme"
         :data-width="view.width"
         :style="canvasStyle"

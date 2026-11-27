@@ -24,7 +24,7 @@ describe('the stage query', () => {
           }
 
   it('round-trips every view the toolbar can make', () => {
-    expect(views).toHaveLength(3 * 2 * 2 * 3 * 4)
+    expect(views).toHaveLength(3 * 2 * 3 * 3 * 4)
     for (const v of views) {
       const query = formatView(v)
       expect(parseView(query), query).toEqual(v)
@@ -37,11 +37,20 @@ describe('the stage query', () => {
     expect(formatView({ input: 'touch', surface: 'landing', theme: 'lisa', scheme: 'dark', width: 390 })).toBe(
       '?input=touch&surface=landing&theme=lisa&scheme=dark&width=390',
     )
-    expect(formatView({ surface: 'app', theme: 'neutral', width: 1280 })).toBe('?width=1280')
+    expect(formatView({ surface: 'app', theme: 'site', width: 1280 })).toBe('?width=1280')
+    expect(formatView({ surface: 'app', theme: 'neutral' })).toBe('?theme=neutral')
+  })
+
+  // The stage shows the example in the site's theme, the one the header's
+  // Theme menu picked, unless the toolbar forces neutral or lisa on it.
+  it("shows the site's theme by default, or forces neutral or lisa", () => {
+    expect(THEMES).toEqual(['site', 'neutral', 'lisa'])
+    expect(DEFAULT_VIEW.theme).toBe('site')
   })
 
   it('reads a link in any order, and leaves what it gets wrong at the default', () => {
     expect(parseView('?width=820&theme=lisa')).toEqual({ surface: 'app', theme: 'lisa', width: 820 })
+    expect(parseView('?theme=site')).toEqual(DEFAULT_VIEW)
     expect(parseView('?input=mouse&surface=&theme=Lisa&scheme=dim&width=391&utm=x')).toEqual(DEFAULT_VIEW)
     expect(parseView('')).toEqual(DEFAULT_VIEW)
   })

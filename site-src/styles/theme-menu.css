@@ -1,0 +1,25 @@
+/* The header's Theme menu (ThemeMenu.vue): a popover anchored under its
+   button, the current theme marked. The menu's module (themes/menu.ts)
+   brings it when the menu is first opened; no page inlines it. */
+.site-theme { anchor-name: --site-theme; }
+.site-themes {
+  inset: auto;
+  position-anchor: --site-theme;
+  position-area: bottom span-left;
+  margin: 6px 0 0;
+  padding: 6px;
+  flex-direction: column;
+  gap: 2px;
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border);
+  border-radius: var(--weft-radius-card, 12px);
+  background: var(--weft-color-surface-raised);
+  color: var(--weft-color-text);
+  box-shadow: var(--weft-shadow-popup, 0 8px 24px color-mix(in srgb, CanvasText 16%, transparent));
+}
+/* Where anchoring is not there yet: under the header's end. */
+@supports not (position-area: bottom) {
+  .site-themes { inset: 64px 16px auto auto; }
+}
+.site-themes:popover-open { display: flex; }
+.site-themes .weft-button { justify-content: flex-start; }
+.site-themes [aria-pressed="true"] { color: var(--weft-color-primary-text); font-weight: var(--weft-weight-heading, 700); }

@@ -1,7 +1,7 @@
 ---
 title: Login
 description: The auth module - one owner set up through a link in the log, a session in a signed cookie, routes guarded by permission, the limits on guessing, and what it does not protect against.
-order: 25
+order: 26
 ---
 
 On this page you learn how an app signs people in with the `auth` module, `github.com/flakerimi/weft/warp/auth`: the owner is set up once, signs in with an email and a password, and gets a session in a signed cookie, which guarded routes check on every request. It is the smallest login that is honest about security, and it has one role, the owner. What it does not do is at the [end of this page](#what-it-does-not-protect-against).

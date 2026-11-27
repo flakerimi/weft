@@ -24,9 +24,6 @@ useHead({ title: 'Components — Weft', description })
 useFile('/catalog.json', catalogText)
 useFile('/components/parity.md', parityText)
 useFile('/components/sizes.md', sizesText)
-
-/** What the filter matches a card against: its name and purpose, in lowercase. */
-const words = (c: (typeof components)[number]) => `${c.name} ${c.purpose}`.toLowerCase()
 </script>
 
 <template>
@@ -47,7 +44,7 @@ const words = (c: (typeof components)[number]) => `${c.name} ${c.purpose}`.toLow
         <section v-for="g in groups" :key="g.group" class="gallery-group" :aria-labelledby="`group-${g.group}`" data-gallery-group>
           <h2 :id="`group-${g.group}`">{{ g.label }}</h2>
           <ul class="gallery-cards">
-            <GalleryTile v-for="c in g.components" :key="c.name" :component="c" :scope="`t${components.indexOf(c)}`" :data-gallery-card="words(c)" />
+            <GalleryTile v-for="c in g.components" :key="c.name" :component="c" :scope="`t${components.indexOf(c)}`" data-gallery-card />
           </ul>
         </section>
       </Page>

@@ -1,8 +1,9 @@
 <script setup vapor lang="ts">
 // The /components filter box, an island: as you type it hides the cards of
-// the gallery whose name and purpose do not hold every word, and a group
-// with none left. The list itself is the page's HTML, so without
-// JavaScript it is all there; the box is inert until this island starts.
+// the gallery whose name and purpose (its heading and its text) do not hold
+// every word, and a group with none left. The list itself is the page's
+// HTML, so without JavaScript it is all there; the box is inert until this
+// island starts.
 import { onMounted, ref, watch } from 'vue'
 import { Input } from '@weft/ui'
 
@@ -17,7 +18,7 @@ watch(query, (q) => {
   for (const group of document.querySelectorAll<HTMLElement>('[data-gallery-group]')) {
     let any = false
     for (const card of group.querySelectorAll<HTMLElement>('[data-gallery-card]')) {
-      const text = card.dataset.galleryCard ?? ''
+      const text = `${card.querySelector('h3')?.textContent} ${card.querySelector('p')?.textContent}`.toLowerCase()
       const match = words.every((w) => text.includes(w))
       card.hidden = !match
       if (match) any = true

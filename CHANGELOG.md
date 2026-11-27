@@ -7,6 +7,26 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
 0.0.12 have no GitHub Release: they were published at weft.base.al, and
 `site/releases.txt` lists them (only 0.0.1 and 0.0.2 have a tag).
 
+## Unreleased
+
+- Three new themes in `@weft/themes`: `synthwave` (neon on deep violet,
+  Space Grotesk), `editor` (a warm charcoal code editor with candy accents,
+  JetBrains Mono for everything) and `sandstorm` (sand, dune ochre and dusty
+  terracotta, rounder corners, Quicksand), each passing the contrast checks
+  in light and dark. `weft create --theme`, `weft-build-pages --theme` and
+  `weft-dev --theme` take them.
+- The page build builds a stylesheet a page imports by its URL
+  (`import href from './x.css?url'`) as a file of its own under `/assets/`,
+  minified, named by its bytes and cached for good, with the fonts it names;
+  it is never inlined and its fonts are not preloaded. An island that imports
+  one is refused; `weft dev` serves it.
+- weft.base.al's header has a Theme menu that switches the whole site to any
+  of the six themes, kept across pages and visits and applied before the
+  first paint; each theme but `weft` and its fonts load only when picked.
+  The gallery's stage shows the picked theme too, unless its toolbar forces
+  Neutral or Lisa. The docs have pages of their own for `weft scaffold` and
+  for validation and errors.
+
 ## 0.0.19
 
 - On Windows, `weft dev` and the commands that run child processes put each

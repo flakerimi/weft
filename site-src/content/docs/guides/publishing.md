@@ -1,7 +1,7 @@
 ---
 title: Publishing
 description: Build one binary that holds your app with weft build, and run it on a server or in a container.
-order: 30
+order: 31
 ---
 
 On this page you build your app into one binary and run it on a server. The binary holds the pages, the API and the web server. It needs no Node and no files beside it, unless you serve some from disk.

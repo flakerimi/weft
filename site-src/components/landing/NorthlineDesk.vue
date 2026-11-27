@@ -25,7 +25,7 @@ import DeviceTable from './DeviceTable.vue'
         <StatCard label="Offline" :value="17" :delta="3" invert description="today" />
         <StatCard label="Mb/s down" :value="412" :delta="0.8" delta-unit="%" description="this hour" />
       </div>
-      <DeviceTable />
+      <DeviceTable :count="4" />
     </div>
   </div>
 </template>

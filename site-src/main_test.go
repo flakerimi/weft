@@ -209,7 +209,9 @@ func TestRuntimePreloadedOnlyForLoadIslands(t *testing.T) {
 	}
 }
 
-// A page with no island loads no JavaScript; JSON script types are allowed.
+// A page with no island loads no JavaScript; JSON script types are allowed,
+// and the inline pre-paint script (the header's Theme menu's), which loads
+// no script until the menu is used.
 func TestNotFoundPageLoadsNoJavaScript(t *testing.T) {
 	d := dist(t)
 	var r builtRoutes
@@ -222,7 +224,7 @@ func TestNotFoundPageLoadsNoJavaScript(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, tag := range anyScript.FindAllString(string(b), -1) {
-		if !strings.Contains(tag, `type="speculationrules"`) && !strings.Contains(tag, `type="application/json"`) {
+		if !strings.Contains(tag, `type="speculationrules"`) && !strings.Contains(tag, `type="application/json"`) && tag != `<script data-weft-prepaint>` {
 			t.Errorf("not-found page has %s", tag)
 		}
 	}
@@ -582,7 +584,8 @@ func islandChunks(t *testing.T, d fs.FS, runtime string, islands []string) []str
 // once for the whole site and loads only when an island starts. Nor are
 // fonts: they are cached and preloaded. A docs page loads
 // no JavaScript, except one with a command marked copy, whose only island is
-// the copy button.
+// the copy button; its one inline script is the Theme menu's pre-paint
+// script, counted in its HTML, which loads no script until the menu is used.
 //
 // The limit was 10 KB until the owner raised it on 2026-11-24. A flat limit
 // also counts a page's own text, so a long reference page went over without
@@ -621,7 +624,7 @@ func TestDocsPageBudgets(t *testing.T) {
 		switch got := strings.Join(islands[path], ","); got {
 		case "":
 			for _, tag := range anyScript.FindAllString(html, -1) {
-				if !strings.Contains(tag, `type="speculationrules"`) && !strings.Contains(tag, `type="application/json"`) {
+				if !strings.Contains(tag, `type="speculationrules"`) && !strings.Contains(tag, `type="application/json"`) && tag != `<script data-weft-prepaint>` {
 					t.Errorf("%s has no island but has %s", path, tag)
 				}
 			}
@@ -766,7 +769,7 @@ func TestWordmarkIsTheOwners(t *testing.T) {
 // so light, dark and data-weft-scheme follow the theme.
 func TestSiteStylesUseTokens(t *testing.T) {
 	colour := regexp.MustCompile(`#[0-9A-Fa-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|lab)\(`)
-	for _, name := range []string{"styles/site.css", "styles/shell.css", "styles/docs.css", "styles/gallery.css", "styles/gallery-index.css", "styles/stage.css", "styles/landing.css", "styles/not-found.css", "components/CopyCommand.vue", "components/landing/AdaptiveDemo.vue"} {
+	for _, name := range []string{"styles/site.css", "styles/shell.css", "styles/docs.css", "styles/gallery.css", "styles/gallery-index.css", "styles/stage.css", "styles/landing.css", "styles/not-found.css", "styles/theme-menu.css", "components/CopyCommand.vue", "components/ThemeMenu.vue", "components/landing/AdaptiveDemo.vue"} {
 		b, err := os.ReadFile(name)
 		if err != nil {
 			t.Fatal(err)

@@ -55,13 +55,13 @@ It downloads your platform's archive and `SHA256SUMS`, checks one against the ot
 Makes an app in a new folder named after it: `data` (SQLite), `auth` (the owner's login, with `/login` and `/setup`) and `hello`. It writes the app's files from the template `weft` carries, with a fresh `AUTH_SECRET` (48 random bytes, base64url) in `.env`, which only you may read, unpacks Weft's packages into `.weft/`, records the Weft version and theme in `package.json`'s `"weft"` object, and runs `pnpm install`, `go mod download` (Warp's module from GitHub at the release's tag, and the SQLite driver) and `weft gen`. Then it prints `Set AUTH_OWNER_EMAIL in <name>/.env to the owner's email address; it is owner@example.com until you do.` and `Created <name>. Next: cd <name> && weft dev`. [Create an app](../getting-started/create-an-app.md) walks through it.
 
 ```text
-weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install]
+weft create <name> [--module <path>] [--theme neutral|lisa|weft|synthwave|editor|sandstorm] [--no-install]
 ```
 
 | Flag | What it does |
 | --- | --- |
 | `--module <path>` | The Go module path in `go.mod`. Default: the name |
-| `--theme` | `neutral` (the default), `lisa` or `weft`. See [Themes](../guides/themes.md) |
+| `--theme` | `neutral` (the default), `lisa`, `weft`, `synthwave`, `editor` or `sandstorm`. See [Themes](../guides/themes.md) |
 | `--no-install` | Skip `pnpm install`, `go mod download` and `weft gen`, which `weft dev` or `weft build` runs later |
 
 The name is a lowercase letter, then lowercase letters, digits and hyphens, at most 64. It is also the binary's name, so `web`, `api`, `app` and `dist` are refused: the binary would land in a folder of the app. Wrong usage, such as a bad name, theme or flag, is one sentence with exit status 2.
@@ -70,41 +70,13 @@ Before it writes anything it checks that `go`, `node` 22.18 or later and `pnpm` 
 
 ### weft scaffold
 
-Writes one resource into an app `weft create` made, then runs `weft gen`.
+Writes one resource into an app `weft create` made, then runs `weft gen`: its model, routes and story test under `app/<plural>/`, its line in `app/modules.go`, and a `DataTable` page with a record page, or only the Go with `--api`.
 
 ```text
 weft scaffold <name> <field[:type[:modifier...]]>... [--plural <word>] [--api]
-weft scaffold product name:string:required:max=120:unique price:float:min=0 sale:float:nullable status:enum=draft,live:required
 ```
 
-`<name>` is singular snake_case (`line_item`). Its plural, made by a fixed rule (`person` → `people`, `category` → `categories`, `box` → `boxes`, else `s`) or given with `--plural`, names the package `app/<plural>`, the table, `/api/<plural>` and the permissions. Refused: `data`, `auth`, `warp`, `app`, `web`, `test`, `main`, Go's words and standard packages, names the story test uses, and names whose type Weft or the client has (`user`, `module`, `record`, `list`, `login`…).
-
-A field's type is written, never guessed from its name; with none it is `string`.
-
-| Type | Go | Rule | `data` tag |
-| --- | --- | --- | --- |
-| `string` | `string` | | `sort,search` |
-| `text` | `string` | | `search` |
-| `email`, `url` | `string` | `email`, `url` | `sort,search` |
-| `int`, `float` | `int64`, `float64` | | `sort` |
-| `bool` | `bool` | | `sort,filter` |
-| `date`, `datetime` | `time.Time`, RFC 3339 | | `sort`; with `--api` only, until 0.2.0 |
-| `enum=a,b` | `string` | `enum=a\|b` | `sort,filter` |
-
-The modifiers, in any order after the type, are `nullable`, a pointer that may be `null` (`sale:float:nullable` is `*float64`); `required` (not on `bool` or with `nullable`); `unique` (not on `bool`, `text`, `date`, `datetime`); and `min=N` and `max=N`, in characters for text (not on `bool`, `date`, `datetime`, `enum`); a field has only the rules written. Enum choices are separated by commas: `|` or `(` is refused with `weft scaffold: write enum choices separated by commas after enum=, as in status:enum=draft,live.`, and a `?` with the `:nullable` form.
-
-| It writes | What it is |
-| --- | --- |
-| `app/<plural>/model.go` | The model, embedding `data.Record` |
-| `app/<plural>/routes.go` | `data.Resource`, with `data.PerAction(auth.Per("<plural>"))` when `app/modules.go` lists `auth.Module()`, else open, which it says |
-| `app/<plural>/<plural>_test.go` | The story over HTTP on SQLite: make two, list sorted, searched and filtered, change, delete, and, with `auth`, 401 without a session |
-| `app/modules.go` | The import and `<plural>.Module()` last in the list; the rest, comments too, kept |
-| `web/components/<Plural>Table.vue`, `<Singular>View.vue` | Islands: a `DataTable` over `api.<plural>` and `schema.<Singular>Input`, and one record |
-| `web/pages/<plural>/index.vue`, `[id].vue` | The table's page and the record's run-time page |
-
-`--api` writes only the Go; it is needed for `date` and `datetime`, whose controls in the pages land in 0.2.0 ([Coming next](../coming-next.md#scaffolding-and-app-blocks)). It lists what it wrote under `Scaffolded <name> as <plural>:`.
-
-Nothing is written, with one sentence and exit status 1, when `app/<plural>` is there, or without `--api` the page folder, `web/pages/<plural>.vue` or an island, or a `date` or `datetime` field, or when `app/modules.go` has no `func Modules() []warp.Module` returning a `[]warp.Module{...}` with `data.Module()`. `id`, `created_at` and `updated_at` (from `data.Record`), `actions` (`DataTable`'s), a field given twice, an unknown type or modifier, or a modifier its type does not take exit 2. A later release's type exits 1 naming it, as `weft scaffold: field "maker" has type "belongs_to", and relations land in Weft 0.3.0 (W3); use a scalar type for now.`: `belongs_to`, `has_many`, `many_to_many` (0.3.0), `image`, `file` (0.4.0), `json`, `translated` (0.6.0).
+Every type, modifier and file it writes, and what it refuses, is on [weft scaffold](scaffold.md).
 
 ### weft dev
 

@@ -11,8 +11,8 @@ A Weft site is a folder of Vue pages. `weft-build-pages` renders each page to HT
 
 An app is made with `weft create <name>`: the `weft` command carries Weft's packages, which are not on npm, and unpacks them into the app's `.weft/`, which you never edit. You need Go 1.26, Node 22.18 or later and pnpm 10. The site is `web/`, its Go API `app/`:
 
-- `weft dev` runs the page dev server beside the Go API, rendering each page when asked for and reloading the browser when a file changes;
-- `weft build` runs `weft-build-pages --root web --out web/dist` with the app's theme, then builds the binary. It prints `weft: built N pages into web/dist`.
+- `weft dev` runs the page dev server beside the Go API, rendering each page when asked for and reloading on a change;
+- `weft build` runs `weft-build-pages --root web --out web/dist` with the app's theme, then builds the binary.
 
 ## The layout of a site
 
@@ -140,13 +140,13 @@ The build stops with one sentence naming the file, and often the line, when:
 
 - two files make the same route, or a dynamic page has neither `getPaths()` nor `runtime`, or both;
 - an island's prop is not JSON, or an island is not a `.vue` file the page imports;
-- an island imports `virtual:weft/content` or `virtual:weft/files`, which exist only on the server;
+- an island imports `virtual:weft/content`, `virtual:weft/files` or a stylesheet's `?url`, which only the server has;
 - Markdown frontmatter is not valid YAML, misses a field, or has one of the wrong type or one the schema lacks;
 - a link to a `.md` file, a heading or a route in a collection leads nowhere, or an image is missing;
 - a code block's language is unknown to the highlighter;
 - a CSS `url()` names no file;
 - `--out` holds files an earlier build did not write;
-- `--theme` is not `neutral`, `lisa` or `weft`.
+- `--theme` names no theme of `@weft/themes`.
 
 Fix the cause; never weaken the check.
 
