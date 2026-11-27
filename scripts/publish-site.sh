@@ -83,11 +83,12 @@ fi
 # pnpm-workspace.yaml and tsconfig.base.json; warp/ and version.go for a
 # development bundle; catalog/, templates/), the site build (site-src/,
 # packages/, catalog/, skills/, and docs/ for the gallery's parity and sizes
-# pages), this push tree (site/, the installer), and the scripts/ that do it.
+# pages, and bench/results/, whose newest file the home page embeds), this
+# push tree (site/, the installer), and the scripts/ that do it.
 # Elsewhere, such as the owner's notes at the root, an untracked file is no
 # matter.
 stray=$(git ls-files --others --exclude-standard -- go.mod go.sum ':(glob)*.go' package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json \
-	warp cmd templates packages catalog site-src skills docs site scripts) ||
+	warp cmd templates packages catalog site-src skills docs site scripts bench/results) ||
 	fail "git ls-files cannot list the files git does not track, so whether $commit is what is built is unknown; fix the checkout and publish again."
 if [ -n "$stray" ]; then
 	first=$(printf '%s\n' "$stray" | head -n 3 | paste -sd, - | sed 's/,/, /g')

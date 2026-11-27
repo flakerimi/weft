@@ -1478,6 +1478,23 @@ func TestPublishSiteRefusesUntrackedFiles(t *testing.T) {
 	}
 }
 
+// The home page embeds the newest benchmark results file, so an untracked one
+// would go live without being in the tag: it stops a publish too.
+func TestPublishSiteRefusesUntrackedBenchResults(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	os.MkdirAll(filepath.Join(r.root, "bench/results"), 0o755)
+	os.WriteFile(filepath.Join(r.root, "bench/results/2099-01-01.json"), []byte("{}\n"), 0o644)
+	out, err := r.run("publish-site.sh", "0.0.3")
+	want := "publish: files git does not track are in what the release and the site are built from (bench/results/2099-01-01.json), so the tag v0.0.3 would not name what is built; commit them, or move them out, and publish again."
+	if err == nil || out != want {
+		t.Fatalf("err %v, output %q, want %q", err, out, want)
+	}
+	if r.git(t, "tag", "-l") != "" {
+		t.Fatal("the refused publish tagged")
+	}
+}
+
 // A tag origin has and the checkout does not (a fresh clone) is fetched,
 // not made again: the checkout's tag is origin's object, so a later fetch
 // of the tags does not refuse to clobber it.
