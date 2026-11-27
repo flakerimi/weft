@@ -84,7 +84,9 @@ type TypeInfo struct {
 
 // FieldInfo describes one field of a type: its JSON name, its TypeScript
 // type, whether it is optional, whether it is readonly (answered and never
-// read), and its rules as its warp tag has them. Optional means the field may
+// read), its rules as its warp tag has them, and for a time its format:
+// "datetime" for a time.Time or *time.Time, "date" for one with the rule
+// date, absent for any other field. Optional means the field may
 // be absent or, for a pointer, null: it is a pointer, or its json tag has
 // omitempty or omitzero (on a type's own entry, which is what is answered;
 // not on its Input twin, since those options never change what is read).
@@ -95,6 +97,7 @@ type FieldInfo struct {
 	Optional bool       `json:"optional"`
 	Readonly bool       `json:"readonly"`
 	Rules    []RuleInfo `json:"rules"`
+	Format   string     `json:"format,omitempty"`
 }
 
 // RuleInfo is one rule of a warp tag: its name and what follows its =, as
@@ -426,8 +429,26 @@ func (d *describer) twins() map[reflect.Type]bool {
 func (d *describer) fieldInfo(f descField, twin map[reflect.Type]bool, input bool) FieldInfo {
 	return FieldInfo{
 		Name: f.key, TS: d.ts(f.typ, twin), Optional: f.typ.Kind() == reflect.Pointer || f.omits && !input,
-		Readonly: f.readonly, Rules: f.rules,
+		Readonly: f.readonly, Rules: f.rules, Format: timeFormat(f.typ, f.rules),
 	}
+}
+
+// timeFormat is the format of a field of type t with rules: "date" for a
+// time.Time or *time.Time with the rule date, "datetime" for one without,
+// and "" for any other.
+func timeFormat(t reflect.Type, rules []RuleInfo) string {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t != timeType {
+		return ""
+	}
+	for _, r := range rules {
+		if r.Name == "date" {
+			return "date"
+		}
+	}
+	return "datetime"
 }
 
 var (
