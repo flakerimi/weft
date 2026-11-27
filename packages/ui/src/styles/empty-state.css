@@ -40,3 +40,6 @@
   margin-block-start: var(--weft-space-2, 8px);
 }
 .weft-empty-state__footer { margin-block-start: var(--weft-space-2, 8px); color: var(--weft-color-text-muted, GrayText); font-size: 0.9em; }
+/* On the soft tint the sentence and the footer are in the text colour: muted text does not reach 4.5:1 there. */
+.weft-empty-state[data-variant="soft"] .weft-empty-state__description,
+.weft-empty-state[data-variant="soft"] .weft-empty-state__footer { color: var(--weft-color-text, CanvasText); }

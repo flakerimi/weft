@@ -54,6 +54,9 @@
   .weft-tabs__tab:not(:disabled):hover { color: var(--weft-color-text, CanvasText); }
 }
 .weft-tabs__tab[aria-selected="true"] { color: var(--weft-tone-text, CanvasText); }
+/* On the pill list's tint every tab is in the text colour (muted text does not
+   reach 4.5:1 there); the selected one stands out by its raised fill. */
+.weft-tabs[data-variant="pill"] .weft-tabs__tab { color: var(--weft-color-text, CanvasText); }
 .weft-tabs[data-variant="pill"] .weft-tabs__tab[aria-selected="true"] {
   background: var(--weft-color-surface-raised, Canvas);
   color: var(--weft-color-text, CanvasText);

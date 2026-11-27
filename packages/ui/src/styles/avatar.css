@@ -9,7 +9,8 @@
   overflow: hidden;
   border-radius: 50%;
   background: color-mix(in srgb, var(--weft-color-text, CanvasText) 10%, var(--weft-color-surface, Canvas));
-  color: var(--weft-color-text-muted, GrayText);
+  /* The text colour: muted text does not reach 4.5:1 on the disc. */
+  color: var(--weft-color-text, CanvasText);
   font-size: 13px;
   font-weight: var(--weft-weight-heading, 600);
   line-height: 1;

@@ -93,6 +93,11 @@
 .weft-nav[data-orientation="horizontal"] > .weft-nav__list .weft-nav__label { flex: none; }
 .weft-nav__text { display: grid; flex: 1; min-inline-size: 0; }
 .weft-nav__description { color: var(--weft-color-text-muted, GrayText); font-size: 0.85em; font-weight: var(--weft-weight-body, 400); white-space: normal; }
+/* On a hovered or current item's tint the description is in the text colour: muted text does not reach 4.5:1 there. */
+.weft-nav .weft-nav__item[aria-current="page"] .weft-nav__description { color: var(--weft-color-text, CanvasText); }
+@media (hover: hover) {
+  .weft-nav .weft-nav__item:not(:disabled, [aria-disabled="true"]):hover .weft-nav__description { color: var(--weft-color-text, CanvasText); }
+}
 .weft-nav__glyph { flex: none; inline-size: 16px; block-size: 16px; }
 .weft-nav__chevron { color: var(--weft-color-text-muted, GrayText); transition: rotate var(--weft-duration-control, 150ms) var(--weft-ease-standard, ease); }
 .weft-nav .weft-nav__item[aria-expanded="true"] .weft-nav__chevron { rotate: 180deg; }
