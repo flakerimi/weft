@@ -7,12 +7,17 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
 0.0.12 have no GitHub Release: they were published at weft.base.al, and
 `site/releases.txt` lists them (only 0.0.1 and 0.0.2 have a tag).
 
-## Unreleased
+## 0.0.19
 
 - On Windows, `weft dev` and the commands that run child processes put each
   child in a Job Object (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) while suspended,
   so stopping a child or ending `weft dev` (even with `TerminateProcess`) ends
   its whole process tree.
+- On Windows, `weft dev` gives the Go server and the page server a stdin pipe
+  each, so the page server no longer waits behind the Go server's read and
+  starts; a Job Object that cannot be made is said in its own sentence.
+- The license is held by Flakerim Ismani and Basecode LLC, and the site's
+  footer links basecode.llc over https.
 
 ## 0.0.18
 
