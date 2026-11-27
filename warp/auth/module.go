@@ -79,6 +79,11 @@ type module struct {
 	invitations *data.Store[invitationRow]
 	keys        *data.Store[keyRow]
 	mails       *mails
+	laterSlots  chan struct{}  // register's and forgot's mailings running
+	pending     sync.WaitGroup // of those, for Stop
+	base        context.Context
+	cancelBase  context.CancelFunc
+	stopping    bool // set by Stop, under mu
 	postOnce    sync.Once
 	post        postman // the mail module's, once looked for
 	opts        options
@@ -117,9 +122,10 @@ type module struct {
 // now, or the database's when now is nil.
 func newModule(now func() time.Time) *module {
 	m := &module{
-		slots:    make(chan struct{}, runtime.GOMAXPROCS(0)),
-		slotWait: slotWait,
-		clock:    now,
+		slots:      make(chan struct{}, runtime.GOMAXPROCS(0)),
+		laterSlots: make(chan struct{}, maxLater),
+		slotWait:   slotWait,
+		clock:      now,
 	}
 	m.perKey = newLimiter(m.now, maxKeys, maxTries, window)
 	m.perAddress = newLimiter(m.now, maxKeys, maxAddressTries, window)
@@ -223,6 +229,9 @@ func (m *module) Start(ctx context.Context) error {
 	m.secret, m.maxAge, m.owner = []byte(secret), days*24*60*60, owner
 	m.registration, m.apiKeys = registration, apiKeys
 	m.setURL(cfg.URL)
+	m.mu.Lock()
+	m.base, m.cancelBase = context.WithCancel(context.Background())
+	m.mu.Unlock()
 
 	if err := m.expired(ctx, m.now()); err != nil {
 		return fmt.Errorf("the login's tables cannot be written (%v); check the database DB_URL names.", err)
@@ -243,6 +252,31 @@ func (m *module) Start(ctx context.Context) error {
 	m.mu.Unlock()
 	log.Printf("Set up the owner at %s/setup#token=%s", cfg.URL, token)
 	return nil
+}
+
+// Stop waits, until ctx ends, for the mailings register and forgot left
+// running, then ends what is left of them. No mailing begins after it.
+func (m *module) Stop(ctx context.Context) error {
+	m.mu.Lock()
+	cancel := m.cancelBase
+	m.stopping = true // later adds no more to pending
+	m.mu.Unlock()
+	if cancel == nil {
+		return nil
+	}
+	done := make(chan struct{})
+	go func() {
+		m.pending.Wait()
+		close(done)
+	}()
+	var err error
+	select {
+	case <-done:
+	case <-ctx.Done():
+		err = errors.New("the mail register or forgot asked for was still being made when the app stopped, so it was not sent; ask for it again.")
+	}
+	cancel()
+	return err
 }
 
 // isEmail reports whether s passes the email rule.

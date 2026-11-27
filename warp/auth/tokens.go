@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -163,7 +164,9 @@ func (m *module) mailTry(ctx context.Context, email string) error {
 
 // register mails a link to finish signing up, under AUTH_REGISTRATION=open
 // once the owner is set up; an address with an account is mailed a reset
-// link instead. Either way the answer is the same, so it never says which.
+// link instead. The lookup and the mail happen after the answer, so the
+// answer, 204, and the work before it are the same whatever the address,
+// and whatever the mail module does.
 func (m *module) register(ctx context.Context, in RegisterInput) (warp.None, error) {
 	if m.registration != registrationOpen {
 		return warp.None{}, warp.Forbidden(errNoSignUps)
@@ -181,28 +184,69 @@ func (m *module) register(ctx context.Context, in RegisterInput) (warp.None, err
 	if err := m.mailTry(ctx, email); err != nil {
 		return warp.None{}, err
 	}
-	u, found, err := m.find(ctx, email)
-	if err != nil {
-		return warp.None{}, err
-	}
-	if found {
-		return warp.None{}, m.mailToken(ctx, email, u.ID, purposeReset, m.mails.known)
-	}
-	return warp.None{}, m.mailToken(ctx, email, 0, purposeRegister, m.mails.register)
+	return warp.None{}, m.later(func(ctx context.Context) error {
+		u, found, err := m.find(ctx, email)
+		switch {
+		case err != nil:
+			return err
+		case found:
+			return m.mailToken(ctx, email, u.ID, purposeReset, m.mails.known)
+		}
+		return m.mailToken(ctx, email, 0, purposeRegister, m.mails.register)
+	})
 }
 
 // forgot mails a reset link to an address with an account, and nothing to
-// one without, under any AUTH_REGISTRATION; the answer is the same.
+// one without, under any AUTH_REGISTRATION. As in register, the lookup and
+// the mail happen after the answer, which is the same either way.
 func (m *module) forgot(ctx context.Context, in ForgotInput) (warp.None, error) {
 	email := normalEmail(in.Email)
 	if err := m.mailTry(ctx, email); err != nil {
 		return warp.None{}, err
 	}
-	u, found, err := m.find(ctx, email)
-	if err != nil || !found {
-		return warp.None{}, err
+	return warp.None{}, m.later(func(ctx context.Context) error {
+		u, found, err := m.find(ctx, email)
+		if err != nil || !found {
+			return err
+		}
+		return m.mailToken(ctx, email, u.ID, purposeReset, m.mails.reset)
+	})
+}
+
+// At most maxLater of register's and forgot's mailings run at once, each for
+// at most laterLasts; past that, both answer the same 503 for every address.
+const (
+	maxLater    = 32
+	laterLasts  = 30 * time.Second
+	errMailBusy = "The server is busy sending mail; try again in a moment."
+)
+
+// later runs work after the request answers, on a goroutine bound to the
+// app: Stop waits for it. Its error is logged, never answered; the log names
+// no address and no token.
+func (m *module) later(work func(ctx context.Context) error) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.base == nil || m.stopping {
+		return warp.Unavailable(errMailBusy)
 	}
-	return warp.None{}, m.mailToken(ctx, email, u.ID, purposeReset, m.mails.reset)
+	select {
+	case m.laterSlots <- struct{}{}:
+	default:
+		return warp.Unavailable(errMailBusy)
+	}
+	m.pending.Add(1)
+	base := m.base
+	go func() {
+		defer m.pending.Done()
+		defer func() { <-m.laterSlots }()
+		ctx, cancel := context.WithTimeout(base, laterLasts)
+		defer cancel()
+		if err := work(ctx); err != nil {
+			slog.Error(fmt.Sprintf("auth: a mail register or forgot asked for was not sent (%v); check the mail module and the database.", err))
+		}
+	}()
+	return nil
 }
 
 // mailToken makes a token of purpose for email (a reset for the user id),

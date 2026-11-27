@@ -2,10 +2,12 @@ package dbtest
 
 import (
 	"context"
+	"log/slog"
 	"net/mail"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/flakerimi/weft/warp"
 )
@@ -29,6 +31,8 @@ type postman = interface {
 type fakeMail struct {
 	mu   sync.Mutex
 	kept []letter
+	sent map[string]int // per address, every message sent to it, kept or not
+	read map[string]int // per address, how many of those lastMail has returned
 }
 
 func mailModule() warp.Module { return &fakeMail{} }
@@ -45,35 +49,78 @@ func (f *fakeMail) Send(_ context.Context, msg letter) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.kept = append(f.kept, msg)
+	if f.sent == nil {
+		f.sent = map[string]int{}
+	}
+	f.sent[address(msg.To)]++
 	if len(f.kept) > 20 {
 		f.kept = f.kept[len(f.kept)-20:]
 	}
 	return nil
 }
 
-// sent is every message the app's mail module kept, oldest first.
-func sent(t testing.TB, app *warp.App) []letter {
+func fakeOf(t testing.TB, app *warp.App) *fakeMail {
 	t.Helper()
 	f, ok := warp.Need[postman](app, "mail").(*fakeMail)
 	if !ok {
 		t.Fatalf("the app has no mail module of the tests'; list mailModule() before auth.Module().")
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return append([]letter(nil), f.kept...)
+	return f
 }
 
-// lastMail is the newest message to to, as mailtest.Last finds it.
+// The login sends register's and forgot's mail after it answers, so the
+// readers wait for it, up to 5 seconds.
+const mailWait = 5 * time.Second
+
+// sent waits until the app's mail module has kept n messages (at most 20)
+// and returns them all, oldest first.
+func sent(t testing.TB, app *warp.App, n int) []letter {
+	t.Helper()
+	f := fakeOf(t, app)
+	deadline := time.Now().Add(mailWait)
+	for {
+		f.mu.Lock()
+		kept := append([]letter(nil), f.kept...)
+		f.mu.Unlock()
+		if len(kept) >= n {
+			return kept
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the app kept %d messages in %v, want %d", len(kept), mailWait, n)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// lastMail is the newest message to to that lastMail has not returned yet,
+// as mailtest.Last finds it, waiting for one to come.
 func lastMail(t testing.TB, app *warp.App, to string) letter {
 	t.Helper()
-	kept := sent(t, app)
-	for i := len(kept) - 1; i >= 0; i-- {
-		if address(kept[i].To) == address(to) {
-			return kept[i]
+	f := fakeOf(t, app)
+	want := address(to)
+	deadline := time.Now().Add(mailWait)
+	for {
+		f.mu.Lock()
+		var mine []letter
+		for _, m := range f.kept {
+			if address(m.To) == want {
+				mine = append(mine, m)
+			}
 		}
+		if f.read == nil {
+			f.read = map[string]int{}
+		}
+		if f.sent[want] > f.read[want] && len(mine) > 0 {
+			f.read[want] = f.sent[want]
+			f.mu.Unlock()
+			return mine[len(mine)-1]
+		}
+		f.mu.Unlock()
+		if time.Now().After(deadline) {
+			t.Fatalf("the app sent no new message to %s in %v", to, mailWait)
+		}
+		time.Sleep(time.Millisecond)
 	}
-	t.Fatalf("the app kept no message to %s among its last %d", to, len(kept))
-	return letter{}
 }
 
 func address(s string) string {
@@ -97,4 +144,45 @@ func mailToken(t testing.TB, msg letter) string {
 		t.Fatalf("the message to %s (%q) has no #token= in its text", msg.To, msg.Subject)
 	}
 	return rest
+}
+
+// failMail is a mail module whose every Send is refused as a full queue is.
+type failMail struct{}
+
+func (failMail) Name() string { return "mail" }
+
+func (f failMail) Register(app *warp.App) error {
+	warp.Provide[postman](app, f)
+	return nil
+}
+
+func (failMail) Send(context.Context, letter) error {
+	return warp.Unavailable("The server is busy sending mail; try again in a moment.")
+}
+
+// logs is what slog's default logger writes while a test runs, safe to read
+// as it is written.
+type logs struct {
+	mu  sync.Mutex
+	buf strings.Builder
+}
+
+func (l *logs) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.Write(p)
+}
+
+func (l *logs) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.String()
+}
+
+func captureLogs(t *testing.T) *logs {
+	l := &logs{}
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(l, nil)))
+	t.Cleanup(func() { slog.SetDefault(old) })
+	return l
 }

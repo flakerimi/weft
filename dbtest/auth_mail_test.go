@@ -128,7 +128,7 @@ func TestRegisterAndForgotSayNothing(t *testing.T) {
 	}
 	// What was mailed: register mails both, forgot only the known address.
 	var subjects []string
-	for _, m := range sent(t, c.App) {
+	for _, m := range sent(t, c.App, 3) {
 		subjects = append(subjects, m.To+": "+m.Subject)
 	}
 	want := []string{
@@ -136,8 +136,127 @@ func TestRegisterAndForgotSayNothing(t *testing.T) {
 		"nobody@example.com: Finish signing up to shop.example.com",
 		"owner@example.com: Reset your password for shop.example.com",
 	}
+	// The mail goes after the answer, in any order.
+	slices.Sort(subjects)
+	slices.Sort(want)
 	if !slices.Equal(subjects, want) {
 		t.Fatalf("mailed %q, want %q", subjects, want)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if n := len(sent(t, c.App, 0)); n != 3 {
+		t.Fatalf("%d mails, want 3: forgot mailed an address with no account", n)
+	}
+}
+
+// Review I3 and m5: when mail fails, register and forgot still answer alike
+// for an address with an account and one without, 204; the failure is
+// logged, never answered, and leaves no token.
+func TestRegisterAndForgotSayNothingWhenMailFails(t *testing.T) {
+	logged := captureLogs(t)
+	c := warptest.New(t, withRegistration(t, "open"), data.Module(), failMail{}, auth.Module(), things{})
+	authtest.Owner(t, c)
+	for _, route := range []string{"/api/auth/register", "/api/auth/forgot"} {
+		known := from(c, http.MethodPost, route, map[string]string{"email": ownerEmail}, "192.0.2.10:1000")
+		unknown := from(c, http.MethodPost, route, map[string]string{"email": "nobody@example.com"}, "192.0.2.11:1000")
+		sameAnswer(t, route, known, unknown)
+		known.Want(204)
+	}
+	// Three mails were asked for (register twice, forgot once), and each
+	// failure is one line in the log.
+	deadline := time.Now().Add(mailWait)
+	for strings.Count(logged.String(), "was not sent") < 3 {
+		if time.Now().After(deadline) {
+			t.Fatalf("the log has %d failures, want 3:\n%s", strings.Count(logged.String(), "was not sent"), logged)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if n := rowsIn(t, c, "auth_tokens"); n != 0 {
+		t.Fatalf("%d tokens kept for mail that was not sent", n)
+	}
+	for _, line := range strings.Split(logged.String(), "\n") {
+		if strings.Contains(line, "was not sent") && (strings.Contains(line, "#token=") || strings.Contains(line, "@")) {
+			t.Fatalf("a failure names a link or an address: %s", line)
+		}
+	}
+}
+
+// answerTimes is the median time register or forgot takes to answer for an
+// address with an account and for one without, over pairs asked in turn,
+// each pair on a fresh hour of every limit. settle waits for the mail the
+// pair asked for to be done.
+func answerTimes(t *testing.T, c *warptest.Client, at *clock, route string, settle func()) (known, unknown time.Duration) {
+	t.Helper()
+	var ks, us []time.Duration
+	for i := range 200 {
+		at.now = at.now.Add(time.Hour)
+		emails := []string{ownerEmail, "nobody@example.com"}
+		if i%2 == 1 {
+			emails = []string{"nobody@example.com", ownerEmail}
+		}
+		for _, email := range emails {
+			r := request(http.MethodPost, route, map[string]string{"email": email}, fmt.Sprintf("192.0.2.%d:1000", i%250+1))
+			f := c.Fork()
+			began := time.Now()
+			res := f.Do(r)
+			took := time.Since(began)
+			if res.Status != 204 {
+				t.Fatalf("%s %s: %d %s", route, email, res.Status, res.Body)
+			}
+			if email == ownerEmail {
+				ks = append(ks, took)
+			} else {
+				us = append(us, took)
+			}
+		}
+		settle()
+	}
+	slices.Sort(ks)
+	slices.Sort(us)
+	return ks[len(ks)/2], us[len(us)/2]
+}
+
+// alike fails the test when one median is more than twice the other and 50
+// µs.
+func alike(t *testing.T, what string, known, unknown time.Duration) {
+	t.Helper()
+	const slack = 50 * time.Microsecond
+	if known > 2*unknown+slack || unknown > 2*known+slack {
+		t.Errorf("%s: the median answer took %v for an address with an account and %v for one without", what, known, unknown)
+	}
+}
+
+// Review I3: register and forgot do the same work before they answer, so
+// they take alike, with mail working and with mail failing.
+func TestRegisterAndForgotTakeAlike(t *testing.T) {
+	at := &clock{now: time.Date(2026, 11, 28, 9, 0, 0, 0, time.UTC)}
+	c := startClocked(t, withRegistration(t, "open"), at)
+	for _, route := range []string{"/api/auth/forgot", "/api/auth/register"} {
+		k, u := answerTimes(t, c, at, route, func() { lastMail(t, c.App, ownerEmail) })
+		alike(t, route, k, u)
+	}
+
+	logged := captureLogs(t)
+	at = &clock{now: time.Date(2026, 11, 28, 9, 0, 0, 0, time.UTC)}
+	f := warptest.New(t, withRegistration(t, "open"), data.Module(), failMail{}, auth.Module(), things{})
+	data.For(f.App).SetClock(at.Now)
+	authtest.Owner(t, f)
+	for _, route := range []string{"/api/auth/forgot", "/api/auth/register"} {
+		perPair := 1 // forgot mails the address with an account
+		if route == "/api/auth/register" {
+			perPair = 2 // register mails both
+		}
+		failures := strings.Count(logged.String(), "was not sent")
+		k, u := answerTimes(t, f, at, route, func() {
+			failures += perPair
+			deadline := time.Now().Add(mailWait)
+			for strings.Count(logged.String(), "was not sent") < failures {
+				if time.Now().After(deadline) {
+					t.Fatalf("%s: %d failures logged, want %d", route, strings.Count(logged.String(), "was not sent"), failures)
+				}
+				time.Sleep(100 * time.Microsecond)
+			}
+		})
+		alike(t, route+" with mail failing", k, u)
 	}
 }
 
@@ -313,7 +432,7 @@ func TestTokensStoredAsHashes(t *testing.T) {
 	c.Fork().Post("/api/auth/register", map[string]string{"email": "new@example.com"}).Want(204)
 	c.Post("/api/auth/invitations", map[string]string{"email": "asked@example.com", "role": "member"}).Want(201)
 	var tokens []string
-	for _, m := range sent(t, c.App) {
+	for _, m := range sent(t, c.App, 3) {
 		tokens = append(tokens, mailToken(t, m))
 	}
 	if len(tokens) != 3 {
@@ -359,7 +478,7 @@ func TestLinksUseFragment(t *testing.T) {
 	c.Fork().Post("/api/auth/register", map[string]string{"email": ownerEmail}).Want(204)
 	c.Fork().Post("/api/auth/register", map[string]string{"email": "new@example.com"}).Want(204)
 	c.Post("/api/auth/invitations", map[string]string{"email": "asked@example.com", "role": "viewer"}).Want(201)
-	mails := sent(t, c.App)
+	mails := sent(t, c.App, 4)
 	if len(mails) != 4 {
 		t.Fatalf("%d mails", len(mails))
 	}
