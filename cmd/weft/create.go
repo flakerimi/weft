@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -18,9 +19,12 @@ import (
 
 var nameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 
-// templateData is what a .tmpl file of the app template can use.
+// templateData is what a .tmpl file of the app template can use. LocalGo
+// says whether go.mod replaces Weft's module with ./.weft/go (a development
+// build) or requires it at the release, from GitHub.
 type templateData struct {
 	Name, Module, Version, Theme string
+	LocalGo                      bool
 }
 
 // reserved are names an app may not take: its binary, named like the app,
@@ -33,7 +37,7 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 	fl.SetOutput(io.Discard)
 	module := fl.String("module", "", "the Go module path")
 	theme := fl.String("theme", "neutral", "neutral, lisa or weft")
-	noInstall := fl.Bool("no-install", false, "do not run pnpm install")
+	noInstall := fl.Bool("no-install", false, "do not run pnpm install or go mod download")
 	var names []string
 	for {
 		if code, done := flagsFailed(fl.Parse(args), "create", usage, stdout, stderr); done {
@@ -88,7 +92,11 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "weft create: %v.\n", strings.TrimSuffix(err.Error(), "."))
 		return 1
 	}
-	data := templateData{Name: name, Module: *module, Version: weft.Version, Theme: *theme}
+	if localModule(weft.Version) && !hasLocalModule(bundle) {
+		fmt.Fprintf(stderr, "weft create: the bundle in %s was staged for a release, so it has no Go package (weft/go) for the replace a development weft writes; stage it with scripts/bundle.sh without WEFT_VERSION.\n", os.Getenv("WEFT_BUNDLE"))
+		return 1
+	}
+	data := templateData{Name: name, Module: *module, Version: weft.Version, Theme: *theme, LocalGo: localModule(weft.Version)}
 	if err := writeTemplate(bundle, name, data); err != nil {
 		fmt.Fprintf(stderr, "weft create: cannot write %s (%v); fix that and run the command again.\n", name, err)
 		return 1
@@ -103,6 +111,17 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 		cmd.Stdout, cmd.Stderr = stdout, stderr
 		if err := cmd.Run(); err != nil {
 			fmt.Fprintf(stderr, "weft create: pnpm install did not finish; run pnpm install in %s to finish.\n", name)
+			return 1
+		}
+		if err := fetchModule(name, stdout, stderr); err != nil {
+			// weft create again would be refused, the folder being there:
+			// weft dev or weft build in it fetches the module again.
+			var fe *fetchError
+			if errors.As(err, &fe) {
+				fmt.Fprintf(stderr, "weft create: Go could not fetch %s %s for %s (see its output above; the module proxy must be reachable); once it can, run cd %s && weft dev (or weft build), which fetches it again.\n", weftModule, fe.version, name, name)
+			} else {
+				fmt.Fprintf(stderr, "weft create: %v.\n", strings.TrimSuffix(err.Error(), "."))
+			}
 			return 1
 		}
 		if err := writeTypes(name, stdout, stderr); err != nil {

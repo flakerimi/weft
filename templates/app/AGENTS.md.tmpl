@@ -1,6 +1,7 @@
 # AGENTS.md
 
 [[.Name]] is a Weft app: Go serves the API (a `warp.App`, from `github.com/flakerimi/weft/warp`, with a list of modules) and the pages the build writes, in one binary. Weft [[.Version]] is unpacked in `.weft/`, which `weft` writes and you do not edit.
+[[if .LocalGo]]Go finds Warp in `.weft/go`, which `go.mod` replaces `github.com/flakerimi/weft` with, since a development build of `weft` made this app.[[else]]Go gets Warp from GitHub: `go.mod` requires `github.com/flakerimi/weft` at the tag of this app's Weft release, and `go.sum` holds its checksums; commit both, and move the version with `weft upgrade`, not by hand.[[end]]
 
 ## Commands
 

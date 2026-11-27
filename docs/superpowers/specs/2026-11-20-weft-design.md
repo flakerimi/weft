@@ -436,9 +436,16 @@ Weft is never published to npm. Everything ships as one versioned thing:
   `"weft"`; `weft dev` and `weft build` refuse an app at another version and
   restore `.weft/` when it is missing, as in a fresh clone; `weft upgrade`
   moves an app to the installed version.
-- The Go module is `github.com/flakerimi/weft`. While the repository is
-  private, the Go package ships in the bundle too, and the app's `go.mod`
-  replaces the module with `./.weft/go`.
+- The Go module is `github.com/flakerimi/weft`. While the repository was
+  private, the Go package shipped in the bundle too, and the app's `go.mod`
+  replaced the module with `./.weft/go`. Since it is public (2026-11-26),
+  each publish tags its commit `v<version>`, and an app a release makes
+  requires the module at that tag, which Go fetches from GitHub through the
+  module proxy; `weft upgrade` moves the require and drops the old replace.
+  Only a development build (`0.0.0-dev`) still bundles the Go package and
+  writes the replace, so working on Weft needs no tag. Each publish also
+  makes a GitHub Release with the same archives and `SHA256SUMS` as the
+  site, which stays the installer's and `weft update`'s source.
 - Third-party packages (Vue, Vite, Floating UI, Unovis) still come from the
   public npm registry through the package manager. No account or org is
   needed for that.

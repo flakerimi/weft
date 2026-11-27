@@ -57,7 +57,7 @@ It says `weft X is up to date.` when there is nothing to do, and `Updated weft X
 
 ### weft create
 
-Makes an app in a new folder named after it. It writes the app's files from the template `weft` carries, unpacks Weft's packages and Go package into the app's `.weft/`, records the Weft version and theme in `package.json`'s `"weft"` object, and runs `pnpm install`. Then it prints `Created <name>. Next: cd <name> && weft dev`. [Create an app](../getting-started/create-an-app.md) walks through what it writes.
+Makes an app in a new folder named after it. It writes the app's files from the template `weft` carries, unpacks Weft's packages into the app's `.weft/`, records the Weft version and theme in `package.json`'s `"weft"` object, and runs `pnpm install` and `go mod download`, which fetches Warp's module from GitHub at the release's tag. Then it prints `Created <name>. Next: cd <name> && weft dev`. [Create an app](../getting-started/create-an-app.md) walks through what it writes.
 
 ```text
 weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install]
@@ -67,7 +67,7 @@ weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install]
 | --- | --- |
 | `--module <path>` | The Go module path in `go.mod`. Default: the name |
 | `--theme` | `neutral` (the default), `lisa` or `weft`. See [Themes](../guides/themes.md) |
-| `--no-install` | Skip `pnpm install`; `weft dev` or `weft build` runs it later |
+| `--no-install` | Skip `pnpm install` and `go mod download`, which `weft dev` or `weft build` runs later |
 
 The name is a lowercase letter, then lowercase letters, digits and hyphens, at most 64. It is also the binary's name, so `web`, `api`, `app` and `dist` are refused: the binary would land in a folder of the app. Wrong usage, such as a bad name, theme or flag, is one sentence with exit status 2.
 
@@ -95,7 +95,7 @@ Builds an app: writes the typed client as [weft gen](#weft-gen) does, type-check
 go build -trimpath -ldflags "-s -w" -o <file> .
 ```
 
-`-trimpath` leaves the build machine's paths out, and `-s -w` the debug tables. It adds `CGO_ENABLED=0`, for a static binary, unless the environment sets it. `GOOS` and `GOARCH` pass through from the environment, so `GOOS=linux GOARCH=arm64 weft build` builds for Linux on arm64. Run it anywhere inside the app; it finds the nearest `package.json` with a `"weft"` object. A `package.json` on the way that is not valid JSON stops the search: the command names it and says to fix it.
+It adds `CGO_ENABLED=0`, for a static binary, unless the environment sets it. `GOOS` and `GOARCH` pass through from the environment, so `GOOS=linux GOARCH=arm64 weft build` builds for Linux on arm64. Run it anywhere inside the app; it finds the nearest `package.json` with a `"weft"` object. A `package.json` on the way that is not valid JSON stops the search: the command names it and says to fix it.
 
 | Flag | What it does |
 | --- | --- |
@@ -104,14 +104,14 @@ go build -trimpath -ldflags "-s -w" -o <file> .
 It prints the build's output, then `Built <file>`. First it checks the app:
 
 - An app recorded at another Weft version is refused: `weft build: this app is on Weft <a> and this weft is <b>; run weft upgrade to move the app, or weft update --version <a> to match it.` For an app on a newer Weft than this `weft`, which `weft upgrade` would refuse, the sentence ends `run weft update --version <a> to match it.` alone. An app whose `"weft"` object has no `version` is refused with a sentence that says what to add.
-- When `.weft/` is missing or holds another version, as in a fresh clone, it unpacks the packages into it and runs `pnpm install`. A `weft` built from the repository (`0.0.0-dev`) also unpacks again when the bundle's files changed, which `.weft/VERSION` records as a hash on its second line; a release is the version it says. It runs `pnpm install` too when `node_modules/` is missing. A `.weft/` without the `VERSION` file `weft` writes is not its own and is left alone, with a sentence saying to move it out of the app folder. Beside `.weft/` only `.weft.lock` is made, while it unpacks; a second `weft` waits for it, and takes over at once one a killed `weft` left.
+- When `.weft/` is missing or holds another version, as in a fresh clone, it unpacks the packages into it and runs `pnpm install`. A `weft` built from the repository (`0.0.0-dev`) also unpacks again when the bundle's files changed, which `.weft/VERSION` records as a hash on its second line; a release is the version it says. It runs `pnpm install` too when `node_modules/` is missing or older than `.weft/`, and `go mod download` when `go.sum` lacks Warp's module. A `.weft/` without the `VERSION` file `weft` writes is not its own and is left alone, with a sentence saying to move it out of the app folder. Beside `.weft/` only `.weft.lock` is made, while it unpacks; a second `weft` waits for it, and takes over at once one a killed `weft` left.
 - After an install, or when `web/.weft-types/components.d.ts` is missing, it writes that file with [weft-types](#weft-types), so `pnpm typecheck` checks the components' props before any build.
 
 Outside an app it says `weft build: no Weft app here; run it in a folder made by weft create.` Any failure is one sentence on standard error, with exit status 1; wrong usage exits with status 2.
 
 ### weft unpack
 
-Makes `.weft/` present and current as `weft build` does first, with no `pnpm install`. In a fresh clone it lets `go test ./...` and an editor resolve the Weft Go module before `weft dev` or `weft build` has installed anything. It prints `Unpacked .weft (Weft <version>)` or `.weft is current (Weft <version>)`, and refuses an app on another Weft version as `weft build` does.
+Makes `.weft/` present and current as `weft build` does first, with no `pnpm install`. In a fresh clone of an app a development build made, whose `go.mod` replaces Warp's module with `./.weft/go`, it lets `go test ./...` and an editor resolve it. It prints `Unpacked .weft (Weft <version>)` or `.weft is current (Weft <version>)`, and refuses an app on another Weft version as `weft build` does.
 
 ### weft gen
 
@@ -130,11 +130,11 @@ GET     /api/hello  hello   hello  -
 
 ### weft upgrade
 
-Moves an app to the Weft version of the `weft` you run: it rewrites `weft.version` in `package.json`, changing no other byte, unpacks that version's packages into `.weft/`, and runs `pnpm install`. It prints `Moved <name> from Weft <a> to <b>`, or `<name> is already on Weft <b>` when there is nothing to do. It never moves an app backwards: an app on a newer Weft is refused with `weft upgrade: this app is on Weft <a>, newer than this weft <b>; run weft update to get <a> or later.`, and exit status 1. A development build's `0.0.0-dev` is older than any release.
+Moves an app to the Weft version of the `weft` you run: it rewrites `weft.version` in `package.json`, changing no other byte, moves `go.mod`'s require of Warp's module to that release, dropping a replace into `./.weft/go` (another is kept, and named), unpacks that version's packages into `.weft/`, and runs `pnpm install` and `go mod download`. It prints `Moved <name> from Weft <a> to <b>`, or `<name> is already on Weft <b>` when there is nothing to do. It never moves an app backwards: an app on a newer Weft is refused with `weft upgrade: this app is on Weft <a>, newer than this weft <b>; run weft update to get <a> or later.`, and exit status 1. A development build's `0.0.0-dev` is older than any release.
 
 | Flag | What it does |
 | --- | --- |
-| `--no-install` | Skip `pnpm install` |
+| `--no-install` | Skip `pnpm install` and `go mod download` |
 
 #### Moving an app to Warp
 
@@ -179,10 +179,9 @@ Avoid: For code or a value to copy, use a code element.
 
 Adapts:
 - …
-- width: Nothing changes.
 
 Props:
-- value: string — The key: a character (`K`) or a name with a symbol (`command`, `shift`, `option`, `enter`, `backspace`, `tab`, `arrowup`…). The default slot replaces it.
+- value: string — The key: a character (`K`) or a name with a symbol (`command`, `shift`…). …
 
 Slots: default
 

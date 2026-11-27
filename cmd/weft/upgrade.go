@@ -21,7 +21,7 @@ func upgradeCmd(args []string, stdout, stderr io.Writer) int {
 	const usage = "usage is weft upgrade [--no-install]."
 	fl := flag.NewFlagSet("upgrade", flag.ContinueOnError)
 	fl.SetOutput(io.Discard)
-	noInstall := fl.Bool("no-install", false, "do not run pnpm install")
+	noInstall := fl.Bool("no-install", false, "do not run pnpm install or go mod download")
 	if code, done := flagsFailed(fl.Parse(args), "upgrade", usage, stdout, stderr); done {
 		return code
 	}
@@ -58,6 +58,12 @@ func upgradeCmd(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return fail(stderr, "upgrade", err)
 	}
+	// go.mod first: it is the author's file, the likeliest to be refused.
+	if !localModule(weft.Version) {
+		if err := moveGoMod(appDir, weft.Version, stderr); err != nil {
+			return fail(stderr, "upgrade", err)
+		}
+	}
 	if err := writeAppVersion(appDir, weft.Version); err != nil {
 		return fail(stderr, "upgrade", err)
 	}
@@ -66,6 +72,9 @@ func upgradeCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	if !*noInstall {
 		if err := pnpmInstall(appDir, stdout, stderr); err != nil {
+			return fail(stderr, "upgrade", err)
+		}
+		if err := fetchModule(appDir, stdout, stderr); err != nil {
 			return fail(stderr, "upgrade", err)
 		}
 		if err := writeTypes(appDir, stdout, stderr); err != nil {

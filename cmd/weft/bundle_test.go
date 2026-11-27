@@ -304,9 +304,19 @@ func TestBundleScript(t *testing.T) {
 	if exists(t, "../../templates/app") && !exists(t, filepath.Join(out, "template/package.json.tmpl")) {
 		t.Error("template/package.json.tmpl is missing")
 	}
-	// A folder that is not a bundle is refused, and a bundle is reusable.
-	if b, err := exec.Command("sh", "../../scripts/bundle.sh", out).CombinedOutput(); err != nil {
+	// A folder that is not a bundle is refused, and a bundle is reusable. A
+	// release's bundle carries no Go package: its apps fetch the module from
+	// GitHub at the release's tag.
+	release := exec.Command("sh", "../../scripts/bundle.sh", out)
+	release.Env = append(os.Environ(), "WEFT_VERSION=0.0.12")
+	if b, err := release.CombinedOutput(); err != nil {
 		t.Errorf("rebuilding a bundle: %v\n%s", err, b)
+	}
+	if exists(t, filepath.Join(out, "weft/go")) {
+		t.Error("a release's bundle holds weft/go")
+	}
+	if !exists(t, filepath.Join(out, "weft/packages/ui/dist/weft.css")) || !exists(t, filepath.Join(out, "weft/catalog/components.json")) {
+		t.Error("a release's bundle lacks its packages or its catalogue")
 	}
 	foreign := t.TempDir()
 	os.WriteFile(filepath.Join(foreign, "mine"), []byte("x"), 0o644)

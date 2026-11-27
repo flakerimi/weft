@@ -1,8 +1,11 @@
 # Builds and tests a release of the weft command on every system it is built
-# for, and keeps it as this run's artifact and, for a tag or when asked, as a
-# draft GitHub Release. It never publishes weft.base.al, which stays the
-# release channel: the owner publishes with scripts/publish-site.sh. It never
-# makes a release that is not a draft, and never replaces or deletes one.
+# for, and keeps it as this run's artifact and, only when started by hand
+# with draft_release, as a draft GitHub Release. A tag v<version> is pushed
+# by scripts/publish-site.sh, which also makes that version's public GitHub
+# Release from the files weft.base.al serves; on a tag this workflow tests
+# and builds, and makes no release, so no draft collides with that one. It
+# never publishes weft.base.al, never makes a release that is not a draft,
+# and never replaces or deletes one.
 name: release
 on:
   push:
@@ -128,10 +131,10 @@ jobs:
 
   # The only job that may write. It checks out nothing and runs no code of
   # the repository's or its dependencies': it downloads the build's files and
-  # hands them to gh.
+  # hands them to gh. Only by hand: a tag's release is made by the publish.
   draft:
     needs: [version, build]
-    if: github.event_name == 'push' || inputs.draft_release
+    if: github.event_name == 'workflow_dispatch' && inputs.draft_release
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

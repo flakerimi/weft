@@ -13,8 +13,10 @@ import (
 )
 
 // The released binary carries the packages and the template: with no
-// WEFT_BUNDLE it makes an app and builds it. release.sh runs the -short
-// tests, so this one does not run itself.
+// WEFT_BUNDLE it makes an app and builds it. The app requires Warp's module
+// at the release, which Go fetches through the module proxy: here a proxy in
+// a folder serves the module as a tag of this working tree would have it.
+// release.sh runs the -short tests, so this one does not run itself.
 func TestReleasedBinaryCreatesAndBuilds(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a release and installs an app")
@@ -78,10 +80,11 @@ func TestReleasedBinaryCreatesAndBuilds(t *testing.T) {
 
 	var env []string
 	for _, kv := range os.Environ() {
-		if !strings.HasPrefix(kv, "WEFT_BUNDLE=") {
+		if !strings.HasPrefix(kv, "WEFT_BUNDLE=") && !strings.HasPrefix(kv, "GOFLAGS=") {
 			env = append(env, kv)
 		}
 	}
+	env = append(env, moduleProxy(t, "v0.0.0-test", repoModule(t))...)
 	weftIn := func(dir string, args ...string) string {
 		t.Helper()
 		cmd := exec.Command(bin, args...)
@@ -99,7 +102,22 @@ func TestReleasedBinaryCreatesAndBuilds(t *testing.T) {
 	}
 	weftIn(work, "create", "demo")
 	app := filepath.Join(work, "demo")
+	if got, want := readFile(t, filepath.Join(app, "go.mod")), "module demo\n\ngo 1.26\n\nrequire github.com/flakerimi/weft v0.0.0-test\n"; got != want {
+		t.Errorf("demo/go.mod = %q, want %q", got, want)
+	}
+	if exists(t, filepath.Join(app, ".weft", "go")) {
+		t.Error("the release unpacked a Go package into demo/.weft/go")
+	}
+	if sum := readFile(t, filepath.Join(app, "go.sum")); !strings.Contains(sum, "github.com/flakerimi/weft v0.0.0-test h1:") {
+		t.Errorf("demo/go.sum = %q, want the module's checksum", sum)
+	}
 	weftIn(app, "build")
+	// The app was built with the module the proxy served, and Version
+	// names its release.
+	if out, err := exec.Command("go", "version", "-m", filepath.Join(app, "demo")).Output(); err != nil ||
+		!strings.Contains(string(out), "\tdep\tgithub.com/flakerimi/weft\tv0.0.0-test\t") {
+		t.Errorf("go version -m demo: %v\n%s", err, out)
+	}
 	if got := unpacked(app); got != "0.0.0-test" {
 		t.Errorf("demo/.weft/VERSION = %q, want 0.0.0-test", got)
 	}

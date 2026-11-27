@@ -14,7 +14,7 @@ Run the installer:
 curl -fsSL https://weft.base.al/install | sh
 ```
 
-It downloads the release for your system from `weft.base.al`, checks it against the release's `SHA256SUMS`, and puts `weft` in `~/.local/bin`. If that folder is not on your `PATH`, it tells you.
+It downloads the release for your system from `weft.base.al`, checks it against the release's `SHA256SUMS`, and puts `weft` in `~/.local/bin`. If that folder is not on your `PATH`, it tells you. Each release is also a [GitHub Release](https://github.com/flakerimi/weft/releases), `v<version>`, with the same archives and the same `SHA256SUMS`.
 
 Check that it works:
 
@@ -42,11 +42,11 @@ curl -fsSL https://weft.base.al/install | WEFT_VERSION=0.0.2 WEFT_BIN_DIR="$HOME
 
 ### Update
 
-`weft update` replaces the binary with the latest release. `weft update --check` only tells you whether there is a newer one. See the [CLI reference](../reference/cli.md) for the flags.
+`weft update` replaces the binary with the latest release. `weft update --check` only tells you whether there is a newer one. Then run `weft upgrade` in each app to move it to that release: its packages, and the version of Warp its `go.mod` requires. See the [CLI reference](../reference/cli.md) for the flags.
 
 ## What an app needs
 
-The `weft` command carries Weft's packages, and puts them in each app it makes. An app also needs:
+The `weft` command carries Weft's packages, and puts them in each app it makes. Warp, the Go module `github.com/flakerimi/weft`, comes from GitHub: an app's `go.mod` requires it at the release's tag, and Go fetches it through its module proxy. An app also needs:
 
 - Go 1.26, which builds its server;
 - Node 22.18 or later, which runs the page build's TypeScript directly;
@@ -56,7 +56,7 @@ The `weft` command carries Weft's packages, and puts them in each app it makes. 
 
 ## Working on Weft itself
 
-You need none of this to build an app. To work on Weft itself, clone the repository. It is private for now, so you need access to it. Install its packages, and build the themes, which the page build reads:
+You need none of this to build an app. To work on Weft itself, clone the repository, install its packages, and build the themes, which the page build reads:
 
 ```sh
 git clone git@github.com:flakerimi/weft.git
@@ -64,6 +64,8 @@ cd weft
 pnpm install
 pnpm --filter @weft/themes build
 ```
+
+A `weft` built from the repository says `0.0.0-dev`. An app it makes gets Warp in `.weft/go`, which its `go.mod` replaces the module with, so working on Weft needs no tag and no network.
 
 To check your setup, build and run this site, which lives in `site-src/`:
 

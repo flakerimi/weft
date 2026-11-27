@@ -267,8 +267,9 @@ func unpackHashed(bundle fs.FS, appDir, version, hash string) (err error) {
 		}
 		return err
 	}
-	// go:embed leaves out a folder that holds a go.mod, so the bundle keeps
-	// the Go package's as go.mod.bundle.
+	// go:embed leaves out a folder that holds a go.mod, so a development
+	// build's bundle keeps the Go package's as go.mod.bundle; a release's
+	// bundle has no Go package, since its apps fetch the module from GitHub.
 	goMod := filepath.Join(tmp, "go", "go.mod")
 	if err := os.Rename(goMod+".bundle", goMod); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err

@@ -15,7 +15,7 @@ The driver is the app's dependency, not Warp's: `main.go` imports it, as `databa
 	_ "modernc.org/sqlite"
 ```
 
-Then add it to `go.mod`, from the app's folder once `.weft/` is there (`weft create` and `weft unpack` make it):
+Then add it to `go.mod`, from the app's folder (an app a development build of `weft` made needs `.weft/` there first, which `weft unpack` makes):
 
 ```sh
 go mod tidy
