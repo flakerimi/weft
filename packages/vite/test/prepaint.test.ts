@@ -93,6 +93,8 @@ describe('pre-paint snippets', () => {
     expect(tag('st')).toMatch(/class="weft-stepper" data-orientation="horizontal" data-width="wide"/)
     expect(tag('tl')).toMatch(/class="weft-timeline" data-orientation="horizontal" data-width="wide"/)
     expect(tag('tb')).toMatch(/class="weft-tabs" data-orientation="vertical" data-width="wide"/)
+    // Each marks its root with the id useWidth reads the pre-paint width back by while hydrating.
+    for (const id of ['st', 'tl', 'tb']) expect(tag(id), id).toMatch(/ data-weft-w="[^"]+"/)
     expect(page('adapts')).toContain('data-weft-prepaint')
   })
 
@@ -100,6 +102,7 @@ describe('pre-paint snippets', () => {
     const { html, prePaint } = await renderPage({ root, page: 'pages/fixed.vue' })
     expect(prePaint).toEqual([])
     expect(html).not.toMatch(/class="weft-(stepper|timeline|tabs)"[^>]*data-width/)
+    expect(html).not.toContain('data-weft-w=')
     expect(page('fixed')).not.toContain('data-weft-prepaint')
   })
 

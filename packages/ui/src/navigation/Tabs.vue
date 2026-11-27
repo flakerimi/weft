@@ -108,6 +108,7 @@ const list = useTemplateRef<HTMLElement>('list')
 // and the arrow keys follow once mounted.
 const adapts = props.orientation === 'vertical'
 const width = useWidth(root, { prepaint: adapts })
+const widthId = width.id
 const orientation = computed(() => (props.orientation === 'vertical' && width.value !== 'narrow' ? 'vertical' : 'horizontal'))
 const roving = useRovingFocus(list, {
   get orientation() {
@@ -191,6 +192,7 @@ let hashOwner: object | undefined
     class="weft-tabs"
     :data-orientation="orientation"
     :data-width="adapts ? width : undefined"
+    :data-weft-w="widthId"
     :data-variant="variant"
     :data-size="size"
     :data-tone="tone"

@@ -80,6 +80,7 @@ const list = useTemplateRef<HTMLElement>('list')
 // adapts too; `orientation` (for the arrow keys) follows once mounted.
 const adapts = props.orientation === 'horizontal'
 const width = useWidth(root, { prepaint: adapts })
+const widthId = width.id
 const orientation = computed(() => (props.orientation === 'horizontal' && width.value !== 'narrow' ? 'horizontal' : 'vertical'))
 const roving = useRovingFocus(list, {
   get orientation() {
@@ -124,7 +125,7 @@ defineExpose({ next, prev, hasNext, hasPrev })
 </script>
 
 <template>
-  <div ref="root" class="weft-stepper" :data-orientation="orientation" :data-width="adapts ? width : undefined" :data-size="size" :data-tone="tone">
+  <div ref="root" class="weft-stepper" :data-orientation="orientation" :data-width="adapts ? width : undefined" :data-weft-w="widthId" :data-size="size" :data-tone="tone">
     <ol ref="list" class="weft-stepper__list">
       <li v-for="(item, i) in items" :key="String(valueOf(item, i))" class="weft-stepper__item" :data-state="stateOf(i)">
         <button

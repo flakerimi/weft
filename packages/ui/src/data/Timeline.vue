@@ -57,6 +57,7 @@ const root = useTemplateRef<HTMLElement>('root')
 // static page adapts too.
 const adapts = props.orientation === 'horizontal'
 const width = useWidth(root, { prepaint: adapts })
+const widthId = width.id
 const layout = computed(() => (props.orientation === 'horizontal' && width.value !== 'narrow' ? 'horizontal' : 'vertical'))
 const value = computed(() => props.modelValue ?? props.defaultValue)
 /** The current item's place in `items`, -1 for none. */
@@ -75,7 +76,7 @@ const state = (index: number) => (current.value < 0 ? undefined : index < curren
 </script>
 
 <template>
-  <ol ref="root" class="weft-timeline" :data-orientation="layout" :data-width="adapts ? width : undefined" :data-tone="tone" :data-size="size">
+  <ol ref="root" class="weft-timeline" :data-orientation="layout" :data-width="adapts ? width : undefined" :data-weft-w="widthId" :data-tone="tone" :data-size="size">
     <li
       v-for="{ item, index } in order"
       :key="item.value ?? index"
