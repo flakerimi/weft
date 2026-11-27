@@ -8,44 +8,18 @@
 //   the preview stage, and one per other example, `Example_<Name>_<Example>.vue`,
 //   the example alone. The file's name is the island's id, so every island
 //   on the site has its own (every component has a basic.vue).
-// - `stage-themes.css`: the neutral and lisa themes, scoped to the stage's
-//   canvas, so the stage can show either in light or dark inside the site's
-//   own theme.
+// The stage's forced themes are the site's own theme files (../themes/),
+// which scope neutral and lisa to its canvas too.
 //
 // The generated files live under <site>/.gallery/, a folder that does not
 // exist: this plugin serves them.
 import { readdirSync, readFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import type { Plugin } from 'vite'
 import { exampleIsland, stageIsland, type Catalog } from './model.ts'
 
 const PUBLIC_ID = 'virtual:weft-gallery'
 const DIR = '.gallery'
-
-/**
- * The scoped CSS of a theme as @weft/themes writes it: its light block (with
- * the tokens every scheme shares) on `.gallery-canvas[data-theme=<name>]`,
- * its dark block where the canvas says `data-weft-scheme="dark"`, and its
- * dark block again under a dark system when the canvas says neither. The
- * input and surface blocks are the same in every theme and stay the site's.
- */
-export function scopeTheme(css: string, name: string): string {
-  const canvas = `.gallery-canvas[data-theme="${name}"]`
-  const body = (selector: string) => {
-    const at = css.indexOf(`${selector} {`)
-    if (at === -1) throw new Error(`gallery: the ${name} theme has no ${selector} block; rebuild @weft/themes.`)
-    const start = css.indexOf('{', at) + 1
-    return css.slice(start, css.indexOf('}', start)).trim()
-  }
-  const light = body(':where(:root, [data-weft-scheme="light"])')
-  const dark = body(':where([data-weft-scheme="dark"])')
-  return [
-    `${canvas} {\n  ${light}\n}`,
-    `${canvas}[data-weft-scheme="dark"] {\n  ${dark}\n}`,
-    `@media (prefers-color-scheme: dark) {\n  ${canvas}:not([data-weft-scheme="light"]) {\n  ${dark}\n  }\n}`,
-  ].join('\n')
-}
 
 export interface GalleryOptions {
   /** catalog/components.json, from the site root; its example paths are from the folder above catalog/. */
@@ -54,7 +28,6 @@ export interface GalleryOptions {
 
 export function gallery(opts: GalleryOptions): Plugin {
   let root = process.cwd()
-  let isBuild = false
   const dir = () => join(root, DIR)
   const catalogFile = () => resolve(root, opts.catalog)
   const repo = () => dirname(dirname(catalogFile()))
@@ -107,11 +80,6 @@ export function gallery(opts: GalleryOptions): Plugin {
         '',
       ].join('\n')
     }
-    if (name === 'stage-themes.css') {
-      const require = createRequire(join(root, 'package.json'))
-      const fromUI = createRequire(require.resolve('@weft/ui/styles/base.css'))
-      return ['neutral', 'lisa'].map((t) => scopeTheme(readFileSync(fromUI.resolve(`@weft/themes/${t}.css`), 'utf8'), t)).join('\n') + '\n'
-    }
     for (const c of catalog.components) {
       const [first, ...rest] = c.examples
       if (first && name === `${stageIsland(c.name)}.vue`) {
@@ -161,7 +129,6 @@ export function gallery(opts: GalleryOptions): Plugin {
     enforce: 'pre',
     configResolved(config) {
       root = config.root
-      isBuild = config.command === 'build'
     },
     resolveId(id) {
       if (id === PUBLIC_ID) return join(dir(), 'index.ts')
@@ -175,8 +142,6 @@ export function gallery(opts: GalleryOptions): Plugin {
       if (g.name === 'index.ts' && !options?.ssr) {
         throw new Error(`${PUBLIC_ID} is read by pages on the server; an island gets what it needs in its own file.`)
       }
-      // The client build ships no CSS: the pages inline it (see @weft/vite's build).
-      if (g.name === 'stage-themes.css' && isBuild && !options?.ssr) return ''
       const code = load(g.name)
       if (code === undefined) throw new Error(`gallery: ${DIR}/${g.name} is no file the catalogue makes.`)
       return code

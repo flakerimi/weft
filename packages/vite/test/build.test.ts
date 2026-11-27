@@ -1603,7 +1603,7 @@ describe('bin/weft-build-pages.mjs', () => {
       code: 1,
       stderr:
         'weft-build-pages: --out is required.\n' +
-        'usage: weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa|weft] [--preload-font <file.woff2>]... [--separate-runtime <section path>]...\n',
+        'usage: weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa|weft|synthwave|editor|sandstorm] [--preload-font <file.woff2>]... [--separate-runtime <section path>]...\n',
     })
   })
 

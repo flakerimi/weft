@@ -1,8 +1,8 @@
 /* The preview stage: a toolbar over a viewport that holds the canvas, the
    box the example is drawn in with the theme, scheme and width the toolbar
-   picks. The canvas carries the stage's theme (stage-themes.css, made by the
-   gallery plugin, scopes neutral and lisa to it), so it sets the type and
-   ground the page's <html> would. It is as tall as the example, and at
+   picks. The canvas carries the stage's theme: the site's, or neutral or
+   lisa forced on it (the site's theme files scope those to it too), so it
+   sets the type and ground the page's <html> would. It is as tall as the example, and at
    least 240 px: no large empty box. */
 .gallery-stage {
   /* The site's raised surface, read here, outside the canvas's own theme. */

@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { buildSite } from '../src/build.ts'
-import type { Theme } from '../src/document.ts'
+import { THEMES, type Theme } from '../src/document.ts'
 
 function findBrowser(): string | null {
   if (process.env.WEFT_BROWSER && existsSync(process.env.WEFT_BROWSER)) return process.env.WEFT_BROWSER
@@ -247,7 +247,7 @@ const state = reactive({ email: '' })
 describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1–I4)', { timeout: 120_000 }, () => {
   let dir: string
   const servers: Server[] = []
-  const urls: Record<Theme, string> = { neutral: '', lisa: '', weft: '' }
+  const urls = Object.fromEntries(THEMES.map((t) => [t, ''])) as Record<Theme, string>
   let browser: ChildProcess | null = null
   let ws: WebSocket | null = null
   let seq = 0
@@ -283,7 +283,7 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1
     writeFileSync(join(root, 'pages/cycles.vue'), CYCLES_PAGE)
     writeFileSync(join(root, 'pages/snippets.vue'), SNIPPETS_PAGE)
 
-    for (const theme of ['neutral', 'lisa', 'weft'] as const) {
+    for (const theme of THEMES) {
       const outDir = join(dir, `dist-${theme}`)
       await buildSite({ root, outDir, theme })
       const srv = createServer((req, res) => {
@@ -564,7 +564,7 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1
         return contrastRgb(fg, bg)
       }
     `
-    for (const theme of ['neutral', 'lisa', 'weft'] as const) {
+    for (const theme of THEMES) {
       for (const scheme of ['light', 'dark'] as const) {
         await openAt(`${urls[theme]}/static`, 1024, scheme)
         const btnBox = await evaluate<{ x: number; y: number }>(`(() => {

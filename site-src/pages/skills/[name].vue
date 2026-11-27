@@ -41,7 +41,7 @@ const toc = skill.toc
 
 <template>
   <div class="site">
-    <SiteHeader current="agents" :path="skill.path" menu="skills-nav" />
+    <SiteHeader current="agents" :path="skill.path" menu="skills-nav" :themes="false" />
     <div class="docs">
       <SkillsNav :current="skill.path" />
       <Page id="main" class="docs-page">

@@ -410,7 +410,7 @@ describe('devSite', { timeout: 30_000 }, () => {
   it('refuses an unknown theme and a site without pages, in a sentence', async () => {
     const root = site('dev-site')
     await expect(devSite({ root, port: 0, theme: 'plain' as never })).rejects.toThrow(
-      'weft dev: unknown theme "plain"; use neutral, lisa or weft.',
+      'weft dev: unknown theme "plain"; use neutral, lisa, weft, synthwave, editor or sandstorm.',
     )
     await expect(devSite({ root: join(root, 'content'), port: 0 })).rejects.toThrow(
       `weft dev: ${join(root, 'content', 'pages')} does not exist; a site's pages are .vue files in it, like pages/index.vue.`,

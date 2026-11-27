@@ -141,6 +141,16 @@ useFile('/catalog.json', catalogText)
 
 The file is compressed and listed in the manifest like any other, and revalidated rather than cached for good. Its path starts with `/` and may not be under `/pages/` or `/assets/`. Two pages may write the same file only with the same bytes. Like `virtual:weft/content`, it exists only on the server. This site writes its component catalogue, `/llms.txt` and its skills' raw files this way.
 
+### Stylesheets a page links
+
+CSS a page fetches only when it needs it, such as a theme a visitor picks, is imported by its URL rather than for the page's own CSS:
+
+```ts
+import synthwave from '../styles/synthwave.css?url'
+```
+
+The build writes it as a file of its own, `/assets/synthwave-<hash>.css`: minified, named by its bytes and cached for good, the fonts and pictures it names copied in as a page's are. It is never inlined, and its fonts are not preloaded. The page gets that URL, to link when it wants (this site's Theme menu does it before the first paint). `weft dev` serves the file at the URL it gives. Only the server render may import one: an island that does is refused, so give the island the URL as a prop.
+
 ## Islands
 
 An island is a component that runs in the browser. The rest of the page is HTML. Write the component, `hello/components/Counter.vue`:

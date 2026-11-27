@@ -1,7 +1,7 @@
 ---
 title: Go package
 description: Everything the warp package exports, with its signature, and the root package's Version.
-order: 36
+order: 37
 ---
 
 Look up here everything the `warp` Go package exports today, with its signature and what it does. The packages beside it list theirs at the end of their guides: [data](../guides/data.md#everything-it-exports), [auth and authtest](../guides/login.md#everything-it-exports) and [warptest](../guides/warp.md#everything-warptest-exports). Import it as `github.com/flakerimi/weft/warp`. It uses only the standard library. [Warp, the Go side](../guides/warp.md) explains the app and [Typed routes](../guides/routes.md) its routes and errors, and [Serving from Go](../guides/go-serving.md) what `Serve` sends.
@@ -237,13 +237,9 @@ func (c Config) Err() error
 func Serve(dist fs.FS, api http.Handler, opts ...ServeOption) http.Handler
 ```
 
-Returns the handler for a Weft app's pages and API. `App.Serve` and `App.Run` build it over the app's `Handler`.
+Returns the handler for a Weft app's pages and API: `/api` and what is under it go to `api` (a 404 in the error shape, `This app has no API.`, when it is nil), the rest to `dist`, a page build or a single-page app, read into memory once, here. [Serving from Go](../guides/go-serving.md) says what each request gets, its compression, caching and Early Hints. `App.Serve` and `App.Run` build it over the app's `Handler`.
 
-- `/api` and the paths under `/api/` go to `api`. With `api` nil they get a 404 in the error shape, `This app has no API.`
-- When `dist` holds a page build (`routes.json` and the `manifest.json` that `weft-build-pages` writes), every file is read into memory once, here. Each request gets a page, a listed file, the app's `index.html` under its prefix, or the not-found page with status 404. Each answer is the stored brotli, gzip or plain variant the client accepts best, with an `ETag`; `If-None-Match` gets a 304. Hashed files are cached for a year, the rest revalidated. A page with linked files has their `Link` headers, and a `103 Early Hints` with them first when the request is a navigation over HTTP/2, or through a proxy.
-- Otherwise `dist` is a single-page app: its files are served as they are, and every other path gets its `index.html`. Files under `/assets/` are cached for a year; a missing one is a 404.
-
-Serve panics, in one sentence that starts `warp.Serve:` and names the file, when the build is incomplete, `dist` has no `index.html`, or `dist` is nil. It does that at start, not on a request. With `WARP_DESCRIBE=1` it prints the description of an app with no routes and exits 0, so an app that serves without a `warp.App` describes itself to `weft gen`; once an App in the process has a route, which it cannot see, it says `warp: Serve was called from the package and the app's routes are on an App; call the app's own Serve so they can be described.` and exits 1.
+It panics at start, not on a request, in one sentence that starts `warp.Serve:` and names the file, when the build is incomplete, `dist` has no `index.html`, or `dist` is nil. With `WARP_DESCRIBE=1` it prints the description of an app with no routes and exits 0, so an app that serves without a `warp.App` describes itself to `weft gen`; once an App in the process has a route, which it cannot see, it says `warp: Serve was called from the package and the app's routes are on an App; call the app's own Serve so they can be described.` and exits 1.
 
 ## ServeOption
 
@@ -259,13 +255,7 @@ Changes what Serve serves. `WithFiles` is the one option today.
 func WithFiles(prefix string, dir fs.FS) ServeOption
 ```
 
-Serves the files of `dir`, a folder that does not change while the server runs, under `prefix`. `WithFiles("/releases/", d)` serves `d`'s `0.0.1/SHA256SUMS` at `/releases/0.0.1/SHA256SUMS`. `prefix` starts and ends with `/`; `/` serves the files at their own paths.
-
-- Each file is read once at start for its ETag, the first 16 hex digits of its SHA-256, and its type. Its bytes are read from disk on each request.
-- A file changed since the start gets a 500; one added since is not served.
-- Serve panics, naming the file, if `dir` holds a symlink or a name starting with `.`, or if a path is also served by the build, by another folder, or is under `/api/`.
-
-Give it `os.OpenRoot(path)`'s `FS()`, so nothing put in the folder later leads out of it.
+Serves the files of `dir`, a folder that does not change while the server runs, under `prefix`, which starts and ends with `/`: `WithFiles("/releases/", d)` serves `d`'s `0.0.1/SHA256SUMS` at `/releases/0.0.1/SHA256SUMS`. Each file is read once at start for its ETag, the first 16 hex digits of its SHA-256, and its type; its bytes are read on each request. One changed since the start gets a 500, one added since is not served. [Files from disk](../guides/go-serving.md#files-from-disk) has the rest.
 
 ## Version
 
