@@ -70,13 +70,30 @@ async function answer(): Promise<{ user: SessionUser | null; problem: string }> 
   return user ? { user, problem: '' } : { user: null, problem: unanswered }
 }
 
+let listening = false
+
+/**
+ * Asks who is signed in. Only the newest question's answer is kept: an older
+ * one that comes late is dropped, and whoever waits on it gets the newest
+ * instead, never the state of a question already overtaken. The first time,
+ * it starts listening for the page coming back, shown again or restored from
+ * the back-forward cache, and asks again then, so a tab left open after a
+ * sign-out elsewhere does not keep showing the old user.
+ */
 function ask(): Promise<SessionUser | null> {
   const n = ++asking
-  asked = answer().then((got) => {
-    if (n === asking) Object.assign(state, got, { loading: false })
+  const mine: Promise<SessionUser | null> = answer().then((got) => {
+    if (n !== asking) return asked!
+    Object.assign(state, got, { loading: false })
     return state.user
   })
-  return asked
+  asked = mine
+  if (!listening) {
+    listening = true
+    document.addEventListener('visibilitychange', () => void (document.visibilityState === 'visible' && ask()))
+    addEventListener('pageshow', (e) => void ((e as PageTransitionEvent).persisted && ask()))
+  }
+  return mine
 }
 
 /** True when the signed-in user has `permission`, always for the role owner; false while loading or signed out. Reactive. */
@@ -100,6 +117,7 @@ async function signOut(): Promise<string> {
   // A 401 means the session had already ended, which is what was asked.
   if (!res.ok && res.status !== 401) return await problemOf(res)
   asking++
+  asked = Promise.resolve(null)
   Object.assign(state, { user: null, problem: '', loading: false })
   location.assign('/login')
   return ''
@@ -138,7 +156,9 @@ export function signInAgain(signIn = '/login'): void {
  */
 export async function requireSession(options: { perm?: string; signIn?: string } = {}): Promise<SessionUser | null> {
   if (!inBrowser()) return null
-  const user = await useSession().ready
+  await useSession().ready
+  // What the session is now, not what the awaited answer was: it may have ended meanwhile.
+  const user = state.user
   if (!user) {
     if (!state.problem) signInAgain(options.signIn)
     return null

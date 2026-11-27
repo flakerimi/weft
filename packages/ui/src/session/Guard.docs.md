@@ -17,20 +17,23 @@ the role `owner`.
 
 **What it shows.** Pages are built with no session, so the server renders the
 `loading` slot (a `Spinner` that says Loading), and so does the browser's
-first render, so hydration always matches. Once mounted it calls
-`requireSession({ perm, signIn })`:
+first render, so hydration always matches. Once mounted, and the session
+known:
 
-- a visitor with no session is sent to `sign-in` (default `/login`) with
-  `?next=` this page's path and query, and `loading` stays while the browser
-  leaves;
-- a user without `perm` sees the `denied` slot, by default an `Alert`:
-  "Your account cannot see this; ask an administrator.";
+- a visitor with no session is sent, by `requireSession({ perm, signIn })`, to
+  `sign-in` (default `/login`) with `?next=` this page's path and query, and
+  `loading` stays while the browser leaves;
+- a user without `perm` sees the `denied` slot, by default an `Alert` with
+  `role="status"`: "Your account cannot see this; ask an administrator.";
 - a session that could not be read (the server cannot be reached, or answers
   an error) shows why in an `Alert` with `role="alert"`, and sends no one
   away;
 - otherwise the default slot, given `{ user }`, the signed-in user.
 
 It follows the session: after `useSession().refresh()` a role that lost the
-permission sees `denied`. It hides what it holds and guards nothing: the
+permission sees `denied`, and a session that has ended (signed out in another
+tab, which the page notices when it is shown again) sends the visitor to sign
+in, as on load. `perm` names a permission a route records or an `auth.Grant`
+names, which is what `me` lists. It hides what it holds and guards nothing: the
 server's routes must still check, as `auth.Per` does, and send nothing a
 viewer may not read.

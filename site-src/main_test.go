@@ -871,3 +871,46 @@ func TestPicturesAreMarked(t *testing.T) {
 		}
 	}
 }
+
+// The gallery's perm and Guard examples ask GET /api/auth/me. The site has no
+// accounts: it answers that one route with a fixed demo viewer, the same JSON
+// examples-hydrate.test.ts answers, and every other /api path as a site with
+// no API does.
+func TestSiteAnswersOnlyTheDemoSession(t *testing.T) {
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
+	defer srv.Close()
+
+	res, body := get(t, srv, "/api/auth/me")
+	var me struct {
+		ID          int64    `json:"id"`
+		Email       string   `json:"email"`
+		Name        string   `json:"name"`
+		Role        string   `json:"role"`
+		Permissions []string `json:"permissions"`
+		CreatedAt   string   `json:"created_at"`
+		UpdatedAt   string   `json:"updated_at"`
+	}
+	if res.StatusCode != 200 || !strings.HasPrefix(res.Header.Get("Content-Type"), "application/json") || json.Unmarshal([]byte(body), &me) != nil {
+		t.Fatalf("GET /api/auth/me: %d %q %.200s", res.StatusCode, res.Header.Get("Content-Type"), body)
+	}
+	if me.Role != "viewer" || strings.Join(me.Permissions, ",") != "products:edit,products:read" || me.ID == 0 || me.CreatedAt == "" {
+		t.Errorf("GET /api/auth/me: %+v, want the demo viewer with products:edit and products:read", me)
+	}
+	if res.Header.Get("Cache-Control") != "no-store" || res.Header.Get("Set-Cookie") != "" {
+		t.Errorf("GET /api/auth/me: Cache-Control %q, Set-Cookie %q", res.Header.Get("Cache-Control"), res.Header.Get("Set-Cookie"))
+	}
+	if want, err := os.ReadFile(filepath.Join("..", "packages", "vite", "test", "fixtures", "demo-me.json")); err != nil || strings.TrimSpace(string(want)) != strings.TrimSpace(body) {
+		t.Errorf("GET /api/auth/me is not packages/vite/test/fixtures/demo-me.json (%v): %s", err, body)
+	}
+
+	for _, p := range []string{"/api", "/api/", "/api/auth/login", "/api/auth/me/", "/api/products", "/api/auth/logout"} {
+		res, body := get(t, srv, p)
+		if res.StatusCode != 404 || !strings.Contains(body, `"message":"This app has no API."`) {
+			t.Errorf("GET %s: %d %.200s, want the 404 of a site with no API", p, res.StatusCode, body)
+		}
+	}
+	req, _ := http.NewRequest("POST", srv.URL+"/api/auth/me", strings.NewReader("{}"))
+	if res, err := srv.Client().Do(req); err != nil || res.StatusCode != 404 {
+		t.Errorf("POST /api/auth/me: %v %v, want 404", err, res)
+	}
+}

@@ -1,15 +1,20 @@
 <script setup vapor lang="ts">
-import { Guard } from '@weft/ui'
+import { Guard, Stack } from '@weft/ui'
 </script>
 
 <template>
   <!--
-    Shown only to a signed-in user with users:read. A visitor with no session is sent to /login and
-    back; here, where no API answers, it says so.
+    Each Guard shows what it holds only to a signed-in user with its permission, and sends a visitor
+    with no session to /login and back. The gallery's demo user may edit products, not read users.
   -->
-  <Guard perm="users:read">
-    <template #default="{ user }">
-      <p>Signed in as {{ user.email }}.</p>
-    </template>
-  </Guard>
+  <Stack :gap="3">
+    <Guard perm="products:edit">
+      <template #default="{ user }">
+        <p>{{ user.name }} may edit products.</p>
+      </template>
+    </Guard>
+    <Guard perm="users:read">
+      <p>The users of this app.</p>
+    </Guard>
+  </Stack>
 </template>

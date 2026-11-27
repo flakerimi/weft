@@ -32,13 +32,26 @@ async function load(): Promise<SessionModule> {
   return await import('../../src/session/session.ts')
 }
 
+// Each test loads a fresh copy of the module, which listens on document and
+// window; the listeners each copy adds are taken off after its test.
+let listening: [EventTarget, string, EventListenerOrEventListenerObject][] = []
 beforeEach(() => {
+  for (const target of [document, window]) {
+    const add = target.addEventListener.bind(target)
+    vi.spyOn(target, 'addEventListener').mockImplementation((type: string, listener: EventListenerOrEventListenerObject | null, options?: unknown) => {
+      if (!listener) return
+      listening.push([target, type, listener])
+      add(type, listener, options as AddEventListenerOptions)
+    })
+  }
   fetchMock = vi.fn()
   vi.stubGlobal('fetch', fetchMock)
   assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {})
   history.replaceState(null, '', '/products/3?tab=stock')
 })
 afterEach(() => {
+  for (const [target, type, listener] of listening) target.removeEventListener(type, listener)
+  listening = []
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -192,6 +205,83 @@ describe('useSession', () => {
     first(unauthorized())
     await new Promise((r) => setTimeout(r, 0))
     expect(session.user).toEqual(member)
+  })
+})
+
+describe('a session that changes while the page is open', () => {
+  it('a refresh during the first load never sends a signed-in user away', async () => {
+    let first!: (r: Response) => void
+    let second!: (r: Response) => void
+    fetchMock
+      .mockReturnValueOnce(new Promise<Response>((r) => (first = r)))
+      .mockReturnValueOnce(new Promise<Response>((r) => (second = r)))
+    const { useSession, requireSession } = await load()
+    const guarded = requireSession()
+    const ready = useSession().ready
+    void useSession().refresh()
+    // The older answer comes first and is dropped; its waiters wait for the newest.
+    first(unauthorized())
+    await new Promise((r) => setTimeout(r, 0))
+    expect(assign).not.toHaveBeenCalled()
+    second(json(200, member))
+    expect(await guarded).toEqual(member)
+    expect(await ready).toEqual(member)
+    expect(assign).not.toHaveBeenCalled()
+    expect(useSession().session).toMatchObject({ user: member, loading: false, problem: '' })
+  })
+
+  it('after signOut, ready and requireSession give no one', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, member)).mockResolvedValueOnce(json(204))
+    const { useSession, requireSession } = await load()
+    await useSession().ready
+    expect(await useSession().signOut()).toBe('')
+    assign.mockClear()
+    expect(await useSession().ready).toBeNull()
+    expect(await requireSession()).toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('asks again when the page is shown again, or restored from history', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, member))
+    const { useSession } = await load()
+    const { session } = useSession()
+    await useSession().ready
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    // Another tab signed out: back on this one, it asks and the user is gone.
+    fetchMock.mockResolvedValueOnce(unauthorized())
+    const visibility = vi.spyOn(document, 'visibilityState', 'get')
+    visibility.mockReturnValue('hidden')
+    document.dispatchEvent(new Event('visibilitychange'))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    visibility.mockReturnValue('visible')
+    document.dispatchEvent(new Event('visibilitychange'))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(session.user).toBeNull()
+
+    // A page from the back-forward cache asks; a fresh load's pageshow does not.
+    // (happy-dom's PageTransitionEvent has no persisted, so the event is made by hand.)
+    const pageshow = (persisted: boolean) => Object.defineProperty(new Event('pageshow'), 'persisted', { value: persisted })
+    fetchMock.mockResolvedValueOnce(json(200, owner))
+    window.dispatchEvent(pageshow(false))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    window.dispatchEvent(pageshow(true))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(session.user).toEqual(owner)
+  })
+
+  it('listens once, however often it asks', async () => {
+    fetchMock.mockImplementation(async () => json(200, member))
+    const { useSession } = await load()
+    await useSession().ready
+    await useSession().refresh()
+    await useSession().refresh()
+    expect(listening.filter(([, type]) => type === 'visibilitychange')).toHaveLength(1)
+    expect(listening.filter(([, type]) => type === 'pageshow')).toHaveLength(1)
   })
 })
 

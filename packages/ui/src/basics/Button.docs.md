@@ -49,6 +49,9 @@ disable, and it guards nothing: the route behind it must still check, as
 `perm` button, and neither does the browser's first render: it appears once
 the button has mounted and `GET /api/auth/me` has answered, asked once for
 the whole page, so hydration always matches. Without `perm` nothing is asked.
+`perm` names a permission a route records (`auth.Per`, `auth.Can`) or an
+`auth.Grant` names, which is what `me` lists; one covered only by a wildcard
+grant, with no such route, is false in the browser though the server allows it.
 
 `click` is emitted only when the button is pressed while neither loading nor
 disabled. `type` defaults to `button`, so a Button inside a form submits it

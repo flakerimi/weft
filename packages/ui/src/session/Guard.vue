@@ -2,11 +2,12 @@
 // The route guard for a page's islands: what it holds is shown only to a
 // signed-in user who has `perm`. Pages are documents, built with no session,
 // so the server renders `loading`, and so does the browser's first render;
-// once mounted it calls requireSession, which sends a visitor with no
-// session to sign in, with `next`. A user without `perm` sees `denied`, and
+// once mounted, whenever the session is known to have no user (on load, or
+// later, when a refresh answers 401) it calls requireSession, which sends the
+// visitor to sign in, with `next`. A user without `perm` sees `denied`, and
 // a session that could not be read shows why, sending no one away. It hides
 // what it holds; it guards nothing on the server, whose routes still check.
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import Spinner from '../basics/Spinner.vue'
 import Alert from '../feedback/Alert.vue'
 import { requireSession, useSession, type SessionUser } from './session.ts'
@@ -30,10 +31,10 @@ defineSlots<{
 
 const { session, can } = useSession()
 const mounted = ref(false)
-onMounted(() => {
-  mounted.value = true
-  void requireSession({ perm: props.perm, signIn: props.signIn })
-})
+onMounted(() => (mounted.value = true))
+/** Known, once mounted, to have no one signed in and nothing in the way of asking. */
+const signedOut = computed(() => mounted.value && !session.loading && !session.user && !session.problem)
+watch(signedOut, (out) => out && void requireSession({ perm: props.perm, signIn: props.signIn }))
 
 /** What to show: nothing is known before mounting, so the server and hydration agree. */
 const shown = computed(() => {
@@ -47,7 +48,7 @@ const shown = computed(() => {
 <template>
   <slot v-if="shown === 'allowed'" :user="session.user!" />
   <slot v-else-if="shown === 'denied'" name="denied">
-    <Alert tone="warning" title="Your account cannot see this; ask an administrator." />
+    <Alert role="status" tone="warning" title="Your account cannot see this; ask an administrator." />
   </slot>
   <Alert v-else-if="shown === 'problem'" role="alert" tone="danger" :title="session.problem" />
   <slot v-else name="loading"><Spinner label="Loading" /></slot>

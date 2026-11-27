@@ -46,7 +46,9 @@ disable, and the server still decides: a route guarded by `auth.Per` answers
 403 to anyone without the permission. Pages are built with no session, so the
 server draws none of the three, and neither does the browser's first render;
 they appear once the table has mounted and `GET /api/auth/me` has answered,
-so hydration always matches. Without `perm` nothing is asked.
+so hydration always matches. Without `perm` nothing is asked. When they
+appear, the toolbar gains New and every row its Actions cell, so the table
+shifts once, as the page's first answer arrives.
 
 **Dialogs and refresh.** Saving in `EntityDialog` emits `saved` and refreshes
 `Table`. Confirming in `ConfirmDialog` calls `remove(row[idKey])`, emits

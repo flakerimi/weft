@@ -11,6 +11,7 @@
 // (a coarse pointer) must hydrate that same form and switch once mounted:
 // each example hydrates under both a fine and a coarse matchMedia.
 import { execFile } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
@@ -40,13 +41,15 @@ beforeAll(async () => {
 }, 120_000)
 
 // No server answers here: GET /api/auth/me, which an example with `perm` or a
-// Guard asks, is answered as the gallery's server answers it, a site with no API
-// (warp.Serve's 404); any other request is a mistake of the example's.
+// Guard asks, is answered as the gallery's server answers it (site-src/main.go),
+// with the demo user in fixtures/demo-me.json; any other request is a mistake
+// of the example's.
+const demoMe = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'demo-me.json'), 'utf8')
 let strays: string[] = []
 beforeEach(() => {
   strays = []
   vi.stubGlobal('fetch', async (url: string) => {
-    if (url === '/api/auth/me') return new Response(JSON.stringify({ error: { code: 'not_found', message: 'This app has no API.' } }), { status: 404 })
+    if (url === '/api/auth/me') return new Response(demoMe, { status: 200, headers: { 'content-type': 'application/json' } })
     strays.push(String(url))
     throw new TypeError('Failed to fetch')
   })
@@ -116,6 +119,16 @@ describe('every @weft/ui example, server-rendered in an island', () => {
       for (const field of island.querySelectorAll('input[role="combobox"]')) {
         expect(field.hasAttribute('readonly'), file).toBe(input === 'touch')
       }
+    }
+
+    // The demo user may edit products, not delete them or read users: each perm example shows both ways.
+    if (file === 'Button/by-permission.vue') {
+      expect([...island.querySelectorAll('button')].map((b) => b.textContent!.trim())).toEqual(['View', 'Edit'])
+    }
+    if (file === 'Guard/basic.vue') {
+      expect(island.textContent).toContain('Demo may edit products.')
+      expect(island.textContent).not.toContain('The users of this app.')
+      expect(island.querySelector('.weft-alert[role="status"]')!.textContent).toBe('Your account cannot see this; ask an administrator.')
     }
 
     app.unmount()

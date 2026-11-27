@@ -10,15 +10,18 @@ const no = () => false
 
 /**
  * For a component that shows something by permission: a ref of `can`, which
- * says no until the component has mounted and its session is loaded. The
- * server renders it signed out, and so does hydration's first render, even in
- * an island that wakes after the session is known, so the two always agree.
- * Reactive; call it in setup, and use it as `can(perm)` in a template or
- * `can.value(perm)` in a script.
+ * says no until the component has mounted and its session is loaded. Two
+ * things keep it so. The stand-in installed on mount says no and starts an
+ * `import()` that resolves only after the render that called it, so the
+ * browser's first render, hydration's included (even in an island that wakes
+ * after the session is known), draws what the server drew. And the stand-in
+ * is installed only on mount, so the server, which never mounts, never calls
+ * `import()` at all (session-island-ssr.test.ts). Reactive; call it in setup,
+ * and use it as `can(perm)` in a template or `can.value(perm)` in a script.
  */
 export function useCan(): Ref<Can> {
-  // No before mounting; then a stand-in that loads the session when asked, and says no until it has. Not
-  // fetched (offline, say), it stays, and asks again the next time.
+  // No before mounting; then a stand-in that loads the session when asked, and says no until it has.
+  // Not fetched (offline, say), the stand-in stays, and asks again the next time.
   const can = ref<Can>(no)
   onMounted(() => (can.value = () => (import('./load.ts').then((m) => (can.value = m.sessionCan()), no), false)))
   return can

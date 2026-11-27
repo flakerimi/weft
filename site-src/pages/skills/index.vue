@@ -20,7 +20,7 @@ import SiteFooter from '../../components/SiteFooter.vue'
 import SiteHeader from '../../components/SiteHeader.vue'
 import SkillsNav from '../../components/SkillsNav.vue'
 
-const description = 'Claude Code skills that teach an agent to build with Weft, and the files an agent reads: index.md to start from, llms.txt, the full text and the component catalogue.'
+const description = 'Claude Code skills for building with Weft, and the files an agent reads.'
 useHead({ title: 'For agents — Weft', description })
 
 const skills = useCollection('skills').map((s) => useContent('skills', s.slug))
@@ -33,9 +33,9 @@ useFile('/index.md', indexMd({ ...input, version: siteVersion(process.env.WEFT_S
 
 const names = skills.map((s) => s.frontmatter.title)
 const commands = [
-  { title: 'For every project', text: 'Into ~/.claude/skills, which Claude Code reads in every project on this machine.', command: installCommand(names, '~/.claude/skills') },
-  { title: 'For one project', text: 'Into .claude/skills at the project’s root, to commit with it.', command: installCommand(names, '.claude/skills') },
-  { title: 'From a clone of Weft', text: 'The same files, copied from the repository’s skills folder.', command: 'mkdir -p .claude/skills && cp -R skills/weft-* .claude/skills/' },
+  { title: 'For every project', text: 'Into ~/.claude/skills, for every project on this machine.', command: installCommand(names, '~/.claude/skills') },
+  { title: 'For one project', text: 'Into the project’s .claude/skills, to commit with it.', command: installCommand(names, '.claude/skills') },
+  { title: 'From a clone of Weft', text: 'The same files, from the repository’s skills folder.', command: 'mkdir -p .claude/skills && cp -R skills/weft-* .claude/skills/' },
 ]
 </script>
 
@@ -62,7 +62,7 @@ const commands = [
             </Grid>
           </Section>
           <Section title="Install them in Claude Code">
-            <p>A skill is a folder with a SKILL.md in it. Claude Code reads the folders in a skills folder, and picks up new ones without a restart; if one does not show, run <code>/reload-skills</code>.</p>
+            <p>A skill is a folder with a SKILL.md. Claude Code picks up new ones without a restart; if one does not show, run <code>/reload-skills</code>.</p>
             <Stack v-for="c in commands" :key="c.title" :gap="2">
               <h3>{{ c.title }}</h3>
               <p>{{ c.text }}</p>
@@ -71,9 +71,9 @@ const commands = [
           </Section>
           <Section title="Files for agents">
             <ul>
-              <li><Link to="/index.md">index.md</Link>: start here: the whole brief for an agent asked to build an app.</li>
-              <li><Link to="/llms.txt">llms.txt</Link>: every doc, component and skill, with a line on each.</li>
-              <li><Link to="/llms-full.txt">llms-full.txt</Link>: the docs and skills in full, in one file.</li>
+              <li><Link to="/index.md">index.md</Link>: the brief to start from.</li>
+              <li><Link to="/llms.txt">llms.txt</Link>: a line on every doc, component and skill.</li>
+              <li><Link to="/llms-full.txt">llms-full.txt</Link>: the docs and skills in full.</li>
               <li><Link to="/catalog.json">catalog.json</Link>: every component, and each one alone, such as <Link to="/components/date-picker.json">/components/date-picker.json</Link>.</li>
             </ul>
           </Section>

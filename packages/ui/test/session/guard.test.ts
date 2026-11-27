@@ -84,6 +84,8 @@ describe('Guard', () => {
     expect(el.querySelector('.secret')).toBeNull()
     const alert = el.querySelector('.weft-alert')!
     expect(alert.textContent).toBe('Your account cannot see this; ask an administrator.')
+    // It takes the place of a Spinner that said Loading, so it is announced as politely.
+    expect(alert.getAttribute('role')).toBe('status')
     expect(assign).not.toHaveBeenCalled()
     // Its own words, and its own loading, by slot.
     const mine = guard({ case: 'slots', perm: 'users:read' })
@@ -106,6 +108,7 @@ describe('Guard', () => {
     await answerWith(unauthorized)
     const el = guard({ case: 'plain', perm: 'reports:read' })
     await settle()
+    expect(assign).toHaveBeenCalledTimes(1)
     expect(assign).toHaveBeenCalledWith('/login?next=%2Freports%3Fyear%3D2026')
     // While the browser leaves, it still says it is loading, and shows nothing of the slot.
     expect(el.querySelector('.weft-spinner')).not.toBeNull()
@@ -115,6 +118,19 @@ describe('Guard', () => {
     guard({ case: 'plain', signIn: '/enter' })
     await settle()
     expect(assign).toHaveBeenCalledWith('/enter?next=%2Freports%3Fyear%3D2026')
+  })
+
+  it('a session that ends mid-page sends to sign-in with next', async () => {
+    await answerWith(() => answer(200, me(['reports:read'])))
+    const el = guard({ case: 'plain', perm: 'reports:read' })
+    await settle()
+    expect(el.querySelector('.secret')!.textContent).toBe('For Mia')
+    // Signed out elsewhere: the next answer is a 401.
+    await answerWith(unauthorized)
+    expect(el.querySelector('.secret')).toBeNull()
+    expect(el.querySelector('.weft-spinner')).not.toBeNull()
+    expect(assign).toHaveBeenCalledTimes(1)
+    expect(assign).toHaveBeenCalledWith('/login?next=%2Freports%3Fyear%3D2026')
   })
 
   it('a problem shows it and sends no one away', async () => {
