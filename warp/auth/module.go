@@ -77,6 +77,7 @@ type module struct {
 	sessions    *data.Store[sessionRow]
 	tokens      *data.Store[tokenRow]
 	invitations *data.Store[invitationRow]
+	keys        *data.Store[keyRow]
 	mails       *mails
 	postOnce    sync.Once
 	post        postman // the mail module's, once looked for
@@ -170,6 +171,7 @@ func (m *module) Register(app *warp.App) error {
 	m.sessions = data.NewStore[sessionRow](m.db, "sessions")
 	m.tokens = data.NewStore[tokenRow](m.db, "auth_tokens")
 	m.invitations = data.NewStore[invitationRow](m.db, "invitations")
+	m.keys = data.NewStore[keyRow](m.db, "api_keys")
 	if m.mails, err = parseMails(); err != nil {
 		app.Mistake("%s", strings.TrimPrefix(err.Error(), "auth: "))
 	}
@@ -181,6 +183,7 @@ func (m *module) Register(app *warp.App) error {
 	m.routes()
 	m.mailRoutes()
 	m.userRoutes()
+	m.keyRoutes()
 	return nil
 }
 
@@ -328,7 +331,7 @@ func AddUser(ctx context.Context, app *warp.App, email, password, role string) (
 }
 
 // RemoveUser removes the user with the id and, in the same transaction,
-// every session of theirs and every invitation they sent. A user no one has is a warp.NotFound. It is for tools and tests, after the app has started, as
+// every session and API key of theirs and every invitation they sent. A user no one has is a warp.NotFound. It is for tools and tests, after the app has started, as
 // AddUser is. It may remove the last user, the owner included: the running
 // app then has no setup link, and the next start, finding no user, logs a
 // new one.
@@ -341,14 +344,17 @@ func RemoveUser(ctx context.Context, app *warp.App, id int64) error {
 }
 
 // removeUser removes the user with the id and, in one transaction, every
-// session of theirs and every invitation they sent: what RemoveUser and the
-// route remove_user do.
+// session and API key of theirs and every invitation they sent: what
+// RemoveUser and the route remove_user do.
 func (m *module) removeUser(ctx context.Context, id int64) error {
 	return m.db.Tx(ctx, func(ctx context.Context) error {
 		if _, err := m.sessions.DeleteBy(ctx, "user_id", id); err != nil {
 			return err
 		}
 		if _, err := m.invitations.DeleteBy(ctx, "invited_by", id); err != nil {
+			return err
+		}
+		if _, err := m.keys.DeleteBy(ctx, "user_id", id); err != nil {
 			return err
 		}
 		return m.users.Delete(ctx, id)

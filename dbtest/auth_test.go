@@ -657,7 +657,7 @@ func TestDescribeHidesTheHash(t *testing.T) {
 		}
 	}
 	all, _ := json.Marshal(d)
-	for _, hidden := range []string{"password_hash", "userRow"} {
+	for _, hidden := range []string{"password_hash", "token_hash", "secret_hash", "userRow", "sessionRow", "tokenRow", "invitationRow", "keyRow"} {
 		if bytes.Contains(all, []byte(hidden)) {
 			t.Errorf("the description has %q: %s", hidden, all)
 		}
@@ -690,6 +690,9 @@ func TestDescribeHidesTheHash(t *testing.T) {
 		"end_user_sessions": "DELETE /api/auth/users/{id}/sessions 204",
 		"update_me":         "PATCH /api/auth/me 200",
 		"change_password":   "POST /api/auth/password/change 204",
+		"keys":              "GET /api/auth/keys 200",
+		"create_key":        "POST /api/auth/keys 201",
+		"remove_key":        "DELETE /api/auth/keys/{id} 204",
 	}
 	if !maps.Equal(routes, want) {
 		t.Fatalf("auth's routes are %v, want %v", routes, want)

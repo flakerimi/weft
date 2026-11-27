@@ -27,8 +27,10 @@ func (m *module) carry(next http.Handler) http.Handler {
 }
 
 // Can is the route option that records permission on the route and guards
-// it: a request without a session is answered 401, and one whose user's role
-// lacks the permission 403. The user is read from the users table on every
+// it: a request without a session or a good API key is answered 401, and one
+// whose role lacks the permission 403. A request with Authorization: Bearer
+// is read as a key, acting with the lower of its role and its user's, and
+// never as a cookie. The user is read from the users table on every
 // request, so a removed user is out at once and a changed role counts at
 // once; UserOf gives it to the handler. What a role is allowed is Allows's
 // answer. An app that lists no auth module has a registration mistake that
@@ -41,7 +43,7 @@ func Can(permission string) warp.RouteOption {
 				warp.WriteError(w, r, errors.New("auth: a route guarded by auth.Can was asked with no auth module; list auth.Module() in app/modules.go."))
 				return
 			}
-			u, _, err := m.signedIn(r)
+			u, err := m.requester(r)
 			if err != nil {
 				warp.WriteError(w, r, err)
 				return

@@ -110,9 +110,10 @@ func (m *module) attempt(ctx context.Context, email, password, ip string) (userR
 	return row, nil
 }
 
-// me answers the signed-in user with their permissions, or the 401.
+// me answers the signed-in user with their permissions, or the 401. It
+// takes an API key as auth.Can does, the role then the key's.
 func (m *module) me(ctx context.Context, _ warp.None) (Me, error) {
-	u, _, err := m.signedIn(warp.Request(ctx))
+	u, err := m.requester(warp.Request(ctx))
 	if err != nil {
 		return Me{}, err
 	}
