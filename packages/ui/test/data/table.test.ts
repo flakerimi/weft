@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import TableCases, { type Person } from '../fixtures/data/TableCases.vue'
+import TableInlineFetch from '../fixtures/data/TableInlineFetch.vue'
 import TableWire, { type ListQuery } from '../fixtures/data/TableWire.vue'
 import { compareValues, nextSort, parseSort, selectRange, sortRows, tableSearch, type TableFetch, type TableQuery, type TableResult } from '../../src/data/table.ts'
 import { mount } from '../mount.ts'
@@ -604,7 +605,7 @@ describe('Table', () => {
 
     it('sends the search and the filters, and asks again when either changes', async () => {
       const { fetch, calls } = server()
-      const m = await cases({ rows: undefined, fetch: fn(fetch), perPage: 10, search: 'P0', filters: { city: 'X' } })
+      const m = await cases({ rows: undefined, fetch: fn(fetch), perPage: 10, search: 'P0', searchDebounce: 0, filters: { city: 'X' } })
       expect(calls.at(-1)).toEqual({ page: 1, per_page: 10, q: 'P0', filter: { city: 'X' } })
       m.exposed.searchText = 'P1'
       await settle()
@@ -614,7 +615,7 @@ describe('Table', () => {
 
     it('goes back to page 1 when the search or the filters change, unless the parent sets the page too', async () => {
       const { fetch, calls } = server()
-      const m = await cases({ rows: undefined, fetch: fn(fetch), perPage: 10, search: 'P', filters: { city: 'X' } })
+      const m = await cases({ rows: undefined, fetch: fn(fetch), perPage: 10, search: 'P', searchDebounce: 0, filters: { city: 'X' } })
       const exposed = m.exposed as { page: number; searchText: string; filterValues: Record<string, string> }
       exposed.page = 3
       await settle()
@@ -636,6 +637,114 @@ describe('Table', () => {
       await settle()
       expect(exposed.page).toBe(2)
       expect(calls.at(-1)).toEqual({ page: 2, per_page: 10, q: 'P2', filter: { city: 'Y' } })
+    })
+
+    it('debounces non-empty search changes after mount, asks at once when cleared or when sort, filters or page changes, and ignores superseded answers and errors', async () => {
+      vi.useFakeTimers()
+      try {
+        const answers: { q?: string; resolve: (r: TableResult<Person>) => void; reject: (e: unknown) => void }[] = []
+        const fetch = vi.fn((q: TableQuery) => new Promise<TableResult<Person>>((resolve, reject) => answers.push({ q: q.q, resolve, reject })))
+        const m = mount(TableCases, { rows: undefined, fetch: fn(fetch), perPage: 10, search: 'P' })
+        unmount = m.unmount
+        await nextTick()
+        // Initial mount asks immediately without waiting for the debounce timer.
+        expect(answers).toHaveLength(1)
+        expect(answers[0]!.q).toBe('P')
+        const exposed = m.exposed as { page: number; searchText: string; filterValues: Record<string, string>; errors: unknown[] }
+
+        // Keystroke while initial request is in flight: timer starts, and the in-flight request is superseded immediately.
+        exposed.searchText = 'P0'
+        await nextTick()
+        expect(answers).toHaveLength(1)
+        // Even if the superseded initial request resolves or rejects while the debounce timer is pending, it is ignored.
+        answers[0]!.reject(new Error('stale error'))
+        await Promise.resolve()
+        await nextTick()
+        expect(exposed.errors).toHaveLength(0)
+
+        // Rapid keystrokes reset the 250 ms timer.
+        vi.advanceTimersByTime(150)
+        exposed.searchText = 'P01'
+        await nextTick()
+        vi.advanceTimersByTime(150)
+        expect(answers).toHaveLength(1)
+        vi.advanceTimersByTime(100)
+        await nextTick()
+        expect(answers).toHaveLength(2)
+        expect(answers[1]!.q).toBe('P01')
+        answers[1]!.resolve({ items: [PEOPLE[0]!], total: 1 })
+        await Promise.resolve()
+        await nextTick()
+
+        // Clearing search to '' cancels a pending timer and asks immediately.
+        exposed.searchText = 'P02'
+        await nextTick()
+        expect(answers).toHaveLength(2)
+        exposed.searchText = ''
+        await nextTick()
+        expect(answers).toHaveLength(3)
+        expect(answers[2]!.q).toBeUndefined()
+        answers[2]!.resolve({ items: PEOPLE, total: 5 })
+        await Promise.resolve()
+        await nextTick()
+
+        // Changing filters while a search debounce timer is pending cancels the timer and asks immediately with both.
+        exposed.searchText = 'Ada'
+        await nextTick()
+        expect(answers).toHaveLength(3)
+        exposed.filterValues = { city: 'London' }
+        await nextTick()
+        expect(answers).toHaveLength(4)
+        expect(answers[3]!.q).toBe('Ada')
+        // When the old timer window passes, no duplicate call fires.
+        vi.advanceTimersByTime(300)
+        await nextTick()
+        expect(answers).toHaveLength(4)
+
+        // Calling refresh() and then typing a search while refresh() is in flight does not hang the refresh() promise.
+        const refreshPromise = (m.exposed as { table: { refresh(): Promise<void> } }).table.refresh()
+        await nextTick()
+        expect(answers).toHaveLength(5)
+        exposed.searchText = 'Ada2'
+        await nextTick()
+        let settled = false
+        void refreshPromise.then(() => {
+          settled = true
+        })
+        answers[4]!.resolve({ items: PEOPLE, total: 5 })
+        await Promise.resolve()
+        await nextTick()
+        expect(settled).toBe(true)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('debounces search when fetch is an inline arrow in the parent template', async () => {
+      vi.useFakeTimers()
+      try {
+        const m = mount(TableInlineFetch)
+        unmount = m.unmount
+        await nextTick()
+        const exposed = m.exposed as { q: string; asked: (string | undefined)[] }
+        expect(exposed.asked).toEqual([undefined])
+
+        exposed.q = 'A'
+        await nextTick()
+        vi.advanceTimersByTime(60)
+        exposed.q = 'Ad'
+        await nextTick()
+        vi.advanceTimersByTime(60)
+        exposed.q = 'Ada'
+        await nextTick()
+        expect(exposed.asked).toEqual([undefined])
+
+        vi.advanceTimersByTime(250)
+        await nextTick()
+        expect(exposed.asked).toEqual([undefined, 'Ada'])
+      } finally {
+        vi.useRealTimers()
+      }
     })
 
     it('asks again for changed filters, not for a fresh object with the same filters', async () => {
