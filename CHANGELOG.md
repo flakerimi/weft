@@ -7,6 +7,13 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
 0.0.12 have no GitHub Release: they were published at weft.base.al, and
 `site/releases.txt` lists them (only 0.0.1 and 0.0.2 have a tag).
 
+## Unreleased
+
+- On Windows, `weft dev` and the commands that run child processes put each
+  child in a Job Object (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) while suspended,
+  so stopping a child or ending `weft dev` (even with `TerminateProcess`) ends
+  its whole process tree.
+
 ## 0.0.18
 
 - `weft scaffold <name> <field[:type[:modifier...]]>...` writes a resource:

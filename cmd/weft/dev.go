@@ -394,11 +394,15 @@ func goBuild(ctx context.Context, command, appDir, bin string, stderr io.Writer)
 	cmd.Dir, cmd.Env = appDir, hostBuildEnv(os.Environ())
 	cmd.Stdout, cmd.Stderr = stderr, stderr
 	// Stopped as a Ctrl-C would, so go stops the compilers it started; on
-	// Windows, which has none to send, go and what it started are killed.
-	// Cancel runs before Wait returns, so always while go is pinned.
+	// Windows, which has none to send, go runs in a Job Object and it and
+	// what it started are killed.
 	cmd.Cancel = func() error { return interrupt(cmd) }
 	cmd.WaitDelay = 3 * time.Second
-	if cmd.Start() != nil {
+	start := cmd.Start
+	if runtime.GOOS == "windows" {
+		start = func() error { return startGroup(cmd) }
+	}
+	if start() != nil {
 		return false
 	}
 	pin(cmd)

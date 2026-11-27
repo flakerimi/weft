@@ -5,7 +5,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -14,176 +13,54 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"testing"
 	"time"
 	"unsafe"
 )
 
-// syncBuffer is an output buffer that weft dev's children and the test share.
-type syncBuffer struct {
-	mu sync.Mutex
-	b  bytes.Buffer
-}
-
-func (s *syncBuffer) Write(p []byte) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.b.Write(p)
-}
-
-func (s *syncBuffer) String() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.b.String()
-}
-
-// devRun is a weft dev running in a goroutine.
-type devRun struct {
-	app            string
-	url            string
-	stdout, stderr *syncBuffer
-	cancel         context.CancelFunc
-	done           chan int
-	code           int
-}
-
-// withoutSetupLink is a log without the line auth writes at its start while
-// no user exists, Set up the owner at …/setup#token=….
-func withoutSetupLink(log string) string {
-	var kept []string
-	for _, l := range strings.SplitAfter(log, "\n") {
-		if !strings.Contains(l, "Set up the owner at ") {
-			kept = append(kept, l)
-		}
-	}
-	return strings.Join(kept, "")
-}
-
-func freeLocalPort(t *testing.T) int {
+// openTrackedProcess opens a SYNCHRONIZE|PROCESS_TERMINATE handle on pid while
+// the process is known to be alive, pinning its process object so PID reuse
+// cannot cause a false alive check or kill an unrelated process, and registers
+// a t.Cleanup that terminates the process through the handle if it is still
+// alive when the test ends and closes the handle.
+func openTrackedProcess(t *testing.T, pid int) syscall.Handle {
 	t.Helper()
-	for range 20 {
-		l, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		port := l.Addr().(*net.TCPAddr).Port
-		l.Close()
-		if l6, err := net.Listen("tcp", net.JoinHostPort("::1", strconv.Itoa(port))); err == nil {
-			l6.Close()
-			return port
-		} else if !addrInUse(err) {
-			return port
-		}
-	}
-	t.Fatal("no free port")
-	return 0
-}
-
-var (
-	sharedOnce sync.Once
-	sharedDir  string
-)
-
-// sharedDevApp runs the test in one copy of the installed app, made once for
-// this test binary, for the tests that change none of its files.
-func sharedDevApp(t *testing.T) string {
-	t.Helper()
-	if testing.Short() {
-		t.Skip("weft dev runs the app's servers")
-	}
-	inTempDir(t, "unused")
-	sharedOnce.Do(func() {
-		dir := filepath.Join(filepath.Dir(stagedBundle), "My Apps", "café")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		sharedDir = copyApp(t, dir)
-	})
-	if sharedDir == "" {
-		t.Fatal("the shared app was not copied")
-	}
-	t.Chdir(sharedDir)
-	return sharedDir
-}
-
-// startDev runs weft dev with args in the current folder; it returns once
-// weft dev prints its URL line, and stops it when the test ends.
-func startDev(t *testing.T, app string, args ...string) *devRun {
-	t.Helper()
-	ctx, cancel := context.WithCancel(context.Background())
-	r := &devRun{app: app, stdout: &syncBuffer{}, stderr: &syncBuffer{}, cancel: cancel, done: make(chan int, 1)}
-	done := r.done
-	go func() { done <- dev(ctx, args, r.stdout, r.stderr) }()
-	t.Cleanup(func() {
-		if r.done == nil {
-			return
-		}
-		cancel()
-		select {
-		case <-r.done:
-		case <-time.After(10 * time.Second):
-			t.Error("weft dev did not stop within 10 s of being cancelled")
-		}
-	})
-	lineRe := regexp.MustCompile(`(?m)^weft dev: (http://localhost:\d+)\n`)
-	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
-		if m := lineRe.FindStringSubmatch(r.stdout.String()); m != nil {
-			r.url = m[1]
-			return r
-		}
-		select {
-		case code := <-r.done:
-			r.done = nil
-			t.Fatalf("weft dev exited %d before its URL line: %s%s", code, r.stdout, r.stderr)
-		default:
-		}
-	}
-	t.Fatalf("weft dev printed no URL line within 60 s: %s%s", r.stdout, r.stderr)
-	return nil
-}
-
-// stop cancels weft dev, as SIGINT does, and returns its exit code.
-func (r *devRun) stop(t *testing.T) int {
-	t.Helper()
-	r.cancel()
-	select {
-	case r.code = <-r.done:
-		r.done = nil
-		return r.code
-	case <-time.After(10 * time.Second):
-		t.Fatal("weft dev did not stop within 10 s")
-		return -1
-	}
-}
-
-// refuses says whether nothing answers on addr within 5 s.
-func refuses(addr string) bool {
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
-		c, err := net.DialTimeout("tcp", addr, time.Second)
-		if err != nil {
-			return true
-		}
-		c.Close()
-	}
-	return false
-}
-
-// processAlive reports whether a process with pid is currently running on
-// Windows (OpenProcess succeeds and WaitForSingleObject with timeout 0
-// returns WAIT_TIMEOUT).
-func processAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	h, err := syscall.OpenProcess(syscall.SYNCHRONIZE, false, uint32(pid))
+	h, err := syscall.OpenProcess(syscall.SYNCHRONIZE|syscall.PROCESS_TERMINATE, false, uint32(pid))
 	if err != nil {
+		t.Fatalf("OpenProcess(%d): %v", pid, err)
+	}
+	t.Cleanup(func() {
+		if handleAlive(h) {
+			syscall.TerminateProcess(h, 1)
+		}
+		syscall.CloseHandle(h)
+	})
+	return h
+}
+
+// handleAlive reports whether the process referred to by handle h is still
+// running (WaitForSingleObject with timeout 0 returns WAIT_TIMEOUT).
+func handleAlive(h syscall.Handle) bool {
+	if h == 0 {
 		return false
 	}
-	defer syscall.CloseHandle(h)
 	ev, err := syscall.WaitForSingleObject(h, 0)
 	return err == nil && ev == syscall.WAIT_TIMEOUT
+}
+
+// waitHandlesGone polls until every process handle in hs is no longer running,
+// for up to within.
+func waitHandlesGone(t *testing.T, hs []syscall.Handle, within time.Duration) {
+	t.Helper()
+	for _, h := range hs {
+		for deadline := time.Now().Add(within); handleAlive(h); time.Sleep(25 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Errorf("process handle %v is still alive after %s", h, within)
+				break
+			}
+		}
+	}
 }
 
 // activeChildJobs returns a snapshot of the open Job Object handles currently
@@ -198,23 +75,27 @@ func activeChildJobs() []syscall.Handle {
 	return out
 }
 
-// activeChildPIDs returns the PIDs of the active *exec.Cmd processes currently
-// tracked in jobs.
-func activeChildPIDs() []int {
+// openActiveChildHandles opens tracked process handles on the active *exec.Cmd
+// processes currently in jobs while they are still running.
+func openActiveChildHandles(t *testing.T) []syscall.Handle {
+	t.Helper()
 	mu.Lock()
-	defer mu.Unlock()
-	out := make([]int, 0, len(jobs))
+	var pids []int
 	for cmd := range jobs {
 		if cmd.Process != nil {
-			out = append(out, cmd.Process.Pid)
+			pids = append(pids, cmd.Process.Pid)
 		}
 	}
-	return out
+	mu.Unlock()
+	hs := make([]syscall.Handle, 0, len(pids))
+	for _, pid := range pids {
+		hs = append(hs, openTrackedProcess(t, pid))
+	}
+	return hs
 }
 
 // findProcessByExe finds the PID of a running process whose executable base
-// name equals exeName and whose parent PID (or ancestor) is in jobs, or by
-// matching exeName (e.g. "app.exe").
+// name equals exeName (e.g. "app.exe").
 func findProcessByExe(t *testing.T, exeName string) int {
 	t.Helper()
 	snap, err := syscall.CreateToolhelp32Snapshot(syscall.TH32CS_SNAPPROCESS, 0)
@@ -240,17 +121,12 @@ func findProcessByExe(t *testing.T, exeName string) int {
 	return 0
 }
 
-// terminateProcessHard terminates pid immediately via TerminateProcess, as a
-// hard kill does.
-func terminateProcessHard(t *testing.T, pid int) {
+// terminateHandleHard terminates the process referred to by h immediately via
+// TerminateProcess, as a hard kill does.
+func terminateHandleHard(t *testing.T, h syscall.Handle) {
 	t.Helper()
-	h, err := syscall.OpenProcess(syscall.PROCESS_TERMINATE|syscall.SYNCHRONIZE, false, uint32(pid))
-	if err != nil {
-		t.Fatalf("OpenProcess(%d): %v", pid, err)
-	}
-	defer syscall.CloseHandle(h)
 	if err := syscall.TerminateProcess(h, 1); err != nil {
-		t.Fatalf("TerminateProcess(%d): %v", pid, err)
+		t.Fatalf("TerminateProcess(%v): %v", h, err)
 	}
 }
 
@@ -266,7 +142,6 @@ func TestJobObjectStopsOrphanedGrandchild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Wait for the child itself to exit after writing the grandchild's PID.
 	select {
 	case <-c.done:
 	case <-time.After(10 * time.Second):
@@ -283,30 +158,21 @@ func TestJobObjectStopsOrphanedGrandchild(t *testing.T) {
 		c.stop()
 		t.Fatalf("bad grandchild pid %q: %v", raw, err)
 	}
-	t.Cleanup(func() {
-		if processAlive(grandPID) {
-			if h, err := syscall.OpenProcess(syscall.PROCESS_TERMINATE, false, uint32(grandPID)); err == nil {
-				syscall.TerminateProcess(h, 1)
-				syscall.CloseHandle(h)
-			}
-		}
-	})
-	if !processAlive(grandPID) {
+	grandH := openTrackedProcess(t, grandPID)
+	if !handleAlive(grandH) {
 		c.stop()
 		t.Fatalf("grandchild %d is not running before stop()", grandPID)
 	}
 	// Stopping the exited child unpins and closes its Job Object (with
-	// JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE), terminating the orphaned grandchild.
+	// JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) and waits for the job to empty.
 	c.stop()
-	for deadline := time.Now().Add(3 * time.Second); processAlive(grandPID); time.Sleep(25 * time.Millisecond) {
-		if time.Now().After(deadline) {
-			t.Fatalf("grandchild %d is still alive 3 s after child.stop()", grandPID)
-		}
+	if handleAlive(grandH) {
+		t.Fatalf("grandchild %d is still alive after child.stop() returned", grandPID)
 	}
 }
 
-// Also test stopGroup directly while the child is still running after spawning
-// a grandchild.
+// Also test stopGroup while the child is still running after spawning a
+// grandchild: c.stop() waits until the whole job is gone before returning.
 func TestJobObjectStopGroupEndsTree(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "grandchild.pid")
 	in, out, err := os.Pipe()
@@ -335,23 +201,14 @@ func TestJobObjectStopGroupEndsTree(t *testing.T) {
 			t.Fatal("grandchild pid file was not written within 10 s")
 		}
 	}
-	t.Cleanup(func() {
-		if processAlive(grandPID) {
-			if h, err := syscall.OpenProcess(syscall.PROCESS_TERMINATE, false, uint32(grandPID)); err == nil {
-				syscall.TerminateProcess(h, 1)
-				syscall.CloseHandle(h)
-			}
-		}
-	})
-	if !processAlive(grandPID) {
+	grandH := openTrackedProcess(t, grandPID)
+	if !handleAlive(grandH) {
 		c.stop()
 		t.Fatalf("grandchild %d is not running before stop()", grandPID)
 	}
 	c.stop()
-	for deadline := time.Now().Add(3 * time.Second); processAlive(grandPID); time.Sleep(25 * time.Millisecond) {
-		if time.Now().After(deadline) {
-			t.Fatalf("grandchild %d is still alive 3 s after child.stop()", grandPID)
-		}
+	if handleAlive(grandH) {
+		t.Fatalf("grandchild %d is still alive after child.stop() returned", grandPID)
 	}
 }
 
@@ -366,6 +223,7 @@ func TestJobObjectKillsTreeWhenHolderTerminatedHard(t *testing.T) {
 	if err := holder.Start(); err != nil {
 		t.Fatal(err)
 	}
+	holderH := openTrackedProcess(t, holder.Process.Pid)
 	holderDone := make(chan error, 1)
 	go func() { holderDone <- holder.Wait() }()
 	t.Cleanup(func() {
@@ -394,30 +252,22 @@ func TestJobObjectKillsTreeWhenHolderTerminatedHard(t *testing.T) {
 			t.Fatal("holder did not write child and grandchild pids within 10 s")
 		}
 	}
-	t.Cleanup(func() {
-		for _, pid := range []int{childPID, grandPID} {
-			if processAlive(pid) {
-				if h, err := syscall.OpenProcess(syscall.PROCESS_TERMINATE, false, uint32(pid)); err == nil {
-					syscall.TerminateProcess(h, 1)
-					syscall.CloseHandle(h)
-				}
-			}
-		}
-	})
-	if !processAlive(childPID) || !processAlive(grandPID) {
-		t.Fatalf("before TerminateProcess: child %d alive=%v, grandchild %d alive=%v", childPID, processAlive(childPID), grandPID, processAlive(grandPID))
+	childH := openTrackedProcess(t, childPID)
+	grandH := openTrackedProcess(t, grandPID)
+	if !handleAlive(childH) || !handleAlive(grandH) {
+		t.Fatalf("before TerminateProcess: child %d alive=%v, grandchild %d alive=%v", childPID, handleAlive(childH), grandPID, handleAlive(grandH))
 	}
 
-	terminateProcessHard(t, holder.Process.Pid)
+	terminateHandleHard(t, holderH)
 	select {
 	case <-holderDone:
 	case <-time.After(5 * time.Second):
 		t.Fatal("holder did not exit after TerminateProcess")
 	}
 
-	for deadline := time.Now().Add(2 * time.Second); processAlive(childPID) || processAlive(grandPID); time.Sleep(25 * time.Millisecond) {
+	for deadline := time.Now().Add(2 * time.Second); handleAlive(childH) || handleAlive(grandH); time.Sleep(25 * time.Millisecond) {
 		if time.Now().After(deadline) {
-			t.Fatalf("2 s after holder TerminateProcess: child %d alive=%v, grandchild %d alive=%v", childPID, processAlive(childPID), grandPID, processAlive(grandPID))
+			t.Fatalf("2 s after holder TerminateProcess: child %d alive=%v, grandchild %d alive=%v", childPID, handleAlive(childH), grandPID, handleAlive(grandH))
 		}
 	}
 }
@@ -491,9 +341,9 @@ func TestDevStopsChildren(t *testing.T) {
 	if code, body := get(t, r.url+"/api/hello"); code != 200 || strings.TrimSpace(body) != `{"message":"Hello from Go"}` {
 		t.Fatalf("GET /api/hello = %d %q", code, body)
 	}
-	pids := activeChildPIDs()
-	if len(pids) != 2 {
-		t.Fatalf("want 2 active child jobs (Go server and page server), found %v", pids)
+	hs := openActiveChildHandles(t)
+	if len(hs) != 2 {
+		t.Fatalf("want 2 active child jobs (Go server and page server), found %d", len(hs))
 	}
 	if code := r.stop(t); code != 0 {
 		t.Errorf("exit %d: %s", code, r.stderr)
@@ -501,9 +351,9 @@ func TestDevStopsChildren(t *testing.T) {
 	if !refuses("localhost:" + strconv.Itoa(port)) {
 		t.Errorf("localhost:%d still answers after stop", port)
 	}
-	for _, pid := range pids {
-		if processAlive(pid) {
-			t.Errorf("child process %d is still alive", pid)
+	for _, h := range hs {
+		if handleAlive(h) {
+			t.Errorf("child process handle %v is still alive", h)
 		}
 	}
 	if left := activeChildJobs(); len(left) != 0 {
@@ -534,12 +384,12 @@ func TestDevStopsWhileStarting(t *testing.T) {
 			t.Error("weft dev did not stop within 10 s of being cancelled")
 		}
 	})
-	for deadline := time.Now().Add(30 * time.Second); len(activeChildPIDs()) < 2; time.Sleep(5 * time.Millisecond) {
+	for deadline := time.Now().Add(30 * time.Second); len(activeChildJobs()) < 2; time.Sleep(5 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatalf("the page server did not start: %s%s", out.String(), errb.String())
 		}
 	}
-	pids := activeChildPIDs()
+	hs := openActiveChildHandles(t)
 	cancel()
 	select {
 	case <-finished:
@@ -555,14 +405,7 @@ func TestDevStopsWhileStarting(t *testing.T) {
 	if got := withoutSetupLink(errb.String()); got != "" {
 		t.Errorf("stderr %q, want nothing", got)
 	}
-	for _, pid := range pids {
-		for deadline := time.Now().Add(2 * time.Second); processAlive(pid); time.Sleep(25 * time.Millisecond) {
-			if time.Now().After(deadline) {
-				t.Errorf("child process %d is still alive", pid)
-				break
-			}
-		}
-	}
+	waitHandlesGone(t, hs, 2*time.Second)
 	if left := activeChildJobs(); len(left) != 0 {
 		t.Errorf("jobs are still open: %v", left)
 	}
@@ -577,8 +420,9 @@ func TestDevChildStopsByItself(t *testing.T) {
 	if goPID == 0 {
 		t.Fatal("found no Go server (app.exe)")
 	}
-	pids := activeChildPIDs()
-	terminateProcessHard(t, goPID)
+	goH := openTrackedProcess(t, goPID)
+	hs := openActiveChildHandles(t)
+	terminateHandleHard(t, goH)
 	select {
 	case code := <-r.done:
 		r.done = nil
@@ -594,19 +438,13 @@ func TestDevChildStopsByItself(t *testing.T) {
 	if !refuses("localhost:" + strconv.Itoa(port)) {
 		t.Error("the page server still answers")
 	}
-	for _, pid := range pids {
-		for deadline := time.Now().Add(2 * time.Second); processAlive(pid); time.Sleep(25 * time.Millisecond) {
-			if time.Now().After(deadline) {
-				t.Errorf("child process %d is still alive", pid)
-				break
-			}
-		}
-	}
+	waitHandlesGone(t, hs, 2*time.Second)
 }
 
 // When weft dev itself is killed hard via TerminateProcess on Windows, its
-// Job Objects close and both the Go server and the page server (pnpm and node)
-// stop within a couple of seconds.
+// Job Objects close and terminate both servers and any grandchild they spawned
+// — including a grandchild that ignores stdin EOF and would otherwise outlive
+// weft dev.
 func TestDevStopsWhenKilled(t *testing.T) {
 	if testing.Short() {
 		t.Skip("weft dev runs the app's servers")
@@ -621,7 +459,36 @@ func TestDevStopsWhenKilled(t *testing.T) {
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v: %s", err, out)
 	}
-	app := sharedDevApp(t)
+	app := devApp(t)
+	// Have the app's main.go spawn a detached grandchild ( running the test
+	// binary's TestHelperSleepForever, which ignores stdin EOF ) and write its
+	// PID to grand.pid before serving. Without JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+	// on the Go server's Job Object, this grandchild survives when weft.exe is
+	// killed hard via TerminateProcess.
+	grandPIDFile := filepath.Join(app, "grand.pid")
+	mainPath := filepath.Join(app, "main.go")
+	src, err := os.ReadFile(mainPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inject := fmt.Sprintf(`func main() {
+	if os.Getenv("WARP_DESCRIBE") == "" {
+		g := exec.Command(%q, "-test.short", "-test.run=^TestHelperSleepForever$")
+		g.Env = append(os.Environ(), "WEFT_TEST_HELPER=sleep-forever")
+		if err := g.Start(); err == nil {
+			_ = os.WriteFile(%q, []byte(strconv.Itoa(g.Process.Pid)), 0o644)
+		}
+	}
+`, os.Args[0], grandPIDFile)
+	withImports := bytes.Replace(src, []byte("import (\n"), []byte("import (\n\t\"os\"\n\t\"os/exec\"\n\t\"strconv\"\n"), 1)
+	patched := bytes.Replace(withImports, []byte("func main() {\n"), []byte(inject), 1)
+	if bytes.Equal(patched, withImports) {
+		t.Fatalf("main.go has no func main(): %s", src)
+	}
+	if err := os.WriteFile(mainPath, patched, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	port := freeLocalPort(t)
 	out, errb := &syncBuffer{}, &syncBuffer{}
 	cmd := exec.Command(bin, "dev", "--port", strconv.Itoa(port))
@@ -631,6 +498,7 @@ func TestDevStopsWhenKilled(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
+	weftH := openTrackedProcess(t, cmd.Process.Pid)
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	t.Cleanup(func() {
@@ -654,8 +522,21 @@ func TestDevStopsWhenKilled(t *testing.T) {
 	if goPID == 0 {
 		t.Fatal("found no Go server (app.exe)")
 	}
+	goH := openTrackedProcess(t, goPID)
+	rawGrand, err := os.ReadFile(grandPIDFile)
+	if err != nil {
+		t.Fatalf("read grand.pid: %v", err)
+	}
+	grandPID, err := strconv.Atoi(strings.TrimSpace(string(rawGrand)))
+	if err != nil || grandPID <= 0 {
+		t.Fatalf("bad grand.pid %q: %v", rawGrand, err)
+	}
+	grandH := openTrackedProcess(t, grandPID)
+	if !handleAlive(grandH) {
+		t.Fatalf("grandchild %d is not running before TerminateProcess", grandPID)
+	}
 
-	terminateProcessHard(t, cmd.Process.Pid)
+	terminateHandleHard(t, weftH)
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
@@ -668,12 +549,11 @@ func TestDevStopsWhenKilled(t *testing.T) {
 		if err == nil {
 			c.Close()
 		}
-		if err != nil && !processAlive(goPID) {
+		if err != nil && !handleAlive(goH) && !handleAlive(grandH) {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("2 s after weft dev was killed with TerminateProcess: addr err=%v, goPID(%d) alive=%v", err, goPID, processAlive(goPID))
+			t.Fatalf("2 s after weft dev was killed with TerminateProcess: addr err=%v, goPID(%d) alive=%v, grandPID(%d) alive=%v", err, goPID, handleAlive(goH), grandPID, handleAlive(grandH))
 		}
 	}
-	_ = errors.New // keep errors import if needed
 }
