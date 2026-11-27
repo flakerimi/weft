@@ -804,9 +804,9 @@ func TestLoginLimitedPerAccountAcrossAddresses(t *testing.T) {
 	// The session the owner already has is not touched.
 	c.Get("/api/auth/me").Want(200)
 
-	at.now = at.now.Add(10*time.Minute - time.Second)
+	at.set(at.Now().Add(10*time.Minute - time.Second))
 	wantError(t, try(ownerEmail, authtest.Password, "198.51.100.3:1000"), 429, "rate_limited", tooManyForAccount)
-	at.now = at.now.Add(time.Second)
+	at.set(at.Now().Add(time.Second))
 	try(ownerEmail, authtest.Password, "198.51.100.3:1000").Want(200)
 }
 

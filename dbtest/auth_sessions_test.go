@@ -113,9 +113,9 @@ func TestListSessions(t *testing.T) {
 	at := &clock{now: time.Date(2026, 11, 28, 9, 0, 0, 0, time.UTC)}
 	c := startClocked(t, authEnv(t), at) // session 1, from warptest's address
 	phone, laptop := c.Fork(), c.Fork()
-	at.now = at.now.Add(time.Hour)
+	at.set(at.Now().Add(time.Hour))
 	signInFrom(t, phone, ownerEmail, authtest.Password, "192.0.2.7:4000", "Phone/1.0")
-	at.now = at.now.Add(time.Hour)
+	at.set(at.Now().Add(time.Hour))
 	agent := strings.Repeat("L", 199) + "é" + "tail"
 	signInFrom(t, laptop, ownerEmail, authtest.Password, "[2001:db8::5]:4000", agent)
 	// Another user's sessions are not listed.
@@ -140,8 +140,8 @@ func TestListSessions(t *testing.T) {
 			t.Errorf("session %d: seen %v", s.ID, s.SeenAt)
 		}
 	}
-	if !list[0].CreatedAt.Equal(at.now) {
-		t.Errorf("the newest was made at %v, want %v", list[0].CreatedAt, at.now)
+	if !list[0].CreatedAt.Equal(at.Now()) {
+		t.Errorf("the newest was made at %v, want %v", list[0].CreatedAt, at.Now())
 	}
 	body := string(phone.Get("/api/auth/sessions").Want(200).Body)
 	for _, hidden := range []string{"token", "user_id"} {
@@ -196,19 +196,19 @@ func TestFiftySessions(t *testing.T) {
 	stamp := func(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05.000000000Z") }
 	insert := func(seen time.Time) {
 		_, err := data.For(c.App).Exec(ctx, `INSERT INTO "sessions" ("created_at", "updated_at", "user_id", "token_hash", "expires_at", "seen_at", "address", "agent") `+
-			`VALUES (?, ?, 1, ?, ?, ?, '192.0.2.9', 'Old')`, stamp(seen), stamp(seen), fmt.Sprintf("%064x", seen.UnixNano()), stamp(at.now.Add(24*time.Hour)), stamp(seen))
+			`VALUES (?, ?, 1, ?, ?, ?, '192.0.2.9', 'Old')`, stamp(seen), stamp(seen), fmt.Sprintf("%064x", seen.UnixNano()), stamp(at.Now().Add(24*time.Hour)), stamp(seen))
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-	insert(at.now.Add(-time.Hour)) // session 2, seen longest ago
+	insert(at.Now().Add(-time.Hour)) // session 2, seen longest ago
 	for i := range 48 {
-		insert(at.now.Add(time.Duration(i+1) * time.Minute))
+		insert(at.Now().Add(time.Duration(i+1) * time.Minute))
 	}
 	if n := rows(t, c, `WHERE "user_id" = 1`); n != 50 {
 		t.Fatalf("%d sessions, want 50", n)
 	}
-	at.now = at.now.Add(time.Hour)
+	at.set(at.Now().Add(time.Hour))
 	u := c.Fork()
 	login(u, ownerEmail, authtest.Password).Want(200)
 	if n := rows(t, c, `WHERE "user_id" = 1`); n != 50 {
@@ -258,7 +258,7 @@ func TestSeenAtWrittenEveryFiveMinutes(t *testing.T) {
 		{9 * time.Minute, 5 * time.Minute},
 		{10 * time.Minute, 10 * time.Minute},
 	} {
-		at.now = start.Add(step.after)
+		at.set(start.Add(step.after))
 		c.Get("/api/things").Want(200)
 		if got := seenAt(t, c, 1); !got.Equal(start.Add(step.want)) {
 			t.Fatalf("after %v: seen at %v, want %v", step.after, got, start.Add(step.want))
@@ -275,10 +275,10 @@ func TestExpiredSessionIsOutAndRemoved(t *testing.T) {
 	at := &clock{now: start}
 	c := startClocked(t, vars, at) // session 1
 	for _, d := range []time.Duration{time.Hour, 12 * time.Hour, 24*time.Hour - time.Second} {
-		at.now = start.Add(d)
+		at.set(start.Add(d))
 		c.Get("/api/auth/me").Want(200)
 	}
-	at.now = start.Add(24 * time.Hour)
+	at.set(start.Add(24 * time.Hour))
 	wantError(t, c.Get("/api/auth/me"), 401, "unauthorized", signIn)
 	if n := rows(t, c, ""); n != 1 {
 		t.Fatalf("%d sessions before a sign-in, want the expired one", n)

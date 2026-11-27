@@ -178,9 +178,9 @@ func TestExpiredKey(t *testing.T) {
 	authtest.Owner(t, c)
 	data.For(c.App).SetClock(at.Now)
 	k := makeKey(t, c, "Short", auth.RoleOwner, 1)
-	at.now = start.Add(24*time.Hour - time.Second)
+	at.set(start.Add(24*time.Hour - time.Second))
 	bearer(c, k.Secret, http.MethodGet, "/api/things", nil).Want(200)
-	at.now = start.Add(24 * time.Hour)
+	at.set(start.Add(24 * time.Hour))
 	wantError(t, bearer(c, k.Secret, http.MethodGet, "/api/things", nil), 401, "unauthorized", keyNotValid)
 	// Removed at the next sign-in.
 	login(c.Fork(), ownerEmail, authtest.Password).Want(200)

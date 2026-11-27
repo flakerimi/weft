@@ -155,7 +155,7 @@ func TestTimesAreSetAndRoundTrip(t *testing.T) {
 	var db *data.DB
 	warptest.New(t, env(dbFile(t)), data.Module(), stores{"events", func(d *data.DB) { db, s = d, data.NewStore[Event](d, "events") }})
 	cet := time.FixedZone("CET", 3600)
-	c := &clock{time.Date(2026, 11, 25, 10, 0, 0, 123456789, cet)}
+	c := &clock{now: time.Date(2026, 11, 25, 10, 0, 0, 123456789, cet)}
 	db.SetClock(c.Now)
 
 	e := Event{Name: "launch", At: time.Date(2026, 12, 1, 9, 0, 0, 1, cet), Live: true, Small: -5, Big: 1 << 40}
@@ -180,7 +180,7 @@ func TestTimesAreSetAndRoundTrip(t *testing.T) {
 	}
 
 	// Pointers and bytes with values; updated_at moves and created_at stays.
-	c.now = c.now.Add(time.Hour)
+	c.set(c.Now().Add(time.Hour))
 	ends, notes := time.Date(2027, 1, 1, 0, 0, 0, 0, cet), "bring cake"
 	change := Event{Ends: &ends, Notes: &notes, Blob: []byte{0, 1, 2}}
 	got, err = s.Update(ctx, e.ID, &change, []string{"ends", "notes", "blob"})

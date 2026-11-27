@@ -188,7 +188,7 @@ func answerTimes(t *testing.T, c *warptest.Client, at *clock, route string, sett
 	t.Helper()
 	var ks, us []time.Duration
 	for i := range 200 {
-		at.now = at.now.Add(time.Hour)
+		at.set(at.Now().Add(time.Hour))
 		emails := []string{ownerEmail, "nobody@example.com"}
 		if i%2 == 1 {
 			emails = []string{"nobody@example.com", ownerEmail}
@@ -231,7 +231,12 @@ func TestRegisterAndForgotTakeAlike(t *testing.T) {
 	at := &clock{now: time.Date(2026, 11, 28, 9, 0, 0, 0, time.UTC)}
 	c := startClocked(t, withRegistration(t, "open"), at)
 	for _, route := range []string{"/api/auth/forgot", "/api/auth/register"} {
-		k, u := answerTimes(t, c, at, route, func() { lastMail(t, c.App, ownerEmail) })
+		k, u := answerTimes(t, c, at, route, func() {
+			lastMail(t, c.App, ownerEmail)
+			if route == "/api/auth/register" { // register mails the address without an account too
+				lastMail(t, c.App, "nobody@example.com")
+			}
+		})
 		alike(t, route, k, u)
 	}
 
@@ -369,13 +374,13 @@ func TestTokenLifetimes(t *testing.T) {
 		{"register", 23 * time.Hour, 25 * time.Hour},
 		{"invite", 6 * 24 * time.Hour, 8 * 24 * time.Hour},
 	} {
-		at.now = start
+		at.set(start)
 		good, late := ask(tc.kind, 1), ask(tc.kind, 2)
-		at.now = start.Add(tc.inside)
+		at.set(start.Add(tc.inside))
 		tokenInfo(c, good).Want(200)
 		tokenInfo(c, late).Want(200)
 		setPassword(c.Fork(), good, newPassword).Want(200)
-		at.now = start.Add(tc.past)
+		at.set(start.Add(tc.past))
 		wantError(t, tokenInfo(c, late), 403, "forbidden", linkGone)
 		wantError(t, setPassword(c.Fork(), late, newPassword), 403, "forbidden", linkGone)
 	}
@@ -679,7 +684,7 @@ func TestTokenRoutesLimited(t *testing.T) {
 		wantError(t, from(c, http.MethodPost, route, body, client), 403, "forbidden", linkGone)
 	}
 	wantError(t, from(c, http.MethodPost, "/api/auth/token", map[string]string{"token": newTokenText()}, client), 429, "rate_limited", "Too many tries; wait a minute and try again.")
-	at.now = at.now.Add(time.Minute)
+	at.set(at.Now().Add(time.Minute))
 	wantError(t, from(c, http.MethodPost, "/api/auth/token", map[string]string{"token": newTokenText()}, client), 403, "forbidden", linkGone)
 }
 
