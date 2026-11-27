@@ -1,3 +1,4 @@
+import { mix } from './contrast.ts'
 import type { Curve, Theme } from './tokens.ts'
 
 interface Entry<T> { value: T }
@@ -37,6 +38,10 @@ export function lisa(tokens: LisaTokens, opts: { accent?: string } = {}): Theme 
   // and 300 on dark. Danger takes the red ramp the same way: semantic.error reads
   // at 4.2:1 with warm-white and 4.1:1 with ink-900, under AA either way. The text
   // on each fill is chosen at build (themeToCss), from the contract's two inks.
+  // Muted text: the contract's ink-500 reads at 4.34:1 on paper, under AA;
+  // 5% of ink-700 mixed in (#627188) is the least that reaches 4.5:1 on paper
+  // (4.52:1) and on the surfaces (4.74:1).
+  const muted = mix(c('ink', 'ink-700'), c('ink', 'ink-500'), 0.05)
   const semantic = {
     warning: c('semantic', 'warning'),
     success: c('semantic', 'success'),
@@ -46,7 +51,7 @@ export function lisa(tokens: LisaTokens, opts: { accent?: string } = {}): Theme 
     name: accent === 'olive' ? 'lisa' : `lisa-${accent}`,
     light: {
       bg: c('ink', 'paper'), surface: c('ink', 'surface'), 'surface-raised': c('ink', 'surface'),
-      border: c('ink', 'line-200'), text: c('ink', 'ink-900'), 'text-muted': c('ink', 'ink-500'),
+      border: c('ink', 'line-200'), text: c('ink', 'ink-900'), 'text-muted': muted,
       primary: stop(accent, 700), 'primary-soft': stop(accent, 300), focus: stop(accent, 500),
       danger: stop('red', 700), ...semantic,
     },

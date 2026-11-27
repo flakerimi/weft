@@ -6,7 +6,7 @@ avoid: For a few label–value pairs about one thing, use a description list or 
 adapts:
   input: On touch every row is at least --weft-hit-min (44 px) tall, and its checkbox takes a 44 px press (Checkbox's rule).
   surface: Nothing changes in behaviour; `size` sets the row height and text follows the surface's type scale.
-  width: When its own box is narrow (under 640 px, even in a side panel on a wide screen) each row becomes a card, a list item of label–value pairs from the same columns, with a Select all checkbox and the sort buttons above the cards; wide again, it is a table again.
+  width: When its own box is narrow (under 640 px, even in a side panel on a wide screen) each row becomes a card, a list item of label–value pairs from the same columns, with a Select all checkbox and the sort buttons above the cards; wide again, it is a table again. The cards come once it is hydrated, in an island: before that it is a table, which scrolls sideways inside its box.
 ---
 `columns` is a typed array: `{ key, label, sortable, align, width,
 accessor, format, rowHeader }`. A cell shows `accessor(row)` (default

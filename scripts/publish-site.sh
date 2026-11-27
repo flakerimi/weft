@@ -49,6 +49,15 @@ fail() {
 	exit 1
 }
 
+# --dry-run counts only before the version: one anywhere else, an option this
+# script does not know, or a second argument is refused before anything is
+# done, so a dry run asked for in the wrong place never publishes.
+for arg in "$@"; do
+	case "$arg" in -*) fail "$arg is not taken, since no argument but --dry-run may begin with - and --dry-run goes first, before the version; usage: scripts/publish-site.sh [--dry-run] <version>." ;; esac
+done
+[ $# -le 1 ] ||
+	fail "takes one version and nothing after it; usage: scripts/publish-site.sh [--dry-run] <version>."
+
 # The version goes into the Dockerfile's -ldflags: nothing but a version may.
 scripts/version.sh "$version" ||
 	fail "give a version like 0.0.1 or 0.1.0-alpha.1 (one line of digits, dots, lowercase letters and hyphens); usage: scripts/publish-site.sh [--dry-run] <version>."

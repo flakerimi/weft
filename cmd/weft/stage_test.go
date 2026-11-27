@@ -346,6 +346,47 @@ func TestPublishSiteRefusesABadVersion(t *testing.T) {
 	}
 }
 
+// The scripts that publish take [--dry-run] <version> (github-release.sh also
+// a folder) and nothing else: --dry-run after the version, an option they do
+// not know, or one argument too many is refused before anything is built,
+// tagged or pushed, so a dry run asked for in the wrong place never publishes.
+func TestPublishScriptsRefuseStrayArguments(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	for _, c := range []struct {
+		script string
+		args   []string
+	}{
+		{"publish-site.sh", []string{"0.0.3", "--dry-run"}},
+		{"publish-site.sh", []string{"--dry", "0.0.3"}},
+		{"publish-site.sh", []string{"0.0.3", "0.0.4"}},
+		{"publish-site.sh", []string{"--dry-run", "0.0.3", "x"}},
+		{"publish-site.sh", []string{"--dry-run", "--dry-run", "0.0.3"}},
+		{"rollback-site.sh", []string{"0.0.2", "--dry-run"}},
+		{"rollback-site.sh", []string{"-n", "0.0.2"}},
+		{"rollback-site.sh", []string{"0.0.2", "x"}},
+		{"github-release.sh", []string{"0.0.3", "--dry-run"}},
+		{"github-release.sh", []string{"0.0.3", "site/releases/0.0.3", "--dry-run"}},
+		{"github-release.sh", []string{"0.0.3", "site/releases/0.0.3", "x"}},
+	} {
+		out, err := r.run(c.script, c.args...)
+		name := strings.TrimSuffix(c.script, "-site.sh")
+		name = strings.TrimSuffix(name, ".sh")
+		if err == nil || !strings.HasPrefix(out, name+": ") || strings.Contains(out, "\n") || !strings.Contains(out, "usage: scripts/"+c.script+" [--dry-run] <version>") {
+			t.Errorf("%s %q: err %v, output %q (want one sentence with the usage)", c.script, c.args, err, out)
+		}
+	}
+	if r.lisa() != "" || r.fakeFile("order") != "" || strings.Contains(r.fakeFile("gh.log"), "release create") {
+		t.Fatalf("a refused call pushed or released: lisa %q, order %q, gh %q", r.lisa(), r.fakeFile("order"), r.fakeFile("gh.log"))
+	}
+	if r.git(t, "tag", "-l") != "" {
+		t.Fatal("a refused call made a tag")
+	}
+	if trees, _ := filepath.Glob(filepath.Join(r.tmp, "weft-*")); len(trees) != 0 {
+		t.Fatalf("a refused call built %v", trees)
+	}
+}
+
 // release.sh checks the whole argument: a version with a second line is refused
 // before anything is built.
 func TestReleaseRefusesAMultiLineVersion(t *testing.T) {

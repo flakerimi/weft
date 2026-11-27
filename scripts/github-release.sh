@@ -27,6 +27,15 @@ fail() {
 	exit 1
 }
 
+# --dry-run counts only before the version: one anywhere else, an option this
+# script does not know, or a third argument is refused before anything is
+# done, so a dry run asked for in the wrong place never makes a release.
+for arg in "$@"; do
+	case "$arg" in -*) fail "$arg is not taken, since no argument but --dry-run may begin with - and --dry-run goes first, before the version; usage: scripts/github-release.sh [--dry-run] <version> [DIR]." ;; esac
+done
+[ $# -le 2 ] ||
+	fail "takes a version and a folder and nothing after them; usage: scripts/github-release.sh [--dry-run] <version> [DIR]."
+
 scripts/version.sh "$version" ||
 	fail "give a version like 0.0.1 or 0.1.0-alpha.1; usage: scripts/github-release.sh [--dry-run] <version> [DIR]."
 dir="${2:-site/releases/$version}"

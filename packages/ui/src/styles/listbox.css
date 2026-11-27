@@ -91,6 +91,10 @@
 .weft-listbox__check svg,
 .weft-listbox__glyph { inline-size: 16px; block-size: 16px; }
 .weft-listbox__create { color: var(--weft-color-text-muted, GrayText); }
+/* On the active option's tint its muted parts are in the text colour: muted text does not reach 4.5:1 there. */
+.weft-listbox__option[data-active] .weft-listbox__description,
+.weft-listbox__option[data-active] .weft-listbox__leading,
+.weft-listbox__create[data-active] { color: var(--weft-color-text, CanvasText); }
 .weft-listbox__text mark {
   background: none;
   color: var(--weft-color-primary, Highlight);

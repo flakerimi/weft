@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { createVaporApp, nextTick } from 'vue'
-import { widthPrePaint } from '../src/adaptive/useWidth.ts'
+import { NARROW_QUERY, REGULAR_QUERY, widthPrePaint } from '../src/adaptive/useWidth.ts'
 import { ID_SCOPE } from '../src/headless/useId.ts'
 import { installResizeObserver } from './resize-observer.ts'
 import { mount } from './mount.ts'
@@ -114,5 +114,47 @@ it('widthPrePaint batches all getBoundingClientRect reads before any setAttribut
     host.remove()
   } finally {
     island.remove()
+  }
+})
+
+it('measures the border box everywhere: the pre-paint script and useWidth agree on a padded element (650 px border box, 618 px content)', async () => {
+  const el = document.createElement('div')
+  el.setAttribute('data-width', 'wide')
+  el.getBoundingClientRect = () => ({ width: 650 }) as DOMRect
+  document.body.append(el)
+  try {
+    new Function(widthPrePaint)()
+    expect(el.getAttribute('data-width')).toBe('regular')
+    ro.report(el, 650, 618)
+    expect(el.getAttribute('data-width')).toBe('regular')
+    ro.report(el, 630, 598)
+    expect(el.getAttribute('data-width')).toBe('narrow')
+  } finally {
+    el.remove()
+  }
+  const { el: host, unmount } = mount(WidthProbe)
+  const box = host.querySelector('.box') as HTMLElement
+  ro.report(box, 650, 618)
+  await nextTick()
+  expect(box.dataset.width).toBe('regular')
+  unmount()
+})
+
+it("Grid's docs quote the pre-paint script exactly as a page carries it, with its CSP hash", async () => {
+  const { readFileSync } = await import('node:fs')
+  const { createHash } = await import('node:crypto')
+  // The package's folder: vitest runs each package's tests from it.
+  const docs = readFileSync(`${process.cwd()}/src/layout/Grid.docs.md`, 'utf8')
+  const wrapped = `(function(){${widthPrePaint}})()`
+  expect(docs).toContain(`\n    ${wrapped}\n`)
+  expect(docs).toContain(`'sha256-${createHash('sha256').update(wrapped).digest('base64')}'`)
+})
+
+it('the viewport width classes are the media queries the components\' CSS falls back to before mounting', async () => {
+  expect(NARROW_QUERY).toBe('(max-width: 639.98px)')
+  expect(REGULAR_QUERY).toBe('(max-width: 1023.98px)')
+  const { readFileSync } = await import('node:fs')
+  for (const sheet of ['pagination', 'header', 'app-shell', 'footer']) {
+    expect(readFileSync(`${process.cwd()}/src/styles/${sheet}.css`, 'utf8'), sheet).toContain(`@media ${NARROW_QUERY}`)
   }
 })

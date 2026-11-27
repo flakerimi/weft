@@ -11,7 +11,8 @@ const COARSE = '(pointer: coarse)'
 let override: MatchMedia | undefined
 let shared: Readonly<Ref<Input>> | undefined
 
-function currentMatchMedia(): MatchMedia | undefined {
+/** The media-query source: the one setMatchMedia gave, else the browser's, else none (the server). */
+export function currentMatchMedia(): MatchMedia | undefined {
   if (override) return override
   return typeof window !== 'undefined' && window.matchMedia ? window.matchMedia.bind(window) : undefined
 }
