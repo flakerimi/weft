@@ -44,12 +44,13 @@ const (
 )
 
 const (
-	errLinkGone       = "This link is not valid any more; ask for a new one."
-	errNoSignUps      = "This app does not take sign-ups; ask for an invitation."
-	errNoInvitations  = "This app takes no invitations; set AUTH_REGISTRATION=invite in .env."
-	errTooManyMails   = "Too many emails asked for; wait an hour and try again."
-	errTooManyInvites = "Too many invitations; wait an hour and try again."
-	errHasAccount     = "This address already has an account."
+	errLinkGone         = "This link is not valid any more; ask for a new one."
+	errNoSignUps        = "This app does not take sign-ups; ask for an invitation."
+	errNoInvitations    = "This app takes no invitations; set AUTH_REGISTRATION=invite in .env."
+	errTooManyMails     = "Too many emails asked for; wait an hour and try again."
+	errTooManyInvites   = "Too many invitations; wait an hour and try again."
+	errHasAccount       = "This address already has an account."
+	errHigherInvitation = "Your account cannot remove an invitation for a higher role."
 )
 
 // tokenRow is a mailed token of register or reset, as the table auth_tokens
@@ -503,7 +504,17 @@ func (m *module) listInvitations(ctx context.Context, q data.Query) (data.List[I
 	return out, nil
 }
 
-// removeInvitation ends an invitation, whose link then works no more.
+// removeInvitation ends an invitation, whose link then works no more. As on
+// every users route, an actor acts only on one whose role is not above
+// their own.
 func (m *module) removeInvitation(ctx context.Context, in data.ID) (warp.None, error) {
+	actor, _ := UserOf(ctx)
+	inv, err := m.invitations.Get(ctx, in.ID)
+	if err != nil {
+		return warp.None{}, err
+	}
+	if above(inv.Role, actor.Role) {
+		return warp.None{}, warp.Forbidden(errHigherInvitation)
+	}
 	return warp.None{}, m.invitations.Delete(ctx, in.ID)
 }

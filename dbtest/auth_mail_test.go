@@ -785,3 +785,17 @@ func TestResetLinkDiesWithItsUser(t *testing.T) {
 	}
 	wantError(t, setPassword(c.Fork(), token, newPassword), 403, "forbidden", linkGone)
 }
+
+// Review m2: removing an invitation follows the rank rule, as every other
+// users route does.
+func TestRemoveInvitationByRank(t *testing.T) {
+	c, _ := startAuth(t, authEnv(t))
+	authtest.Owner(t, c)
+	admin, _ := authtest.As(t, c, auth.RoleAdministrator)
+	var boss, peer auth.Invitation
+	c.Post("/api/auth/invitations", map[string]string{"email": "boss@example.com", "role": "owner"}).Want(201).JSON(&boss)
+	c.Post("/api/auth/invitations", map[string]string{"email": "peer@example.com", "role": "administrator"}).Want(201).JSON(&peer)
+	wantError(t, admin.Delete(fmt.Sprintf("/api/auth/invitations/%d", boss.ID)), 403, "forbidden", "Your account cannot remove an invitation for a higher role.")
+	admin.Delete(fmt.Sprintf("/api/auth/invitations/%d", peer.ID)).Want(204)
+	c.Delete(fmt.Sprintf("/api/auth/invitations/%d", boss.ID)).Want(204)
+}
