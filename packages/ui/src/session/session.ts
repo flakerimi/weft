@@ -3,7 +3,8 @@
 // useSession() sends GET /api/auth/me once per page load, however many islands
 // and buttons call it, and shares the answer. The state is this module's, and
 // the module imports only vue, so every island shares it through one small
-// chunk and Button can import it without pulling in anything else.
+// chunk. Button and DataTable load it through can.ts, only once one with
+// `perm` has mounted, so a page with no `perm` never fetches it.
 import { reactive, readonly } from 'vue'
 
 /** The signed-in user, as GET /api/auth/me answers it: Warp's `auth.Me`, whose generated type is assignable to this one. */

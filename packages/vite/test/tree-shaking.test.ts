@@ -34,8 +34,17 @@ describe('import { Button } from "@weft/ui"', () => {
       'src/basics/address.ts',
       'src/basics/icons.ts',
       'src/forms/form-state.ts',
+      // perm: the check, and who is signed in, loaded only once a Button with perm has mounted.
+      'src/session/can.ts',
+      'src/session/session.ts',
     ])
     expect(js).toContain('weft-button')
+  })
+
+  it('loads the session on demand, not with the page', () => {
+    const lazy = built.chunks.filter((c) => c.lazy && !c.vue)
+    expect(lazy.some((c) => c.code.includes('/api/auth/me'))).toBe(true)
+    for (const c of built.chunks.filter((c) => !c.lazy)) expect(c.code, c.name).not.toContain('/api/auth/me')
   })
 
   it('holds no Dialog, no Table, no overlay stack and no default overlay icon', () => {

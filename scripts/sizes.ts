@@ -12,7 +12,8 @@
  *
  * Two things every page with any component carries are measured once rather
  * than in each row: Vue's runtime (split into a chunk of its own in every
- * build; it varies a little with the Vue features a component uses, so the
+ * build, with Vite's preload helper, as the page build's shared runtime has
+ * both; it varies a little with the Vue features a component uses, so the
  * smallest and largest are given) and `styles/base.css` (left out of each
  * build's CSS, since the page build inlines it on every page anyway).
  *
@@ -95,7 +96,7 @@ page pays before anyone touches it.
 
 | What | Brotli |
 | --- | ---: |
-| Vue runtime (Vapor), its own chunk in each build | ${kb(Math.min(...vue))} to ${kb(Math.max(...vue))} KB |
+| Vue runtime (Vapor) and Vite's preload helper, their own chunk in each build, as in a page build's shared runtime | ${kb(Math.min(...vue))} to ${kb(Math.max(...vue))} KB |
 | \`styles/base.css\`, inlined on every page by the page build | ${kb(base)} KB |
 
 Vue's runtime is tree-shaken per build, so it varies with the Vue features a

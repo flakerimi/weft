@@ -14,7 +14,7 @@ import { execFile } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createVaporSSRApp, type Component } from 'vue'
 import { setMatchMedia } from '@weft/ui'
 import { ISLAND_ID_SCOPE } from '../src/island-runtime.ts'
@@ -39,7 +39,22 @@ beforeAll(async () => {
   server = JSON.parse(stdout) as Record<string, string>
 }, 120_000)
 
+// No server answers here: GET /api/auth/me, which an example with `perm` asks, is
+// answered as the gallery's would be, with no one signed in; any other request
+// is a mistake of the example's.
+let strays: string[] = []
+beforeEach(() => {
+  strays = []
+  vi.stubGlobal('fetch', async (url: string) => {
+    if (url === '/api/auth/me') return new Response(JSON.stringify({ error: { code: 'unauthorized', message: 'Sign in to do that.' } }), { status: 401 })
+    strays.push(String(url))
+    throw new TypeError('Failed to fetch')
+  })
+})
+
 afterEach(() => {
+  vi.unstubAllGlobals()
+  expect(strays).toEqual([])
   setMatchMedia(undefined)
   document.body.innerHTML = ''
   localStorage.clear()

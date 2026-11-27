@@ -18,7 +18,8 @@ export const brotli = (text: string) =>
 
 export interface AloneBuild {
   /**
-   * Each JavaScript chunk: its file name and code. `vue` is Vue's runtime;
+   * Each JavaScript chunk: its file name and code. `vue` is Vue's runtime
+   * (with Vite's preload helper, as a page build's shared runtime has it);
    * `lazy`, a chunk only a dynamic `import()` reaches, loaded on demand
    * rather than with the page.
    */
@@ -31,11 +32,15 @@ export interface AloneBuild {
 
 const ENTRY = 'virtual:weft-alone'
 const VUE = /[\\/]node_modules[\\/](?:\.pnpm[\\/][^\\/]+[\\/]node_modules[\\/])?(?:vue|@vue[\\/][^\\/]+)[\\/]/
+/** Vite's helper for a dynamic `import()`, which a page build keeps in the runtime every island shares, beside Vue's. */
+const PRELOAD = /vite\/preload-helper/
+const shared = (id: string) => VUE.test(id) || PRELOAD.test(id)
 
 /**
  * Build `entry` (a module's source, imports resolved from packages/ui, so
  * `@weft/ui` is the package itself) alone: Vapor, production, minified, the
- * icons plugin on, Vue's runtime in a chunk of its own, base.css left out.
+ * icons plugin on, Vue's runtime (and Vite's preload helper) in a chunk of
+ * its own, base.css left out.
  */
 export async function buildAlone(entry: string): Promise<AloneBuild> {
   const base = resolve(ui, 'src/styles/base.css')
@@ -64,7 +69,7 @@ export async function buildAlone(entry: string): Promise<AloneBuild> {
       modulePreload: { polyfill: false },
       rolldownOptions: {
         input: { alone: ENTRY },
-        output: { codeSplitting: { groups: [{ name: 'vue', test: VUE }] } },
+        output: { codeSplitting: { groups: [{ name: 'vue', test: shared }] } },
       },
     },
   })) as Rolldown.RolldownOutput | Rolldown.RolldownOutput[]
@@ -82,7 +87,7 @@ export async function buildAlone(entry: string): Promise<AloneBuild> {
   const chunks = built.map((c) => ({
     name: c.fileName,
     code: c.code,
-    vue: c.moduleIds.length > 0 && c.moduleIds.every((m) => VUE.test(m)),
+    vue: c.moduleIds.length > 0 && c.moduleIds.every(shared),
     lazy: !eager.has(c.fileName),
   }))
   const modules = built.flatMap((c) => c.moduleIds.filter((m) => (c.modules[m]?.renderedLength ?? 0) > 0))
