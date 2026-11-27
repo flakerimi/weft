@@ -159,6 +159,9 @@ import { Card, FeatureGrid, Grid, Pricing, Stack } from '@weft/ui'
       <FeatureGrid id="fg-shrink" title="Centred FeatureGrid" :items="[{ title: 'Vapor', description: 'Direct DOM' }, { title: 'Go', description: 'One binary' }]" />
       <Pricing id="pr-shrink" title="Centred Pricing" :plans="[{ title: 'Starter', price: '$0' }, { title: 'Pro', price: '$29' }]" />
     </div>
+    <div id="inert-box" inert style="width: 280px;">
+      <Grid id="grid-inert"><Card>A</Card><Card>B</Card><Card>C</Card></Grid>
+    </div>
   </main>
 </template>
 `
@@ -305,6 +308,9 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1
     })
     await send('Page.enable')
     await send('Runtime.enable')
+    await send('Page.addScriptToEvaluateOnNewDocument', {
+      source: `window.r = 'author-r'; window.s = 'author-s'; window.m = 1; window.__cls = 0; window.__pageErrors = []; window.addEventListener('error', (e) => window.__pageErrors.push(String(e.message))); new PerformanceObserver((l) => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.__cls += e.value }).observe({ type: 'layout-shift', buffered: true });`,
+    })
   })
 
   afterAll(async () => {
@@ -343,6 +349,9 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1
       teCols: number
       heroStacked: boolean
       ctaStacked: boolean
+      cls: number
+      pageErrors: string[]
+      globalsPreserved: boolean
     }>(`{
       gridDisplay: getComputedStyle(document.querySelector('#fg .weft-grid')).display,
       scrollWidth: document.documentElement.scrollWidth,
@@ -352,6 +361,9 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1
       teCols: getComputedStyle(document.querySelector('#te .weft-grid')).gridTemplateColumns.split(' ').length,
       heroStacked: getComputedStyle(document.querySelector('#hero-h .weft-hero__inner')).gridTemplateColumns.split(' ').length === 1,
       ctaStacked: getComputedStyle(document.querySelector('#cta-solid .weft-cta__box')).gridTemplateColumns.split(' ').length === 1,
+      cls: window.__cls,
+      pageErrors: window.__pageErrors,
+      globalsPreserved: window.r === 'author-r' && window.s === 'author-s' && window.m === 1,
     }`)
     expect(at375).toEqual({
       gridDisplay: 'grid',
@@ -362,6 +374,9 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1
       teCols: 1,
       heroStacked: true,
       ctaStacked: true,
+      cls: 0,
+      pageErrors: [],
+      globalsPreserved: true,
     })
 
     await openAt(`${urls.neutral}/static`, 768)
@@ -421,7 +436,7 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1
     })
   })
 
-  it('N1 & N2: Grid and landing blocks inside shrink-to-fit parents (inline-block, popover, auto track, table cell, row Stack, centred grid) never collapse to 0 px', async () => {
+  it('N1, N2 & N7: Grid and landing blocks inside shrink-to-fit parents (inline-block, popover, auto track, table cell, row Stack, centred grid) never collapse to 0 px, and elements inside [inert] are measured too', async () => {
     await openAt(`${urls.neutral}/shrink`, 1024)
     const sizes = await evaluate<{
       inlineBlock: number
@@ -432,6 +447,8 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1
       siblingCard: number
       fgShrink: number
       prShrink: number
+      inertWidth: string | null
+      inertCols: number
     }>(`{
       inlineBlock: Math.round(document.querySelector('#grid-inline-block').getBoundingClientRect().width),
       popover: Math.round(document.querySelector('#grid-popover').getBoundingClientRect().width),
@@ -441,6 +458,8 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1
       siblingCard: Math.round(document.querySelector('#sibling-card').getBoundingClientRect().width),
       fgShrink: Math.round(document.querySelector('#fg-shrink').getBoundingClientRect().width),
       prShrink: Math.round(document.querySelector('#pr-shrink').getBoundingClientRect().width),
+      inertWidth: document.querySelector('#grid-inert').getAttribute('data-width'),
+      inertCols: getComputedStyle(document.querySelector('#grid-inert')).gridTemplateColumns.split(' ').length,
     }`)
     expect(sizes.inlineBlock).toBeGreaterThan(80)
     expect(sizes.popover).toBeGreaterThan(80)
@@ -451,6 +470,8 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1
     expect(sizes.siblingCard).toBeGreaterThan(60)
     expect(sizes.fgShrink).toBeGreaterThan(400)
     expect(sizes.prShrink).toBeGreaterThan(400)
+    expect(sizes.inertWidth).toBe('narrow')
+    expect(sizes.inertCols).toBe(1)
   })
 
   it('I4: an 87-character unbroken word and a 53-character Hero/Cta button label wrap inside every block at 375 px without sideways scroll', async () => {

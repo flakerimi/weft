@@ -6,20 +6,21 @@ import { NARROW_MAX, REGULAR_MAX, widthOf, type Width } from './detect.ts'
 /**
  * The pre-paint script (usePrePaint) for components that measure their own
  * box (`useWidth`): one `ResizeObserver` for the page, attached to every
- * `[data-width]` element outside `[inert]` as the parser adds it (through a
- * `MutationObserver` on the document, disconnected at `DOMContentLoaded`
- * after one final sweep), so `data-width` is set from the element's width
- * before the first paint and follows resizes without hydration. When a
+ * `[data-width]` element (`[inert]` included, since inert is about input, not
+ * layout) as the parser adds it (through a `MutationObserver` on the document,
+ * disconnected at `DOMContentLoaded` after one final sweep), measuring each
+ * element synchronously with `getBoundingClientRect().width` when first seen
+ * so `data-width` is already set for the first layout with zero layout shift
+ * (CLS 0), and keeping it observed for resizes without hydration. When a
  * component mounts in an island, `useWidth` marks the element
  * `data-weft-width` and unobserves it from the shared observer (`window.__weftWidthRo`)
  * so the pre-paint observer never fights the component's own `ResizeObserver`.
  */
 export const widthPrePaint =
   `if(typeof ResizeObserver<"u"){` +
-  `var r=window.__weftWidthRo=new ResizeObserver(function(e){for(var i=0;i<e.length;i++){var t=e[i].target,w=e[i].contentRect.width;` +
-  `if(t.hasAttribute("data-weft-width"))r.unobserve(t);` +
-  `else if(w>0)t.setAttribute("data-width",w<${NARROW_MAX}?"narrow":w<${REGULAR_MAX}?"regular":"wide")}}),` +
-  `s=function(){var l=document.querySelectorAll("[data-width]:not([data-weft-width])");for(var i=0;i<l.length;i++)if(!l[i].closest("[inert]"))r.observe(l[i])};` +
+  `var d=function(t,w){if(w>0)t.setAttribute("data-width",w<${NARROW_MAX}?"narrow":w<${REGULAR_MAX}?"regular":"wide")},` +
+  `r=window.__weftWidthRo=new ResizeObserver(function(e){for(var i=0;i<e.length;i++){var t=e[i].target;if(t.hasAttribute("data-weft-width"))r.unobserve(t);else d(t,e[i].contentRect.width)}}),` +
+  `s=function(){var l=document.querySelectorAll("[data-width]:not([data-weft-width])");for(var i=0;i<l.length;i++){d(l[i],l[i].getBoundingClientRect().width);r.observe(l[i])}};` +
   `s();if(document.readyState==="loading"){var m=new MutationObserver(s);m.observe(document,{childList:true,subtree:true});` +
   `addEventListener("DOMContentLoaded",function(){m.disconnect();s()},{once:true})}}`
 
@@ -41,11 +42,12 @@ export interface UseWidthOptions {
 /**
  * The width class of an element, measured from the element itself, not the
  * window. Until it is measured (on the server, while hydrating) it is the
- * width the nearest WeftProvider gives, else `wide`. On the server, when no
- * WeftProvider forces a fixed width and `prepaint` is not `false`, it registers
- * one page-wide pre-paint script (`weft:width`) that keeps `[data-width]`
- * elements updated from their own width before paint and on resize even without
- * hydration.
+ * width the nearest WeftProvider gives, else `wide` (or the `data-width`
+ * attribute the pre-paint script already set on the element). On the server,
+ * when no WeftProvider forces a fixed width and `prepaint` is not `false`, it
+ * registers one page-wide pre-paint script (`weft:width`) that keeps
+ * `[data-width]` elements updated from their own width before paint and on
+ * resize even without hydration.
  */
 export function useWidth(el: Readonly<Ref<HTMLElement | null>>, options?: UseWidthOptions): Readonly<Ref<Width>> {
   const given = hasInjectionContext() ? inject(weftKey, null)?.width.value : undefined
@@ -67,6 +69,8 @@ export function useWidth(el: Readonly<Ref<HTMLElement | null>>, options?: UseWid
       release()
       if (!node || typeof ResizeObserver === 'undefined') return
       current = node
+      const attr = node.getAttribute('data-width')
+      if (attr === 'narrow' || attr === 'regular' || attr === 'wide') width.value = attr
       node.setAttribute('data-weft-width', '')
       ;(globalThis as { __weftWidthRo?: ResizeObserver }).__weftWidthRo?.unobserve(node)
       const initial = node.getBoundingClientRect().width

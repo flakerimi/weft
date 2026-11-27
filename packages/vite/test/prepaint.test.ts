@@ -24,10 +24,11 @@ beforeAll(async () => {
 afterAll(() => rmSync(join(out, '..'), { recursive: true, force: true }))
 
 describe('pre-paint snippets', () => {
-  it('are written once, at the top of <head> before the CSS, on a page that renders an AppShell', () => {
+  it('are written once, wrapped in their own function scope at the top of <head> before the CSS, on a page that renders an AppShell', () => {
     const h = head('shell')
     expect(snippets(h)).toHaveLength(1)
     expect(h.indexOf('data-weft-prepaint')).toBeLessThan(h.indexOf('<style>'))
+    expect(snippets(h)[0]).toMatch(/^\(function\(\)\{[\s\S]*\}\)\(\)$/)
     expect(snippets(h)[0]).toContain('"weft:app-shell:collapsed"')
   })
 

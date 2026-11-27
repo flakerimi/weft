@@ -44,28 +44,30 @@ it('starts wide with no WeftProvider saying otherwise', () => {
   unmount()
 })
 
-it('widthPrePaint sets data-width on unhydrated elements from their width, skips [inert], and hands off once useWidth mounts', async () => {
+it('widthPrePaint sets data-width synchronously on unhydrated elements (including inside [inert]), updates on resize, and hands off once useWidth mounts', async () => {
   const staticEl = document.createElement('div')
   staticEl.setAttribute('data-width', 'wide')
+  staticEl.getBoundingClientRect = () => ({ width: 420 }) as DOMRect
   const inertWrap = document.createElement('div')
   inertWrap.setAttribute('inert', '')
   const inertChild = document.createElement('div')
-  inertChild.setAttribute('data-width', 'narrow')
+  inertChild.setAttribute('data-width', 'wide')
+  inertChild.getBoundingClientRect = () => ({ width: 277 }) as DOMRect
   inertWrap.appendChild(inertChild)
   document.body.append(staticEl, inertWrap)
   try {
     new Function(widthPrePaint)()
-    ro.report(staticEl, 480)
+    // Synchronously measured before the ResizeObserver fires (CLS 0, and [inert] measured too).
     expect(staticEl.getAttribute('data-width')).toBe('narrow')
+    expect(inertChild.getAttribute('data-width')).toBe('narrow')
     ro.report(staticEl, 768)
     expect(staticEl.getAttribute('data-width')).toBe('regular')
     ro.report(staticEl, 1280)
     expect(staticEl.getAttribute('data-width')).toBe('wide')
-    // Inside [inert], the pre-paint observer leaves the server's data-width alone.
     ro.report(inertChild, 1280)
-    expect(inertChild.getAttribute('data-width')).toBe('narrow')
+    expect(inertChild.getAttribute('data-width')).toBe('wide')
 
-    // Once a component mounts, useWidth sets data-weft-width and unobserves from __weftWidthRo.
+    // Once a component mounts, useWidth reads the existing data-width, sets data-weft-width, and unobserves from __weftWidthRo.
     const { el, unmount } = mount(WidthProbe)
     const box = el.querySelector('.box') as HTMLElement
     expect(box.hasAttribute('data-weft-width')).toBe(true)

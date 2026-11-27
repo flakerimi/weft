@@ -92,7 +92,7 @@ Wrap only what must run in the browser, such as a form, a menu or a dialog:
 - The island's file name is its id: two islands may not share one.
 - Props must survive JSON: strings, finite numbers, booleans, `null`, arrays and plain objects; anything else fails the build, naming the prop.
 - The server renders the island too, so it shows before any script runs. Read input and width through `useWeft()` and `useWidth()`, which answer `pointer` and `wide` on the server.
-- `usePrePaint(id, code)` runs before the first paint: to copy a stored preference onto `<html>`, or, as `Form` does, to stop a submit before the island is live (so `Form` belongs in an island).
+- `usePrePaint(id, code)` runs before the first paint: to measure width-adaptive components (`useWidth`), copy a stored preference onto `<html>`, or, as `Form` does, stop a submit before the island is live (so `Form` belongs in an island).
 
 To list the pages that load JavaScript:
 
