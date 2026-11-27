@@ -5,14 +5,18 @@
 // controls at an end are disabled. With `show-edges` the first and last
 // pages always show, ellipses (hidden from assistive technology) for the
 // gaps. When the viewport is narrow it shows at most one page each side and
-// drops the first and last controls; on touch every button is at least
+// drops the first and last controls. Before mounting (on the server, and
+// while hydrating) it draws both forms, each entry of one form only marked
+// `data-only`, and CSS shows the narrow one on a narrow viewport, so a page
+// that is never hydrated pages right too. On touch every button is at least
 // --weft-hit-min tall (Button's rule).
 import { computed, onMounted, shallowRef } from 'vue'
 import Button from '../basics/Button.vue'
+import { useWeft } from '../adaptive/context.ts'
 import { useWidth } from '../adaptive/useWidth.ts'
 import { useControllable } from '../headless/useControllable.ts'
 import type { Size, Tone, Variant } from '../types.ts'
-import { PAGINATION_LABELS, pageRange, type PaginationLabels } from './pagination.ts'
+import { PAGINATION_LABELS, pageRange, pageRangeBoth, type PageSlot, type PaginationLabels } from './pagination.ts'
 import '../styles/base.css'
 import '../styles/pagination.css'
 
@@ -75,10 +79,23 @@ const count = computed(() => Math.max(0, Math.ceil(props.total / Math.max(1, pro
 
 // Narrow is the viewport's width: the root element's.
 const viewport = shallowRef<HTMLElement | null>(null)
-onMounted(() => (viewport.value = document.documentElement))
+const mounted = shallowRef(false)
+onMounted(() => {
+  viewport.value = document.documentElement
+  mounted.value = true
+})
+// A WeftProvider's `width` says which form to draw before mounting; without
+// one, both are drawn and CSS picks from the viewport until mounted.
+const given = useWeft().width.value
 const width = useWidth(viewport, { prepaint: false })
 const narrow = computed(() => width.value === 'narrow')
-const entries = computed(() => pageRange(page.value, count.value, narrow.value ? Math.min(props.siblingCount, 1) : props.siblingCount, props.showEdges))
+const both = computed(() => !mounted.value && given === undefined)
+const entries = computed<PageSlot[]>(() =>
+  both.value
+    ? pageRangeBoth(page.value, count.value, props.siblingCount, props.showEdges)
+    : pageRange(page.value, count.value, narrow.value ? Math.min(props.siblingCount, 1) : props.siblingCount, props.showEdges).map((entry) => ({ entry })),
+)
+const edgeOnly = computed(() => (both.value ? 'wide' : undefined))
 
 function go(n: number) {
   if (props.disabled || n < 1 || n > count.value) return
@@ -90,7 +107,7 @@ const href = (n: number) => (props.to && n >= 1 && n <= count.value ? props.to(n
 <template>
   <nav class="weft-pagination" :aria-label="t.nav" :data-size="size">
     <ul class="weft-pagination__list">
-      <li v-if="showControls && !narrow">
+      <li v-if="showControls && (both || !narrow)" :data-only="edgeOnly">
         <Button :variant="variant" :tone="tone" :size="size" square :aria-label="t.first" :to="href(1)" :disabled="disabled || page <= 1" @click="go(1)">
           <template #leading><svg class="weft-pagination__glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 17-5-5 5-5" /><path d="m18 17-5-5 5-5" /></svg></template>
         </Button>
@@ -100,7 +117,7 @@ const href = (n: number) => (props.to && n >= 1 && n <= count.value ? props.to(n
           <template #leading><svg class="weft-pagination__glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg></template>
         </Button>
       </li>
-      <li v-for="(entry, i) in entries" :key="entry === 'ellipsis' ? `e${i}` : entry">
+      <li v-for="({ entry, only }, i) in entries" :key="entry === 'ellipsis' ? `e${i}` : entry" :data-only="only">
         <span v-if="entry === 'ellipsis'" class="weft-pagination__ellipsis" aria-hidden="true">…</span>
         <Button
           v-else
@@ -122,7 +139,7 @@ const href = (n: number) => (props.to && n >= 1 && n <= count.value ? props.to(n
           <template #leading><svg class="weft-pagination__glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg></template>
         </Button>
       </li>
-      <li v-if="showControls && !narrow">
+      <li v-if="showControls && (both || !narrow)" :data-only="edgeOnly">
         <Button :variant="variant" :tone="tone" :size="size" square :aria-label="t.last" :to="href(count)" :disabled="disabled || page >= count" @click="go(count)">
           <template #leading><svg class="weft-pagination__glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 17 5-5-5-5" /><path d="m6 17 5-5-5-5" /></svg></template>
         </Button>

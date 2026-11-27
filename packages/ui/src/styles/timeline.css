@@ -1,7 +1,9 @@
 /* Timeline: each item a marker (a dot, or an icon in a disc, on a line to
    the next item) beside its text. Done items and their lines are drawn in
    the tone; the current dot is ringed in it; later ones are muted. When
-   horizontal the markers run along the top and the text sits under each. */
+   horizontal the markers run along the top and the text sits under each;
+   a horizontal timeline whose own box is narrow (`data-width`, which the
+   pre-paint script sets before hydration) is drawn vertical. */
 .weft-timeline {
   --weft-timeline-dot: 12px;
   --weft-timeline-disc: 28px;
@@ -14,11 +16,11 @@
 }
 .weft-timeline[data-size="sm"] { --weft-timeline-dot: 10px; --weft-timeline-disc: 24px; font-size: 0.9em; }
 .weft-timeline[data-size="lg"] { --weft-timeline-dot: 14px; --weft-timeline-disc: 36px; }
-.weft-timeline[data-orientation="horizontal"] { flex-direction: row; }
+.weft-timeline[data-orientation="horizontal"]:where(:not([data-width="narrow"])) { flex-direction: row; }
 .weft-timeline__item { display: flex; gap: var(--weft-space-3, 12px); min-inline-size: 0; }
-.weft-timeline[data-orientation="horizontal"] .weft-timeline__item { flex: 1; flex-direction: column; }
+.weft-timeline[data-orientation="horizontal"]:where(:not([data-width="narrow"])) .weft-timeline__item { flex: 1; flex-direction: column; }
 .weft-timeline__marker { display: flex; flex-direction: column; align-items: center; flex: none; inline-size: var(--weft-timeline-disc); }
-.weft-timeline[data-orientation="horizontal"] .weft-timeline__marker { flex-direction: row; inline-size: auto; block-size: var(--weft-timeline-disc); }
+.weft-timeline[data-orientation="horizontal"]:where(:not([data-width="narrow"])) .weft-timeline__marker { flex-direction: row; inline-size: auto; block-size: var(--weft-timeline-disc); }
 .weft-timeline__indicator {
   display: inline-grid;
   place-items: center;
@@ -38,14 +40,14 @@
 }
 .weft-timeline__indicator .weft-icon { inline-size: 60%; block-size: 60%; }
 .weft-timeline__line { flex: 1; inline-size: 2px; min-block-size: var(--weft-space-4, 16px); background: var(--weft-color-border, GrayText); }
-.weft-timeline[data-orientation="horizontal"] .weft-timeline__line { inline-size: auto; block-size: 2px; min-block-size: 0; min-inline-size: var(--weft-space-4, 16px); margin-inline: var(--weft-space-2, 8px); }
+.weft-timeline[data-orientation="horizontal"]:where(:not([data-width="narrow"])) .weft-timeline__line { inline-size: auto; block-size: 2px; min-block-size: 0; min-inline-size: var(--weft-space-4, 16px); margin-inline: var(--weft-space-2, 8px); }
 .weft-timeline__item:last-child .weft-timeline__line { visibility: hidden; }
 .weft-timeline__item[data-state="done"] .weft-timeline__indicator,
 .weft-timeline__item[data-state="current"] .weft-timeline__indicator { background: var(--weft-tone, LinkText); color: var(--weft-tone-fg, Canvas); }
 .weft-timeline__item[data-state="current"] .weft-timeline__indicator { box-shadow: 0 0 0 4px color-mix(in srgb, var(--weft-tone, LinkText) 25%, transparent); }
 .weft-timeline__item[data-state="done"] .weft-timeline__line { background: var(--weft-tone, LinkText); }
 .weft-timeline__content { display: grid; gap: 2px; align-content: start; min-inline-size: 0; padding-block-end: var(--weft-space-4, 16px); }
-.weft-timeline[data-orientation="horizontal"] .weft-timeline__content { padding-block-end: 0; padding-inline-end: var(--weft-space-3, 12px); }
+.weft-timeline[data-orientation="horizontal"]:where(:not([data-width="narrow"])) .weft-timeline__content { padding-block-end: 0; padding-inline-end: var(--weft-space-3, 12px); }
 .weft-timeline__date { color: var(--weft-color-text-muted, GrayText); font-size: 0.9em; }
 .weft-timeline__title { font-weight: var(--weft-weight-heading, 600); }
 .weft-timeline__description { color: var(--weft-color-text-muted, GrayText); }

@@ -7,8 +7,9 @@
 // right to left) and chosen with Enter, Space or a press. `linear` (the
 // default) lets a press reach only the steps done and the next one;
 // disabled steps are never reached. `next()` and `prev()` move from code (a
-// form's Continue button). A horizontal stepper stacks vertically when
-// narrow; on touch every step button is at least --weft-hit-min tall.
+// form's Continue button). A horizontal stepper stacks vertically when its
+// own box is narrow, in CSS from `data-width` (so before hydration too); on
+// touch every step button is at least --weft-hit-min tall.
 import { computed, useTemplateRef, watch } from 'vue'
 import Icon from '../basics/Icon.vue'
 import { useWidth } from '../adaptive/useWidth.ts'
@@ -73,7 +74,12 @@ const currentItem = computed(() => props.items[current.value])
 
 const root = useTemplateRef<HTMLElement>('root')
 const list = useTemplateRef<HTMLElement>('list')
-const width = useWidth(root, { prepaint: false })
+// Only a horizontal stepper depends on its width. It says its width class in
+// `data-width`, which the page's pre-paint script keeps current before
+// hydration, and CSS stacks it on `[data-width="narrow"]`, so a static page
+// adapts too; `orientation` (for the arrow keys) follows once mounted.
+const adapts = props.orientation === 'horizontal'
+const width = useWidth(root, { prepaint: adapts })
 const orientation = computed(() => (props.orientation === 'horizontal' && width.value !== 'narrow' ? 'horizontal' : 'vertical'))
 const roving = useRovingFocus(list, {
   get orientation() {
@@ -118,7 +124,7 @@ defineExpose({ next, prev, hasNext, hasPrev })
 </script>
 
 <template>
-  <div ref="root" class="weft-stepper" :data-orientation="orientation" :data-size="size" :data-tone="tone">
+  <div ref="root" class="weft-stepper" :data-orientation="orientation" :data-width="adapts ? width : undefined" :data-size="size" :data-tone="tone">
     <ol ref="list" class="weft-stepper__list">
       <li v-for="(item, i) in items" :key="String(valueOf(item, i))" class="weft-stepper__item" :data-state="stateOf(i)">
         <button

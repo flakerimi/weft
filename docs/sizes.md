@@ -84,7 +84,7 @@ component uses. Neither is counted in the rows below.
 | NavigationMenu | 16.84 | — | 3.04 | 19.88 |
 | OverlayPanel | 1.85 | — | 1.51 | 3.36 |
 | Page | 1.70 | — | 1.39 | 3.09 |
-| Pagination | 2.87 | — | 1.36 | 4.23 |
+| Pagination | 3.38 | — | 1.41 | 4.79 |
 | PinInput | 2.68 | — | 0.53 | 3.21 |
 | Popover | 13.46 | — | 2.55 | 16.01 |
 | Pricing | 5.60 | — | 2.23 | 7.83 |
@@ -100,13 +100,13 @@ component uses. Neither is counted in the rows below.
 | Spinner | 0.52 | — | 0.53 | 1.05 |
 | Stack | 0.35 | — | 0.27 | 0.62 |
 | StatCard | 2.69 | — | 1.06 | 3.75 |
-| Stepper | 3.20 | — | 1.00 | 4.21 |
+| Stepper | 3.22 | — | 1.04 | 4.26 |
 | Switch | 1.97 | — | 1.42 | 3.39 |
-| Table | 11.33 | — | 2.75 | 14.07 |
-| Tabs | 3.94 | — | 1.28 | 5.21 |
+| Table | 11.56 | — | 2.79 | 14.35 |
+| Tabs | 3.97 | — | 1.30 | 5.26 |
 | Testimonials | 3.02 | — | 1.05 | 4.07 |
 | Textarea | 2.12 | — | 0.54 | 2.66 |
-| Timeline | 2.09 | — | 0.90 | 2.99 |
+| Timeline | 2.10 | — | 0.92 | 3.02 |
 | Toast | 3.19 | — | 1.94 | 5.13 |
 | Toaster | 4.22 | — | 2.12 | 6.34 |
 | Toggle | 2.30 | — | 1.39 | 3.69 |

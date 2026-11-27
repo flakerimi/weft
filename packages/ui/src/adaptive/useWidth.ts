@@ -51,11 +51,12 @@ export interface UseWidthOptions {
    * `[data-width]` is set from the element's width before the first paint and
    * on resize without hydration. Default `true` (a component that can sit in
    * any box and styles from `[data-width]` in CSS must keep the pre-paint
-   * measuring); set `false` only on components that always span the page or the
-   * viewport and adapt before mounting with a viewport `@media` fallback
-   * (`Header`, `Footer`, `AppShell`, `NavigationMenu`, `Dialog`, `Pagination`),
-   * or that switch their template/orientation in JavaScript after mounting
-   * (`Table`, `Timeline`, `Tabs`, `Stepper`).
+   * measuring); set `false` only on components that measure the viewport or
+   * span the page and adapt before mounting with a viewport `@media` fallback
+   * (`Header`, `Footer`, `AppShell`, `NavigationMenu`, `Pagination`; `Dialog`
+   * draws only once open), on one whose layout does not depend on its width
+   * (a vertical `Stepper` or `Timeline`, a horizontal `Tabs`), or on one that
+   * switches its markup in JavaScript after mounting (`Table`).
    */
   prepaint?: boolean
 }

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import TrailCases from '../fixtures/navigation/TrailCases.vue'
-import { pageRange } from '../../src/navigation/pagination.ts'
+import { pageRange, pageRangeBoth } from '../../src/navigation/pagination.ts'
 import { mount } from '../mount.ts'
 import { press as pressKey } from '../keyboard.ts'
 import { installResizeObserver } from '../resize-observer.ts'
@@ -91,6 +91,39 @@ describe('pageRange', () => {
 
   it('has no pages when there is nothing to page', () => {
     expect(pageRange(1, 0, 1, true)).toEqual([])
+  })
+})
+
+describe('pageRangeBoth', () => {
+  it('holds the narrow and the wide pages in one list: leaving out one form\'s entries gives the other\'s pageRange', () => {
+    for (const edges of [false, true]) {
+      for (let siblings = 0; siblings <= 3; siblings++) {
+        for (let count = 0; count <= 24; count++) {
+          for (let page = 1; page <= Math.max(1, count); page++) {
+            const both = pageRangeBoth(page, count, siblings, edges)
+            const at = `page ${page} of ${count}, ${siblings} siblings, edges ${edges}`
+            expect(both.filter((s) => s.only !== 'wide').map((s) => s.entry), at).toEqual(pageRange(page, count, Math.min(siblings, 1), edges))
+            expect(both.filter((s) => s.only !== 'narrow').map((s) => s.entry), at).toEqual(pageRange(page, count, siblings, edges))
+          }
+        }
+      }
+    }
+  })
+
+  it('marks only what differs: a page or gap in both forms is drawn once, unmarked, and a gap that ends at another page once per form', () => {
+    expect(pageRangeBoth(10, 20, 2, true)).toEqual([
+      { entry: 1 },
+      { entry: 'ellipsis', only: 'wide' },
+      { entry: 8, only: 'wide' },
+      { entry: 'ellipsis', only: 'narrow' },
+      { entry: 9 },
+      { entry: 10 },
+      { entry: 11 },
+      { entry: 12, only: 'wide' },
+      { entry: 'ellipsis' },
+      { entry: 20 },
+    ])
+    expect(pageRangeBoth(5, 20, 1, true).every((s) => s.only === undefined)).toBe(true)
   })
 })
 

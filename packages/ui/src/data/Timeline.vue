@@ -5,7 +5,8 @@
 // the items before it are done (said as "Done:" to assistive technology)
 // and it is the current step (aria-current="step"); `reverse` lists the
 // newest first. Not interactive. Horizontal when asked and its own box is
-// wide enough; vertical when narrow. Its type scale follows the surface.
+// wide enough; vertical when narrow, in CSS from `data-width` (so before
+// hydration too). Its type scale follows the surface.
 import { computed, useTemplateRef } from 'vue'
 import Icon from '../basics/Icon.vue'
 import { useWidth } from '../adaptive/useWidth.ts'
@@ -50,7 +51,12 @@ defineSlots<{
 
 const t = computed<TimelineLabels>(() => ({ ...TIMELINE_LABELS, ...props.labels }))
 const root = useTemplateRef<HTMLElement>('root')
-const width = useWidth(root, { prepaint: false })
+// Only a horizontal timeline depends on its width. It says its width class in
+// `data-width`, which the page's pre-paint script keeps current before
+// hydration, and CSS draws it vertical on `[data-width="narrow"]`, so a
+// static page adapts too.
+const adapts = props.orientation === 'horizontal'
+const width = useWidth(root, { prepaint: adapts })
 const layout = computed(() => (props.orientation === 'horizontal' && width.value !== 'narrow' ? 'horizontal' : 'vertical'))
 const value = computed(() => props.modelValue ?? props.defaultValue)
 /** The current item's place in `items`, -1 for none. */
@@ -69,7 +75,7 @@ const state = (index: number) => (current.value < 0 ? undefined : index < curren
 </script>
 
 <template>
-  <ol ref="root" class="weft-timeline" :data-orientation="layout" :data-tone="tone" :data-size="size">
+  <ol ref="root" class="weft-timeline" :data-orientation="layout" :data-width="adapts ? width : undefined" :data-tone="tone" :data-size="size">
     <li
       v-for="{ item, index } in order"
       :key="item.value ?? index"
