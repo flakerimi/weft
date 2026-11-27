@@ -46,7 +46,7 @@ Replaces the running `weft` with another release from `weft.base.al`.
 | Flag | What it does |
 | --- | --- |
 | `--check` | Only says whether the latest release differs from yours, and changes nothing. After a rollback of the site the latest may be older than yours. |
-| `--version X` | Installs release `X` instead of the latest, older ones included (on Windows, from the next release on) |
+| `--version X` | Installs release `X` instead of the latest, older ones included (on Windows, from 0.0.21 on) |
 
 It downloads your platform's archive and `SHA256SUMS`, checks one against the other, and renames the new binary into place (through a symlink to the real file), the old one whole until then. It says `weft X is up to date.` or `Updated weft X → Y.`; a failure is one sentence (exit 1), an unknown flag exits 2, and a development build says to run the installer. `WEFT_BASE` is where the releases are (default `https://weft.base.al`).
 
@@ -219,7 +219,7 @@ An unknown name prints nothing for the others and exits 1, naming up to three co
 
 ## The installer
 
-`curl -fsSL https://weft.base.al/install | sh` installs the latest release on macOS and Linux (needs `curl`, and `sha256sum` or `shasum`); on Windows (from the next release), `irm https://weft.base.al/install.ps1 | iex` in PowerShell installs `weft.exe` in `$HOME\.local\bin` and adds that folder to your user `PATH`, each on arm64 and amd64.
+`curl -fsSL https://weft.base.al/install | sh` installs the latest release on macOS and Linux (needs `curl`, and `sha256sum` or `shasum`); on Windows (from 0.0.21), `irm https://weft.base.al/install.ps1 | iex` in PowerShell installs `weft.exe` in `$HOME\.local\bin` and adds that folder to your user `PATH`, each on arm64 and amd64.
 
 | Variable | What it does | Default |
 | --- | --- | --- |

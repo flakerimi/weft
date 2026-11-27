@@ -18,7 +18,7 @@ the owner; each milestone gets its own design or plan before it is built.
   client, `warp/data` on SQLite, `warp/auth` with one owner, `warptest`, and an
   example shop that uses all of it.
 - **Runs on:** macOS, Linux and Windows (the full suite passes on all three on
-  GitHub's runners; Windows installs from the next release).
+  GitHub's runners; Windows installs from 0.0.21).
 - **Distributed:** from weft.base.al (installer, releases with checksums,
   `weft update`); the repository is public since 2026-11-26.
 - **Not stable:** every 0.0.x may change any name. Vue is pinned to
@@ -54,11 +54,11 @@ platforms it claims, and the docs saying what it brought.
 
 What a newcomer meets first works, on every platform.
 
-- **Windows supported:** the release workflow's Windows tests pass (done,
-  0.0.19); `weft dev` stops its process trees with a Job Object (done,
-  0.0.19); the installer has a PowerShell form (`/install.ps1`), and
-  `scripts/release.sh` builds all six archives by default; the docs say Windows
-  is supported. The suite runs on all three platforms on every push to `main`
+- **Windows supported (done, 0.0.21):** the release workflow's Windows tests
+  pass (0.0.19); `weft dev` stops its process trees with a Job Object
+  (0.0.19); the installer has a PowerShell form (`/install.ps1`), and
+  `scripts/release.sh` builds all six archives by default (0.0.21); the docs
+  say Windows is supported. The suite runs on all three platforms on every push to `main`
   (done: `ci.yml` runs Linux on every push and pull request, macOS and
   Windows on every push to `main`).
 - **The Go module from GitHub (done, 0.0.12):** with the repository public, an app's `go.mod`
