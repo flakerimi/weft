@@ -164,4 +164,4 @@ Planned, not built (see https://weft.base.al/docs/coming-next):
 
 - app routes: a client-side router and `layouts/`. An app is pages rendered at build, with islands, and run-time pages for records;
 - an `<Image>` component, actions, environment values, a development overlay and `weft deploy`;
-- `weft scaffold`, `DataTable` and `EntityDialog`.
+- date and time fields in `EntityDialog` and the pages `weft scaffold` writes (0.2.0).

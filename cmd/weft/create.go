@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -21,10 +24,12 @@ var nameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 
 // templateData is what a .tmpl file of the app template can use. LocalGo
 // says whether go.mod replaces Weft's module with ./.weft/go (a development
-// build) or requires it at the release, from GitHub.
+// build) or requires it at the release, from GitHub. AuthSecret is the
+// app's own AUTH_SECRET, made fresh for each app, which only .env holds.
 type templateData struct {
 	Name, Module, Version, Theme string
 	LocalGo                      bool
+	AuthSecret                   string
 }
 
 // reserved are names an app may not take: its binary, named like the app,
@@ -96,9 +101,21 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "weft create: the bundle in %s was staged for a release, so it has no Go package (weft/go) for the replace a development weft writes; stage it with scripts/bundle.sh without WEFT_VERSION.\n", os.Getenv("WEFT_BUNDLE"))
 		return 1
 	}
-	data := templateData{Name: name, Module: *module, Version: weft.Version, Theme: *theme, LocalGo: localModule(weft.Version)}
+	secret, err := newSecret()
+	if err != nil {
+		fmt.Fprintf(stderr, "weft create: cannot make a random AUTH_SECRET (%v); run the command again.\n", err)
+		return 1
+	}
+	data := templateData{Name: name, Module: *module, Version: weft.Version, Theme: *theme, LocalGo: localModule(weft.Version), AuthSecret: secret}
 	if err := writeTemplate(bundle, name, data); err != nil {
 		fmt.Fprintf(stderr, "weft create: cannot write %s (%v); fix that and run the command again.\n", name, err)
+		return 1
+	}
+	// An empty page build's marker, so dist.go's embed matches and go test
+	// ./... works before the first weft build, which replaces it; a binary
+	// built with it refuses to start, saying the pages are not built.
+	if err := writeUnbuilt(name); err != nil {
+		fmt.Fprintf(stderr, "weft create: cannot write %s (%v); fix that and run the command again.\n", filepath.Join(name, "web", "dist", ".weft-build"), err)
 		return 1
 	}
 	if err := unpack(bundle, name, weft.Version); err != nil {
@@ -124,11 +141,34 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 			}
 			return 1
 		}
+		// Every module go.mod requires, the SQLite driver too, so a proxy
+		// out of reach is said here, not by the build weft gen runs.
+		dl := exec.Command("go", "mod", "download")
+		dl.Dir, dl.Env = name, hostBuildEnv(os.Environ())
+		dl.Stdout, dl.Stderr = stdout, stderr
+		if err := dl.Run(); err != nil {
+			fmt.Fprint(stdout, ownerLine(name))
+			fmt.Fprintf(stderr, "weft create: Go could not download the modules %s/go.mod requires, such as the SQLite driver (see its output above), so %s is made but does not build yet; check the network or GOPROXY, then run cd %s && weft gen.\n", name, name, name)
+			return 1
+		}
 		if err := writeTypes(name, stdout, stderr); err != nil {
 			fmt.Fprintf(stderr, "weft create: %v.\n", strings.TrimSuffix(err.Error(), "."))
 			return 1
 		}
+		// The client the login and setup pages call, so they type-check
+		// before the first weft dev or weft build.
+		// Its paths are absolute, as the Go build runs in the app's folder.
+		abs, err := filepath.Abs(name)
+		if err == nil {
+			_, err = genTypes(context.Background(), "create", abs, stderr)
+		}
+		if err != nil {
+			fmt.Fprint(stdout, ownerLine(name))
+			fmt.Fprintf(stderr, "weft create: weft gen did not write %s in %s (see the output above); once that is fixed, run cd %s && weft gen.\n", filepath.ToSlash(apiTypes), name, name)
+			return 1
+		}
 	}
+	fmt.Fprint(stdout, ownerLine(name))
 	fmt.Fprintf(stdout, "Created %s. Next: cd %s && weft dev\n", name, name)
 	return 0
 }
@@ -182,9 +222,41 @@ func writeTemplate(bundle fs.FS, dir string, data templateData) error {
 		if info, err := d.Info(); err == nil && info.Mode()&0o111 != 0 {
 			mode = 0o755
 		}
+		if p == ".env" {
+			mode = 0o600 // it holds the app's AUTH_SECRET
+		}
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
 		}
 		return os.WriteFile(target, content, mode)
 	})
+}
+
+// unbuiltMarker is the .weft-build of a page build with no files, which
+// weft-build-pages takes as its own and replaces, and warp.Serve refuses.
+const unbuiltMarker = `{"weft":1,"files":[]}` + "\n"
+
+// writeUnbuilt writes unbuiltMarker into dir/web/dist.
+func writeUnbuilt(dir string) error {
+	d := filepath.Join(dir, "web", "dist")
+	if err := os.MkdirAll(d, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(d, ".weft-build"), []byte(unbuiltMarker), 0o644)
+}
+
+// ownerLine is what weft create says of AUTH_OWNER_EMAIL in the app's .env.
+func ownerLine(app string) string {
+	return "Set AUTH_OWNER_EMAIL in " + filepath.Join(app, ".env") + " to the owner's email address; it is owner@example.com until you do.\n"
+}
+
+// newSecret is a fresh AUTH_SECRET: 48 bytes from crypto/rand in base64url
+// without padding, 64 characters, which is what the session cookie is signed
+// with.
+func newSecret() (string, error) {
+	b := make([]byte, 48)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }

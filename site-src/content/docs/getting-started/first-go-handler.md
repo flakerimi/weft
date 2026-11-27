@@ -83,10 +83,10 @@ func TestGreet(t *testing.T) {
 `app.Handler()` is the app's API alone, so the test needs no server. `app.Err()` reports any mistake made while registering, such as a field with no tag, one sentence each. Run the tests:
 
 ```sh
-go test -tags dev ./...
+go test ./...
 ```
 
-`-tags dev` builds the app as `weft dev` does, without the embedded pages, so the tests run before any `weft build`.
+Before the first `weft build`, `web/dist` holds only an empty marker that `weft create` writes (and `weft unpack` puts back in a fresh clone), so the tests build; a binary built from it refuses to start, saying the pages are not built.
 
 ## Call it
 

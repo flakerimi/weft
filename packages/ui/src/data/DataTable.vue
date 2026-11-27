@@ -382,6 +382,7 @@ defineExpose({
               v-else
               :model-value="getFilter(f.key)"
               :items="f.items"
+              :placeholder="f.items.find((i) => i.value === '')?.label"
               @update:model-value="setFilter(f.key, $event)"
             />
           </FormField>

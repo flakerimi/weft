@@ -1102,7 +1102,8 @@ func fieldRules(f fieldInfo) []string {
 // enumTS refines a string or number TypeScript type with an enum rule into a
 // literal union of its values ('draft' | 'live' or 1 | 2 | 3), keeping | null
 // for a pointer. On a struct field that is not required and not a pointer, the
-// server accepts and answers the zero value ('' or 0), so it is included first.
+// server accepts and answers the zero value (the empty string or 0), so it is
+// included first.
 func enumTS(ts string, rules []ruleInfo, field bool) string {
 	nullable := strings.HasSuffix(ts, " | null")
 	base := strings.TrimSuffix(ts, " | null")

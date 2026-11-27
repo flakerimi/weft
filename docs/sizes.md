@@ -54,7 +54,7 @@ component uses. Neither is counted in the rows below.
 | Container | 0.77 | — | 0.14 | 0.91 |
 | ContextMenu | 14.62 | — | 1.90 | 16.51 |
 | Cta | 2.52 | — | 1.79 | 4.32 |
-| DataTable | 39.32 | — | 5.70 | 45.02 |
+| DataTable | 39.37 | — | 5.70 | 45.07 |
 | DatePicker | 12.19 | 14.87 | 2.72 | 14.91 |
 | DateRangePicker | 25.48 | — | 2.73 | 28.21 |
 | Dialog | 7.67 | — | 2.27 | 9.94 |
@@ -117,7 +117,7 @@ component uses. Neither is counted in the rows below.
 | Tree | 3.94 | — | 0.74 | 4.68 |
 | WeftProvider | 0.97 | — | 0.27 | 1.25 |
 
-The five heaviest: DataTable (45.02 KB), EntityDialog (35.33 KB), DateRangePicker (28.21 KB), Combobox (24.80 KB), Select (22.50 KB).
+The five heaviest: DataTable (45.07 KB), EntityDialog (35.33 KB), DateRangePicker (28.21 KB), Combobox (24.80 KB), Select (22.50 KB).
 
 ## Tree-shaking
 

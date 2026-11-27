@@ -763,6 +763,24 @@ console.log(JSON.stringify(out))
 
 // genApp copies the installed app into a new temp folder and runs the test
 // in it.
+// withoutClient makes the pages of a created app those of an app with no
+// API, as a 0.0.6 app's were: the login and setup pages and the session,
+// which call the client, go, and the hello island asks /api/hello itself.
+// Such an app's client has no routes, which those pages would not
+// type-check against.
+func withoutClient(t *testing.T, app string) {
+	t.Helper()
+	for _, p := range []string{"web/pages/login.vue", "web/pages/setup.vue", "web/components/LoginForm.vue", "web/components/SetupForm.vue", "web/session.ts", "web/answers.ts"} {
+		if err := os.Remove(filepath.Join(app, filepath.FromSlash(p))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hello := "<script setup vapor lang=\"ts\">\nimport { onMounted, ref } from 'vue'\n\nconst message = ref('Loading')\n\nonMounted(async () => {\n  message.value = ((await (await fetch('/api/hello')).json()) as { message: string }).message\n})\n</script>\n\n<template>\n  <Badge :label=\"message\" />\n</template>\n"
+	if err := os.WriteFile(filepath.Join(app, "web", "components", "Hello.vue"), []byte(hello), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func genApp(t *testing.T) string {
 	t.Helper()
 	if testing.Short() {
@@ -781,6 +799,8 @@ func genApp(t *testing.T) string {
 func TestGenInApp(t *testing.T) {
 	app := genApp(t)
 	file := filepath.Join(app, "web", ".weft-types", "api.ts")
+	// weft create wrote it; gone, weft gen writes it again.
+	os.Remove(file)
 	code, out, errs := runCmd("gen")
 	if code != 0 || out != "Wrote web/.weft-types/api.ts\n" {
 		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errs)
@@ -805,7 +825,11 @@ func TestGenInApp(t *testing.T) {
 	}
 
 	code, out, errs = runCmd("routes")
-	if want := "METHOD  PATH        MODULE  NAME   PERMISSION\nGET     /api/hello  hello   hello  -\n"; code != 0 || out != want {
+	// The frame's routes: auth's four and hello.
+	want := "METHOD  PATH              MODULE  NAME    PERMISSION\n" +
+		"POST    /api/auth/login   auth    login   -\nPOST    /api/auth/logout  auth    logout  -\nGET     /api/auth/me      auth    me      -\n" +
+		"POST    /api/auth/setup   auth    setup   -\nGET     /api/hello        hello   hello   -\n"
+	if code != 0 || out != want {
 		t.Errorf("weft routes: exit %d, stdout %q, stderr %q, want %q", code, out, errs, want)
 	}
 
@@ -834,6 +858,11 @@ func TestGenInApp(t *testing.T) {
 		t.Errorf("pnpm typecheck passed a page reading a field the Go type no longer has: %v\n%s", err, out2)
 	}
 	os.Remove(filepath.Join(app, "web", "pages", "typed.vue"))
+	// The field back as it was: the template's Hello island reads it too.
+	os.WriteFile(routes, goSrc, 0o644)
+	if code, out, errs := runCmd("gen"); code != 0 {
+		t.Fatalf("gen after the rename back: exit %d: %s%s", code, out, errs)
+	}
 
 	// C1: adding a runtime page that calls useParams('/items/:id') and running
 	// weft gen refreshes components.d.ts so pnpm typecheck passes without weft dev.
@@ -908,9 +937,8 @@ func TestGenReportsAppMistake(t *testing.T) {
 func TestBuildRunsGen(t *testing.T) {
 	app := genApp(t)
 	file := filepath.Join(app, "web", ".weft-types", "api.ts")
-	if exists(t, file) {
-		t.Fatal("the created app has an api.ts already")
-	}
+	// weft create wrote it; gone, weft build writes it again.
+	os.Remove(file)
 	code, out, errs := build(t)
 	if code != 0 {
 		t.Fatalf("exit %d: %s%s", code, out, errs)
@@ -928,7 +956,7 @@ func TestBuildRunsGen(t *testing.T) {
 	if code != 1 || !strings.HasSuffix(errs, want) || !strings.Contains(errs, "no app here") {
 		t.Errorf("exit %d, stdout %q, stderr %q, want it to end %q", code, out, errs, want)
 	}
-	if exists(t, filepath.Join(app, "web", "dist")) {
+	if exists(t, filepath.Join(app, "web", "dist", "routes.json")) {
 		t.Error("the pages were built")
 	}
 }
@@ -987,6 +1015,7 @@ func TestNoWarpAppIsNotDescribed(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(app, "main.go"), []byte(old), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	withoutClient(t, app)
 	kept := func(command string) string {
 		return "weft " + command + ": the app has no warp.App, as no package it is built from calls warp.New, so web/.weft-types/api.ts, which has routes, was left as it was; if the app has routes, make sure its main package is built from one that calls warp.New, and if it has none, remove the file.\n"
 	}
