@@ -739,7 +739,7 @@ func TestDocsFontsAreSelfHosted(t *testing.T) {
 	}
 	// Nor does it load or link anything on another site, but for the footer's
 	// two links: the repository, public since 2026-11-26, and Basecode LLC's site.
-	html = strings.NewReplacer(`href="https://github.com/flakerimi/weft"`, "", `href="http://basecode.llc"`, "").Replace(html)
+	html = strings.NewReplacer(`href="https://github.com/flakerimi/weft"`, "", `href="https://basecode.llc"`, "").Replace(html)
 	if regexp.MustCompile(`(?i)(src|href)="https?:|url\(https?:`).MatchString(html) {
 		t.Error("the docs page links or loads something on another site")
 	}

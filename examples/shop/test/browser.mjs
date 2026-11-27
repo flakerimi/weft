@@ -6,7 +6,7 @@
 // Usage: node test/browser.mjs <browser> <base url> <setup link> <out folder>
 // The out folder gets the browser's profile and a screenshot of each step.
 import { spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const [browserPath, base, setupLink, out] = process.argv.slice(2)
@@ -20,32 +20,50 @@ mkdirSync(profile, { recursive: true })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // Port 0: the browser picks a free port and writes it to DevToolsActivePort.
+// Its own output goes to browser.log in the out folder, and is shown when it
+// fails to start, so a crash or a missing library says what it was.
+const browserLog = join(out, 'browser.log')
+const logFd = openSync(browserLog, 'w')
 const browser = spawn(browserPath, [
   '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
   '--no-first-run', '--no-default-browser-check', '--window-size=1200,900', 'about:blank',
-], { stdio: 'ignore' })
+], { stdio: ['ignore', logFd, logFd] })
+let browserExit
+browser.on('exit', (code, signal) => { browserExit = code ?? signal })
 const quit = () => browser.kill()
 process.on('exit', quit)
 // The test that runs this stops its process group on a timeout; the browser
 // is in the group too, and goes with it.
 process.on('SIGTERM', () => process.exit(1))
 
+// browserFailed prints the browser's own output and fails with what went wrong.
+function browserFailed(what) {
+  let log = ''
+  try { log = readFileSync(browserLog, 'utf8').trim().split('\n').slice(-40).join('\n') } catch {}
+  console.error(`the browser's output (${browserLog}):\n${log || '(none)'}`)
+  throw new Error(`the browser at ${browserPath} ${what}; check that it starts headless on this machine`)
+}
+
+// A loaded machine (a CI runner, just after a build) can take well over ten
+// seconds to start the browser: wait up to a minute for its port, unless it
+// exits first.
 let port
-for (let i = 0; i < 200 && !port; i++) {
+for (let i = 0; i < 1200 && !port && browserExit === undefined; i++) {
   try { port = readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0] } catch { await sleep(50) }
 }
-// A slow machine (a CI runner) may not have opened its first tab by the time
-// the debugging port answers, or open none, or drop the first ask: from two
-// seconds on, ask for one every two seconds, for up to a minute.
+if (!port) browserFailed(browserExit === undefined ? 'opened no debugging port within 60 s' : `exited (${browserExit}) before it opened its debugging port`)
+// A slow machine may not have opened its first tab by the time the debugging
+// port answers, or open none, or drop the first ask: from two seconds on, ask
+// for one every two seconds, for up to a minute.
 let page
-for (let i = 0; i < 600 && !page; i++) {
+for (let i = 0; i < 600 && !page && browserExit === undefined; i++) {
   try { page = (await (await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(2000) })).json()).find((t) => t.type === 'page') } catch {}
   if (!page && i >= 20 && i % 20 === 0) {
     try { await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT', signal: AbortSignal.timeout(2000) }) } catch {}
   }
   if (!page) await sleep(100)
 }
-if (!page) throw new Error(`the browser at ${browserPath} gave no page to drive within 60 s; check that it starts headless on this machine`)
+if (!page) browserFailed(browserExit === undefined ? 'gave no page to drive within 60 s' : `exited (${browserExit}) before it gave a page to drive`)
 const ws = new WebSocket(page.webSocketDebuggerUrl)
 await new Promise((resolve, reject) => { ws.addEventListener('open', resolve); ws.addEventListener('error', reject) })
 
