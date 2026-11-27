@@ -70,6 +70,10 @@ func upgradeCmd(args []string, stdout, stderr io.Writer) int {
 	if err := unpack(bundle, appDir, weft.Version); err != nil {
 		return fail(stderr, "upgrade", err)
 	}
+	// An app made by 0.0.17 or before has no web/dist marker.
+	if err := keepDist(appDir); err != nil {
+		return fail(stderr, "upgrade", err)
+	}
 	if !*noInstall {
 		if err := pnpmInstall(appDir, stdout, stderr); err != nil {
 			return fail(stderr, "upgrade", err)

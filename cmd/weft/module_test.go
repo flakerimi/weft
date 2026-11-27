@@ -463,3 +463,19 @@ func TestFileProxyURL(t *testing.T) {
 		}
 	}
 }
+
+// An app made by 0.0.17 or before has no web/dist: weft upgrade puts the
+// empty marker in, so go test ./... builds right after it.
+func TestUpgradeWritesTheMarker(t *testing.T) {
+	madeAt(t, "0.0.11")
+	if err := os.RemoveAll(filepath.Join("web", "dist")); err != nil {
+		t.Fatal(err)
+	}
+	setVersion(t, "0.0.12")
+	if code, out, errs := runCmd("upgrade", "--no-install"); code != 0 {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errs)
+	}
+	if got := readFile(t, filepath.Join("web", "dist", ".weft-build")); got != unbuiltMarker {
+		t.Errorf("web/dist/.weft-build = %q, want the empty marker", got)
+	}
+}

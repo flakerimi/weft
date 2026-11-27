@@ -343,14 +343,20 @@ func pnpmInstall(appDir string, stdout, stderr io.Writer) error {
 }
 
 // keepDist writes weft create's empty page build marker into web/dist when
-// the app embeds that folder (it has dist.go) and has none, as in a fresh
-// clone, which git leaves without it: go test ./... then builds, and a
-// binary built so refuses to start until weft build builds the pages.
+// the app embeds that folder (it has dist.go) and it is missing, as in a
+// fresh clone, which git leaves without it, or empty, which embeds nothing
+// either: go test ./... then builds, and a binary built so refuses to start
+// until weft build builds the pages.
 func keepDist(appDir string) error {
 	if !isFile(filepath.Join(appDir, "dist.go")) {
 		return nil
 	}
-	if _, err := os.Lstat(filepath.Join(appDir, "web", "dist")); !errors.Is(err, fs.ErrNotExist) {
+	dir := filepath.Join(appDir, "web", "dist")
+	if _, err := os.Lstat(dir); err == nil {
+		if entries, err := os.ReadDir(dir); err != nil || len(entries) > 0 {
+			return nil
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	if err := writeUnbuilt(appDir); err != nil {

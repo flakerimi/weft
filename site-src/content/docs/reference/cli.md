@@ -144,7 +144,7 @@ Outside an app it says `weft build: no Weft app here; run it in a folder made by
 
 ### weft unpack
 
-Makes `.weft/` present and current as `weft build` does, with no `pnpm install`, so in a fresh clone whose `go.mod` replaces Warp's module with `./.weft/go`, `go test` and an editor resolve it. It prints `Unpacked .weft (Weft <version>)` or `.weft is current (Weft <version>)`.
+Makes `.weft/` present and current as `weft build` does, with no `pnpm install`, and writes the empty marker `web/dist/.weft-build` when `web/dist` is missing or empty, so in a fresh clone `go test ./...` builds and an editor resolves `./.weft/go`. It prints `Unpacked .weft (Weft <version>)` or `.weft is current (Weft <version>)`.
 
 ### weft gen
 

@@ -249,7 +249,7 @@ func TestHello(t *testing.T) {
 }
 ```
 
-`warp.Config{}` works as it is, with the defaults above. Check `app.Err()` first, so a registration mistake fails the test with its sentence. A module with `Migrate` or `Start` needs them run: `app.Start(ctx)` does that without listening, and `app.Stop(ctx)` stops what it started. Run the tests with `go test ./...`: before the first `weft build`, `web/dist` holds an empty marker `weft create` writes, so `dist.go` builds; a binary built from it refuses to start, saying the pages are not built.
+`warp.Config{}` works as it is, with the defaults above. Check `app.Err()` first, so a registration mistake fails the test with its sentence. A module with `Migrate` or `Start` needs them run: `app.Start(ctx)` does that without listening, and `app.Stop(ctx)` stops what it started. Run the tests with `go test ./...`: before the first `weft build`, `web/dist` holds an empty marker `weft create` writes (in a clone, `weft unpack` puts it back), so `dist.go` builds; a binary built from it refuses to start, saying the pages are not built.
 
 The package `github.com/flakerimi/weft/warp/warptest` does the rest. `warptest.New(t, vars, modules...)` builds the app from a map of settings, starts it, stops it when the test ends, and fails the test on a mistake; its client keeps cookies, sends JSON, and decodes the answer or the error shape. The shop's test, cut short:
 

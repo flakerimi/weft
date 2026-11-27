@@ -114,7 +114,7 @@ It serves the pages and `/api` from one file, and needs no Node. It reads `PORT`
 
 ## In a clone of the app
 
-Commit the app without `.weft/` and `node_modules/`, as its `.gitignore` says. Whoever clones it runs `weft dev` or `weft build`, which unpack `.weft/` and run `pnpm install` first. Their `weft` must be at the app's Weft version; `weft upgrade` moves the app to a newer one.
+Commit the app without `.weft/` and `node_modules/`, as its `.gitignore` says. Whoever clones it runs `weft dev` or `weft build`, which unpack `.weft/` and run `pnpm install` first. CI that runs only Go runs `weft unpack` first: `web/dist`, which git ignores, then holds the empty marker `dist.go` embeds, and `go test ./...` builds. Their `weft` must be at the app's Weft version; `weft upgrade` moves the app to a newer one.
 
 ## Next
 
