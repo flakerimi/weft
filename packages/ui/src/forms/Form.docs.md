@@ -88,9 +88,10 @@ the platform's design, so it bypasses the script and sends a POST to the
 page.
 
 A site with a Content-Security-Policy must allow the page's inline
-pre-paint script, `<script data-weft-prepaint>`, by its hash or with
+pre-paint script, `<script data-weft-prepaint>`, and its inline
+`<script type="speculationrules">`, by their SHA-256 hashes or with
 `'unsafe-inline'` (a nonce needs a server that writes one into each answer,
-which a built page does not have). The build wraps each snippet in
+which a built page does not have). The build wraps each pre-paint snippet in
 `(function(){…})()`, so a page whose only pre-paint component is Form has
 exactly (`'sha256-tx8/QjztXL6iQA+dqwGLMSVBWxKaWIfL8huD/H0v4SY='`)
 
@@ -98,12 +99,16 @@ exactly (`'sha256-tx8/QjztXL6iQA+dqwGLMSVBWxKaWIfL8huD/H0v4SY='`)
 
 and a page whose other components register pre-paint code too (Grid or the
 landing blocks Hero, FeatureGrid, Pricing, Testimonials, Faq and Cta, a
-horizontal Stepper or Timeline or a vertical Tabs, via `useWidth`, AppShell with `persist`, or a closable Banner with an `id`) has
-each wrapped snippet joined into the same script with `;\n`, one per line.
-Because the script's text — and so its hash — changes with which components
-a page renders, the order they register in, and each AppShell `persist` key
-or Banner `id`, a strict Content-Security-Policy needs one `'sha256-…'` entry
-per distinct `<script data-weft-prepaint>` across the site's built pages. To
-collect every hash from a build in `dist/`:
+horizontal Stepper or Timeline or a vertical Tabs, via `useWidth`, AppShell
+unless `persist` is `false`, or a closable Banner with an `id`) has each
+wrapped snippet joined into the same script with `;\n`, one per line (the
+width snippet appears at most once per page, whatever the number of width
+components). Because the script's text — and so its hash — changes with the
+Weft version, which components a page renders, the order they register in, and
+each AppShell `persist` key or Banner `id`, a strict Content-Security-Policy
+needs one `'sha256-…'` entry per distinct inline script across the site's
+built pages, collected again after each build or `weft upgrade`. Run this in
+the folder that holds `dist/` (`web/` in an app) to print every hash, quoted
+for `script-src`, one per line:
 
-    node -e 'const fs=require("node:fs"),crypto=require("node:crypto");console.log([...new Set(fs.globSync("dist/**/*.html").flatMap(f=>[...fs.readFileSync(f,"utf8").matchAll(/<script data-weft-prepaint>([\s\S]*?)<\/script>/g)].map(m=>"sha256-"+crypto.createHash("sha256").update(m[1]).digest("base64"))))])'
+    node -e 'const fs=require("node:fs"),crypto=require("node:crypto");console.log([...new Set(fs.globSync("dist/**/*.html").flatMap(f=>[...fs.readFileSync(f,"utf8").matchAll(/<script (?:data-weft-prepaint|type="speculationrules")>([\s\S]*?)<\/script>/g)].map(m=>"\x27sha256-"+crypto.createHash("sha256").update(m[1]).digest("base64")+"\x27")))].join("\n"))'

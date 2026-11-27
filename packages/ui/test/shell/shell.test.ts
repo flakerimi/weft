@@ -357,9 +357,29 @@ describe('Header', () => {
 })
 
 describe('Footer', () => {
-  it('is the page footer, its row stacking when its own width is narrow', async () => {
+  it('is the page footer, its row stacking when its own width is narrow, and carries data-weft-w so hydration in an island keeps its pre-paint width without flipping', async () => {
+    const pre = document.createElement('footer')
+    pre.setAttribute('data-width', 'narrow')
+    pre.setAttribute('data-weft-w', 'w-i0-0')
+    document.body.appendChild(pre)
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const { createVaporApp } = await import('vue')
+    const { ID_SCOPE } = await import('../../src/headless/useId.ts')
+    const Footer = (await import('../../src/shell/Footer.vue')).default
+    const app = createVaporApp(Footer as never)
+    app.provide(ID_SCOPE, { prefix: 'i0', next: 0 })
+    app.mount(host)
+    const hydratedFooter = host.querySelector('footer.weft-footer') as HTMLElement
+    expect(hydratedFooter.getAttribute('data-weft-w')).toBe('w-i0-0')
+    expect(hydratedFooter.dataset.width).toBe('narrow')
+    app.unmount()
+    host.remove()
+    pre.remove()
+
     await mountAt(HeaderCases as typeof ShellCases, {})
     const footer = $('footer.weft-footer')
+    expect(footer.getAttribute('data-weft-w')).toBeNull()
     expect($('.weft-footer__leading .copy', footer)).not.toBeNull()
     expect($('.weft-footer__center a', footer).getAttribute('href')).toBe('/privacy')
     expect($('.weft-footer__trailing a', footer)).not.toBeNull()
