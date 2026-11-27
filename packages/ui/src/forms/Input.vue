@@ -5,7 +5,7 @@
 // Attributes go to the <input> itself (placeholder, autocomplete, aria-*),
 // except class and style, which go to the box. A press anywhere on the box
 // outside the text, or on its touch hit area, focuses the text.
-import { useTemplateRef } from 'vue'
+import { computed, useTemplateRef } from 'vue'
 import Icon from '../basics/Icon.vue'
 import Spinner from '../basics/Spinner.vue'
 import { useId } from '../headless/useId.ts'
@@ -69,7 +69,8 @@ defineSlots<{
 
 const f = useField(props)
 const { own, box, describedBy } = useControlAttrs(f)
-const id = f.id.value ?? (f.name.value ? undefined : useId('input'))
+const fallback = f.id.value || f.name.value ? undefined : useId('input')
+const id = computed(() => f.id.value ?? (f.name.value ? undefined : fallback))
 
 const input = useTemplateRef<HTMLInputElement>('input')
 

@@ -55,7 +55,8 @@ const emit = defineEmits<{
 
 const f = useField(props)
 const { own, box, describedBy } = useControlAttrs(f)
-const id = f.id.value ?? (f.name.value ? undefined : useId('textarea'))
+const fallback = f.id.value || f.name.value ? undefined : useId('textarea')
+const id = computed(() => f.id.value ?? (f.name.value ? undefined : fallback))
 // One element takes both: the textarea is its own box.
 const attrs = computed(() => ({ ...own.value, ...box.value }))
 const area = useTemplateRef<HTMLTextAreaElement>('area')

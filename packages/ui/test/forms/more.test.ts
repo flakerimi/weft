@@ -41,6 +41,15 @@ describe('Textarea', () => {
     expect(area.getAttribute('aria-describedby')).toBe(field.querySelector('.weft-form-field__hint')!.id)
   })
 
+  it('updates the DOM id when the id prop changes after mount', async () => {
+    const m = cases({ case: 'textarea' })
+    const area = m.el.querySelector<HTMLTextAreaElement>('textarea.dynamic-id')!
+    expect(area.id).toBe('first')
+    m.exposed.dynamicId = 'second'
+    await nextTick()
+    expect(area.id).toBe('second')
+  })
+
   describe('autoresize', () => {
     /** Give the textarea a 20 px line and no padding or border, and say how tall its text is. */
     function sized(area: HTMLTextAreaElement, content: () => number) {
@@ -226,6 +235,15 @@ describe('InputNumber', () => {
     const f = cases({ case: 'number' }).el.querySelector('.in-field')!
     await nextTick()
     expect(f.querySelector('label')!.htmlFor).toBe(f.querySelector('input')!.id)
+  })
+
+  it('updates the DOM id when the id prop changes after mount', async () => {
+    const m = cases({ case: 'number' })
+    const input = field(m.el, '.dynamic-id')
+    expect(input.id).toBe('first')
+    m.exposed.dynamicId = 'second'
+    await nextTick()
+    expect(input.id).toBe('second')
   })
 })
 

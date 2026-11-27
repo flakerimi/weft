@@ -269,7 +269,7 @@ for (const s of scenes) {
           </div>
           <picture>
             <source srcset="/loom-480.avif, /loom-960.avif 2x" type="image/avif" />
-            <img src="/loom-480.webp" srcset="/loom-960.webp 2x" width="480" height="480" alt="" loading="lazy" decoding="async" style="aspect-ratio: 1" />
+            <img src="/loom-480.webp" srcset="/loom-960.webp 2x" width="480" height="480" alt="" loading="lazy" decoding="async" />
           </picture>
         </div>
       </section>

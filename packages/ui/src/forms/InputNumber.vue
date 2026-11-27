@@ -68,7 +68,8 @@ const emit = defineEmits<{
 
 const f = useField(props)
 const { own, box, describedBy } = useControlAttrs(f)
-const id = f.id.value ?? (f.name.value ? undefined : useId('input-number'))
+const fallback = f.id.value || f.name.value ? undefined : useId('input-number')
+const id = computed(() => f.id.value ?? (f.name.value ? undefined : fallback))
 const model = useControllable(props, 'modelValue', emit, () => props.defaultValue)
 const input = useTemplateRef<HTMLInputElement>('input')
 

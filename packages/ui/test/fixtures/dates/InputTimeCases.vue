@@ -21,22 +21,25 @@ const props = withDefaults(defineProps<{
   readonly?: boolean
   range?: boolean
   standalone?: boolean
+  id?: string
+  name?: string
 }>(), { initial: undefined })
 const input = ref<Input | undefined>(props.input)
 const value = ref(((props.initial ?? null) as TimeInput | TimeRange | null))
+const dynamicId = ref<string | undefined>(props.id)
 const submitted = ref<string | null>(null)
 function onSubmit(event: Event) {
   event.preventDefault()
   const data = new FormData(event.target as HTMLFormElement)
   submitted.value = props.range ? `${data.get('at[start]')}–${data.get('at[end]')}` : (data.get('at') as string | null)
 }
-defineExpose({ input, value, submitted })
+defineExpose({ input, value, dynamicId, submitted })
 </script>
 
 <template>
   <WeftProvider :input="input" :locale="locale">
     <div :dir="dir">
-      <InputTime v-if="standalone" v-model="value as never" :range="range" />
+      <InputTime v-if="standalone" :id="dynamicId" v-model="value as never" :range="range" :name="name" />
       <form v-else @submit="onSubmit">
         <FormField label="Start time" name="at" description="Local time">
           <InputTime

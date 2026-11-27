@@ -41,6 +41,15 @@ describe('Input', () => {
     expect(input.id).toMatch(/^input-/)
   })
 
+  it('updates the DOM id when the id prop changes after mount', async () => {
+    const m = cases({ case: 'model' })
+    const input = m.el.querySelector<HTMLInputElement>('.dynamic-id input')!
+    expect(input.id).toBe('first')
+    m.exposed.dynamicId = 'second'
+    await nextTick()
+    expect(input.id).toBe('second')
+  })
+
   it('gives attributes to the input, and class and style to the box', () => {
     const box = render({ class: 'wide', style: 'color: red', placeholder: 'Search', autocomplete: 'email', 'aria-label': 'Find', name: 'q' })
     expect(box.classList.contains('wide')).toBe(true)

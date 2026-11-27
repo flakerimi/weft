@@ -10,21 +10,24 @@ const price = ref<number | null>(0.1)
 const volume = ref<number | number[]>(40)
 const span = ref<number | number[]>([20, 60])
 const code = ref('')
+const dynamicId = ref<string | undefined>('first')
 const completed = ref<string[]>([])
 const changes = ref<(number | number[])[]>([])
-defineExpose({ note, qty, price, volume, span, code, completed, changes })
+defineExpose({ note, qty, price, volume, span, code, dynamicId, completed, changes })
 void props
 </script>
 
 <template>
   <div v-if="$props.case === 'textarea'">
     <Textarea v-model="note" class="bound" :autoresize="autoresize" :maxrows="maxrows" placeholder="Notes" />
+    <Textarea :id="dynamicId" class="dynamic-id" />
     <FormField label="Bio" hint="A line or two." class="in-field"><Textarea /></FormField>
   </div>
   <div v-else-if="$props.case === 'number'">
     <InputNumber v-model="qty" class="qty" :min="0" :max="10" :wheel="wheel" aria-label="Quantity" />
     <InputNumber v-model="price" class="price" :step="0.1" aria-label="Price" />
     <InputNumber class="free" aria-label="Free" />
+    <InputNumber :id="dynamicId" class="dynamic-id" aria-label="Dynamic" />
     <FormField label="Seats" class="in-field"><InputNumber /></FormField>
   </div>
   <div v-else-if="$props.case === 'slider'" :dir="dir">
