@@ -1,5 +1,5 @@
 // Package middleware is what a Warp app puts around its requests when the
-// middleware module is listed: security headers on every answer, and one log
+// middleware module is listed: security headers on every answer, one log
 // line per request, and a rate limit per client on the API.
 //
 // It is configured in .env, read when the app starts: LOG is text (the
