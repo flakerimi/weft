@@ -54,11 +54,13 @@ platforms it claims, and the docs saying what it brought.
 
 What a newcomer meets first works, on every platform.
 
-- **Windows supported:** the release workflow's Windows tests pass; `weft dev`
-  stops its process trees with a Job Object; the installer has a PowerShell
-  form; the docs say Windows is supported. The suite runs on all three
-  platforms on every push (free now that the repository is public).
-- **The Go module from GitHub:** with the repository public, an app's `go.mod`
+- **Windows supported:** the release workflow's Windows tests pass (done,
+  0.0.19); `weft dev` stops its process trees with a Job Object (done,
+  0.0.19); the installer has a PowerShell form; the docs say Windows is
+  supported. The suite runs on all three platforms on every push to `main`
+  (done: `ci.yml` runs Linux on every push and pull request, macOS and
+  Windows on every push to `main`).
+- **The Go module from GitHub (done, 0.0.12):** with the repository public, an app's `go.mod`
   can require `github.com/flakerimi/weft` at the release's tag instead of
   replacing it with `./.weft/go`; tag each release (`vX.Y.Z`) and attach the
   six archives to a public GitHub Release made from the same build the site
@@ -70,14 +72,14 @@ What a newcomer meets first works, on every platform.
   (server paging, sorting, filtering over the list shape) and `EntityDialog`;
   the app template takes the shop's frame (data, the login and its pages, and
   `hello`, with no starter resource).
-- **Landing blocks** (Weft phase 7): `Hero`, `FeatureGrid`, `Pricing`,
+- **Landing blocks (done, 0.0.13)** (Weft phase 7): `Hero`, `FeatureGrid`, `Pricing`,
   `Testimonials`, `Faq`, `Cta`.
 - **The benchmark** run on a quiet machine with every series interleaved, and
   Weft not behind on requests a second and time to first byte (Weft phase 7's
   "beats Astro on every row" stays the aim for the rows Weft can win: bytes
   and LCP are a choice of what an island ships, said plainly where it loses).
-- **A changelog**, `CHANGELOG.md`, from 0.1.0 on, and branch protection on
-  `main`.
+- **A changelog**, `CHANGELOG.md` (done, 0.0.18), and branch protection on
+  `main` (done: no force push or deletion, admins included).
 
 ### 0.2.0: accounts (W4, with the middleware it needs)
 
