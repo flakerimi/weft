@@ -33,7 +33,7 @@ import Button from '../basics/Button.vue'
 import Icon from '../basics/Icon.vue'
 import Link from '../basics/Link.vue'
 import { useWeft } from '../adaptive/context.ts'
-import { useWidth } from '../adaptive/useWidth.ts'
+import { useViewportWidth } from '../adaptive/useWidth.ts'
 import { focus, focused } from '../headless/dom.ts'
 import { useControllable } from '../headless/useControllable.ts'
 import { useId } from '../headless/useId.ts'
@@ -102,11 +102,10 @@ const collapsed = useControllable(props, 'collapsed', emit, () => props.defaultC
 const root = useTemplateRef<HTMLElement>('root')
 if (persist) usePrePaint(`app-shell:${persist}`, collapsedSnippet(persist))
 
-// Narrow is the viewport's width: the root element's.
-const viewport = shallowRef<HTMLElement | null>(null)
+// The viewport's width class, as the `@media` fallback before mounting sees it.
+const width = useViewportWidth()
 const mounted = shallowRef(false)
 onMounted(() => {
-  viewport.value = document.documentElement
   mounted.value = true
   if (persist) {
     const stored = readCollapsed(persist)
@@ -114,7 +113,6 @@ onMounted(() => {
   }
 })
 watch(collapsed, (on) => persist && mounted.value && writeCollapsed(persist, on))
-const width = useWidth(viewport, { prepaint: false })
 /** Unset until mounted: CSS picks from the viewport. */
 const layout = computed(() => {
   if (!mounted.value) return undefined

@@ -36,7 +36,7 @@ import Button from '../basics/Button.vue'
 import Icon from '../basics/Icon.vue'
 import Link from '../basics/Link.vue'
 import { useWeft } from '../adaptive/context.ts'
-import { useWidth } from '../adaptive/useWidth.ts'
+import { useViewportWidth } from '../adaptive/useWidth.ts'
 import { focus, focused, isRtl } from '../headless/dom.ts'
 import { useDismiss } from '../headless/useDismiss.ts'
 import { useFloating } from '../headless/useFloating.ts'
@@ -78,14 +78,12 @@ defineSlots<{
 const weft = useWeft()
 const id = useId('nav')
 const root = useTemplateRef<HTMLElement>('root')
+// The viewport's width class, as the `@media` fallback before mounting sees it.
+const width = useViewportWidth()
 const mounted = ref(false)
-// Narrow is the viewport's width: the root element's.
-const viewport = shallowRef<HTMLElement | null>(null)
 onMounted(() => {
-  viewport.value = document.documentElement
   mounted.value = true
 })
-const width = useWidth(viewport, { prepaint: false })
 const horizontal = computed(() => props.orientation === 'horizontal')
 const form = computed<'bar' | 'sheet' | 'column'>(() =>
   !horizontal.value ? 'column' : weft.input.value === 'touch' && width.value === 'narrow' ? 'sheet' : 'bar',

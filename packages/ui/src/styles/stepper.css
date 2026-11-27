@@ -1,13 +1,15 @@
 /* Stepper: indicators joined by lines. Horizontal, each step takes an equal
    share of the row, its indicator above its text; vertical, the indicators
    stand in a column with the line running down between them. Done steps and
-   the current one are in the tone (done ones filled), the rest muted. */
+   the current one are in the tone (done ones filled), the rest muted. A
+   horizontal stepper whose own box is narrow (`data-width`, which the
+   pre-paint script sets before hydration) is drawn vertical. */
 .weft-stepper { display: flex; flex-direction: column; gap: var(--weft-space-4, 16px); }
 .weft-stepper__list { display: flex; margin: 0; padding: 0; list-style: none; }
-.weft-stepper[data-orientation="vertical"] > .weft-stepper__list { flex-direction: column; }
+.weft-stepper:is([data-orientation="vertical"], [data-width="narrow"]) > .weft-stepper__list { flex-direction: column; }
 .weft-stepper__item { position: relative; display: flex; flex: 1; min-inline-size: 0; }
-.weft-stepper[data-orientation="vertical"] .weft-stepper__item { padding-block-end: var(--weft-space-4, 16px); }
-.weft-stepper[data-orientation="vertical"] .weft-stepper__item:last-child { padding-block-end: 0; }
+.weft-stepper:is([data-orientation="vertical"], [data-width="narrow"]) .weft-stepper__item { padding-block-end: var(--weft-space-4, 16px); }
+.weft-stepper:is([data-orientation="vertical"], [data-width="narrow"]) .weft-stepper__item:last-child { padding-block-end: 0; }
 
 .weft-stepper__trigger {
   position: relative;
@@ -26,7 +28,7 @@
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.weft-stepper[data-orientation="horizontal"] .weft-stepper__trigger { flex-direction: column; align-items: center; text-align: center; inline-size: 100%; }
+.weft-stepper[data-orientation="horizontal"]:where(:not([data-width="narrow"])) .weft-stepper__trigger { flex-direction: column; align-items: center; text-align: center; inline-size: 100%; }
 .weft-stepper__trigger:disabled { cursor: not-allowed; }
 .weft-stepper__trigger:focus-visible { outline: var(--weft-focus-width, 2px) solid var(--weft-color-focus, Highlight); outline-offset: 2px; }
 
@@ -57,13 +59,13 @@
 
 .weft-stepper__separator { position: absolute; background: var(--weft-color-border, GrayText); }
 .weft-stepper__item[data-state="completed"] .weft-stepper__separator { background: var(--weft-tone, CanvasText); }
-.weft-stepper[data-orientation="horizontal"] .weft-stepper__separator {
+.weft-stepper[data-orientation="horizontal"]:where(:not([data-width="narrow"])) .weft-stepper__separator {
   inset-block-start: calc(var(--weft-control-sm, 28px) / 2 - var(--weft-border-width-strong, 2px) / 2);
   inset-inline-start: calc(50% + var(--weft-control-sm, 28px) / 2 + var(--weft-space-1, 4px));
   inset-inline-end: calc(-50% + var(--weft-control-sm, 28px) / 2 + var(--weft-space-1, 4px));
   block-size: var(--weft-border-width-strong, 2px);
 }
-.weft-stepper[data-orientation="vertical"] .weft-stepper__separator {
+.weft-stepper:is([data-orientation="vertical"], [data-width="narrow"]) .weft-stepper__separator {
   inset-block: calc(var(--weft-control-sm, 28px) + var(--weft-space-1, 4px)) var(--weft-space-1, 4px);
   inset-inline-start: calc(var(--weft-control-sm, 28px) / 2 - var(--weft-border-width-strong, 2px) / 2);
   inline-size: var(--weft-border-width-strong, 2px);

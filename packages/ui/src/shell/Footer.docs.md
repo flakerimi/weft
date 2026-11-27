@@ -6,7 +6,7 @@ avoid: Inside a card or a dialog, use their own footer slots.
 adapts:
   input: Nothing changes between pointer and touch; links inside bring their own touch sizes (Link with `standalone`).
   surface: Nothing changes in behaviour; text follows the surface's type scale.
-  width: When its own width is narrow (under 640 px) the row stacks its parts, centred.
+  width: When its own width is narrow (under 640 px) the row stacks its parts, centred. Before it mounts, and on a page that is never hydrated, a viewport under 640 px does; on a page that carries the pre-paint width script (for a component that measures its own box), the script measures the Footer's own box too, as the mounted Footer does.
 ---
 Slots: `top` (a band above, such as columns of links), `leading` (the start
 of the row), the default slot (its middle), `trailing` (its end) and

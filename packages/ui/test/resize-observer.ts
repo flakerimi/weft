@@ -1,4 +1,4 @@
-type Callback = (entries: { contentRect: { width: number }; target: Element }[]) => void
+type Callback = (entries: { contentRect: { width: number }; borderBoxSize: { inlineSize: number; blockSize: number }[]; target: Element }[]) => void
 
 /** A ResizeObserver stand-in whose sizes tests report by hand. */
 export function installResizeObserver() {
@@ -13,8 +13,9 @@ export function installResizeObserver() {
   const original = globalThis.ResizeObserver
   globalThis.ResizeObserver = FakeObserver as unknown as typeof ResizeObserver
   return {
-    report(el: Element, width: number) {
-      live.forEach((o) => o.targets.has(el) && o.cb([{ contentRect: { width }, target: el }]))
+    /** Report `el` at a border box `width` px wide, its content box `content` px (the same, unless padded). */
+    report(el: Element, width: number, content = width) {
+      live.forEach((o) => o.targets.has(el) && o.cb([{ contentRect: { width: content }, borderBoxSize: [{ inlineSize: width, blockSize: 0 }], target: el }]))
     },
     liveCount: () => live.size,
     restore() { globalThis.ResizeObserver = original },

@@ -1,6 +1,7 @@
 /* Pagination: a row of Buttons, wrapping when it must. The ellipsis takes a
    button's width so the row does not shift; the arrows mirror right to
-   left. */
+   left. Before mounting both forms are drawn, an entry of one form only
+   marked data-only, and the viewport picks the form, as Header does. */
 .weft-pagination__list {
   display: flex;
   flex-wrap: wrap;
@@ -21,3 +22,9 @@
 }
 .weft-pagination__glyph { inline-size: 16px; block-size: 16px; }
 [dir="rtl"] .weft-pagination__glyph { scale: -1 1; }
+@media (max-width: 639.98px) {
+  .weft-pagination__list > [data-only="wide"] { display: none; }
+}
+@media (min-width: 640px) {
+  .weft-pagination__list > [data-only="narrow"] { display: none; }
+}

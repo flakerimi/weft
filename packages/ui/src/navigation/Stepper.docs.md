@@ -6,7 +6,7 @@ avoid: For views a reader moves between freely, use Tabs; for where a page sits 
 adapts:
   input: Each step button is at least --weft-hit-min tall on touch.
   surface: Nothing changes in behaviour; text follows the surface's type scale.
-  width: A horizontal stepper stacks vertically when its own width is narrow (under 640 px).
+  width: A horizontal stepper stacks vertically when its own width is narrow (under 640 px). CSS does it from `data-width`, which the page's pre-paint script sets, so a page that is never hydrated adapts too; the arrow keys follow once hydrated.
 ---
 `items` are `{ title, description, value, icon, content, disabled, slot }`;
 a step's value is its `value`, else its index. Bind the current step with

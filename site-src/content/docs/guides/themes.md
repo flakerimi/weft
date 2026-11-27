@@ -31,7 +31,7 @@ Every value a component draws with is a `--weft-*` custom property:
 | Tokens | What they set |
 | --- | --- |
 | `--weft-color-bg`, `-surface`, `-surface-raised`, `-border` | The page, cards and raised panels, and lines |
-| `--weft-color-text`, `-text-muted` | Text |
+| `--weft-color-text`, `-text-muted` | Text. Muted text is drawn on the page, cards and raised panels, so it must reach 4.5:1 on all three; on a tint of the text colour (a pill tab list, a hovered or active item, a soft panel, initials) components draw the full text colour |
 | `--weft-color-primary`, `-danger`, `-warning`, `-success`, `-info` | The four tones, info, and `-focus` for focus rings |
 | `--weft-color-primary-soft` | A pale ground of the primary, under selected table rows and tree items |
 | `--weft-space-1`, `-2`, `-3`, `-4`, `-6`, `-8` (no 5 or 7), `--weft-radius-control`, `-card`, `-panel` | Spacing and corners |

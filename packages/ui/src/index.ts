@@ -152,6 +152,28 @@ export {
   type TableResult,
 } from './data/table.ts'
 export { useTableData, type TableData, type TableDataOptions, type TableEntry } from './data/useTableData.ts'
+export { default as EntityDialog } from './data/EntityDialog.vue'
+export { default as DataTable } from './data/DataTable.vue'
+export {
+  changes,
+  DATA_TABLE_LABELS,
+  ENTITY_DIALOG_LABELS,
+  entityProblem,
+  fieldChoices,
+  humanLabel,
+  inferControl,
+  initialDraft,
+  isNonScalarRule,
+  ruleKind,
+  type DataResource,
+  type DataTableFilter,
+  type DataTableLabels,
+  type EntityControlKind,
+  type EntityDialogLabels,
+  type EntityFieldConfig,
+  type EntityFieldRule,
+  type EntitySchema,
+} from './data/entity.ts'
 export { default as StatCard } from './data/StatCard.vue'
 export type { StatLabels } from './data/stat.ts'
 export { default as Timeline } from './data/Timeline.vue'

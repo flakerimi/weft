@@ -6,7 +6,7 @@ avoid: For a feed a reader scrolls, load more as they reach the end; for steps o
 adapts:
   input: Every button is at least --weft-hit-min tall on touch (Button's rule).
   surface: Nothing changes in behaviour; text follows the surface's type scale.
-  width: When the viewport is narrow it shows at most one page each side of the current one and drops the first and last buttons; the row wraps when it must.
+  width: When the viewport is narrow it shows at most one page each side of the current one and drops the first and last buttons; the row wraps when it must. Before it mounts it draws the entries of both forms and a viewport media query shows one, so a page that is never hydrated pages right too.
 ---
 Bind the current page with `v-model:page` (from 1). `total` is the number
 of items and `items-per-page` the size of a page. `sibling-count` (2) pages

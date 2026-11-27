@@ -68,7 +68,6 @@ export function commandsNotYet(comingNext: string): string[] {
 export const NOT_YET: { see: string; missing: string; instead: string }[] = [
   { see: 'Login and permissions', missing: 'Roles other than the owner, registration and password reset', instead: 'sign in with `auth.Module()`, whose one role is the owner; `auth.AddUser` with the role `owner` adds another person, and any other role gets 403 everywhere' },
   { see: 'Data', missing: 'PostgreSQL, MySQL and relations between records', instead: 'keep records in SQLite with `warp/data`, and an id field for a link' },
-  { see: 'Scaffolding and app blocks', missing: '`DataTable` and `EntityDialog`', instead: 'use `Table`, and a `Dialog` with a `Form`' },
   { see: 'Attachments and live data', missing: 'Attachments, `useLive` and the charts', instead: 'use `FileUpload` with a handler of your own mounted with `app.Handle`, and `StatCard`' },
   { see: 'App routes', missing: 'A client-side router and `layouts/`', instead: 'each page is a document of its own; share a layout as a component the pages use' },
 ]

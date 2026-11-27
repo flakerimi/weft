@@ -97,8 +97,8 @@ exactly (`'sha256-tx8/QjztXL6iQA+dqwGLMSVBWxKaWIfL8huD/H0v4SY='`)
     (function(){window.addEventListener("submit",function(e){var t=e.target;if(t&&t.classList&&t.classList.contains("weft-form"))e.preventDefault()},true)})()
 
 and a page whose other components register pre-paint code too (Grid or the
-landing blocks Hero, FeatureGrid, Pricing, Testimonials, Faq and Cta via
-`useWidth`, AppShell with `persist`, or a closable Banner with an `id`) has
+landing blocks Hero, FeatureGrid, Pricing, Testimonials, Faq and Cta, a
+horizontal Stepper or Timeline or a vertical Tabs, via `useWidth`, AppShell with `persist`, or a closable Banner with an `id`) has
 each wrapped snippet joined into the same script with `;\n`, one per line.
 Because the script's text — and so its hash — changes with which components
 a page renders, the order they register in, and each AppShell `persist` key

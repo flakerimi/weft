@@ -2695,6 +2695,360 @@
       ]
     },
     {
+      "name": "DataTable",
+      "group": "data",
+      "file": "packages/ui/src/data/DataTable.vue",
+      "purpose": "A CRUD resource table with search, filters, EntityDialog and ConfirmDialog.",
+      "use": "For a resource table backed by a generated Warp client (`api.<plural>`) and schema (`schema.<Name>Input`), with server-paged listing, search, filters, creation, editing and deletion.",
+      "avoid": "For a read-only table over an array or a custom fetcher without CRUD dialogs, use Table; for a few key metrics, use StatCard.",
+      "adapts": {
+        "input": "Inherits Table's, Button's and the dialog controls' touch hit areas (at least 44 px, with row action buttons switching to `md` on coarse pointers).",
+        "surface": "Nothing changes in behaviour; `size` sets the row height and text follows the surface's type scale.",
+        "width": "When its own box is narrow (under 640 px), Table switches rows to cards, toolbar filter definitions with four or fewer choices switch from a horizontal RadioGroup to a Select, and EntityDialog goes full-screen."
+      },
+      "props": [
+        {
+          "name": "columns",
+          "type": "TableColumn<T>[]",
+          "required": true,
+          "default": null,
+          "description": "Table columns."
+        },
+        {
+          "name": "resource",
+          "type": "DataResource<T, TInput>",
+          "required": false,
+          "default": "undefined",
+          "description": "Generated resource `{ list, create, update, remove }`."
+        },
+        {
+          "name": "fetch",
+          "type": "TableFetch<T>",
+          "required": false,
+          "default": "undefined",
+          "description": "List fetcher."
+        },
+        {
+          "name": "create",
+          "type": "(body: TInput) => Promise<T>",
+          "required": false,
+          "default": "undefined",
+          "description": "Create handler."
+        },
+        {
+          "name": "update",
+          "type": "(id: any, body: Partial<TInput>) => Promise<T>",
+          "required": false,
+          "default": "undefined",
+          "description": "Update handler."
+        },
+        {
+          "name": "remove",
+          "type": "(id: any) => Promise<unknown>",
+          "required": false,
+          "default": "undefined",
+          "description": "Delete handler."
+        },
+        {
+          "name": "schema",
+          "type": "{ [K in Name]?: EntityFieldRule }",
+          "required": false,
+          "default": "undefined",
+          "description": "Field schema."
+        },
+        {
+          "name": "fields",
+          "type": "EntityFieldConfig[]",
+          "required": false,
+          "default": "undefined",
+          "description": "Field configs."
+        },
+        {
+          "name": "defaults",
+          "type": "Partial<TInput> | (() => Partial<TInput>)",
+          "required": false,
+          "default": "undefined",
+          "description": "Default values."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": "'item'",
+          "description": "Singular name."
+        },
+        {
+          "name": "idKey",
+          "type": "string",
+          "required": false,
+          "default": "'id'",
+          "description": "ID property."
+        },
+        {
+          "name": "labelKey",
+          "type": "string",
+          "required": false,
+          "default": "'name'",
+          "description": "Label property."
+        },
+        {
+          "name": "searchable",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Show search input."
+        },
+        {
+          "name": "search",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "Search string."
+        },
+        {
+          "name": "defaultSearch",
+          "type": "string",
+          "required": false,
+          "default": "''",
+          "description": "Initial search."
+        },
+        {
+          "name": "searchPlaceholder",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "Search placeholder."
+        },
+        {
+          "name": "searchDebounce",
+          "type": "number",
+          "required": false,
+          "default": "250",
+          "description": "Debounce in ms."
+        },
+        {
+          "name": "filterDefs",
+          "type": "DataTableFilter[]",
+          "required": false,
+          "default": "undefined",
+          "description": "Toolbar filters."
+        },
+        {
+          "name": "filters",
+          "type": "Record<string, string>",
+          "required": false,
+          "default": "undefined",
+          "description": "Active filters."
+        },
+        {
+          "name": "defaultFilters",
+          "type": "Record<string, string>",
+          "required": false,
+          "default": null,
+          "description": "Initial filters."
+        },
+        {
+          "name": "perPage",
+          "type": "number",
+          "required": false,
+          "default": "20",
+          "description": "Rows per page."
+        },
+        {
+          "name": "page",
+          "type": "number",
+          "required": false,
+          "default": "undefined",
+          "description": "Current page."
+        },
+        {
+          "name": "defaultPage",
+          "type": "number",
+          "required": false,
+          "default": "1",
+          "description": "Initial page."
+        },
+        {
+          "name": "sort",
+          "type": "string | null",
+          "required": false,
+          "default": "undefined",
+          "description": "Current sort."
+        },
+        {
+          "name": "defaultSort",
+          "type": "string | null",
+          "required": false,
+          "default": "null",
+          "description": "Initial sort."
+        },
+        {
+          "name": "selectable",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "Row checkboxes."
+        },
+        {
+          "name": "selected",
+          "type": "RowKey[]",
+          "required": false,
+          "default": "undefined",
+          "description": "Selected keys."
+        },
+        {
+          "name": "defaultSelected",
+          "type": "RowKey[]",
+          "required": false,
+          "default": null,
+          "description": "Initial selected."
+        },
+        {
+          "name": "caption",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "Table caption."
+        },
+        {
+          "name": "hideCaption",
+          "type": "boolean",
+          "required": false,
+          "default": "true",
+          "description": "Hide caption."
+        },
+        {
+          "name": "emptyTitle",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "Empty title."
+        },
+        {
+          "name": "emptyDescription",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "Empty description."
+        },
+        {
+          "name": "emptyIcon",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "Empty icon."
+        },
+        {
+          "name": "size",
+          "type": "'sm' | 'md' | 'lg'",
+          "required": false,
+          "default": "'md'",
+          "description": "Row size."
+        },
+        {
+          "name": "labels",
+          "type": "Partial<DataTableLabels>",
+          "required": false,
+          "default": null,
+          "description": "Labels override."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:search",
+          "payload": "[q: string]",
+          "description": "The search text changed."
+        },
+        {
+          "name": "update:filters",
+          "payload": "[filters: Record<string, string>]",
+          "description": "The active filter values changed."
+        },
+        {
+          "name": "update:sort",
+          "payload": "[sort: string | null]",
+          "description": "The sort changed."
+        },
+        {
+          "name": "update:page",
+          "payload": "[page: number]",
+          "description": "The current page changed."
+        },
+        {
+          "name": "update:selected",
+          "payload": "[keys: RowKey[]]",
+          "description": "The chosen rows changed."
+        },
+        {
+          "name": "saved",
+          "payload": "[record: T]",
+          "description": "Emitted after create or update succeeds."
+        },
+        {
+          "name": "deleted",
+          "payload": "[record: T]",
+          "description": "Emitted after delete succeeds."
+        },
+        {
+          "name": "error",
+          "payload": "[error: unknown]",
+          "description": "Emitted when `fetch`, `create`, `update`, or `remove` rejects."
+        }
+      ],
+      "slots": [
+        {
+          "name": "toolbar",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "toolbar-actions",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "dialog",
+          "props": [
+            "state",
+            "record",
+            "schema"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "empty",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "<key>-cell",
+          "props": [
+            "row",
+            "value",
+            "index",
+            "column"
+          ],
+          "dynamic": true
+        },
+        {
+          "name": "<key>-header",
+          "props": [
+            "column"
+          ],
+          "dynamic": true
+        }
+      ],
+      "notes": "It has no stylesheet of its own: it composes `Stack`, `FormField`, `Input`,\n`RadioGroup`, `Select`, `Button`, `Table`, `EmptyState`, `EntityDialog` and\n`ConfirmDialog`.\n\n`DataTable` pairs a toolbar, `Table`, `EntityDialog` and `ConfirmDialog`\naround a generated Warp resource (`{ list, create, update, remove }`) and its\nfield schema (`schema.ProductInput` from `weft gen`). Pass\n`:resource=\"api.products\"` (or individual `fetch`, `create`, `update` and\n`remove` functions) and `:schema=\"schema.ProductInput\"`.\n\n**Toolbar.** When `searchable` is true (the default), the toolbar renders a\nsearch `Input` bound to `v-model:search` with `search-debounce` (default\n250 ms). Each entry in `filter-defs` (`{ key, label, items, allLabel, control }`)\nrenders a filter control bound into `v-model:filters`, prepending\n`allLabel || labels.anyFilter` (default `\"Any\"`, value `\"\"`) unless\n`allLabel: false`; filters with four or fewer options render a horizontal\n`RadioGroup` on regular and wide containers and a `Select` when narrow. When\n`create` and `schema` (or `#dialog`) are present, a `\"New <name>\"` button\nopens `EntityDialog` in create mode.\n\n**Columns and row actions.** `columns` takes the same typed array as `Table`,\nand every `#<key>-cell` and `#<key>-header` slot forwards to `Table`.\nUnslotted cells format numbers in the `WeftProvider`'s locale (`en-US` by\ndefault) and booleans with `labels.booleanYes` / `labels.booleanNo`. When\n`update` (with `schema` or `#dialog`) or `remove` is present and `columns` has\nno `actions` column, `DataTable` appends a trailing `Actions` column with\n`Edit` (`aria-label` `\"Edit <itemLabel>\"`) and `Delete` (`aria-label`\n`\"Delete <itemLabel>\"`).\n\n**Dialogs and refresh.** Saving in `EntityDialog` emits `saved` and refreshes\n`Table`. Confirming in `ConfirmDialog` calls `remove(row[idKey])`, emits\n`deleted`, refreshes the table, and moves focus to the next row's action\nbutton (or `\"New <name>\"` when empty); if `remove` rejects, the dialog stays\nopen with an `Alert` (`role=\"alert\"`). `defineExpose` provides `refresh()`,\n`edit(record)` and `askRemove(record)`.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/DataTable/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { DataTable, type EntitySchema, type TableColumn } from '@weft/ui'\n\ninterface Item {\n  id: number\n  name: string\n  status: string\n}\n\ntype ItemInput = Omit<Item, 'id'>\n\nconst schema: EntitySchema = {\n  name: { kind: 'string', required: true },\n  status: { kind: 'string', required: true, enum: ['draft', 'live'] },\n}\n\nconst columns: TableColumn<Item>[] = [\n  { key: 'name', label: 'Name', sortable: true, rowHeader: true },\n  { key: 'status', label: 'Status' },\n]\n\nlet items: Item[] = [\n  { id: 1, name: 'Kettle', status: 'live' },\n  { id: 2, name: 'Lamp', status: 'draft' },\n]\n\nconst resource = {\n  list: async () => ({ items, total: items.length }),\n  create: async (b: ItemInput) => ((items = [...items, { id: items.length + 1, ...b }]), items.at(-1)!),\n  update: async (id: number, b: Partial<ItemInput>) => ((items = items.map((r) => (r.id === id ? { ...r, ...b } : r))), items[0]!),\n  remove: async (id: number) => (items = items.filter((r) => r.id !== id)),\n}\n</script>\n\n<template>\n  <DataTable :resource=\"resource\" :schema=\"schema\" :columns=\"columns\" name=\"product\" caption=\"Products\" :per-page=\"5\" />\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "DatePicker",
       "group": "dates",
       "file": "packages/ui/src/dates/DatePicker.vue",
@@ -3688,6 +4042,166 @@
       ]
     },
     {
+      "name": "EntityDialog",
+      "group": "data",
+      "file": "packages/ui/src/data/EntityDialog.vue",
+      "purpose": "A dialog that creates or edits a record from a Weft field schema.",
+      "use": "For making or editing a resource record from a generated `schema.<Name>Input`, with client validation, diffed PATCH updates and server error mapping.",
+      "avoid": "For a confirmation with no fields, use ConfirmDialog; for a dialog whose content is not an entity form, use Dialog with Form.",
+      "adapts": {
+        "input": "Inherits Dialog's and the inner form controls' touch hit areas (at least 44 px).",
+        "surface": "Nothing changes in behaviour; text and spacing follow the surface's type scale.",
+        "width": "Full-screen when the viewport is narrow (under 640 px), and enum fields with four or fewer choices switch from a horizontal RadioGroup to a Select."
+      },
+      "props": [
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": false,
+          "default": "undefined",
+          "description": "Open or closed, bound with `v-model:open`."
+        },
+        {
+          "name": "defaultOpen",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "Whether it starts open when `v-model:open` is not bound."
+        },
+        {
+          "name": "record",
+          "type": "T | null",
+          "required": false,
+          "default": null,
+          "description": "`null` or `undefined` for create mode; a record for edit mode."
+        },
+        {
+          "name": "schema",
+          "type": "{ [K in Name]?: EntityFieldRule }",
+          "required": true,
+          "default": null,
+          "description": "The generated `schema.<Name>Input` object."
+        },
+        {
+          "name": "create",
+          "type": "(body: TInput) => Promise<T>",
+          "required": false,
+          "default": "undefined",
+          "description": "Called on create submit (`record == null`)."
+        },
+        {
+          "name": "update",
+          "type": "(id: any, body: Partial<TInput>) => Promise<T>",
+          "required": false,
+          "default": "undefined",
+          "description": "Called on edit submit (`record != null`) with only changed fields."
+        },
+        {
+          "name": "idKey",
+          "type": "string",
+          "required": false,
+          "default": "'id'",
+          "description": "Key used to read the record ID for `update`; default `'id'`."
+        },
+        {
+          "name": "labelKey",
+          "type": "string",
+          "required": false,
+          "default": "'name'",
+          "description": "Key used to read the record's display name for the edit title; default `'name'`, falling back to `'title'`, then `name`."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "default": "'item'",
+          "description": "Singular entity name (e.g. `'product'`), used for default titles (`\"New product\"`, `\"Edit Kettle\"`)."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "Explicit dialog title override."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "Optional dialog description."
+        },
+        {
+          "name": "defaults",
+          "type": "Partial<TInput> | (() => Partial<TInput>)",
+          "required": false,
+          "default": "undefined",
+          "description": "Initial field values for create mode."
+        },
+        {
+          "name": "fields",
+          "type": "EntityFieldConfig[]",
+          "required": false,
+          "default": "undefined",
+          "description": "Ordered field configurations (`name`, `label`, `hint`, `description`, `placeholder`, `control`, `step`, `rows`, `items`, `hidden`)."
+        },
+        {
+          "name": "labels",
+          "type": "Partial<EntityDialogLabels>",
+          "required": false,
+          "default": null,
+          "description": "The words it says; give some or all to translate them."
+        }
+      ],
+      "emits": [
+        {
+          "name": "update:open",
+          "payload": "[open: boolean]",
+          "description": "Opened or closed."
+        },
+        {
+          "name": "saved",
+          "payload": "[record: T]",
+          "description": "Emitted after `create` or `update` resolves."
+        },
+        {
+          "name": "error",
+          "payload": "[error: unknown]",
+          "description": "Emitted when `create` or `update` rejects."
+        }
+      ],
+      "slots": [
+        {
+          "name": "default",
+          "props": [
+            "state",
+            "record",
+            "schema"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "<key>-field",
+          "props": [
+            "state",
+            "record",
+            "rule",
+            "field"
+          ],
+          "dynamic": true
+        }
+      ],
+      "notes": "It has no stylesheet of its own: it composes `Dialog`, `Form`, `Stack`,\n`Alert`, `FormField`, `Button` and the form controls.\n\n`EntityDialog` pairs `Dialog` and `Form` around a generated `schema`\n(`schema.ProductInput` from `weft gen`). In create mode (`record` null or\nomitted) it starts each field from `defaults` (an object or factory function,\nor the schema's empty value) and calls `create(body)` on submit. In edit mode\n(`record` set) it populates the form from `record`, diffs the submitted values\nagainst `record`, calls `update(record[idKey], changed)` with only the fields\nthat changed, and closes without a request or `saved` event when nothing\nchanged.\n\n**Controls from the schema.** Each field in `schema` renders a `FormField`\nwhose label defaults to the sentence-cased field name (`firstName` →\n`First name`, `unit_price` → `Unit price`) and whose control follows the rule:\n- `enum` (or a `fields` entry's `items`) with four or fewer choices renders a\n  horizontal `RadioGroup` on regular and wide viewports and a `Select` when\n  narrow; five or more choices render a `Select`. An optional non-nullable\n  enum prepends `labels.noneOption` (default `\"None\"`).\n- `kind: 'boolean'` (or `type: 'boolean'`) renders a `Checkbox` (or a `Switch`\n  with `control: 'switch'`).\n- `kind: 'number'` (or `type: 'number'`) renders an `InputNumber` with `min`\n  and `max` from the rule and `step` from the field's `step` when given.\n- `email: true` renders `<Input type=\"email\">`, `url: true` renders\n  `<Input type=\"url\">`, `control: 'textarea'` renders `Textarea`, and\n  everything else scalar renders `<Input type=\"text\">`. Non-scalar kinds\n  (`list`, `record`, `object`) start as `[]` or `{}` and render only when\n  given a `#<name>-field` slot.\n\n**Customizing fields.** When `fields` is omitted, every field in `schema`\nrenders in key order. When `fields` is given, it takes an array of\n`EntityFieldConfig` objects\n(`{ name, label, hint, description, placeholder, control, step, rows, items, hidden }`),\nrendering only the fields it lists, in that order, each merged with\n`schema[f.name]`. The `#<name>-field=\"{ state, record, rule, field }\"` slot\nreplaces one field's control inside its `FormField`, and the default slot\n`#default=\"{ state, record, schema }\"` replaces the whole field list while\nkeeping the top `Alert` (`role=\"alert\"`) and the Cancel and Create/Save\nbuttons.\n\n**Errors.** Before calling `create` or `update`, `Form` checks every rendered\nfield against `schema` (with non-nullable number fields in edit mode marked\nrequired so an emptied number is caught before sending). When `create` or\n`update` rejects with Warp's `ApiError` shape (`{ status, code, message, fields }`),\nfield errors matching rendered fields attach to their `FormField`s and focus\nmoves to the first invalid control once the form is no longer busy; unknown\nfield keys or a top-level `message` appear in an `Alert` (`role=\"alert\"`) at\nthe top of the form; `code === 'network'` shows `labels.unreachable`;\n`code === 'http'` shows `labels.unavailable`; and any other error logs to\n`console.error` and shows `labels.pageFailed`. Reopening the dialog or\nswitching `record` resets the draft and clears every error.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/EntityDialog/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Button, EntityDialog, type EntitySchema } from '@weft/ui'\n\ninterface Product {\n  id: number\n  name: string\n  price: number\n  sale: number | null\n  status: 'draft' | 'live'\n}\n\nconst open = ref(false)\nconst schema: EntitySchema = {\n  name: { type: 'string', required: true },\n  price: { type: 'number', required: true, min: 0 },\n  sale: { type: 'number', min: 0, nullable: true },\n  status: { type: 'string', required: true, enum: ['draft', 'live'] },\n}\n\nasync function create(body: Omit<Product, 'id'>): Promise<Product> {\n  return { id: 1, ...body }\n}\n</script>\n\n<template>\n  <Button label=\"New product\" icon=\"plus\" @click=\"open = true\" />\n  <EntityDialog\n    v-model:open=\"open\"\n    name=\"product\"\n    :schema=\"schema\"\n    :defaults=\"{ price: 0, status: 'draft' }\"\n    :fields=\"[\n      { name: 'name' },\n      { name: 'price', step: 0.01 },\n      { name: 'sale', step: 0.01, hint: 'Empty when it is not on sale.' },\n      { name: 'status' },\n    ]\"\n    :create=\"create\"\n  />\n</template>\n"
+        }
+      ]
+    },
+    {
       "name": "ErrorState",
       "group": "feedback",
       "file": "packages/ui/src/feedback/ErrorState.vue",
@@ -4422,7 +4936,7 @@
       "adapts": {
         "input": "Nothing changes between pointer and touch; links inside bring their own touch sizes (Link with `standalone`).",
         "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
-        "width": "When its own width is narrow (under 640 px) the row stacks its parts, centred."
+        "width": "When its own width is narrow (under 640 px) the row stacks its parts, centred. Before it mounts, and on a page that is never hydrated, a viewport under 640 px does; on a page that carries the pre-paint width script (for a component that measures its own box), the script measures the Footer's own box too, as the mounted Footer does."
       },
       "props": [],
       "emits": [],
@@ -4533,7 +5047,7 @@
           "dynamic": false
         }
       ],
-      "notes": "`state` is the values, an object the fields bind into with `v-model`;\n`schema` is a Weft field schema - plain JSON a server can send, the same\nshape `weft gen` writes as `schema` from the Go types - keyed by field name:\n\n    { email: { required: true, email: true }, age: { min: 18, message: 'You must be 18 or over.' } }\n\nEach rule is optional: `required`, `min` and `max` (a length for text and\nlists, bounds for numbers), `pattern` (matched against the whole text, as the\nHTML attribute does), `email`, `url` (an absolute `http:` or `https:`\naddress with a host: \"Enter a web address that starts with http:// or\nhttps://.\"), `enum` (a list of the values allowed: \"Choose one of: a, b.\"),\nand `message` in place of the default sentences. `required` counts text of\nonly spaces as empty; every other rule skips only a missing or empty value\n(`undefined`, `null`, `''` or an empty list), so spaces alone fail `enum`,\n`url` and `email`. Its TypeScript type is `FieldSchema`, and\n`validateFields` checks values against one anywhere.\n\n**When it checks.** On submit every field is checked. With errors, `error`\nfires with them, each FormField with a matching `name` shows its error, and\nfocus moves to the first invalid control; without, the `@submit` handler\nruns with a deep copy of the values (lists and objects too), typed as\n`state` is. A field the schema marks `nullable` (a pointer in Go, which\n`weft gen`'s schema marks) is sent as `null` when emptied, `''` included,\nwhich clears it; without the schema there is no way to tell, so every other\n`null` (an emptied number, date or choice) is left out of that copy, and\nthe server reads the field as not sent. A `required` field is stopped by\nthe rule first.\nAfter the first submit, a field is checked again when it is\nleft, and a field showing an error is checked as it changes, so the error\ngoes the moment it is fixed - but no new error appears while typing.\n\n**Server errors.** A template ref's `setErrors({ email: 'That address is\ntaken.' })` shows errors from elsewhere. Leaving such a field keeps its error\n(the server said so, and nothing changed); changing the field checks it\nagain. `validate()` checks without submitting, and `clear()` clears every\nerror.\n\nA server error on a field the schema has no rule for clears the first time\nthat field changes: there is nothing to check it against.\n\n**Its template ref.** `FormApi` is the ref's type:\n`useTemplateRef<FormApi>('form')` gives `setErrors(errors)`, `validate()`,\n`clear()`, `submit()` (as the submit button would), and `errors` and\n`loading` read as values.\n\n**Disabled.** The content sits in a `<fieldset>` with no frame, so\n`disabled` disables every control in the form at once - Weft's and native\nones, Buttons included - and a submit does nothing. A fieldset leaves links\nalone, so a Link, or a Button with `to`, in the form reads it and is\ndisabled as a disabled link is: no address, `aria-disabled`, no navigation.\n\n**Busy.** `loading`, or with `loading-auto` (on by default) a `@submit`\nhandler that returns a promise, makes the form busy until it settles: it sets\n`aria-busy`, a second press or Enter submits nothing, its fields are\ndisabled and its links have no address. The submit button is not natively\ndisabled, so it keeps focus: it shows its spinner, is `aria-busy` and\n`aria-disabled`, and ignores presses. Any other button works, so a Cancel or\nStop can abort the submit (as in Nuxt UI). Raw native controls in the form (a\nplain `<input>` or `<button>`) are not blocked while busy, only while\n`disabled`; use Weft's components to have them follow the form. A field that\nhad focus (Enter pressed in it, or focused as `loading` turned on) gets it\nback when the form is done. (`@submit` is a handler prop, as in Nuxt UI, so\nthe form can wait for it.) The native form has `novalidate`: Weft shows the\nerrors, not the browser.\n\n**Before it is live.** A Form sends only through its `@submit` handler,\nso it belongs in an island: one drawn by the page, with no island around\nit, is never live and does nothing on submit; in development its first\nsubmit says so in the console. Until its island is live it\nsends nothing: a small inline script at the top of the page's `<head>`\nstops every submit of a Weft form from the first moment, and the form is\n`method=\"post\"`, so with scripts off its own submit puts nothing in the\naddress (a submit button the app gives `formmethod=\"get\"` still does).\nIts fields stay usable meanwhile: what a person types, or a password\nmanager fills, before the island is live is kept when it hydrates and\nreaches the model. An app's own `form.submit()` fires no submit event, by\nthe platform's design, so it bypasses the script and sends a POST to the\npage.\n\nA site with a Content-Security-Policy must allow the page's inline\npre-paint script, `<script data-weft-prepaint>`, by its hash or with\n`'unsafe-inline'` (a nonce needs a server that writes one into each answer,\nwhich a built page does not have). The build wraps each snippet in\n`(function(){…})()`, so a page whose only pre-paint component is Form has\nexactly (`'sha256-tx8/QjztXL6iQA+dqwGLMSVBWxKaWIfL8huD/H0v4SY='`)\n\n    (function(){window.addEventListener(\"submit\",function(e){var t=e.target;if(t&&t.classList&&t.classList.contains(\"weft-form\"))e.preventDefault()},true)})()\n\nand a page whose other components register pre-paint code too (Grid or the\nlanding blocks Hero, FeatureGrid, Pricing, Testimonials, Faq and Cta via\n`useWidth`, AppShell with `persist`, or a closable Banner with an `id`) has\neach wrapped snippet joined into the same script with `;\\n`, one per line.\nBecause the script's text — and so its hash — changes with which components\na page renders, the order they register in, and each AppShell `persist` key\nor Banner `id`, a strict Content-Security-Policy needs one `'sha256-…'` entry\nper distinct `<script data-weft-prepaint>` across the site's built pages. To\ncollect every hash from a build in `dist/`:\n\n    node -e 'const fs=require(\"node:fs\"),crypto=require(\"node:crypto\");console.log([...new Set(fs.globSync(\"dist/**/*.html\").flatMap(f=>[...fs.readFileSync(f,\"utf8\").matchAll(/<script data-weft-prepaint>([\\s\\S]*?)<\\/script>/g)].map(m=>\"sha256-\"+crypto.createHash(\"sha256\").update(m[1]).digest(\"base64\"))))])'",
+      "notes": "`state` is the values, an object the fields bind into with `v-model`;\n`schema` is a Weft field schema - plain JSON a server can send, the same\nshape `weft gen` writes as `schema` from the Go types - keyed by field name:\n\n    { email: { required: true, email: true }, age: { min: 18, message: 'You must be 18 or over.' } }\n\nEach rule is optional: `required`, `min` and `max` (a length for text and\nlists, bounds for numbers), `pattern` (matched against the whole text, as the\nHTML attribute does), `email`, `url` (an absolute `http:` or `https:`\naddress with a host: \"Enter a web address that starts with http:// or\nhttps://.\"), `enum` (a list of the values allowed: \"Choose one of: a, b.\"),\nand `message` in place of the default sentences. `required` counts text of\nonly spaces as empty; every other rule skips only a missing or empty value\n(`undefined`, `null`, `''` or an empty list), so spaces alone fail `enum`,\n`url` and `email`. Its TypeScript type is `FieldSchema`, and\n`validateFields` checks values against one anywhere.\n\n**When it checks.** On submit every field is checked. With errors, `error`\nfires with them, each FormField with a matching `name` shows its error, and\nfocus moves to the first invalid control; without, the `@submit` handler\nruns with a deep copy of the values (lists and objects too), typed as\n`state` is. A field the schema marks `nullable` (a pointer in Go, which\n`weft gen`'s schema marks) is sent as `null` when emptied, `''` included,\nwhich clears it; without the schema there is no way to tell, so every other\n`null` (an emptied number, date or choice) is left out of that copy, and\nthe server reads the field as not sent. A `required` field is stopped by\nthe rule first.\nAfter the first submit, a field is checked again when it is\nleft, and a field showing an error is checked as it changes, so the error\ngoes the moment it is fixed - but no new error appears while typing.\n\n**Server errors.** A template ref's `setErrors({ email: 'That address is\ntaken.' })` shows errors from elsewhere. Leaving such a field keeps its error\n(the server said so, and nothing changed); changing the field checks it\nagain. `validate()` checks without submitting, and `clear()` clears every\nerror.\n\nA server error on a field the schema has no rule for clears the first time\nthat field changes: there is nothing to check it against.\n\n**Its template ref.** `FormApi` is the ref's type:\n`useTemplateRef<FormApi>('form')` gives `setErrors(errors)`, `validate()`,\n`clear()`, `submit()` (as the submit button would), and `errors` and\n`loading` read as values.\n\n**Disabled.** The content sits in a `<fieldset>` with no frame, so\n`disabled` disables every control in the form at once - Weft's and native\nones, Buttons included - and a submit does nothing. A fieldset leaves links\nalone, so a Link, or a Button with `to`, in the form reads it and is\ndisabled as a disabled link is: no address, `aria-disabled`, no navigation.\n\n**Busy.** `loading`, or with `loading-auto` (on by default) a `@submit`\nhandler that returns a promise, makes the form busy until it settles: it sets\n`aria-busy`, a second press or Enter submits nothing, its fields are\ndisabled and its links have no address. The submit button is not natively\ndisabled, so it keeps focus: it shows its spinner, is `aria-busy` and\n`aria-disabled`, and ignores presses. Any other button works, so a Cancel or\nStop can abort the submit (as in Nuxt UI). Raw native controls in the form (a\nplain `<input>` or `<button>`) are not blocked while busy, only while\n`disabled`; use Weft's components to have them follow the form. A field that\nhad focus (Enter pressed in it, or focused as `loading` turned on) gets it\nback when the form is done. (`@submit` is a handler prop, as in Nuxt UI, so\nthe form can wait for it.) The native form has `novalidate`: Weft shows the\nerrors, not the browser.\n\n**Before it is live.** A Form sends only through its `@submit` handler,\nso it belongs in an island: one drawn by the page, with no island around\nit, is never live and does nothing on submit; in development its first\nsubmit says so in the console. Until its island is live it\nsends nothing: a small inline script at the top of the page's `<head>`\nstops every submit of a Weft form from the first moment, and the form is\n`method=\"post\"`, so with scripts off its own submit puts nothing in the\naddress (a submit button the app gives `formmethod=\"get\"` still does).\nIts fields stay usable meanwhile: what a person types, or a password\nmanager fills, before the island is live is kept when it hydrates and\nreaches the model. An app's own `form.submit()` fires no submit event, by\nthe platform's design, so it bypasses the script and sends a POST to the\npage.\n\nA site with a Content-Security-Policy must allow the page's inline\npre-paint script, `<script data-weft-prepaint>`, by its hash or with\n`'unsafe-inline'` (a nonce needs a server that writes one into each answer,\nwhich a built page does not have). The build wraps each snippet in\n`(function(){…})()`, so a page whose only pre-paint component is Form has\nexactly (`'sha256-tx8/QjztXL6iQA+dqwGLMSVBWxKaWIfL8huD/H0v4SY='`)\n\n    (function(){window.addEventListener(\"submit\",function(e){var t=e.target;if(t&&t.classList&&t.classList.contains(\"weft-form\"))e.preventDefault()},true)})()\n\nand a page whose other components register pre-paint code too (Grid or the\nlanding blocks Hero, FeatureGrid, Pricing, Testimonials, Faq and Cta, a\nhorizontal Stepper or Timeline or a vertical Tabs, via `useWidth`, AppShell with `persist`, or a closable Banner with an `id`) has\neach wrapped snippet joined into the same script with `;\\n`, one per line.\nBecause the script's text — and so its hash — changes with which components\na page renders, the order they register in, and each AppShell `persist` key\nor Banner `id`, a strict Content-Security-Policy needs one `'sha256-…'` entry\nper distinct `<script data-weft-prepaint>` across the site's built pages. To\ncollect every hash from a build in `dist/`:\n\n    node -e 'const fs=require(\"node:fs\"),crypto=require(\"node:crypto\");console.log([...new Set(fs.globSync(\"dist/**/*.html\").flatMap(f=>[...fs.readFileSync(f,\"utf8\").matchAll(/<script data-weft-prepaint>([\\s\\S]*?)<\\/script>/g)].map(m=>\"sha256-\"+crypto.createHash(\"sha256\").update(m[1]).digest(\"base64\"))))])'",
       "examples": [
         {
           "name": "basic",
@@ -4704,7 +5218,7 @@
           "dynamic": false
         }
       ],
-      "notes": "`cols` is a fixed number or one per width class, `{ narrow, regular, wide }`.\nA width left out falls back to the nearest smaller one given, else to the\ndefault for it.\n\nOn the server, `Grid` (and the landing blocks `Hero`, `FeatureGrid`,\n`Pricing`, `Testimonials`, `Faq` and `Cta`) registers `useWidth`'s pre-paint\nobserver (`widthPrePaint`), which the page build wraps in `(function(){…})()`\ninside `<script data-weft-prepaint>` in `<head>` (its SHA-256 CSP hash when\nalone is `'sha256-9BDYcqAvUSo5sGyREfywnuaJMRGECCNSMPtWf2EQYPM='`):\n\n    (function(){if(typeof ResizeObserver<\"u\"){var o=new Set,d=function(t,w){if(w>0)t.setAttribute(\"data-width\",w<640?\"narrow\":w<1024?\"regular\":\"wide\")},r=window.__weftWidthRo=new ResizeObserver(function(e){for(var i=0;i<e.length;i++){var t=e[i].target;if(t.hasAttribute(\"data-weft-width\"))r.unobserve(t);else d(t,e[i].contentRect.width)}}),s=function(){var l=document.querySelectorAll(\"[data-width]:not([data-weft-width])\"),n=[],w=[],i;for(i=0;i<l.length;i++)if(!o.has(l[i])){o.add(l[i]);n.push(l[i]);w.push(l[i].getBoundingClientRect().width)}for(i=0;i<n.length;i++){d(n[i],w[i]);r.observe(n[i])}};s();if(document.readyState===\"loading\"){var m=new MutationObserver(s);m.observe(document,{childList:true,subtree:true});addEventListener(\"DOMContentLoaded\",function(){m.disconnect();s()},{once:true})}}})()\n\nIt observes `[data-width]` elements added while the page parses until\n`DOMContentLoaded`; `[data-width]` markup inserted after `DOMContentLoaded`\nby code outside Vue keeps its server attribute. A page that renders other\npre-paint components too (`Form`, `AppShell` with `persist`, or a closable\n`Banner` with an `id`) joins their wrapped snippets into the same script with\n`;\\n` in registration order (embedding any `persist` key or Banner `id`); a\nstrict Content-Security-Policy needs one `'sha256-…'` hash per distinct\n`<script data-weft-prepaint>` in `dist/` (see `Form`'s docs for the command\nthat lists them).",
+      "notes": "`cols` is a fixed number or one per width class, `{ narrow, regular, wide }`.\nA width left out falls back to the nearest smaller one given, else to the\ndefault for it.\n\nOn the server, `Grid` (and the landing blocks `Hero`, `FeatureGrid`,\n`Pricing`, `Testimonials`, `Faq` and `Cta`, a horizontal `Stepper` or\n`Timeline`, and a vertical `Tabs`) registers `useWidth`'s pre-paint\nobserver (`widthPrePaint`), which the page build wraps in `(function(){…})()`\ninside `<script data-weft-prepaint>` in `<head>` (its SHA-256 CSP hash when\nalone is `'sha256-iNtcuTghwj4FD4cClz4HdWeY2ACaeNPFjXtP7CUdMP0='`):\n\n    (function(){if(typeof ResizeObserver<\"u\"){var o=new Set,d=function(t,w){if(w>0)t.setAttribute(\"data-width\",w<640?\"narrow\":w<1024?\"regular\":\"wide\")},r=window.__weftWidthRo=new ResizeObserver(function(e){for(var i=0;i<e.length;i++){var t=e[i].target;if(t.hasAttribute(\"data-weft-width\"))r.unobserve(t);else d(t,b(e[i]))}}),b=function(x){var z=x.borderBoxSize;return z?(z[0]||z).inlineSize:x.target.getBoundingClientRect().width},s=function(){var l=document.querySelectorAll(\"[data-width]:not([data-weft-width])\"),n=[],w=[],i;for(i=0;i<l.length;i++)if(!o.has(l[i])){o.add(l[i]);n.push(l[i]);w.push(l[i].getBoundingClientRect().width)}for(i=0;i<n.length;i++){d(n[i],w[i]);r.observe(n[i],{box:\"border-box\"})}};s();if(document.readyState===\"loading\"){var m=new MutationObserver(s);m.observe(document,{childList:true,subtree:true});addEventListener(\"DOMContentLoaded\",function(){m.disconnect();s()},{once:true})}}})()\n\nIt observes `[data-width]` elements added while the page parses until\n`DOMContentLoaded`; `[data-width]` markup inserted after `DOMContentLoaded`\nby code outside Vue keeps its server attribute. A page that renders other\npre-paint components too (`Form`, `AppShell` with `persist`, or a closable\n`Banner` with an `id`) joins their wrapped snippets into the same script with\n`;\\n` in registration order (embedding any `persist` key or Banner `id`); a\nstrict Content-Security-Policy needs one `'sha256-…'` hash per distinct\n`<script data-weft-prepaint>` in `dist/` (see `Form`'s docs for the command\nthat lists them).",
       "examples": [
         {
           "name": "basic",
@@ -6423,7 +6937,7 @@
       "adapts": {
         "input": "Every button is at least --weft-hit-min tall on touch (Button's rule).",
         "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
-        "width": "When the viewport is narrow it shows at most one page each side of the current one and drops the first and last buttons; the row wraps when it must."
+        "width": "When the viewport is narrow it shows at most one page each side of the current one and drops the first and last buttons; the row wraps when it must. Before it mounts it draws the entries of both forms and a viewport media query shows one, so a page that is never hydrated pages right too."
       },
       "props": [
         {
@@ -8184,7 +8698,7 @@
       "adapts": {
         "input": "Each step button is at least --weft-hit-min tall on touch.",
         "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
-        "width": "A horizontal stepper stacks vertically when its own width is narrow (under 640 px)."
+        "width": "A horizontal stepper stacks vertically when its own width is narrow (under 640 px). CSS does it from `data-width`, which the page's pre-paint script sets, so a page that is never hydrated adapts too; the arrow keys follow once hydrated."
       },
       "props": [
         {
@@ -8461,7 +8975,7 @@
       "adapts": {
         "input": "On touch every row is at least --weft-hit-min (44 px) tall, and its checkbox takes a 44 px press (Checkbox's rule).",
         "surface": "Nothing changes in behaviour; `size` sets the row height and text follows the surface's type scale.",
-        "width": "When its own box is narrow (under 640 px, even in a side panel on a wide screen) each row becomes a card, a list item of label–value pairs from the same columns, with a Select all checkbox and the sort buttons above the cards; wide again, it is a table again."
+        "width": "When its own box is narrow (under 640 px, even in a side panel on a wide screen) each row becomes a card, a list item of label–value pairs from the same columns, with a Select all checkbox and the sort buttons above the cards; wide again, it is a table again. The cards come once it is hydrated, in an island: before that it is a table, which scrolls sideways inside its box."
       },
       "props": [
         {
@@ -8491,6 +9005,13 @@
           "required": false,
           "default": "undefined",
           "description": "The search text, sent to `fetch` as `q`; empty sends none. Does nothing without `fetch`. A new one goes to page 1."
+        },
+        {
+          "name": "searchDebounce",
+          "type": "number",
+          "required": false,
+          "default": "250",
+          "description": "Milliseconds to wait before asking `fetch` after a non-empty `search` change; default 250."
         },
         {
           "name": "filters",
@@ -8679,7 +9200,7 @@
           "dynamic": true
         }
       ],
-      "notes": "`columns` is a typed array: `{ key, label, sortable, align, width,\naccessor, format, rowHeader }`. A cell shows `accessor(row)` (default\n`row[key]`) as text, or `format(value, row)`; the `<key>-cell` slot draws it\ninstead (`{ row, value, index, column }`), and `<key>-header` the header. A\n`rowHeader` column's cells are `th scope=\"row\"`, and its value names each\nrow's checkbox (\"Select Ada\").\n\n**Rows.** Give `rows` (an array), sorted and paged on the client (text in\nthe WeftProvider's `locale`, en-US without one, numbers and dates by\namount), or `fetch(query)`, which receives the wire format's list query\nin its names, `{ page, per_page, sort, q, filter }` (each but `page` and\n`per_page` is absent when there is none; `sort` is `name` or `-since`),\nand answers the wire format's whole list, `{ items, total, page, per_page }`\n(`page` and `per_page` are optional), so paging, sorting, searching and\nfiltering happen on the server. A list function from the generated client\nfits as it is: `:fetch=\"api.products.list\"`. Give the search text as\n`search` (sent as `q`) and the filters as `filters` (`{ plan: 'pro' }`,\nsent as `filter`); a change asks again. Clearing a filter is setting it to\nan empty string or leaving it out: a filter with no value is not sent, and\n`{ status: '' }` is the same query as `{}`. With `rows` and no `fetch`,\n`search` and `filters` do nothing.\n`tableSearch(query)` writes the query as the wire format's search\nparameters: `page=2&per_page=20&sort=-since&q=ada&filter[plan]=pro`. It asks\nonce mounted (the server draws skeleton rows), again whenever the page, the\nsort, the search or the filters change, ignores an answer a newer query\novertook, and shows a message with a Try again button (and emits `error`)\nwhen the promise rejects; `refresh()` asks again. `rowKey` (a property name\nor a function; default the row's `id`, else its place) keys the rows. The\ndata source is `useTableData`, exported for a view of its own.\n\n**Sorting.** A sortable header holds a button: ascending, descending, then\nas given. The sort is `v-model:sort` in the wire format. On the client it is\nstable (equal rows keep their order both ways), numbers and dates by amount,\ntext numeric-aware and case-blind, empty values last. A press on a header\ngoes back to page 1, as does a new `search` or new `filters` (with `fetch`); a\nparent that sets the page and the sort, the search or the filters together\nkeeps its page. The sorted header says `aria-sort`; the others say nothing (APG\nsortable table).\n\n**Selection.** `selectable` adds a checkbox per row and one in the header,\nbound with `v-model:selected` (the rows' keys). The header box is ticked\nwhen every row shown is chosen, indeterminate when some are; it chooses or\nclears the rows shown (on this page). Shift+click on a row's box sets every\nrow from the last one clicked to it, in the order shown. Keys persist\nacross pages and sorts: a row chosen on page 1 stays chosen on page 3 and\nafter a new sort. So rows from `fetch` that can be chosen need keys of their\nown, an `id` or `rowKey`; without one a row's key is its place on its page,\nand development builds warn once.\n\n**Paging.** `per-page` pages the rows with a Pagination under the table\n(`v-model:page`), shown when there is more than one page; with `fetch` it\ndefaults to 20. A fetched page past the last one, as after the last row of\nthe last page is deleted, moves the page to the last one there is, which it\nthen asks for, once. The move goes through `update:page`, so a parent that binds the\npage one way (`:page` with no handler) and keeps it gets that page shown\nempty, with the server's total, and no request until the page, the query or\na refresh changes.\n\n**States.** `loading` makes it `aria-busy` and draws skeleton rows (hidden\nfrom assistive technology, a status saying Loading) until there are rows;\nrows it already has stay, dimmed. With no rows the `empty` slot (or\n`empty`, default \"Nothing to show.\") fills the body.\n\n**Sticky header.** With `sticky` (on by default) the header stays in view.\nWith a `height` (or once windowed) the rows scroll inside the table's box\nand the header sticks at its top. Without one the box clips rather than\nscrolls once mounted, so the header sticks against the page as it scrolls,\nbelow `--weft-table-sticky-top` (set it to a sticky page header's height);\nbut a table wider than its box must scroll sideways, and then its header\nsticks only inside it: give it a `height`. Before it mounts (and on a page\nwith no island) the box scrolls, so a wide table is never cut off.\n\n**Windowing.** Past 200 rows on a page it renders only the rows in view,\nspacer rows standing for the rest (`useVirtualList`): every row is then\n`row-height` px (default by size, at least 44 on touch), its text on one\nline, the box 30rem tall unless `height` says otherwise, and the table\nstates `aria-rowcount` and each row `aria-rowindex`. The narrow cards are\nnot windowed; page long lists.\n\n**Keyboard.** By default it is a plain `<table>` (caption, `th scope`), and\neach control in it (sort buttons, checkboxes, controls in cells) is its own\ntab stop. With `keyboard` it is an APG grid, one tab stop, so Tab enters and\nleaves it in one step: arrows move between cells (mirrored right to left)\nand stop at the edges, Home and End go along the row, Ctrl+Home to the first\nheader cell and Ctrl+End to the last cell of the last row, windowed or not.\nThe focused cell scrolls into view, and a windowed table keeps its row drawn\nwhen the pointer scrolls it away, so focus is never lost. A sort button or a\ncheckbox stands in for its cell. Controls a cell slot draws leave the tab\norder (`tabindex=\"-1\"`); Enter or F2 on the cell gives them back and focuses\nthe first, keys pressed in it are its own, and Escape, or focus leaving the\ncell, takes them out again. `caption` names the table (and the\nlist of cards); `hide-caption` keeps it for assistive technology only.\n`labels` translate its words.",
+      "notes": "`columns` is a typed array: `{ key, label, sortable, align, width,\naccessor, format, rowHeader }`. A cell shows `accessor(row)` (default\n`row[key]`) as text, or `format(value, row)`; the `<key>-cell` slot draws it\ninstead (`{ row, value, index, column }`), and `<key>-header` the header. A\n`rowHeader` column's cells are `th scope=\"row\"`, and its value names each\nrow's checkbox (\"Select Ada\").\n\n**Rows.** Give `rows` (an array), sorted and paged on the client (text in\nthe WeftProvider's `locale`, en-US without one, numbers and dates by\namount), or `fetch(query)`, which receives the wire format's list query\nin its names, `{ page, per_page, sort, q, filter }` (each but `page` and\n`per_page` is absent when there is none; `sort` is `name` or `-since`),\nand answers the wire format's whole list, `{ items, total, page, per_page }`\n(`page` and `per_page` are optional), so paging, sorting, searching and\nfiltering happen on the server. A list function from the generated client\nfits as it is: `:fetch=\"api.products.list\"`. Give the search text as\n`search` (sent as `q`, debounced by `search-debounce`, default 250 ms; clearing `search` asks at once) and the filters as `filters` (`{ plan: 'pro' }`,\nsent as `filter`); a change asks again. Clearing a filter is setting it to\nan empty string or leaving it out: a filter with no value is not sent, and\n`{ status: '' }` is the same query as `{}`. With `rows` and no `fetch`,\n`search` and `filters` do nothing.\n`tableSearch(query)` writes the query as the wire format's search\nparameters: `page=2&per_page=20&sort=-since&q=ada&filter[plan]=pro`. It asks\nonce mounted (the server draws skeleton rows), again whenever the page, the\nsort, the search or the filters change, ignores an answer a newer query\novertook, and shows a message with a Try again button (and emits `error`)\nwhen the promise rejects; `refresh()` asks again. `rowKey` (a property name\nor a function; default the row's `id`, else its place) keys the rows. The\ndata source is `useTableData`, exported for a view of its own.\n\n**Sorting.** A sortable header holds a button: ascending, descending, then\nas given. The sort is `v-model:sort` in the wire format. On the client it is\nstable (equal rows keep their order both ways), numbers and dates by amount,\ntext numeric-aware and case-blind, empty values last. A press on a header\ngoes back to page 1, as does a new `search` or new `filters` (with `fetch`); a\nparent that sets the page and the sort, the search or the filters together\nkeeps its page. The sorted header says `aria-sort`; the others say nothing (APG\nsortable table).\n\n**Selection.** `selectable` adds a checkbox per row and one in the header,\nbound with `v-model:selected` (the rows' keys). The header box is ticked\nwhen every row shown is chosen, indeterminate when some are; it chooses or\nclears the rows shown (on this page). Shift+click on a row's box sets every\nrow from the last one clicked to it, in the order shown. Keys persist\nacross pages and sorts: a row chosen on page 1 stays chosen on page 3 and\nafter a new sort. So rows from `fetch` that can be chosen need keys of their\nown, an `id` or `rowKey`; without one a row's key is its place on its page,\nand development builds warn once.\n\n**Paging.** `per-page` pages the rows with a Pagination under the table\n(`v-model:page`), shown when there is more than one page; with `fetch` it\ndefaults to 20. A fetched page past the last one, as after the last row of\nthe last page is deleted, moves the page to the last one there is, which it\nthen asks for, once. The move goes through `update:page`, so a parent that binds the\npage one way (`:page` with no handler) and keeps it gets that page shown\nempty, with the server's total, and no request until the page, the query or\na refresh changes.\n\n**States.** `loading` makes it `aria-busy` and draws skeleton rows (hidden\nfrom assistive technology, a status saying Loading) until there are rows;\nrows it already has stay, dimmed. With no rows the `empty` slot (or\n`empty`, default \"Nothing to show.\") fills the body.\n\n**Sticky header.** With `sticky` (on by default) the header stays in view.\nWith a `height` (or once windowed) the rows scroll inside the table's box\nand the header sticks at its top. Without one the box clips rather than\nscrolls once mounted, so the header sticks against the page as it scrolls,\nbelow `--weft-table-sticky-top` (set it to a sticky page header's height);\nbut a table wider than its box must scroll sideways, and then its header\nsticks only inside it: give it a `height`. Before it mounts (and on a page\nwith no island) the box scrolls, so a wide table is never cut off.\n\n**Windowing.** Past 200 rows on a page it renders only the rows in view,\nspacer rows standing for the rest (`useVirtualList`): every row is then\n`row-height` px (default by size, at least 44 on touch), its text on one\nline, the box 30rem tall unless `height` says otherwise, and the table\nstates `aria-rowcount` and each row `aria-rowindex`. The narrow cards are\nnot windowed; page long lists.\n\n**Keyboard.** By default it is a plain `<table>` (caption, `th scope`), and\neach control in it (sort buttons, checkboxes, controls in cells) is its own\ntab stop. With `keyboard` it is an APG grid, one tab stop, so Tab enters and\nleaves it in one step: arrows move between cells (mirrored right to left)\nand stop at the edges, Home and End go along the row, Ctrl+Home to the first\nheader cell and Ctrl+End to the last cell of the last row, windowed or not.\nThe focused cell scrolls into view, and a windowed table keeps its row drawn\nwhen the pointer scrolls it away, so focus is never lost. A sort button or a\ncheckbox stands in for its cell. Controls a cell slot draws leave the tab\norder (`tabindex=\"-1\"`); Enter or F2 on the cell gives them back and focuses\nthe first, keys pressed in it are its own, and Escape, or focus leaving the\ncell, takes them out again. `caption` names the table (and the\nlist of cards); `hide-caption` keeps it for assistive technology only.\n`labels` translate its words.",
       "examples": [
         {
           "name": "basic",
@@ -8705,7 +9226,7 @@
       "adapts": {
         "input": "Tabs are at least --weft-hit-min tall on touch; a row too long for its width scrolls sideways.",
         "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
-        "width": "A vertical tab list goes above the panels when the tabs' own width is narrow (under 640 px), and turns horizontal."
+        "width": "A vertical tab list goes above the panels when the tabs' own width is narrow (under 640 px), and turns horizontal. CSS does it from `data-width`, which the page's pre-paint script sets, so a page that is never hydrated adapts too; `aria-orientation` and the arrow keys follow once hydrated."
       },
       "props": [
         {
@@ -9088,7 +9609,7 @@
       "adapts": {
         "input": "Nothing changes; it is not interactive.",
         "surface": "Nothing changes in behaviour; text follows the surface's type scale.",
-        "width": "A horizontal timeline turns vertical when its own box is narrow, so the text keeps its width."
+        "width": "A horizontal timeline turns vertical when its own box is narrow, so the text keeps its width. CSS does it from `data-width`, which the page's pre-paint script sets, so a page that is never hydrated adapts too."
       },
       "props": [
         {

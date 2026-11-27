@@ -105,6 +105,8 @@ tbody .weft-calendar__week { padding: 0 var(--weft-space-1, 4px); font-size: 0.7
   inline-size: 100%;
 }
 .weft-calendar__day[data-outside] { color: var(--weft-color-text-muted, GrayText); }
+/* Hovered, on the tint, an outside day is in the text colour: muted text does not reach 4.5:1 there. */
+.weft-calendar__day[data-outside]:hover:not(:disabled, [data-disabled], [data-selected]) { color: var(--weft-color-text, CanvasText); }
 .weft-calendar__day[data-today]::after {
   content: '';
   position: absolute;

@@ -56,7 +56,8 @@ defineSlots<{
 }>()
 
 const f = useField(props)
-f.field?.namedByLabel()
+f.field?.namedByLabel(true)
+onScopeDispose(() => f.field?.namedByLabel(false))
 hideField()
 const model = useControllable(props, 'modelValue', emit, () => props.defaultValue)
 const options = computed(() => props.items.map(choice))
