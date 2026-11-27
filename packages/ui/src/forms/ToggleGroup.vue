@@ -118,7 +118,7 @@ watch([firstPressed, root], ([i]) => i >= 0 && roving.setActive(i), { flush: 'po
     class="weft-toggle-group"
     role="group"
     :id="f.id.value"
-    :aria-labelledby="f.field?.labelId"
+    :aria-labelledby="f.labelId.value"
     :data-orientation="orientation"
     :data-attached="attached ? 'true' : undefined"
   >

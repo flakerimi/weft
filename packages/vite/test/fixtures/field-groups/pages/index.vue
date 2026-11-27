@@ -45,7 +45,30 @@ const sizes = [
     <div data-control="native FileUpload"><FormField label="Files" name="files"><FileUpload /></FormField></div>
     <div data-control="native select"><FormField label="Country" id="country"><select id="country"><option>Kosovo</option></select></FormField></div>
   </WeftProvider>
+  <!-- With no label: a control names itself by no label's id. -->
+  <WeftProvider locale="en-GB" input="pointer">
+    <div data-unlabelled>
+      <FormField name="u-plan"><RadioGroup :items="['Starter', 'Team']" /></FormField>
+      <FormField name="u-alerts"><CheckboxGroup :items="['Email', 'SMS']" /></FormField>
+      <FormField name="u-volume"><Slider :model-value="40" /></FormField>
+      <FormField name="u-price"><Slider :model-value="[20, 80]" /></FormField>
+      <FormField name="u-fruit"><Listbox :items="fruits" /></FormField>
+      <FormField name="u-at"><InputTime model-value="09:30" /></FormField>
+      <FormField name="u-hours"><InputTime range :model-value="{ start: '09:00', end: '17:00' }" /></FormField>
+      <FormField name="u-size"><ToggleGroup :items="sizes" /></FormField>
+      <FormField name="u-code"><PinInput :length="3" /></FormField>
+      <FormField name="u-stay"><DateRangePicker :model-value="{ start: '2024-04-02', end: '2024-04-05' }" /></FormField>
+      <FormField name="u-files"><FileUpload /></FormField>
+      <FormField name="u-pick"><Select :items="fruits" /></FormField>
+      <FormField name="u-search"><Combobox :items="fruits" /></FormField>
+    </div>
+  </WeftProvider>
   <WeftProvider locale="en-GB" input="touch">
+    <div data-unlabelled>
+      <FormField name="u-born"><DatePicker model-value="2000-01-01" /></FormField>
+      <FormField name="u-trip"><DateRangePicker :model-value="{ start: '2024-04-02', end: '2024-04-05' }" /></FormField>
+      <FormField name="u-shift"><InputTime range :model-value="{ start: '09:00', end: '17:00' }" /></FormField>
+    </div>
     <div data-control="native InputTime touch"><FormField label="Wake" name="wake"><InputTime model-value="07:00" /></FormField></div>
     <div data-control="named InputTime touch range"><FormField label="Shift" name="shift"><InputTime range :model-value="{ start: '09:00', end: '17:00' }" /></FormField></div>
     <div data-control="native DatePicker touch"><FormField label="Born" name="born"><DatePicker model-value="2000-01-01" /></FormField></div>

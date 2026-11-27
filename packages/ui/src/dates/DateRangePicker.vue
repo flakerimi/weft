@@ -174,7 +174,7 @@ const buttonLabel = computed(() => {
 const dialogTitle = computed(() => (open.value ? picker.title(t.value.choose) : undefined))
 const months = computed(() => props.numberOfMonths ?? (touch.value ? 1 : 2))
 /** A name for a field: the FormField's label and which end it is. */
-const nameFor = (word: string) => (f.field ? `${f.field.labelId} ${word}` : undefined)
+const nameFor = (word: string) => (f.field ? joinIds(f.labelId.value, word) : undefined)
 
 let openOn: CalendarDate | null = null
 const startOn = computed(() => (open.value ? openOn?.toString() : undefined))
@@ -307,7 +307,7 @@ defineExpose({
       :aria-expanded="open ? 'true' : 'false'"
       :aria-controls="open ? panelId : undefined"
       :aria-label="touch ? (own['aria-label'] as string | undefined) : buttonLabel"
-      :aria-labelledby="touch && f.field ? joinIds(f.field.labelId, ids.value) : undefined"
+      :aria-labelledby="touch && f.labelId.value ? joinIds(f.labelId.value, ids.value) : undefined"
       :aria-describedby="touch ? describedBy() : undefined"
       :aria-invalid="touch && invalid ? 'true' : undefined"
       :aria-required="touch && (required || f.aria.value['aria-required']) ? 'true' : undefined"

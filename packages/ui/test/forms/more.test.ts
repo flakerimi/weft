@@ -32,8 +32,9 @@ describe('Textarea', () => {
     expect(area.value).toBe('from parent')
   })
 
-  it('takes its FormField\'s id and hint', () => {
+  it('takes its FormField\'s id and hint', async () => {
     const field = cases({ case: 'textarea' }).el.querySelector('.in-field')!
+    await nextTick()
     const area = field.querySelector('textarea')!
     expect(field.querySelector('label')!.htmlFor).toBe(area.id)
     expect(area.getAttribute('aria-describedby')).toBe(field.querySelector('.weft-form-field__hint')!.id)
@@ -219,8 +220,9 @@ describe('InputNumber', () => {
     expect(on.exposed.qty).toBe(3)
   })
 
-  it('takes its FormField\'s id', () => {
+  it('takes its FormField\'s id', async () => {
     const f = cases({ case: 'number' }).el.querySelector('.in-field')!
+    await nextTick()
     expect(f.querySelector('label')!.htmlFor).toBe(f.querySelector('input')!.id)
   })
 })
@@ -319,8 +321,9 @@ describe('Slider', () => {
     expect(m.exposed.changes).toEqual([[20, 50]])
   })
 
-  it('names a middle thumb by its place, so three thumbs read apart', () => {
+  it('names a middle thumb by its place, so three thumbs read apart', async () => {
     const f = cases({ case: 'slider' }).el.querySelector('.three-field')!
+    await nextTick()
     const label = f.querySelector('.weft-form-field__label')!
     const all = [...f.querySelectorAll<HTMLElement>('[role="slider"]')]
     expect(all.map((t) => t.getAttribute('aria-label'))).toEqual(['Minimum', 'Value 2 of 3', 'Maximum'])
@@ -469,6 +472,7 @@ describe('PinInput', () => {
 
   it('in a FormField is labelled by the field, and posts the joined code under its name', async () => {
     const f = cases({ case: 'pin' }).el.querySelector('.in-field')!
+    await nextTick()
     expect(f.querySelector('[role="group"]')!.getAttribute('aria-labelledby')).toBe(f.querySelector('label')!.id)
     const [first] = boxes(f as HTMLElement, '.weft-pin-input')
     expect(first!.id).toBe(f.querySelector('label')!.htmlFor)

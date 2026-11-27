@@ -135,7 +135,7 @@ const list =
     search: () => (props.filter ? term.value : ''),
     touch,
     label: () => {
-      if (f.field) return { 'aria-labelledby': f.field.labelId }
+      if (f.labelId.value) return { 'aria-labelledby': f.labelId.value }
       const label = own.value['aria-label'] as string | undefined
       return label ? { 'aria-label': label } : {}
     },

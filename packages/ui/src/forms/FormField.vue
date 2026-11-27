@@ -6,7 +6,7 @@
 // through aria-describedby; an error marks it aria-invalid. Inside a Form, a
 // field with a name shows the Form's error for that name and is required when
 // the Form's schema says so.
-import { computed, hasInjectionContext, inject, shallowRef, useSlots } from 'vue'
+import { computed, hasInjectionContext, inject, onMounted, ref, shallowRef, useSlots } from 'vue'
 import { ID_SCOPE, useId, type IdScope } from '../headless/useId.ts'
 import { joinIds } from './dom.ts'
 import { provideField, useForm } from './field.ts'
@@ -61,15 +61,24 @@ const descriptionId = `${base}-description`
 const hintId = `${base}-hint`
 const errorId = `${base}-error`
 // A control that names itself by the label's id (a group, a slider) says so
-// in its setup, and the label is then no <label>. The server draws the label
-// after the control (FieldLabel). Hydrating an island, the label is drawn
-// before the control's setup runs, as the server drew it; the control then
-// takes over.
+// in its setup, and the label is then no <label> (FieldLabel). The field
+// draws its label before the control, so it waits to know:
+// - On the server the label is drawn after the control (FieldLabel's prefetch).
+// - Hydrating an island, the label is drawn as the server drew it, read from
+//   the page before the first render, so the hydration matches; the control,
+//   once set up, decides from then on.
+// - Mounted in the browser with no server markup, the label is drawn once the
+//   field has mounted, its control set up, so it is drawn once, the right
+//   element, and its slot is set up once.
 const inIsland = hasInjectionContext() && inject<IdScope | null>(ID_SCOPE, null) !== null
 const drawn = !import.meta.env.SSR && inIsland && typeof document !== 'undefined' ? document.getElementById(labelId) : null
 const asDrawn = !!drawn && drawn.tagName !== 'LABEL'
-const named = shallowRef<() => boolean>(() => asDrawn)
-const isNamed = () => named.value()
+const own = shallowRef<(() => boolean) | null>(null)
+const mounted = ref(false)
+onMounted(() => (mounted.value = true))
+const isNamed = () => (own.value ? own.value() : !mounted.value && asDrawn)
+const hasLabel = () => !!props.label || !!slots.label
+const drawLabel = () => hasLabel() && (import.meta.env.SSR || !!drawn || mounted.value)
 
 const message = computed(() => {
   if (typeof props.error === 'string') return props.error || undefined
@@ -85,6 +94,7 @@ const showError = computed(() => !!message.value || (invalid.value && !!slots.er
 provideField({
   id,
   labelId,
+  hasLabel,
   name: () => props.name,
   describedBy: () => joinIds(hasDescription.value && descriptionId, hasHint.value && hintId, showError.value && errorId),
   invalid: () => invalid.value,
@@ -93,14 +103,14 @@ provideField({
   size: () => props.size,
   blur: () => props.name && form?.blur(props.name),
   input: () => props.name && form?.input(props.name),
-  namedByLabel: (on = true) => (named.value = typeof on === 'function' ? on : () => on),
+  namedByLabel: (on = true) => (own.value = typeof on === 'function' ? on : on ? () => true : null),
 })
 </script>
 
 <template>
   <div class="weft-form-field" :data-size="size" :data-invalid="invalid ? 'true' : undefined">
     <div v-if="label || $slots.label || hasHint" class="weft-form-field__head">
-      <FieldLabel v-if="label || $slots.label" :id="labelId" :control="id" :named="isNamed">
+      <FieldLabel v-if="drawLabel()" :id="labelId" :control="id" :named="isNamed">
         <slot name="label">{{ label }}</slot>
         <span v-if="required" class="weft-form-field__required" aria-hidden="true">*</span>
       </FieldLabel>

@@ -100,9 +100,10 @@ const thumbId = (i: number) => (i === 0 && f.id.value ? f.id.value : `${base}-${
  */
 function labelledBy(i: number): string | undefined {
   const own = attrs['aria-labelledby'] as string | undefined
-  if (range.value) return f.field ? `${own ?? f.field.labelId} ${thumbId(i)}` : own && `${own} ${thumbId(i)}`
+  const field = f.labelId.value
+  if (range.value) return (own ?? field) && `${own ?? field} ${thumbId(i)}`
   if (label(i)) return undefined
-  return own ?? f.field?.labelId
+  return own ?? field
 }
 
 /** Move thumb `i` toward `to`, kept on a step and between its neighbours; true when it moved. */

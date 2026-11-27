@@ -266,8 +266,9 @@ describe('Switch', () => {
     expect(m.el.querySelector('.busy .weft-switch__thumb .weft-spinner')).not.toBeNull()
   })
 
-  it('takes its FormField\'s id, so the field label names it', () => {
+  it('takes its FormField\'s id, so the field label names it', async () => {
     const field = cases({ case: 'switch' }).el.querySelector('.in-field')!
+    await nextTick()
     expect(field.querySelector<HTMLLabelElement>('.weft-form-field__label')!.htmlFor).toBe(field.querySelector('input')!.id)
   })
 

@@ -4,6 +4,8 @@ import { neutral } from '@weft/themes'
 import { registerIcon } from '../../src/basics/icons.ts'
 import Input from '../../src/forms/Input.vue'
 import InputCases from '../fixtures/forms/InputCases.vue'
+import LabelSlotCases from '../fixtures/forms/LabelSlotCases.vue'
+import { counts } from '../fixtures/forms/setup-counts.ts'
 import { mount } from '../mount.ts'
 import { loadStyles, ruleFor } from '../styles.ts'
 import { px, settle, type } from './helpers.ts'
@@ -175,8 +177,9 @@ describe('Input', () => {
 })
 
 describe('FormField', () => {
-  it('labels its control, with a description under the label and a hint beside it, both describing it', () => {
+  it('labels its control, with a description under the label and a hint beside it, both describing it', async () => {
     const el = cases({ case: 'field' }).el
+    await settle()
     const field = el.querySelector('.weft-form-field')!
     const label = field.querySelector('label')!
     const input = field.querySelector('input')!
@@ -196,6 +199,31 @@ describe('FormField', () => {
     expect(field.querySelector('.weft-form-field__error')).toBeNull()
   })
 
+  it('mounted in the browser, draws its label once, the right element, its slot set up once', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const added = new Set<Element>()
+    const watch = new MutationObserver((records) => {
+      for (const r of records) for (const n of r.addedNodes) {
+        if (n instanceof Element) for (const l of [n, ...n.querySelectorAll('.weft-form-field__label')]) if (l.classList.contains('weft-form-field__label')) added.add(l)
+      }
+    })
+    watch.observe(host, { childList: true, subtree: true })
+    const m = mount(LabelSlotCases)
+    host.appendChild(m.el)
+    await settle()
+    watch.disconnect()
+    // Never a <label> over the radio group, not even for a moment.
+    expect(m.el.querySelector('.plan .weft-form-field__label')!.tagName).toBe('SPAN')
+    expect(m.el.querySelector('.email .weft-form-field__label')!.tagName).toBe('LABEL')
+    // The two labels are the only ones ever drawn.
+    expect([...added].map((l) => l.tagName).sort()).toEqual(['LABEL', 'SPAN'])
+    for (const l of added) expect(l.isConnected).toBe(true)
+    expect(counts).toEqual({ plan: 1, email: 1 })
+    m.unmount()
+    host.remove()
+  })
+
   it('is a <label> whose control is its labelable control', async () => {
     const el = cases({ case: 'field' }).el
     await settle()
@@ -205,8 +233,9 @@ describe('FormField', () => {
     expect(label.control).toBe(el.querySelector('input'))
   })
 
-  it('marks a required field with an asterisk read only by sight, and the control as aria-required', () => {
+  it('marks a required field with an asterisk read only by sight, and the control as aria-required', async () => {
     const el = cases({ case: 'field' }).el
+    await settle()
     const mark = el.querySelector('.weft-form-field__required')!
     expect(mark.textContent).toBe('*')
     expect(mark.getAttribute('aria-hidden')).toBe('true')

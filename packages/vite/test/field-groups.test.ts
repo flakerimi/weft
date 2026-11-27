@@ -80,6 +80,17 @@ describe('a FormField on the server', () => {
     }
   })
 
+  it('names no control by the id of a label it does not draw', () => {
+    const unlabelled = doc.querySelectorAll('[data-unlabelled] .weft-form-field')
+    expect(unlabelled.length).toBe(16)
+    for (const field of unlabelled) expect(field.querySelector('.weft-form-field__label')).toBeNull()
+    for (const el of doc.querySelectorAll('[aria-labelledby]')) {
+      for (const id of el.getAttribute('aria-labelledby')!.split(' ')) {
+        expect(doc.getElementById(id), `${el.outerHTML.slice(0, 100)}: no element ${id}`).not.toBeNull()
+      }
+    }
+  })
+
   it('draws no <label> that labels no form control', () => {
     const labels = [...doc.querySelectorAll('label')]
     expect(labels.length).toBeGreaterThan(0)

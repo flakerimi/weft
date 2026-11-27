@@ -79,7 +79,7 @@ hideField()
     :data-size="f.size.value"
     :disabled="f.disabled.value || undefined"
     :id="f.id.value"
-    :aria-labelledby="f.field && !legend && !$slots.legend ? f.field.labelId : undefined"
+    :aria-labelledby="!legend && !$slots.legend ? f.labelId.value : undefined"
     :aria-describedby="f.aria.value['aria-describedby']"
     :aria-invalid="f.aria.value['aria-invalid']"
     @focusout="leavesGroup($event) && f.blur()"
