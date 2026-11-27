@@ -35,6 +35,7 @@ const GROUPS: [string, string][] = [
   ['disclosure', 'Disclosure'],
   ['feedback', 'Feedback'],
   ['data', 'Data'],
+  ['session', 'Session'],
   ['shell', 'Shell'],
   ['landing', 'Landing'],
   ['adaptive', 'Adaptive'],
@@ -89,8 +90,9 @@ export const STILL = new Set([
 
 /**
  * Whether an example needs JavaScript to be what it shows: its script does
- * more than import, its template listens (`@`, `v-on`, `v-model`), or it
- * draws a component (any PascalCase tag) outside STILL.
+ * more than import, its template listens (`@`, `v-on`, `v-model`) or draws by
+ * permission (`perm`, known only in the browser), or it draws a component
+ * (any PascalCase tag) outside STILL.
  */
 export function isInteractive(source: string): boolean {
   const script = /<script\b[^>]*>([\s\S]*?)<\/script>/.exec(source)?.[1] ?? ''
@@ -102,7 +104,7 @@ export function isInteractive(source: string): boolean {
   if (code.trim()) return true
   const template = /<template>([\s\S]*)<\/template>/.exec(source)?.[1] ?? ''
   const markup = template.replace(/<!--[\s\S]*?-->/g, '')
-  if (/\s(?:@|v-on[:\s=]|v-model\b)/.test(markup)) return true
+  if (/\s(?:@|v-on[:\s=]|v-model\b|:?perm=)/.test(markup)) return true
   return [...markup.matchAll(/<([A-Z][A-Za-z0-9]*)/g)].some((m) => !STILL.has(m[1]!))
 }
 

@@ -53,6 +53,7 @@ const props = withDefaults(
     customDialogSlot?: boolean
     input?: Input
     locale?: string
+    perm?: string
   }>(),
   {
     columns: undefined,
@@ -84,6 +85,7 @@ const props = withDefaults(
     customDialogSlot: false,
     input: undefined,
     locale: undefined,
+    perm: undefined,
   },
 )
 
@@ -155,6 +157,7 @@ defineExpose({
       :empty-description="emptyDescription"
       :empty-icon="emptyIcon"
       :labels="labels"
+      :perm="perm"
       @saved="savedRecords.push($event)"
       @deleted="deletedRecords.push($event)"
       @error="errors.push($event)"

@@ -871,6 +871,13 @@
           "required": false,
           "default": "'button'",
           "description": "The native button type; `submit` submits its form. Ignored with `to`."
+        },
+        {
+          "name": "perm",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A permission, such as `products:edit`: the button is drawn only for a signed-in user who has it (`useSession().can`), never on the server. It hides; it does not disable."
         }
       ],
       "emits": [
@@ -897,7 +904,7 @@
           "dynamic": false
         }
       ],
-      "notes": "`variant` is `solid`, `soft`, `outline` or `ghost`; `tone` is `neutral`,\n`primary`, `danger`, `warning` or `success`; `size` is `sm`, `md` or `lg`.\nGive the text as `label` or as the default slot; the `leading` and\n`trailing` slots replace `icon` and `trailing-icon`. With only an icon the\nbutton is square (`square` makes any button square): give it an\n`aria-label`, or put it in a `Tooltip`, whose text names it; otherwise it\nwarns once in development. `active` draws it as the\ncurrent one of a set; with `to` it also sets `aria-current=\"page\"`.\n\n**Touch:** an md button grows to 44 px tall on touch, so the visible target\nis the hit target. A small or square button keeps its size (a toolbar would\nchange shape otherwise) and its `::before` reaches 44 px instead.\n\n**Loading** shows a spinner (or `loading-icon`, turning) over the content,\nwhich stays in place (hidden), so the button keeps its width. It sets `aria-busy=\"true\"` and\n`aria-disabled=\"true\"`, and blocks activation by mouse, keyboard and form\nsubmit, but stays focusable, so a keyboard user does not lose their place.\n\n**Disabled** is the native `disabled` attribute on a button. With `to` the\nbutton is an `<a>`, taking `rel` and `target`, with `noopener` added for\nanother site; disabled, it has no address and is announced as a disabled\nlink; loading, it keeps its address (and focus) but neither a click, a\nmiddle click nor Enter follows it.\n\n**Keyboard:** a native button, so Enter and Space press it; as a link, Enter\nfollows it. Focus shows the theme's focus ring.\n\n**In a Form.** As a link it is disabled while the Form is disabled or busy,\nso a Cancel cannot navigate mid-submit (a disabled fieldset disables native\nbuttons but leaves links alone). While the Form is busy, a `type=\"submit\"`\nbutton loads, keeping focus, and any other button works as ever, so a\nCancel or Stop can abort the submit (as in Nuxt UI).\n\n`click` is emitted only when the button is pressed while neither loading nor\ndisabled. `type` defaults to `button`, so a Button inside a form submits it\nonly with `type=\"submit\"`.",
+      "notes": "`variant` is `solid`, `soft`, `outline` or `ghost`; `tone` is `neutral`,\n`primary`, `danger`, `warning` or `success`; `size` is `sm`, `md` or `lg`.\nGive the text as `label` or as the default slot; the `leading` and\n`trailing` slots replace `icon` and `trailing-icon`. With only an icon the\nbutton is square (`square` makes any button square): give it an\n`aria-label`, or put it in a `Tooltip`, whose text names it; otherwise it\nwarns once in development. `active` draws it as the\ncurrent one of a set; with `to` it also sets `aria-current=\"page\"`.\n\n**Touch:** an md button grows to 44 px tall on touch, so the visible target\nis the hit target. A small or square button keeps its size (a toolbar would\nchange shape otherwise) and its `::before` reaches 44 px instead.\n\n**Loading** shows a spinner (or `loading-icon`, turning) over the content,\nwhich stays in place (hidden), so the button keeps its width. It sets `aria-busy=\"true\"` and\n`aria-disabled=\"true\"`, and blocks activation by mouse, keyboard and form\nsubmit, but stays focusable, so a keyboard user does not lose their place.\n\n**Disabled** is the native `disabled` attribute on a button. With `to` the\nbutton is an `<a>`, taking `rel` and `target`, with `noopener` added for\nanother site; disabled, it has no address and is announced as a disabled\nlink; loading, it keeps its address (and focus) but neither a click, a\nmiddle click nor Enter follows it.\n\n**Keyboard:** a native button, so Enter and Space press it; as a link, Enter\nfollows it. Focus shows the theme's focus ring.\n\n**In a Form.** As a link it is disabled while the Form is disabled or busy,\nso a Cancel cannot navigate mid-submit (a disabled fieldset disables native\nbuttons but leaves links alone). While the Form is busy, a `type=\"submit\"`\nbutton loads, keeping focus, and any other button works as ever, so a\nCancel or Stop can abort the submit (as in Nuxt UI).\n\n**By permission.** With `perm`, such as `perm=\"products:edit\"`, the button\nis drawn only for a signed-in user who has that permission\n(`useSession().can`, always true for the role `owner`). It hides; it does not\ndisable, and it guards nothing: the route behind it must still check, as\n`auth.Per` does. Pages are built with no session, so the server never draws a\n`perm` button, and neither does the browser's first render: it appears once\nthe button has mounted and `GET /api/auth/me` has answered, asked once for\nthe whole page, so hydration always matches. Without `perm` nothing is asked.\n`perm` names a permission a route records (`auth.Per`, `auth.Can`) or an\n`auth.Grant` names, which is what `me` lists; one covered only by a wildcard\ngrant, with no such route, is false in the browser though the server allows it.\n\n`click` is emitted only when the button is pressed while neither loading nor\ndisabled. `type` defaults to `button`, so a Button inside a form submits it\nonly with `type=\"submit\"`.",
       "examples": [
         {
           "name": "basic",
@@ -910,6 +917,12 @@
           "title": "As link",
           "file": "packages/ui/examples/Button/as-link.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { Button, Stack } from '@weft/ui'\n</script>\n\n<template>\n  <Stack direction=\"row\" :gap=\"2\" wrap>\n    <Button to=\"/pricing\" label=\"See pricing\" trailing-icon=\"arrow-right\" />\n    <Button to=\"https://vuejs.org/\" label=\"Vue docs\" variant=\"outline\" trailing-icon=\"external-link\" />\n    <Button block to=\"/signup\" label=\"Create an account\" variant=\"soft\" />\n  </Stack>\n</template>\n"
+        },
+        {
+          "name": "by-permission",
+          "title": "By permission",
+          "file": "packages/ui/examples/Button/by-permission.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Button, Stack } from '@weft/ui'\n</script>\n\n<template>\n  <!--\n    Edit and Delete are drawn only for a signed-in user with products:edit and products:delete.\n    The gallery's demo user may edit products, not delete them, so it sees View and Edit.\n  -->\n  <Stack direction=\"row\" :gap=\"2\">\n    <Button label=\"View\" variant=\"outline\" />\n    <Button label=\"Edit\" icon=\"pencil\" perm=\"products:edit\" />\n    <Button label=\"Delete\" icon=\"trash\" tone=\"danger\" variant=\"soft\" perm=\"products:delete\" />\n  </Stack>\n</template>\n"
         },
         {
           "name": "icons",
@@ -2951,6 +2964,13 @@
           "required": false,
           "default": null,
           "description": "Labels override."
+        },
+        {
+          "name": "perm",
+          "type": "string",
+          "required": false,
+          "default": "undefined",
+          "description": "Resource name; New, Edit and Delete need its create, edit and delete permissions."
         }
       ],
       "emits": [
@@ -3038,7 +3058,7 @@
           "dynamic": true
         }
       ],
-      "notes": "It has no stylesheet of its own: it composes `Stack`, `FormField`, `Input`,\n`RadioGroup`, `Select`, `Button`, `Table`, `EmptyState`, `EntityDialog` and\n`ConfirmDialog`.\n\n`DataTable` pairs a toolbar, `Table`, `EntityDialog` and `ConfirmDialog`\naround a generated Warp resource (`{ list, create, update, remove }`) and its\nfield schema (`schema.ProductInput` from `weft gen`). Pass\n`:resource=\"api.products\"` (or individual `fetch`, `create`, `update` and\n`remove` functions) and `:schema=\"schema.ProductInput\"`.\n\n**Toolbar.** When `searchable` is true (the default), the toolbar renders a\nsearch `Input` bound to `v-model:search` with `search-debounce` (default\n250 ms). Each entry in `filter-defs` (`{ key, label, items, allLabel, control }`)\nrenders a filter control bound into `v-model:filters`, prepending\n`allLabel || labels.anyFilter` (default `\"Any\"`, value `\"\"`) unless\n`allLabel: false`; filters with four or fewer options render a horizontal\n`RadioGroup` on regular and wide containers and a `Select` when narrow. When\n`create` and `schema` (or `#dialog`) are present, a `\"New <name>\"` button\nopens `EntityDialog` in create mode.\n\n**Columns and row actions.** `columns` takes the same typed array as `Table`,\nand every `#<key>-cell` and `#<key>-header` slot forwards to `Table`.\nUnslotted cells format numbers in the `WeftProvider`'s locale (`en-US` by\ndefault) and booleans with `labels.booleanYes` / `labels.booleanNo`. When\n`update` (with `schema` or `#dialog`) or `remove` is present and `columns` has\nno `actions` column, `DataTable` appends a trailing `Actions` column with\n`Edit` (`aria-label` `\"Edit <itemLabel>\"`) and `Delete` (`aria-label`\n`\"Delete <itemLabel>\"`).\n\n**Dialogs and refresh.** Saving in `EntityDialog` emits `saved` and refreshes\n`Table`. Confirming in `ConfirmDialog` calls `remove(row[idKey])`, emits\n`deleted`, refreshes the table, and moves focus to the next row's action\nbutton (or `\"New <name>\"` when empty); if `remove` rejects, the dialog stays\nopen with an `Alert` (`role=\"alert\"`). `defineExpose` provides `refresh()`,\n`edit(record)` and `askRemove(record)`.",
+      "notes": "It has no stylesheet of its own: it composes `Stack`, `FormField`, `Input`,\n`RadioGroup`, `Select`, `Button`, `Table`, `EmptyState`, `EntityDialog` and\n`ConfirmDialog`.\n\n`DataTable` pairs a toolbar, `Table`, `EntityDialog` and `ConfirmDialog`\naround a generated Warp resource (`{ list, create, update, remove }`) and its\nfield schema (`schema.ProductInput` from `weft gen`). Pass\n`:resource=\"api.products\"` (or individual `fetch`, `create`, `update` and\n`remove` functions) and `:schema=\"schema.ProductInput\"`.\n\n**Toolbar.** When `searchable` is true (the default), the toolbar renders a\nsearch `Input` bound to `v-model:search` with `search-debounce` (default\n250 ms). Each entry in `filter-defs` (`{ key, label, items, allLabel, control }`)\nrenders a filter control bound into `v-model:filters`, prepending\n`allLabel || labels.anyFilter` (default `\"Any\"`, value `\"\"`) unless\n`allLabel: false`; filters with four or fewer options render a horizontal\n`RadioGroup` on regular and wide containers and a `Select` when narrow. When\n`create` and `schema` (or `#dialog`) are present, a `\"New <name>\"` button\nopens `EntityDialog` in create mode.\n\n**Columns and row actions.** `columns` takes the same typed array as `Table`,\nand every `#<key>-cell` and `#<key>-header` slot forwards to `Table`.\nUnslotted cells format numbers in the `WeftProvider`'s locale (`en-US` by\ndefault) and booleans with `labels.booleanYes` / `labels.booleanNo`. When\n`update` (with `schema` or `#dialog`) or `remove` is present and `columns` has\nno `actions` column, `DataTable` appends a trailing `Actions` column with\n`Edit` (`aria-label` `\"Edit <itemLabel>\"`) and `Delete` (`aria-label`\n`\"Delete <itemLabel>\"`).\n\n**By permission.** `perm` takes a resource name, such as `perm=\"products\"`:\n`\"New <name>\"` is drawn only for a signed-in user with `products:create`,\n`Edit` only with `products:edit` and `Delete` only with `products:delete`\n(`useSession().can`, always true for the role `owner`), and the `Actions`\ncolumn is dropped when neither row action is left. It hides; it does not\ndisable, and the server still decides: a route guarded by `auth.Per` answers\n403 to anyone without the permission. Pages are built with no session, so the\nserver draws none of the three, and neither does the browser's first render;\nthey appear once the table has mounted and `GET /api/auth/me` has answered,\nso hydration always matches. Without `perm` nothing is asked. When they\nappear, the toolbar gains New and every row its Actions cell, so the table\nshifts once, as the page's first answer arrives.\n\n**Dialogs and refresh.** Saving in `EntityDialog` emits `saved` and refreshes\n`Table`. Confirming in `ConfirmDialog` calls `remove(row[idKey])`, emits\n`deleted`, refreshes the table, and moves focus to the next row's action\nbutton (or `\"New <name>\"` when empty); if `remove` rejects, the dialog stays\nopen with an `Alert` (`role=\"alert\"`). `defineExpose` provides `refresh()`,\n`edit(record)` and `askRemove(record)`.",
       "examples": [
         {
           "name": "basic",
@@ -5231,6 +5251,64 @@
           "title": "Per width",
           "file": "packages/ui/examples/Grid/per-width.vue",
           "source": "<script setup vapor lang=\"ts\">\nimport { Card, Grid } from '@weft/ui'\n</script>\n\n<template>\n  <Grid :cols=\"{ narrow: 2, wide: 4 }\" :gap=\"3\">\n    <Card v-for=\"n in 8\" :key=\"n\" :padding=\"3\">Tile {{ n }}</Card>\n  </Grid>\n</template>\n"
+        }
+      ]
+    },
+    {
+      "name": "Guard",
+      "group": "session",
+      "file": "packages/ui/src/session/Guard.vue",
+      "purpose": "A route guard: what it holds is shown only to a signed-in user with perm.",
+      "use": "Around an island's content that only some accounts may see, such as a users page for users:read; it sends a visitor with no session to sign in and back.",
+      "avoid": "For one button or action, use Button's or DataTable's perm; for what the server must refuse, guard the route with auth.Per, which Guard never replaces.",
+      "adapts": {
+        "input": "Nothing changes.",
+        "surface": "Nothing changes; the Alert and Spinner follow the surface's type scale.",
+        "width": "Nothing changes."
+      },
+      "props": [
+        {
+          "name": "perm",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "A permission, such as `reports:read`, the user must have; without it, any signed-in user."
+        },
+        {
+          "name": "signIn",
+          "type": "string",
+          "required": false,
+          "default": null,
+          "description": "Where a visitor with no session is sent, with `?next=` this page; `/login` by default."
+        }
+      ],
+      "emits": [],
+      "slots": [
+        {
+          "name": "default",
+          "props": [
+            "user"
+          ],
+          "dynamic": false
+        },
+        {
+          "name": "denied",
+          "props": [],
+          "dynamic": false
+        },
+        {
+          "name": "loading",
+          "props": [],
+          "dynamic": false
+        }
+      ],
+      "notes": "It has no stylesheet of its own: it draws `Spinner` and `Alert`.\n\n`perm` is a permission such as `perm=\"users:read\"`; without it, any\nsigned-in user passes. Who is signed in comes from `useSession()`, which asks\n`GET /api/auth/me` once for the whole page, and `can(perm)` is always true for\nthe role `owner`.\n\n**What it shows.** Pages are built with no session, so the server renders the\n`loading` slot (a `Spinner` that says Loading), and so does the browser's\nfirst render, so hydration always matches. Once mounted, and the session\nknown:\n\n- a visitor with no session is sent, by `requireSession({ perm, signIn })`, to\n  `sign-in` (default `/login`) with `?next=` this page's path and query, and\n  `loading` stays while the browser leaves;\n- a user without `perm` sees the `denied` slot, by default an `Alert` with\n  `role=\"status\"`: \"Your account cannot see this; ask an administrator.\";\n- a session that could not be read (the server cannot be reached, or answers\n  an error) shows why in an `Alert` with `role=\"alert\"`, and sends no one\n  away;\n- otherwise the default slot, given `{ user }`, the signed-in user.\n\nIt follows the session: after `useSession().refresh()` a role that lost the\npermission sees `denied`, and a session that has ended (signed out in another\ntab, which the page notices when it is shown again) sends the visitor to sign\nin, as on load. `perm` names a permission a route records or an `auth.Grant`\nnames, which is what `me` lists. It hides what it holds and guards nothing: the\nserver's routes must still check, as `auth.Per` does, and send nothing a\nviewer may not read.",
+      "examples": [
+        {
+          "name": "basic",
+          "title": "Basic",
+          "file": "packages/ui/examples/Guard/basic.vue",
+          "source": "<script setup vapor lang=\"ts\">\nimport { Guard, Stack } from '@weft/ui'\n</script>\n\n<template>\n  <!--\n    Each Guard shows what it holds only to a signed-in user with its permission, and sends a visitor\n    with no session to /login and back. The gallery's demo user may edit products, not read users.\n  -->\n  <Stack :gap=\"3\">\n    <Guard perm=\"products:edit\">\n      <template #default=\"{ user }\">\n        <p>{{ user.name }} may edit products.</p>\n      </template>\n    </Guard>\n    <Guard perm=\"users:read\">\n      <p>The users of this app.</p>\n    </Guard>\n  </Stack>\n</template>\n"
         }
       ]
     },

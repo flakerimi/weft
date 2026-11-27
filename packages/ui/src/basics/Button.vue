@@ -9,8 +9,12 @@
 // disabled while the Form is disabled or busy (a disabled fieldset leaves
 // links alone); as a button, while the Form is busy, a submit button loads
 // (keeping focus) and any other works as ever, so a Cancel can abort.
+// With `perm` it is drawn only for a signed-in user who has that permission:
+// never on the server, and in the browser once mounted and the session is
+// known, so hydration always matches.
 import { computed, inject, useAttrs, useSlots } from 'vue'
 import { useForm } from '../forms/form-state.ts'
+import { useCan } from '../session/can.ts'
 import { isExternal, relFor } from './address.ts'
 import Icon from './Icon.vue'
 import Spinner from './Spinner.vue'
@@ -53,6 +57,8 @@ const props = withDefaults(
     target?: string
     /** The native button type; `submit` submits its form. Ignored with `to`. */
     type?: 'button' | 'submit' | 'reset'
+    /** A permission, such as `products:edit`: the button is drawn only for a signed-in user who has it (`useSession().can`), never on the server. It hides; it does not disable. */
+    perm?: string
   }>(),
   { variant: 'solid', tone: 'primary', size: 'md', type: 'button' },
 )
@@ -79,6 +85,7 @@ if (import.meta.env.DEV && !useSlots().default && !props.label && (props.icon ||
 }
 
 const form = useForm()
+const can = useCan()
 /** Disabled: by its own prop, or, as a link, by a disabled or busy Form. */
 const off = computed(() => props.disabled || (!!props.to && !!form?.disabled()))
 /** Loading: by its own prop, or as the submit button of a busy Form. */
@@ -114,6 +121,7 @@ function warnUnnamed() {
 
 <template>
   <component
+    v-if="!perm || can(perm)"
     :is="to ? 'a' : 'button'"
     class="weft-button"
     :type="to ? undefined : type"

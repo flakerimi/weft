@@ -41,6 +41,18 @@ buttons but leaves links alone). While the Form is busy, a `type="submit"`
 button loads, keeping focus, and any other button works as ever, so a
 Cancel or Stop can abort the submit (as in Nuxt UI).
 
+**By permission.** With `perm`, such as `perm="products:edit"`, the button
+is drawn only for a signed-in user who has that permission
+(`useSession().can`, always true for the role `owner`). It hides; it does not
+disable, and it guards nothing: the route behind it must still check, as
+`auth.Per` does. Pages are built with no session, so the server never draws a
+`perm` button, and neither does the browser's first render: it appears once
+the button has mounted and `GET /api/auth/me` has answered, asked once for
+the whole page, so hydration always matches. Without `perm` nothing is asked.
+`perm` names a permission a route records (`auth.Per`, `auth.Can`) or an
+`auth.Grant` names, which is what `me` lists; one covered only by a wildcard
+grant, with no such route, is false in the browser though the server allows it.
+
 `click` is emitted only when the button is pressed while neither loading nor
 disabled. `type` defaults to `button`, so a Button inside a form submits it
 only with `type="submit"`.

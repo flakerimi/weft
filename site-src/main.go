@@ -69,7 +69,31 @@ func handler(releases fs.FS) http.Handler {
 	if err != nil {
 		panic(err)
 	}
-	return warp.Serve(dist, nil, warp.WithFiles("/", releases))
+	return warp.Serve(dist, http.HandlerFunc(demoAPI), warp.WithFiles("/", releases))
+}
+
+// demoMe is who the gallery's examples see signed in: a demo viewer who may
+// also edit products, so the perm Button example draws Edit and not Delete,
+// and of the Guard example's two Guards one opens and one is denied. It is the
+// JSON of packages/vite/test/fixtures/demo-me.json, which examples-hydrate
+// answers too.
+var demoMe = []byte(`{"id":1,"created_at":"2026-11-28T00:00:00Z","updated_at":"2026-11-28T00:00:00Z","email":"demo@example.com","name":"Demo","role":"viewer","permissions":["products:edit","products:read"]}` + "\n")
+
+// demoAPI is the site's whole API: GET /api/auth/me answers demoMe, and every
+// other request under /api is the 404 of a site with no API, as warp.Serve
+// answers with none. It is a demo, not a session: the site has no accounts,
+// reads and sets no cookie, and has no other route, so nothing else on it acts
+// as if it had an API.
+func demoAPI(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/api/auth/me" || (r.Method != http.MethodGet && r.Method != http.MethodHead) {
+		warp.WriteError(w, r, warp.NotFound("This app has no API."))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method == http.MethodGet {
+		w.Write(demoMe)
+	}
 }
 
 func main() {
