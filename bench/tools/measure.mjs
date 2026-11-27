@@ -8,7 +8,10 @@
 //               sends; images as they are. Wire bytes are what this server
 //               really sent with Accept-Encoding: br, gzip.
 //   ttfb        `load -ttfb N`: N requests on new connections, to the final
-//               response's headers.
+//               response's headers; as many rounds as the load test, the
+//               targets in a shuffled order each round, after the Lighthouse
+//               runs, a pause and one untimed round; the median of every
+//               round's requests, with p25 and p75.
 //   lighthouse  N runs of Lighthouse's mobile preset, the targets interleaved
 //               run by run; the median score and LCP, with min and max.
 //   load        `load`: 64 connections, 2 s warm-up, 10 s measured; three
@@ -20,6 +23,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import http from 'node:http'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { parseArgs, promisify } from 'node:util'
 import zlib from 'node:zlib'
 
@@ -79,6 +83,33 @@ function median(xs) {
 function spread(xs) {
   return { median: median(xs), min: Math.min(...xs), max: Math.max(...xs), values: xs }
 }
+
+// percentile is the nearest-rank percentile p of sorted numbers, as load's.
+function percentile(sorted, p) {
+  return sorted[Math.max(0, Math.min(Math.ceil((p / 100) * sorted.length) - 1, sorted.length - 1))]
+}
+
+// shuffled is a copy of xs in an order drawn from rand (Fisher-Yates).
+function shuffled(xs, rand) {
+  const s = [...xs]
+  for (let i = s.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1))
+    ;[s[i], s[j]] = [s[j], s[i]]
+  }
+  return s
+}
+
+// seeded is a small fixed-seed generator (mulberry32), so a run's orders can
+// be made again.
+function seeded(seed) {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0
+    let x = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x
+    return ((x ^ (x >>> 14)) >>> 0) / 2 ** 32
+  }
+}
+const TTFB_SEED = 1
 
 // get fetches a URL with node:http, which does not decompress, so the body is
 // the bytes on the wire. Any 1xx (Early Hints) before the response is skipped.
@@ -195,8 +226,10 @@ async function sh(cmd, argv) {
 }
 
 const pkg = (p) => JSON.parse(readFileSync(p, 'utf8')).version
+// The local date, as bench/run.sh names the results file (`date +%F`).
+const today = new Date()
 const results = {
-  date: new Date().toISOString().slice(0, 10),
+  date: [today.getFullYear(), today.getMonth() + 1, today.getDate()].map((n) => String(n).padStart(2, '0')).join('-'),
   machine: {
     chip: await sh('sysctl', ['-n', 'machdep.cpu.brand_string']),
     cores: Number(await sh('sysctl', ['-n', 'hw.ncpu'])),
@@ -227,6 +260,9 @@ const results = {
     lighthouse_runs: Number(args.runs),
     lighthouse_preset: 'mobile (default), simulated throttling, headless Chrome, a fresh profile each run',
     ttfb_requests: Number(args.ttfb),
+    ttfb_runs: Number(args['load-runs']),
+    ttfb_seed: TTFB_SEED,
+    ttfb_order: [],
     load: { runs: Number(args['load-runs']), connections: Number(args.conns), duration: args.duration, warmup: args.warmup, accept_encoding: 'br, gzip' },
   },
   targets: [],
@@ -256,8 +292,42 @@ for (const t of results.targets) {
     requests: runs[0].requests,
   }
   log(`${t.id}: ${t.bytes.requests} requests, JS ${t.bytes.js_br} B br + ${t.bytes.js_inline_raw} B inline, total ${t.bytes.total_br} B br`)
+}
 
-  t.ttfb = await load(t.url, ['-ttfb', args.ttfb])
+// TTFB, interleaved as the load is. A series timed straight after Chrome quits
+// is slower, whichever server it is, and so is the first of a sequence; so
+// the rounds wait for the machine to settle, then one untimed round, as long
+// as a counted one, warms every server, and each counted round visits the
+// targets in its own order, shuffled from a fixed seed, so that no target is
+// always first or always after the same one.
+log(`ttfb, ${args['load-runs']} rounds of ${args.ttfb} requests per target, interleaved`)
+await sleep(5000)
+for (const t of results.targets) await load(t.url, ['-ttfb', args.ttfb])
+const rand = seeded(TTFB_SEED)
+const series = new Map(results.targets.map((t) => [t, []]))
+for (let i = 0; i < Number(args['load-runs']); i++) {
+  const order = shuffled(results.targets, rand)
+  results.method.ttfb_order.push(order.map((t) => t.id))
+  for (const t of order) {
+    const r = await load(t.url, ['-ttfb', args.ttfb])
+    series.get(t).push(r)
+    log(`  ttfb ${i + 1} ${t.id}: median ${r.median_ms.toFixed(3)} ms`)
+  }
+}
+for (const [t, runs] of series) {
+  const final = runs.flatMap((r) => r.samples_ms).sort((a, b) => a - b)
+  const first = runs.flatMap((r) => r.first_byte_ms).sort((a, b) => a - b)
+  t.ttfb = {
+    url: t.url,
+    n: final.length,
+    median_ms: percentile(final, 50),
+    p25_ms: percentile(final, 25),
+    p75_ms: percentile(final, 75),
+    min_ms: final[0],
+    max_ms: final.at(-1),
+    first_byte_median_ms: percentile(first, 50),
+    runs,
+  }
   log(`${t.id}: TTFB median ${t.ttfb.median_ms.toFixed(3)} ms`)
 }
 

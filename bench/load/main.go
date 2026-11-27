@@ -8,7 +8,8 @@
 // TTFB (-ttfb N): N requests one after another, each on a new connection,
 // after a few untimed ones. Each is timed to the final response's headers,
 // past any 103 Early Hints; the first byte of anything (the 103 included) is
-// reported beside it.
+// reported beside it. Every timed request is listed too, in order, so that
+// several series can be pooled.
 //
 // Usage:
 //
@@ -48,14 +49,16 @@ type LoadResult struct {
 }
 
 type TTFBResult struct {
-	URL               string  `json:"url"`
-	N                 int     `json:"n"`
-	MedianMs          float64 `json:"median_ms"`
-	P25Ms             float64 `json:"p25_ms"`
-	P75Ms             float64 `json:"p75_ms"`
-	MinMs             float64 `json:"min_ms"`
-	MaxMs             float64 `json:"max_ms"`
-	FirstByteMedianMs float64 `json:"first_byte_median_ms"`
+	URL               string    `json:"url"`
+	N                 int       `json:"n"`
+	MedianMs          float64   `json:"median_ms"`
+	P25Ms             float64   `json:"p25_ms"`
+	P75Ms             float64   `json:"p75_ms"`
+	MinMs             float64   `json:"min_ms"`
+	MaxMs             float64   `json:"max_ms"`
+	FirstByteMedianMs float64   `json:"first_byte_median_ms"`
+	SamplesMs         []float64 `json:"samples_ms"`
+	FirstByteMs       []float64 `json:"first_byte_ms"`
 }
 
 // percentile is the nearest-rank percentile p (0 to 100) of sorted durations.
@@ -164,6 +167,7 @@ func runTTFB(url string, n int, encoding string) (TTFBResult, error) {
 		return TTFBResult{}, err
 	}
 	var final, first []time.Duration
+	var samples, firstBytes []float64
 	for i := range ttfbWarmup + n {
 		var firstByte time.Time
 		req := base.WithContext(httptrace.WithClientTrace(base.Context(), &httptrace.ClientTrace{
@@ -186,6 +190,8 @@ func runTTFB(url string, n int, encoding string) (TTFBResult, error) {
 		if i >= ttfbWarmup {
 			final = append(final, headers.Sub(start))
 			first = append(first, firstByte.Sub(start))
+			samples = append(samples, ms(headers.Sub(start)))
+			firstBytes = append(firstBytes, ms(firstByte.Sub(start)))
 		}
 	}
 	slices.Sort(final)
@@ -199,6 +205,8 @@ func runTTFB(url string, n int, encoding string) (TTFBResult, error) {
 		MinMs:             ms(final[0]),
 		MaxMs:             ms(final[len(final)-1]),
 		FirstByteMedianMs: ms(percentile(first, 50)),
+		SamplesMs:         samples,
+		FirstByteMs:       firstBytes,
 	}, nil
 }
 
