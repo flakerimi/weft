@@ -69,7 +69,8 @@ What a newcomer meets first works, on every platform.
 - **W5, scaffolding and app blocks:** `weft scaffold`, `DataTable` (server
   paging, sorting, filtering over the list shape) and `EntityDialog`; the app
   template takes the shop's frame (done: data, the login and its pages, and
-  `hello`, with no starter resource).
+  `hello`, with no starter resource); `weft scaffold` (done, its pages
+  waiting on `DataTable`).
 - **Landing blocks** (Weft phase 7): `Hero`, `FeatureGrid`, `Pricing`,
   `Testimonials`, `Faq`, `Cta`.
 - **The benchmark** run on a quiet machine with every series interleaved, and

@@ -1,10 +1,10 @@
 ---
 title: CLI
-description: Every command, flag and error of weft, weft-build-pages and weft-dev, and the installer's settings.
+description: Every command, flag and error of weft, and the installer's settings.
 order: 35
 ---
 
-What is planned and not built is under [Coming next](../coming-next.md).
+What is planned and not built is under [Coming next](../coming-next.md). The page build's own commands, which `weft` runs, are in [Page tools](page-tools.md).
 
 ## weft
 
@@ -20,6 +20,7 @@ Commands:
   dev        run the app, restarting Go when a .go file or .env changes (--port n)
   gen        write web/.weft-types/api.ts, the typed API client and form rules, from the app's Go
   routes     list the app's routes: method, path, module, name and permission
+  scaffold   write a resource: its model, routes, test and pages (weft scaffold <name> <field[:type]>...)
   unpack     make sure .weft/ is unpacked and current, without installing
   update     update weft to the latest release (--check, --version X)
   upgrade    move the app to this weft's Weft version (--no-install)
@@ -73,19 +74,57 @@ The name is a lowercase letter, then lowercase letters, digits and hyphens, at m
 
 Before it writes anything it checks that `go`, `node` 22.18 or later and `pnpm` 10 or later are on `PATH`, and that the folder is missing or empty; otherwise it says `weft create: <name> already exists and is not empty; choose another name or move it away.`, or names the missing tool, with exit status 1. If `pnpm install` fails, the app stays, and it says `weft create: pnpm install did not finish; run pnpm install in <name> to finish.`
 
+### weft scaffold
+
+Writes one resource into an app `weft create` made, then runs `weft gen`.
+
+```text
+weft scaffold <name> <field[:type[:modifier...]]>... [--plural <word>] [--api]
+weft scaffold product name:string:required:max=120:unique price:float:min=0 'sale:float?' status:enum=draft,live:required
+```
+
+`<name>` is singular snake_case (`line_item`). Its plural, made by a fixed rule (`person` → `people`, `category` → `categories`, `box` → `boxes`, else `s`) or given with `--plural`, names the package `app/<plural>`, the table, `/api/<plural>` and the permissions. `data`, `auth`, `warp`, `app`, `web`, `test`, `main`, Go's own words, `user` and `users` are refused.
+
+A field's type is written, never guessed from its name; with none it is `string`.
+
+| Type | Go | Rule | `data` tag |
+| --- | --- | --- | --- |
+| `string` | `string` | | `sort,search` |
+| `text` | `string` | | `search` |
+| `email`, `url` | `string` | `email`, `url` | `sort,search` |
+| `int`, `float` | `int64`, `float64` | | `sort` |
+| `bool` | `bool` | | `sort,filter` |
+| `date`, `datetime` | `time.Time` | | `sort` |
+| `enum=a,b` | `string` | `enum=a\|b` | `sort,filter` |
+
+`?` after the type makes a pointer, which may be `null` (`float?` is `*float64`; quote it in zsh). The modifiers are `required` (not on `bool` or `?`), `unique` (not on `bool`, `text`, `date`, `datetime`), and `min=N` and `max=N`, in characters for text (not on `bool`, `date`, `datetime`, `enum`); a field has only the rules written. Enum choices are separated by commas: `|` or `(` is refused with `weft scaffold: write enum choices separated by commas after enum=, as in status:enum=draft,live.`
+
+| It writes | What it is |
+| --- | --- |
+| `app/<plural>/model.go` | The model, embedding `data.Record` |
+| `app/<plural>/routes.go` | `data.Resource`, with `data.PerAction(auth.Per("<plural>"))` when `app/modules.go` lists `auth.Module()`, else open, which it says |
+| `app/<plural>/<plural>_test.go` | The story over HTTP on SQLite: make two, list sorted, searched and filtered, change, delete, and, with `auth`, 401 without a session |
+| `app/modules.go` | The import and `<plural>.Module()` last in the list; the rest, comments too, kept |
+| `web/components/<Plural>Table.vue`, `<Singular>View.vue` | Islands: a `DataTable` over `api.<plural>` and `schema.<Singular>Input`, and one record |
+| `web/pages/<plural>/index.vue`, `[id].vue` | The table's page and the record's run-time page |
+
+`--api` writes only the Go; until `DataTable` is in `@weft/ui` ([Coming next](../coming-next.md#scaffolding-and-app-blocks)) the pages do not build, so give it. It lists what it wrote under `Scaffolded <name> as <plural>:`.
+
+Nothing is written, with one sentence and exit status 1, when `app/<plural>` is there, or without `--api` the page folder or an island, or when `app/modules.go` has no `func Modules() []warp.Module` returning a `[]warp.Module{...}` with `data.Module()`. `id`, `created_at` and `updated_at` (from `data.Record`), `actions` (`DataTable`'s), a field given twice, an unknown type or modifier, or a modifier its type does not take exit 2. A later release's type exits 1 naming it, as `weft scaffold: field "maker" has type "belongs_to", and relations land in Weft 0.3.0 (W3); use a scalar type for now.`: `belongs_to`, `has_many`, `many_to_many` (0.3.0), `image`, `file` (0.4.0), `json`, `translated` (0.6.0).
+
 ### weft dev
 
-Runs an app while you work. It builds the Go code with the `dev` tag into `.weft/dev/app` and runs it on a free port, starts [weft-dev](#weft-dev) beside it with the app's theme, which renders each page when asked for and sends `/api` to the Go server, and prints `weft dev: http://localhost:<n>` once both answer. Open that address with `localhost`, not `127.0.0.1`: the page server may listen on `::1` only. Run it anywhere inside the app; it checks the app as `weft build` does. It reads the theme once: restart it after changing `"theme"` in `package.json`.
+Runs an app while you work. It builds the Go code with the `dev` tag into `.weft/dev/app` and runs it on a free port, starts [weft-dev](page-tools.md#weft-dev) beside it with the app's theme, which renders each page when asked for and sends `/api` to the Go server, and prints `weft dev: http://localhost:<n>` once both answer. Open that address with `localhost`, not `127.0.0.1`: the page server may listen on `::1` only. Run it anywhere inside the app; it checks the app as `weft build` does. It reads the theme once: restart it after changing `"theme"` in `package.json`.
 
 | Flag | What it does |
 | --- | --- |
 | `--port n` | The page server's port. Default `5173`; `0` takes a free one |
 
-Every 300 ms it looks for a changed `.go` file outside `.weft/`, `.git/`, `node_modules/` and `web/`, and for a changed `.env` in the app's folder. When one changed it builds again and, if that succeeds, replaces the running Go server. A failed build prints the compiler's output; the last build serves `/api` until you save the fix. A rebuilt server that stops by itself, such as one that panics as it starts, prints `weft dev: the Go server stopped after the restart; fix it and save again.`, and the next save builds and starts it again. An unreadable folder is skipped and named once. A change under `web/` reloads the browser and needs no build; a change to `web/vite.config` needs a restart. The Go server's own output passes through. It runs with `PORT` set to a free port, `HOST=127.0.0.1`, `WEFT_DEV_PARENT=1` and `APP_URL=http://localhost:<the page server's port>`, which win over `.env`, so it listens on `127.0.0.1` only and prints no address. A non-empty `APP_URL` in `weft dev`'s own environment is passed on instead.
+Every 300 ms it looks for a changed `.go` file outside `.weft/`, `.git/`, `node_modules/` and `web/`, and a changed `.env`; then it builds again and, if that succeeds, replaces the Go server. A failed build prints the compiler's output, and the last build serves `/api` until the fix is saved; a rebuilt server that stops by itself says `weft dev: the Go server stopped after the restart; fix it and save again.` An unreadable folder is skipped and named once. A change under `web/` reloads the browser; one to `web/vite.config` needs a restart. The Go server's output passes through. It runs with a free `PORT`, `HOST=127.0.0.1`, `WEFT_DEV_PARENT=1` and `APP_URL=http://localhost:<the page server's port>` (or a non-empty `APP_URL` from `weft dev`'s environment), which win over `.env`.
 
-The Go server must listen on `PORT`, which warp's `Serve` reads. If it does not answer there within 30 s of starting, `weft dev` stops both servers and says `weft dev: the Go server did not answer within 30 s; check that main.go serves the app (warp's Serve reads PORT), and run weft dev again.`, with exit status 1. The page server has the same 30 s, after which it says `weft dev: the page server did not answer within 30 s; see its output above.` The app has 5 s to describe itself after each build, else `weft dev: the app did not describe itself within 5 s, so web/.weft-types/api.ts is as it was; make sure main.go calls Serve before doing other work.` and goes on.
+The Go server must answer on `PORT` within 30 s, as must the page server, or `weft dev` stops both, saying which and what to check, with exit status 1. The app has 5 s to describe itself after each build, else `weft dev` says so and goes on with `web/.weft-types/api.ts` as it was.
 
-Ctrl-C, SIGTERM, closing the terminal (SIGHUP) or `Ctrl-\` (SIGQUIT) stops both servers, with exit status 0. Killed, as by SIGKILL, it leaves neither running: each exits when its standard input, a pipe `weft dev` holds, ends. If the page server, or the Go server it started with, stops by itself, `weft dev` stops the other and says `weft dev: the page server stopped; see its output above.` (or `the Go server`), with exit status 1. A port in use is the sentence `weft dev: port <n> is in use; stop what is using it or pass --port.`, checked before anything else, so nothing is installed or started. Wrong usage exits with status 2.
+Ctrl-C, SIGTERM, SIGHUP or SIGQUIT stops both servers, with exit status 0; killed, `weft dev` leaves neither running, as each exits when its standard input, a pipe `weft dev` holds, ends. If one server stops by itself, `weft dev` stops the other and says `weft dev: the page server stopped; see its output above.` (or `the Go server`), with exit status 1. A port in use is `weft dev: port <n> is in use; stop what is using it or pass --port.`, checked first. Wrong usage exits with status 2.
 
 ### weft build
 
@@ -104,8 +143,8 @@ It adds `CGO_ENABLED=0`, for a static binary, unless the environment sets it. `G
 It prints the build's output, then `Built <file>`. First it checks the app:
 
 - An app recorded at another Weft version is refused: `weft build: this app is on Weft <a> and this weft is <b>; run weft upgrade to move the app, or weft update --version <a> to match it.` For an app on a newer Weft than this `weft`, which `weft upgrade` would refuse, the sentence ends `run weft update --version <a> to match it.` alone. An app whose `"weft"` object has no `version` is refused with a sentence that says what to add.
-- When `.weft/` is missing or holds another version, as in a fresh clone, it unpacks the packages into it and runs `pnpm install`. A `weft` built from the repository (`0.0.0-dev`) also unpacks again when the bundle's files changed, which `.weft/VERSION` records as a hash on its second line; a release is the version it says. It runs `pnpm install` too when `node_modules/` is missing or older than `.weft/`, and `go mod download` when `go.sum` lacks Warp's module. A `.weft/` without the `VERSION` file `weft` writes is not its own and is left alone, with a sentence saying to move it out of the app folder. Beside `.weft/` only `.weft.lock` is made, while it unpacks; a second `weft` waits for it, and takes over at once one a killed `weft` left.
-- After an install, or when `web/.weft-types/components.d.ts` is missing, it writes that file with [weft-types](#weft-types), so `pnpm typecheck` checks the components' props before any build.
+- When `.weft/` is missing or holds another version, as in a fresh clone, it unpacks the packages into it and runs `pnpm install`; a `weft` built from the repository (`0.0.0-dev`) also when the bundle's files changed (`.weft/VERSION` holds their hash). It runs `pnpm install` too when `node_modules/` is missing or older than `.weft/`, and `go mod download` when `go.sum` lacks Warp's module. A `.weft/` without the `VERSION` file is not `weft`'s and is left alone, with a sentence. While it unpacks it holds `.weft.lock`, which a second `weft` waits for.
+- After an install, or when `web/.weft-types/components.d.ts` is missing, it writes that file with [weft-types](page-tools.md#weft-types), so `pnpm typecheck` checks the components' props before any build.
 
 Outside an app it says `weft build: no Weft app here; run it in a folder made by weft create.` Any failure is one sentence on standard error, with exit status 1; wrong usage exits with status 2.
 
@@ -124,9 +163,10 @@ A compile error ends `weft gen: go build failed; fix what its output above says 
 Builds and describes the app as `weft gen` does, and prints its routes in the order registered; an app with no `warp.App` gets a sentence saying so. A route that takes every method is `ANY`; no module or no permission is `-`.
 
 ```text
-METHOD  PATH              MODULE  NAME    PERMISSION
-GET     /api/auth/me      auth    me      -
-GET     /api/hello        hello   hello   -
+METHOD  PATH                MODULE    NAME    PERMISSION
+GET     /api/hello          hello     hello   -
+GET     /api/products       products  list    products:read
+DELETE  /api/products/{id}  products  remove  products:delete
 ```
 
 ### weft upgrade
@@ -176,18 +216,9 @@ With names it prints each component as Markdown (`# Kbd`, then its purpose): `Us
 | `--json` | The entries as the catalogue has them, as a JSON array: every one, the ones named, or the ones found |
 | `--find` | Search instead of naming: the components whose name has each word, or whose purpose, use or notes have it as a whole word, without regard to case. Words may be separate or in one argument. |
 
-`--find` prints the list's lines of the components that match every word, in the catalogue's order:
+`--find` prints the list's lines of the components that match every word, in the catalogue's order. When nothing matches it says `weft catalog: nothing matches "<words>"; run weft catalog to list them.`, with exit status 1. `--find` with no words, or only blank ones, is wrong usage.
 
-```text
-$ weft catalog --find week
-  Calendar        A month of dates to choose one, several or a range from, in the current locale.
-  DatePicker      A date field where a date is typed in the locale or chosen from a calendar.
-  WeftProvider    Sets the input, surface and width context for every Weft component inside it.
-```
-
-When nothing matches it says `weft catalog: nothing matches "<words>"; run weft catalog to list them.`, with exit status 1. `--find` with no words, or only blank ones, is wrong usage.
-
-An unknown name prints nothing for the others and exits with status 1, naming up to three components: the names it starts or is part of (`weft catalog: no component named "date"; did you mean DatePicker, DateRangePicker?`); when there are none, the components whose purpose, use or notes have it as a word, then names within a few edits (`weft catalog: no component named "modal"; did you mean Dialog, OverlayPanel, Sheet?`); or `…; run weft catalog to list them.` when none is close. It never prints another component in place of the one named. Wrong usage exits with status 2.
+An unknown name prints nothing for the others and exits with status 1, naming up to three components it starts or is part of, then ones whose text has it as a word, then names within a few edits (`weft catalog: no component named "modal"; did you mean Dialog, OverlayPanel, Sheet?`), or saying `run weft catalog to list them.` It never prints another component in its place. Wrong usage exits with status 2.
 
 ## The installer
 
@@ -198,54 +229,3 @@ An unknown name prints nothing for the others and exits with status 1, naming up
 | `WEFT_VERSION` | The release to install | the latest |
 | `WEFT_BIN_DIR` | Where to put `weft` | `$HOME/.local/bin` |
 | `WEFT_BASE` | Where the releases are | `https://weft.base.al` |
-
-## weft-build-pages
-
-The page build. It comes with `@weft/vite`; run it from a site's `package.json` script.
-
-```text
-weft-build-pages --root <site> --out <dist> [--app-prefix /app [--app-dir <app build>]] [--theme neutral|lisa|weft] [--preload-font <file.woff2>]... [--separate-runtime <section path>]...
-```
-
-| Flag | What it does |
-| --- | --- |
-| `--root` | The site's folder, which holds `pages/`. Required. |
-| `--out` | Where the build goes. Required. It must be missing, empty, or a folder an earlier build wrote and nobody changed since; anything else is refused. |
-| `--theme` | `neutral` (the default), `lisa` or `weft`. See [Themes](../guides/themes.md). |
-| `--app-prefix` | A path prefix, such as `/app`, for a client-rendered app built beside the pages. |
-| `--app-dir` | Where that app's Vite build is. Default `<root>/app-dist`. |
-| `--preload-font` | A font file, such as `lucide.woff2`, to preload on the pages whose CSS names it, besides the Latin faces of the families they use. Give it once per font. |
-| `--separate-runtime` | A section of the site, such as `/components`, whose pages' islands get a runtime of their own, with only the Vue they use, so heavy islands do not grow the shared one. A page is in the longest section it is in or under: `/components/button` is in `/components`. Give it once per section, as a path with no trailing `/`. |
-
-It prints `weft: built N pages into <dist>`. It needs Node 22.18 or later, which runs TypeScript without a build step. Any error is one sentence; the folder at `--out` is left as it was.
-
-## weft-dev
-
-The page dev server. It comes with `@weft/vite`.
-
-```text
-weft-dev --root <site> [--port n] [--host h] [--api <url>] [--theme neutral|lisa|weft] [--exit-with-parent]
-```
-
-| Flag | What it does |
-| --- | --- |
-| `--root` | The site's folder, which holds `pages/`. Required. Its `package.json` may be in a folder above. |
-| `--port` | The port to listen on. Default `5173`; `0` takes a free one. |
-| `--host` | The host to listen on. Default `localhost`. Any other exposes Vite's file serving, the app's folder included, to the network. |
-| `--api` | Where `/api` and every path under it go, such as `http://127.0.0.1:8081`. Without it they are pages like any other. |
-| `--theme` | `neutral` (the default), `lisa` or `weft`, as for the build. |
-| `--exit-with-parent` | Stop, with exit status 0, when standard input ends. `weft dev` passes it with a pipe it holds open. Without it standard input is not read. |
-
-It prints `weft: dev server at <url>` once it listens. Each page is rendered when asked for, as the build renders it, so a saved edit shows on the next request; a dynamic page's `getPaths()` is called then too. A page that exports `runtime = true` is served, as its shell, for every path its pattern matches that no other page gives. An unknown path gets `pages/404.vue` with status 404, or a plain 404 without one. A page that fails to render gets a 500 page naming its file and the error, and reloads when you save the fix; the server keeps running. A change to any file under `--root` reloads the browser. A file a page writes with `useFile` is served once that page has rendered.
-
-It stops on SIGTERM or Ctrl-C. A port in use is the sentence `weft dev: port <n> is in use; stop what is using it or pass --port.`, with exit status 1; a flag it does not know exits with status 2.
-
-## weft-types
-
-Writes a site's `.weft-types/components.d.ts`, which tells TypeScript what each auto-imported component is, as a build does, without building. It comes with `@weft/vite`; `weft create`, `weft build`, `weft dev` and `weft upgrade` run it in an app.
-
-```text
-weft-types --root <site>
-```
-
-It prints nothing once the file is written. When `@weft/ui` cannot be found from the site, it says so with exit status 1.

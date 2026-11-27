@@ -11,12 +11,11 @@ Check here whether something you want is built yet: this is what Weft's design p
 | Command | What it will do | Phase |
 | --- | --- | --- |
 | `weft db` | Show how the database differs from the app's records | W3 |
-| `weft scaffold` | Write a resource from a name and typed fields: its Go module, its tests and a page to list and edit it | W5 |
 | `weft check` | Run Weft's lint rules and type checks | 6 |
 | `weft mcp` | Serve the catalogue and `check` to agents over MCP | 6 |
 | `weft deploy` | Publish an app | 6b |
 
-The commands that make, run, build and upgrade an app, `weft gen` and `weft routes`, and `weft catalog`, which prints the component catalogue, work today: see the [CLI reference](reference/cli.md).
+The commands that make, run, build and upgrade an app, `weft scaffold`, `weft gen` and `weft routes`, and `weft catalog`, which prints the component catalogue, work today: see the [CLI reference](reference/cli.md).
 
 ## App routes
 
@@ -47,10 +46,7 @@ The `auth` module works today, with one role, the owner ([Login](guides/login.md
 
 ## Scaffolding and app blocks
 
-Phase W5, with the blocks the Weft design had in its phase 5:
-
-- `weft scaffold`, which writes `app/<name>/` (the model, the routes and their tests), adds it to `app/modules.go`, and writes a page for it;
-- `DataTable`, with server-side paging, sorting and filtering over the list shape, and `EntityDialog`, which creates and edits records from a form schema; the shop writes them plainly with `Table`, `Dialog` and `Form`;
+Phase W5, with the blocks the Weft design had in its phase 5: `DataTable`, with server-side paging, sorting and filtering over the list shape, and `EntityDialog`, which creates and edits records from a form schema; the shop writes them plainly with `Table`, `Dialog` and `Form`. `weft scaffold` and the app template work today; the pages `weft scaffold` writes use `DataTable`, so until it is in `@weft/ui` they do not build: give `--api`, which writes only the Go.
 
 ## The browser's rules and Go's
 

@@ -1,10 +1,10 @@
 ---
 title: Create an app
-description: Make an app with weft create, run it with weft dev while you edit, and build it into one binary with weft build.
+description: Make an app with weft create, add a resource with weft scaffold, run it with weft dev while you edit, and build it into one binary with weft build.
 order: 11
 ---
 
-On this page you make an app, run it while you change a page and the API, and build it into one binary that serves both. You need the `weft` command, Go 1.26, Node 22.18 or later and pnpm 10, as [Install](install.md) describes. You need no clone of the Weft repository: `weft` carries Weft's packages.
+On this page you make an app, add a resource to it, run it while you change a page and the API, and build it into one binary that serves both. You need the `weft` command, Go 1.26, Node 22.18 or later and pnpm 10, as [Install](install.md) describes. You need no clone of the Weft repository: `weft` carries Weft's packages.
 
 ## Make the app
 
@@ -41,10 +41,28 @@ The app has:
 
 `--theme lisa` or `--theme weft` picks another theme, and `--module` sets the Go module path, which is the app's name otherwise. See [weft create](../reference/cli.md#weft-create) for every flag and refusal.
 
+## Scaffold a resource
+
+The app's records are resources: a model, its five routes and its test, in a module of its own. `weft scaffold` writes one from its name and typed fields:
+
+```sh copy
+cd myapp && weft scaffold product name:string:required:unique price:float:min=0 status:enum=draft,live:required --api
+```
+
+```text
+Scaffolded product as products:
+  app/products/model.go
+  app/products/routes.go
+  app/products/products_test.go
+  app/modules.go (products.Module() added)
+Wrote web/.weft-types/api.ts
+```
+
+`app/products/` is the model, `Product`, and `data.Resource`, which answers `GET`, `POST`, `PATCH` and `DELETE` under `/api/products`, each behind the owner's login; `app/modules.go` lists it last; and `weft gen` has written `api.products.list()`, `show`, `create`, `update` and `remove` into the client, with the form rules in `schema.ProductInput`. `go test -tags dev ./...` runs the story test it wrote, over a database of its own. Without `--api` it also writes the pages `/products` and `/products/<id>`, which use `DataTable`; that is not in `@weft/ui` yet ([Coming next](../coming-next.md#scaffolding-and-app-blocks)), so give `--api` until it is. Every type and modifier is in [weft scaffold](../reference/cli.md#weft-scaffold).
+
 ## Run it
 
 ```sh
-cd myapp
 weft dev
 ```
 
