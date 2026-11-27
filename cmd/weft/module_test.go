@@ -270,7 +270,7 @@ func moduleProxy(t *testing.T, version string, files map[string][]byte) []string
 		}
 	}
 	return []string{
-		"GOPROXY=file://" + filepath.ToSlash(proxy),
+		"GOPROXY=" + fileProxyURL(filepath.ToSlash(proxy)),
 		"GONOSUMDB=" + weftModule,
 		"GOMODCACHE=" + t.TempDir(),
 		// The cache's files are written read-only otherwise, and the test's
@@ -423,5 +423,27 @@ func TestModuleLeavesOutFoldersWithoutGo(t *testing.T) {
 	}
 	if len(withGo) != 2 || !withGo["dbtest"] || !withGo["examples/shop"] {
 		t.Errorf("the nested modules that hold Go are %v, want only dbtest and examples/shop", withGo)
+	}
+}
+
+// fileProxyURL is the file:// URL of a proxy folder given with slashes. A
+// Windows path (C:/…) needs a slash before its drive, or Go reads the drive
+// as the URL's host and refuses it ("invalid file:// proxy URL with non-path
+// elements"), as it did on the Windows runner.
+func fileProxyURL(dir string) string {
+	if !strings.HasPrefix(dir, "/") {
+		dir = "/" + dir
+	}
+	return "file://" + dir
+}
+
+func TestFileProxyURL(t *testing.T) {
+	for in, want := range map[string]string{
+		"/tmp/proxy":                        "file:///tmp/proxy",
+		"C:/Users/RUNNER~1/AppData/Local/x": "file:///C:/Users/RUNNER~1/AppData/Local/x",
+	} {
+		if got := fileProxyURL(in); got != want {
+			t.Errorf("fileProxyURL(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
