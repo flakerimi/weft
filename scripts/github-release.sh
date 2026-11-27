@@ -44,21 +44,39 @@ dir="${2:-site/releases/$version}"
 
 # The files, in SHA256SUMS's order, then SHA256SUMS: exactly what the site serves.
 set --
+has_darwin=
+has_linux=
+has_windows=
 while read -r _ name; do
 	[ -n "$name" ] || continue
 	name=${name#\*} # shasum's mark of a file read in binary mode
 	case "$name" in */* | .*) fail "$dir/SHA256SUMS lists $name, which is not a file of the release's own folder; list only the archives beside it." ;; esac
 	[ -f "$dir/$name" ] || fail "$dir/SHA256SUMS lists $name, which is not in $dir; copy the release weft.base.al serves for $version there."
+	case "$name" in
+	weft_darwin_*) has_darwin=1 ;;
+	weft_linux_*) has_linux=1 ;;
+	weft_windows_*) has_windows=1 ;;
+	esac
 	set -- "$@" "$dir/$name"
 done <"$dir/SHA256SUMS"
 [ $# -gt 0 ] || fail "$dir/SHA256SUMS lists no file; name the folder of the release weft.base.al serves for $version."
 set -- "$@" "$dir/SHA256SUMS"
 
+systems=
+for sys in ${has_darwin:+darwin} ${has_linux:+linux} ${has_windows:+windows}; do
+	systems="${systems:+$systems }$sys"
+done
+case "$systems" in
+"darwin linux windows") systems="darwin, linux and windows" ;;
+*" "*) systems="${systems% *} and ${systems##* }" ;;
+"") systems="darwin and linux" ;;
+esac
+
 pre=
 case "$version" in *-*) pre=--prerelease ;; esac
 # Every link is one weft.base.al serves once the version is pushed (the
 # release's folder itself is not a page; its SHA256SUMS is).
-notes="weft $version for darwin, linux and windows, on amd64 and arm64: the files weft.base.al serves, with their checksums at https://weft.base.al/releases/$version/SHA256SUMS. Install it as https://weft.base.al/docs/getting-started/install says. An app this release makes requires github.com/flakerimi/weft $tag."
+notes="weft $version for $systems, on amd64 and arm64: the files weft.base.al serves, with their checksums at https://weft.base.al/releases/$version/SHA256SUMS. Install it as https://weft.base.al/docs/getting-started/install says. An app this release makes requires github.com/flakerimi/weft $tag."
 
 if [ -n "$dry" ]; then
 	printf 'dry run: would run: gh release create %s --repo %s --verify-tag --title %s --notes '"'"'%s'"'"'%s' "$tag" "$repo" "$tag" "$notes" "${pre:+ $pre}"

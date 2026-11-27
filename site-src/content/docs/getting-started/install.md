@@ -20,7 +20,7 @@ Or on Windows, in PowerShell:
 irm https://weft.base.al/install.ps1 | iex
 ```
 
-It downloads the release for your system from `weft.base.al`, checks it against the release's `SHA256SUMS`, and puts `weft` (`weft.exe` on Windows) in `~/.local/bin` (`$HOME\.local\bin` on Windows, adding it to your user `PATH`). If that folder is not on your `PATH`, it tells you. Each release is also a [GitHub Release](https://github.com/flakerimi/weft/releases), `v<version>`, with the same archives and the same `SHA256SUMS`.
+It downloads the release for your system from `weft.base.al`, checks it against the release's `SHA256SUMS`, and puts `weft` (`weft.exe` on Windows) in `~/.local/bin` (`$HOME\.local\bin` on Windows). On macOS and Linux it tells you if that folder is not on your `PATH`; on Windows it adds the folder to your user `PATH`. Each release is also a [GitHub Release](https://github.com/flakerimi/weft/releases), `v<version>`, with the same archives and the same `SHA256SUMS`. Windows builds start with release 0.0.20.
 
 Check that it works:
 
@@ -40,10 +40,14 @@ Set these in the environment before running the installer to change what it does
 | `WEFT_VERSION` | Which release to install | the latest |
 | `WEFT_BASE` | Where the releases are | `https://weft.base.al` |
 
-For example, to install release 0.0.2 into `~/bin`:
+For example, to install release 0.0.2 into `~/bin` on macOS or Linux, or release 0.0.20 on Windows:
 
 ```sh
 curl -fsSL https://weft.base.al/install | WEFT_VERSION=0.0.2 WEFT_BIN_DIR="$HOME/bin" sh
+```
+
+```powershell
+$env:WEFT_VERSION = '0.0.20'; irm https://weft.base.al/install.ps1 | iex
 ```
 
 ### Update

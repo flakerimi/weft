@@ -1467,7 +1467,7 @@ func TestGithubRelease(t *testing.T) {
 	}
 	log := r.fakeFile("gh.log")
 	files := " " + dir + "/weft_darwin_arm64.tar.gz " + dir + "/weft_linux_amd64.tar.gz " + dir + "/weft_windows_amd64.zip " + dir + "/SHA256SUMS\n"
-	if !strings.Contains(log, " --prerelease"+files) || strings.Contains(log, "stray.txt") {
+	if !strings.Contains(log, "--notes "+releaseNotes("0.1.0-alpha.1", "darwin, linux and windows")+" --prerelease"+files) || strings.Contains(log, "stray.txt") {
 		t.Errorf("gh was run as\n%s", log)
 	}
 	// Made once: a second run finds it and stops.
@@ -1483,9 +1483,14 @@ func TestGithubRelease(t *testing.T) {
 }
 
 // releaseNotes is the GitHub Release's notes for version: every link in it
-// is one weft.base.al serves once the version is pushed.
-func releaseNotes(version string) string {
-	return "weft " + version + " for darwin, linux and windows, on amd64 and arm64: the files weft.base.al serves, with their checksums at https://weft.base.al/releases/" + version + "/SHA256SUMS. Install it as https://weft.base.al/docs/getting-started/install says. An app this release makes requires github.com/flakerimi/weft v" + version + "."
+// is one weft.base.al serves once the version is pushed. systems defaults to
+// "linux", which the fake release.sh builds.
+func releaseNotes(version string, systems ...string) string {
+	sys := "linux"
+	if len(systems) > 0 {
+		sys = systems[0]
+	}
+	return "weft " + version + " for " + sys + ", on amd64 and arm64: the files weft.base.al serves, with their checksums at https://weft.base.al/releases/" + version + "/SHA256SUMS. Install it as https://weft.base.al/docs/getting-started/install says. An app this release makes requires github.com/flakerimi/weft v" + version + "."
 }
 
 // Files git neither tracks nor ignores, in what a release or the site is

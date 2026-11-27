@@ -358,6 +358,9 @@ func TestSiteServesReleasesFromDisk(t *testing.T) {
 		if res.StatusCode != 200 || body != want {
 			t.Fatalf("GET %s: %d %q", p, res.StatusCode, body)
 		}
+		if (p == "/install" || p == "/install.ps1") && res.Header.Get("Content-Type") != "text/plain; charset=utf-8" {
+			t.Fatalf("GET %s: Content-Type %q, want text/plain; charset=utf-8", p, res.Header.Get("Content-Type"))
+		}
 		etag := res.Header.Get("Etag")
 		if etag == "" {
 			t.Fatalf("GET %s: no ETag", p)

@@ -55,8 +55,8 @@ jobs:
           echo "version=$version" >>"$GITHUB_OUTPUT"
 
   # The full tests of the CLI, not -short: they make, install, build and run
-  # real apps, which is the point on each system. macOS and Windows run only
-  # here, not on every push (ci.yml is Linux).
+  # real apps, which is the point on each system. ci.yml runs the same on
+  # macOS and Windows for every push to main, and on Linux for every push.
   test:
     needs: version
     strategy:

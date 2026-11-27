@@ -30,44 +30,44 @@ case "$uname_m" in
 esac
 case "$os/$arch" in
 	darwin/arm64 | darwin/amd64 | linux/arm64 | linux/amd64) ;;
-	*) fail "no build for $os/$arch" ;;
+	*) fail "no build for $os/$arch; Weft supports darwin, linux and windows on amd64 and arm64" ;;
 esac
 
-command -v curl >/dev/null 2>&1 || fail "curl is needed and was not found"
+command -v curl >/dev/null 2>&1 || fail "curl is needed and was not found; install curl and run the installer again"
 if command -v sha256sum >/dev/null 2>&1; then
 	sha() { sha256sum "$1" | cut -d' ' -f1; }
 elif command -v shasum >/dev/null 2>&1; then
 	sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 else
-	fail "sha256sum or shasum is needed and neither was found"
+	fail "sha256sum or shasum is needed and neither was found; install one and run the installer again"
 fi
 
 version="${WEFT_VERSION:-}"
 if [ -z "$version" ]; then
 	version=$(curl -fsSL "$base/releases/latest" 2>/dev/null | tr -d ' \r\n') ||
-		fail "could not reach $base to find the latest version"
-	[ -n "$version" ] || fail "could not reach $base to find the latest version"
+		fail "could not reach $base to find the latest version; check your connection, or set WEFT_VERSION"
+	[ -n "$version" ] || fail "could not reach $base to find the latest version; check your connection, or set WEFT_VERSION"
 fi
 
 name="weft_${os}_${arch}.tar.gz"
 url="$base/releases/$version"
-tmp=$(mktemp -d 2>/dev/null) || fail "could not create a temporary directory"
+tmp=$(mktemp -d 2>/dev/null) || fail "could not create a temporary directory; check that TMPDIR is writable"
 trap 'rm -rf "$tmp"' EXIT
 trap 'rm -rf "$tmp"; rm -f "$bin_dir/.weft.new"; exit 130' INT TERM
 
-curl -fsSL "$url/$name" -o "$tmp/$name" 2>/dev/null || fail "could not download $url/$name"
-curl -fsSL "$url/SHA256SUMS" -o "$tmp/SHA256SUMS" 2>/dev/null || fail "could not download $url/SHA256SUMS"
+curl -fsSL "$url/$name" -o "$tmp/$name" 2>/dev/null || fail "could not download $url/$name; check your connection and that release $version exists"
+curl -fsSL "$url/SHA256SUMS" -o "$tmp/SHA256SUMS" 2>/dev/null || fail "could not download $url/SHA256SUMS; check your connection and that release $version exists"
 
 want=$(awk -v n="$name" '$2 == n { print $1 }' "$tmp/SHA256SUMS")
 got=$(sha "$tmp/$name")
-[ -n "$want" ] && [ "$want" = "$got" ] || fail "checksum mismatch for $name"
+[ -n "$want" ] && [ "$want" = "$got" ] || fail "checksum mismatch for $name; run the installer again"
 
-tar -xzf "$tmp/$name" -C "$tmp" weft 2>/dev/null || fail "could not unpack $name"
-mkdir -p "$bin_dir" || fail "could not create $bin_dir"
+tar -xzf "$tmp/$name" -C "$tmp" weft 2>/dev/null || fail "could not unpack $name; run the installer again"
+mkdir -p "$bin_dir" || fail "could not create $bin_dir; set WEFT_BIN_DIR to a writable folder"
 chmod 755 "$tmp/weft"
 # Copy beside the target, then rename: the old binary stays until the new one is complete.
-cp "$tmp/weft" "$bin_dir/.weft.new" || { rm -f "$bin_dir/.weft.new"; fail "could not write to $bin_dir"; }
-mv -f "$bin_dir/.weft.new" "$bin_dir/weft" || fail "could not write to $bin_dir"
+cp "$tmp/weft" "$bin_dir/.weft.new" || { rm -f "$bin_dir/.weft.new"; fail "could not write to $bin_dir; set WEFT_BIN_DIR to a writable folder"; }
+mv -f "$bin_dir/.weft.new" "$bin_dir/weft" || fail "could not write to $bin_dir; set WEFT_BIN_DIR to a writable folder"
 
 printf 'Installed weft %s to %s/weft\n' "$version" "$bin_dir"
 case ":${PATH:-}:" in
