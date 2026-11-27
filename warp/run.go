@@ -57,6 +57,11 @@ func (a *App) Serve(dist fs.FS, opts ...ServeOption) error {
 	// The app starts before it listens, so nothing answers on the port while
 	// the modules migrate, and a start that fails never says it listens.
 	if err := a.Start(ctx); err != nil {
+		// Stopped while the modules started, such as while one opened the
+		// database: asked to stop, it is a clean exit, not a failed start.
+		if ctx.Err() != nil {
+			return nil
+		}
 		return err
 	}
 	addr := net.JoinHostPort(a.cfg.Host, a.cfg.Port)

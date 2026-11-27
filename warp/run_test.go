@@ -690,3 +690,45 @@ func (m stuckStop) Stop(context.Context) error {
 	<-m.release
 	return nil
 }
+
+// waitsInMigrate is a module whose Migrate waits for its context to end, as
+// opening a database does when the app is stopped meanwhile, and says so.
+type waitsInMigrate struct{ migrating chan struct{} }
+
+func (waitsInMigrate) Name() string        { return "slow" }
+func (waitsInMigrate) Register(*App) error { return nil }
+func (m waitsInMigrate) Migrate(ctx context.Context) error {
+	close(m.migrating)
+	<-ctx.Done()
+	return errors.Join(errors.New("the database cannot be opened"), ctx.Err())
+}
+
+// Asked to stop while its modules start, as weft dev's Go server is when
+// weft dev goes at once, Serve returns nil: the start did not fail, it was
+// stopped.
+func TestServeStoppedWhileStarting(t *testing.T) {
+	signal := make(chan struct{})
+	was := notifyContext
+	notifyContext = func(parent context.Context, _ ...os.Signal) (context.Context, context.CancelFunc) {
+		ctx, cancel := context.WithCancel(parent)
+		go func() { <-signal; cancel() }()
+		return ctx, cancel
+	}
+	t.Cleanup(func() { notifyContext = was })
+	captureLog(t)
+	m := waitsInMigrate{migrating: make(chan struct{})}
+	app := New(Config{Host: "127.0.0.1", Port: "0"})
+	app.Use(m)
+	done := make(chan error, 1)
+	go func() { done <- app.Serve(nil) }()
+	<-m.migrating
+	close(signal)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Serve = %v, want nil", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve did not return after its context ended")
+	}
+}
