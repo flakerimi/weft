@@ -31,7 +31,7 @@ fail() {
 # script does not know, or a third argument is refused before anything is
 # done, so a dry run asked for in the wrong place never makes a release.
 for arg in "$@"; do
-	case "$arg" in -*) fail "$arg is not taken there (--dry-run goes first, before the version, and nothing else is an option); usage: scripts/github-release.sh [--dry-run] <version> [DIR]." ;; esac
+	case "$arg" in -*) fail "$arg is not taken, since no argument but --dry-run may begin with - and --dry-run goes first, before the version; usage: scripts/github-release.sh [--dry-run] <version> [DIR]." ;; esac
 done
 [ $# -le 2 ] ||
 	fail "takes a version and a folder and nothing after them; usage: scripts/github-release.sh [--dry-run] <version> [DIR]."

@@ -53,7 +53,7 @@ fail() {
 # script does not know, or a second argument is refused before anything is
 # done, so a dry run asked for in the wrong place never publishes.
 for arg in "$@"; do
-	case "$arg" in -*) fail "$arg is not taken there (--dry-run goes first, before the version, and nothing else is an option); usage: scripts/publish-site.sh [--dry-run] <version>." ;; esac
+	case "$arg" in -*) fail "$arg is not taken, since no argument but --dry-run may begin with - and --dry-run goes first, before the version; usage: scripts/publish-site.sh [--dry-run] <version>." ;; esac
 done
 [ $# -le 1 ] ||
 	fail "takes one version and nothing after it; usage: scripts/publish-site.sh [--dry-run] <version>."
