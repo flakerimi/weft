@@ -48,7 +48,7 @@ Flags:
   --api            write only the Go, not the pages
 A wrong argument is one sentence and exit 2; a type of a later release, an
 existing file, or an app/modules.go it cannot edit is one sentence and exit 1.
-Nothing is written then. https://weft.base.al/docs/reference/cli#weft-scaffold
+Nothing is written then. https://weft.base.al/docs/reference/scaffold
 `
 
 // scaffoldSpec is what the command line asks for.

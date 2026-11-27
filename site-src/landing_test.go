@@ -441,10 +441,14 @@ func TestLandingAgents(t *testing.T) {
 // The markup and CSS that show a picture are part of the first view. The
 // owner's ruling of 2026-11-24 moved the first view from 22 KB to 23 KB for
 // the closing section with the loom, below the fold, which adds markup and
-// CSS and no script.
+// CSS and no script. The owner's decision of 2026-11-28 raised it from
+// 23,552 B to 24,800 B for the Theme menu in the header (its pre-paint
+// script, its button and its empty popover), keeping the approved hero (five
+// devices on the desktop) and its copy: the page drew 23,760 B with the menu,
+// leaving about 1 KB of room.
 const (
 	landingImageLimit     = 60 * 1024
-	landingFirstViewLimit = 23 * 1024
+	landingFirstViewLimit = 24800
 	landingTotalLimit     = 82 * 1024
 	landingDemoLimit      = 16269 // 14,790 B plus 10 %
 	landingOnDemandLimit  = 16689 // 15,172 B plus 10 %

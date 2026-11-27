@@ -37,11 +37,11 @@ type templateData struct {
 var reserved = map[string]bool{"web": true, "api": true, "app": true, "node_modules": true, "dist": true}
 
 func createCmd(args []string, stdout, stderr io.Writer) int {
-	const usage = "usage is weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install]."
+	const usage = "usage is weft create <name> [--module <path>] [--theme neutral|lisa|weft|synthwave|editor|sandstorm] [--no-install]."
 	fl := flag.NewFlagSet("create", flag.ContinueOnError)
 	fl.SetOutput(io.Discard)
 	module := fl.String("module", "", "the Go module path")
-	theme := fl.String("theme", "neutral", "neutral, lisa or weft")
+	theme := fl.String("theme", "neutral", "neutral, lisa, weft, synthwave, editor or sandstorm")
 	noInstall := fl.Bool("no-install", false, "do not run pnpm install or go mod download")
 	var names []string
 	for {
@@ -75,9 +75,9 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	switch *theme {
-	case "neutral", "lisa", "weft":
+	case "neutral", "lisa", "weft", "synthwave", "editor", "sandstorm":
 	default:
-		fmt.Fprintf(stderr, "weft create: %q is not a theme; use neutral, lisa or weft.\n", *theme)
+		fmt.Fprintf(stderr, "weft create: %q is not a theme; use neutral, lisa, weft, synthwave, editor or sandstorm.\n", *theme)
 		return 2
 	}
 

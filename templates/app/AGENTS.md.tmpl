@@ -17,7 +17,7 @@ go test ./...   # the Go tests; in a fresh clone, run weft unpack first
 pnpm typecheck  # check the Vue files
 ```
 
-To add a resource (a model and its five routes), run `weft scaffold` with its name and typed fields (https://weft.base.al/docs/reference/cli#weft-scaffold); it writes the pages too (a `DataTable` and the record's page), and needs `--api`, Go only, for `date` and `datetime` fields until Weft 0.2.0. To add a route, add it in a module's `Register` with `warp.Get(app, "/path", fn)`; to add a module, make `app/<name>/` with a `Module()` and list it in `app/modules.go`. `weft dev` restarts the Go server when a `.go` file or `.env` changes.
+To add a resource (a model and its five routes), run `weft scaffold` with its name and typed fields (https://weft.base.al/docs/reference/scaffold); it writes the pages too (a `DataTable` and the record's page), and needs `--api`, Go only, for `date` and `datetime` fields until Weft 0.2.0. To add a route, add it in a module's `Register` with `warp.Get(app, "/path", fn)`; to add a module, make `app/<name>/` with a `Module()` and list it in `app/modules.go`. `weft dev` restarts the Go server when a `.go` file or `.env` changes.
 
 The app keeps its records in SQLite (`data.Module()`, the file `DB_URL` names in `.env`) and signs its owner in (`auth.Module()`). At its first start, while no user exists, it logs a one-time link, `/setup#token=…`, that sets the owner's password; the owner's email is `AUTH_OWNER_EMAIL` in `.env`. `GET /api/hello` answers anyone.
 

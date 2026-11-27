@@ -10,7 +10,7 @@
   "dependencies": {
     "@weft/themes": "workspace:*",
     "@weft/ui": "workspace:*",
-    "vue": "3.6.0-rc.16"
+    "vue": "3.6.0-rc.17"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

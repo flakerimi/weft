@@ -32,10 +32,13 @@ if (whole !== stored) throw new Error(`brotli here is ${whole} B, the build stor
 // The inline stylesheet: the content of the page's <style> element.
 const css = /<style>([\s\S]*?)<\/style>/.exec(html)?.[1] ?? ''
 
-// Vue's SSR markers: <!--[--> <!--]--> (fragments), <!--{--> <!--}--> (Vapor
-// fragments) and <!----> (an empty v-if). Inside <weft-island> they are what
+// Vue's SSR markers, as Vue 3.6.0-rc.17 writes them: a range opens with
+// <!--[--> (a fragment), <!--[!--> (a slot's fallback), <!--[$--> (a Vapor
+// component of several roots) or <!--[1--> (a v-if branch) and closes with
+// <!--]-->; <!----> is an empty v-if. Earlier builds' <!--{--> <!--}--> and
+// <!--(--> <!--)--> are counted too. Inside <weft-island> they are what
 // hydration reads; outside, nothing hydrates.
-const MARKER = /<!--(\[|\]|\{|\}|)-->/g
+const MARKER = /<!--(\[(?:\d+|!|\$)?|\]|[{}()]|)-->/g
 const islandAt = html.indexOf('<weft-island')
 const islandEnd = html.indexOf('</weft-island>') + '</weft-island>'.length
 const kinds = {}
@@ -67,7 +70,7 @@ results.weft_html_breakdown = {
     all,
     outside_islands: { ...outside, br_share: whole - br(outsideRemoved) },
     method:
-      'Every match of /<!--(\\[|\\]|\\{|\\}|)-->/ in the page: <!--[--> <!--]--> <!--{--> <!--}--> <!---->. outside_islands leaves out those inside <weft-island>...</weft-island>; br_share is the page\'s brotli size minus that of the page with those removed.',
+      'Every match of /<!--(\\[(?:\\d+|!|\\$)?|\\]|[{}()]|)-->/ in the page: <!--[--> <!--[!--> <!--[$--> <!--[1--> <!--]--> <!---->, and an earlier Vue\'s <!--{--> <!--}--> <!--(--> <!--)-->. outside_islands leaves out those inside <weft-island>...</weft-island>; br_share is the page\'s brotli size minus that of the page with those removed.',
   },
 }
 writeFileSync(resultsFile, JSON.stringify(results, null, 2) + '\n')

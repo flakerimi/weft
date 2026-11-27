@@ -46,7 +46,7 @@ The `auth` module works today, with one role, the owner ([Login](guides/login.md
 
 ## Scaffolding and app blocks
 
-`weft scaffold`, the app template, `DataTable` (server-side paging, sorting, debounced search and filtering over the list shape) and `EntityDialog` (creating and editing records from a form schema) work today ([CLI](reference/cli.md#weft-scaffold), [Components](/components)). Not yet, Weft 0.2.0:
+`weft scaffold`, the app template, `DataTable` (server-side paging, sorting, debounced search and filtering over the list shape) and `EntityDialog` (creating and editing records from a form schema) work today ([weft scaffold](reference/scaffold.md), [Components](/components)). Not yet, Weft 0.2.0:
 
 - date and time fields in `EntityDialog` and in the pages `weft scaffold` writes: a date control, and the schema saying a field is a time. Until then `weft scaffold` takes `date` and `datetime` only with `--api`.
 

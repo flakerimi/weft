@@ -6,9 +6,12 @@
 // skills, llms.txt and the catalogue. The section the page is in
 // is marked aria-current="true"; its own front page, "page". A page with a sidebar names it in `menu`: under 768 px a
 // Menu button then opens it, through the HTML popover attribute (the sidebar
-// is a popover element), so that works without JavaScript too.
+// is a popover element), so that works without JavaScript too. The Theme
+// menu (ThemeMenu) switches the whole site; a page for agents may leave it
+// out (`themes: false`) and keeps the site's own theme.
 import { Button, Header, Link } from '@weft/ui'
 import SiteMark from './SiteMark.vue'
+import ThemeMenu from './ThemeMenu.vue'
 import '../styles/site.css'
 
 /** The site's sections, each by its front page. */
@@ -25,8 +28,10 @@ const props = withDefaults(
     menu?: string
     /** Whether it stays at the top as the page scrolls; the landing page's scrolls away. */
     sticky?: boolean
+    /** Whether it has the Theme menu. */
+    themes?: boolean
   }>(),
-  { sticky: true },
+  { sticky: true, themes: true },
 )
 
 const repoPublic = __WEFT_REPO_PUBLIC__
@@ -44,8 +49,9 @@ const currentOf = (section: Section) => (props.current !== section ? undefined :
       <Link to="/skills" standalone :aria-current="currentOf('agents')">For agents</Link>
       <Link v-if="repoPublic" to="https://github.com/flakerimi/weft" standalone class="site-wide">GitHub</Link>
     </nav>
-    <template v-if="menu" #actions>
-      <Button class="site-menu" variant="soft" tone="neutral" size="sm" :popovertarget="menu" :aria-controls="menu">Menu</Button>
+    <template v-if="menu || themes" #actions>
+      <ThemeMenu v-if="themes" />
+      <Button v-if="menu" class="site-menu" variant="soft" tone="neutral" size="sm" :popovertarget="menu" :aria-controls="menu">Menu</Button>
     </template>
   </Header>
 </template>

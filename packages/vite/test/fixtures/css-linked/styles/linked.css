@@ -1,0 +1,7 @@
+/* Linked by its URL, never inlined: a font beside it, a font from a package. */
+@font-face {
+  font-family: 'Linked';
+  src: url('./fonts/Linked.woff2') format('woff2');
+}
+@font-face { font-family: 'Lucide'; src: url('lucide-static/font/lucide.woff2') format('woff2'); }
+:root[data-linked] .linked   {   font-family: Linked, sans-serif;   color: rebeccapurple;   }

@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto'
 import { constants as fs, existsSync, readFileSync, realpathSync, statSync, type Dirent } from 'node:fs'
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, rmdir, stat, unlink, writeFile } from 'node:fs/promises'
-import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { brotliCompressSync, constants as zlib, gzipSync } from 'node:zlib'
 import { transform as transformCSS, type Targets } from 'lightningcss'
-import { build, isCSSRequest, mergeConfig, normalizePath, type Plugin, type ResolvedConfig, type Rolldown } from 'vite'
+import { build, isCSSRequest, mergeConfig, normalizePath, type Plugin, type ResolvedConfig, type Rolldown, type ViteDevServer } from 'vite'
 import { siteConfig } from './config.ts'
 import { weft } from './plugin.ts'
 import type { ContentAsset } from './content.ts'
@@ -201,13 +201,15 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
 
   // One server renders every page, and loads the dynamic pages for getPaths().
   const pages: (ExpandedRoute & RenderResult)[] = []
-  const server = await createRenderServer(root, 'production')
+  const linked = linkedSheets(root, outDir)
+  const server = await createRenderServer(root, 'production', [linked.plugin])
   const vueFiles: string[] = []
   let contentAssets: ContentAsset[] = []
   let cssTarget: Targets | undefined
   try {
     // The pages' CSS is minified for the browsers the site's Vite config targets.
     cssTarget = cssTargets(server.config.build.cssTarget)
+    linked.start(server, cssTarget)
     const load = (file: string) => server.ssrLoadModule(`/pages/${file}`) as Promise<PageModule>
     const expanded = await expandRoutes(routes, load)
     refuseSharedFiles(expanded)
@@ -244,6 +246,7 @@ export async function buildSite(opts: BuildOptions): Promise<Manifest> {
       appDir,
       pages,
       contentAssets,
+      linked: linked.sheets(),
       baseCSS,
       cssTarget,
       cssInlineLimit: opts.cssInlineLimit,
@@ -268,6 +271,8 @@ interface BuildInput {
   pages: (ExpandedRoute & RenderResult)[]
   /** The images the content shows, each under its content-addressed URL. */
   contentAssets: ContentAsset[]
+  /** The stylesheets pages link by their URL, each built. */
+  linked: LinkedSheet[]
   baseCSS: string
   cssTarget: Targets | undefined
   cssInlineLimit: number | undefined
@@ -466,6 +471,66 @@ function cssFiles(root: string, outDir: string): (css: string, page: string) => 
   }
 }
 
+/** A stylesheet's URL import: `x.css?url`, the query's other parts kept. */
+export const URL_QUERY = /[?&]url(?:=[^&]*)?(?=&|$)/
+
+/** A stylesheet a page links by its URL, built: where it is served, its CSS, and the files that names. */
+interface LinkedSheet {
+  path: string
+  css: string
+  files: CSSFile[]
+}
+
+/**
+ * The stylesheets the pages link by their URL (`import href from
+ * './theme.css?url'`), for CSS a page fetches only when it needs it, such as
+ * a theme a visitor picks. The render server's plugin loads each through
+ * Vite's CSS pipeline, as a page's own CSS is (a plugin may make it), copies
+ * the files it names as a page's are, minifies it for the site's browsers,
+ * and gives the server render `/assets/<name>-<hash>.css`, named by its
+ * bytes; the build writes it there, cached for good. It is never inlined, and
+ * its fonts are not preloaded. Its hook comes before every other plugin's, so
+ * a plugin that makes the file and answers any query on it still gives the
+ * page a URL.
+ */
+function linkedSheets(root: string, outDir: string) {
+  const built = new Map<string, LinkedSheet>()
+  let server: ViteDevServer | undefined
+  let minify: ((css: string, page: string) => string) | undefined
+  const named = cssFiles(root, outDir)
+  const plugin: Plugin = {
+    name: 'weft:linked-css',
+    load: {
+      order: 'pre',
+      async handler(id, options) {
+        if (!options?.ssr || !isCSSRequest(id) || !URL_QUERY.test(id)) return
+        if (!server || !minify) throw new Error(`buildSite: ${id} was loaded before the render server started.`)
+        const q = id.indexOf('?')
+        const file = id.slice(0, q)
+        const rest = id.slice(q + 1).split('&').filter((p) => !/^url(?:=|$)/.test(p))
+        const name = relative(root, file).split(sep).join('/')
+        const url = (name.startsWith('..') || isAbsolute(name) ? `/@fs${normalizePath(file)}` : `/${name}`) + `?${['inline', ...rest].join('&')}`
+        const text = ((await server.ssrLoadModule(url)) as { default?: string }).default ?? ''
+        const { css, files } = await named(text, name)
+        const out = minify(css, name) + '\n'
+        const ext = extname(file)
+        const path = `/assets/${basename(file, ext).replace(/[^\w.-]/g, '-')}-${sha256(out).slice(0, 8)}.css`
+        built.set(path, { path, css: out, files })
+        return `export default ${JSON.stringify(path)}`
+      },
+    },
+  }
+  return {
+    plugin,
+    /** Called once the render server is up: the stylesheets are minified for its config's browsers. */
+    start(s: ViteDevServer, targets: Targets | undefined) {
+      server = s
+      minify = minifier(targets)
+    },
+    sheets: () => [...built.values()].sort((a, b) => (a.path < b.path ? -1 : 1)),
+  }
+}
+
 /** Whether a `unicode-range` value covers Basic Latin's printable characters, U+0020 to U+007E. */
 function coversBasicLatin(range: string): boolean {
   const spans: [number, number][] = []
@@ -509,7 +574,7 @@ function preloads(baseCSS: string, pageCSS: string, files: CSSFile[], optIn: str
 /** Write the whole build into `dir`, a fresh folder of its own, and mark it. */
 async function writeBuild(
   dir: string,
-  { root, app, appDir, pages, contentAssets, baseCSS, cssTarget, cssInlineLimit, outDir, preloadFonts, sections }: BuildInput,
+  { root, app, appDir, pages, contentAssets, linked, baseCSS, cssTarget, cssInlineLimit, outDir, preloadFonts, sections }: BuildInput,
 ): Promise<Manifest> {
   // Every file in the build; none is ever written twice, nor under two names the file system takes for one.
   const taken: Taken = new Map()
@@ -616,6 +681,19 @@ async function writeBuild(
       await writeFile(join(dir, file), body, { flag: 'wx' })
       take(taken, file, name)
     }
+  }
+  // The stylesheets pages link by their URL and the files they name, each once.
+  for (const sheet of linked) {
+    for (const asset of sheet.files) {
+      const file = asset.path.slice(1)
+      if (taken.get(fsKey(file))?.path === file) continue
+      await write(file, await readFile(asset.file))
+      immutable.add(file)
+    }
+    const file = sheet.path.slice(1)
+    if (taken.get(fsKey(file))?.path === file) continue
+    await write(file, sheet.css)
+    immutable.add(file)
   }
   // Named by a hash of their bytes, so cached forever.
   for (const asset of contentAssets) {
@@ -1141,10 +1219,17 @@ export const CSS_MODULE = /\.module\.(css|less|sass|scss|styl|stylus|pcss|postcs
  * leave is dropped from the output. A CSS module keeps its class mapping, the
  * same one the server rendered with.
  */
-const noCSS: Plugin = {
+const noCSS = (root: string, refusals: Set<string>): Plugin => ({
   name: 'weft:no-client-css',
   enforce: 'pre',
   load(id) {
+    // A stylesheet linked by its URL is the server render's to build (linkedSheets).
+    if (isCSSRequest(id) && URL_QUERY.test(id)) {
+      const file = relative(existsSync(root) ? realpathSync(root) : root, id.slice(0, id.indexOf('?'))).split(sep).join('/')
+      const sentence = `buildSite: an island imports ${file}?url, a stylesheet the browser would get no URL for; import it in a page or a component only the server renders, and give the island its URL as a prop.`
+      refusals.add(sentence)
+      throw new Error(sentence)
+    }
     if (isCSSRequest(id) && !CSS_MODULE.test(id)) return { code: '' }
   },
   generateBundle: {
@@ -1153,7 +1238,7 @@ const noCSS: Plugin = {
       for (const [name, file] of Object.entries(bundle)) if (file.type === 'asset' && name.endsWith('.css')) delete bundle[name]
     },
   },
-}
+})
 
 type OutputOptions = Rolldown.OutputOptions
 
@@ -1237,15 +1322,18 @@ function lockOutput(dir: string): OutputLock {
       },
     },
   }
-  const refusal = (error: unknown) => {
-    // Vite and Rolldown pass a hook's error on wrapped, or with their own words around its message.
-    for (let e = error, depth = 0; e != null && depth < 8; e = (e as { cause?: unknown }).cause, depth++) {
-      const message = e instanceof Error ? e.message : String(e)
-      for (const sentence of refusals) if (message.includes(sentence)) return sentence
-    }
-    return null
-  }
+  // Vite and Rolldown pass a hook's error on wrapped, or with their own words around its message.
+  const refusal = (error: unknown) => sentenceIn(error, refusals)
   return { plugin, refusal }
+}
+
+/** The first of `sentences` an error carries, through the words and causes Vite and Rolldown wrap it in, or null. */
+function sentenceIn(error: unknown, sentences: Set<string>): string | null {
+  for (let e = error, depth = 0; e != null && depth < 8; e = (e as { cause?: unknown }).cause, depth++) {
+    const message = e instanceof Error ? e.message : String(e)
+    for (const sentence of sentences) if (message.includes(sentence)) return sentence
+  }
+  return null
 }
 
 /** The site's output options without those that say where files go or what they are called. */
@@ -1254,11 +1342,12 @@ const placeless = ({ dir, file, entryFileNames, chunkFileNames, assetFileNames, 
 /** Build the island runtime and one chunk per island into `<dir>/assets`. */
 async function buildClient(root: string, dir: string, islands: string[]): Promise<ClientBuild> {
   const lock = lockOutput(dir)
+  const cssRefusals = new Set<string>()
   const config = await siteConfig(root, { command: 'build', mode: 'production' }, {
     base: '/',
     logLevel: 'warn',
     publicDir: false,
-    plugins: [noCSS, weft({ islands }), lock.plugin],
+    plugins: [noCSS(root, cssRefusals), weft({ islands }), lock.plugin],
     // The runtime lives in this package; its `vue` must be the site's.
     resolve: { dedupe: ['vue'] },
     build: {
@@ -1297,7 +1386,7 @@ async function buildClient(root: string, dir: string, islands: string[]): Promis
     result = (await build(config)) as typeof result
   } catch (e) {
     // Vite and Rolldown wrap a hook's error in their own words; the lock's sentence is the one to give.
-    const refused = lock.refusal(e)
+    const refused = lock.refusal(e) ?? sentenceIn(e, cssRefusals)
     throw refused ? new Error(refused) : e
   }
   const chunks = (Array.isArray(result) ? result : [result]).flatMap((r) => r.output)
