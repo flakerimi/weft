@@ -7,19 +7,26 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
-// templateBundle is a bundle of the app template as the repository has it,
-// with a weft/ folder that holds no Go package, as a release's bundle has
-// none; WEFT_BUNDLE names it. The test is skipped without go, node and pnpm.
-func templateBundle(t *testing.T) string {
+// templateBundle is a bundle of the app template as the repository has it;
+// WEFT_BUNDLE names it. Its weft/ folder holds the Go package (a go.mod.bundle)
+// only when withGo is set, as a development bundle does and a release's does
+// not. The test is skipped without go, node and pnpm.
+func templateBundle(t *testing.T, withGo bool) string {
 	t.Helper()
 	if err := prerequisites(); err != nil {
 		t.Skipf("prerequisites: %v", err)
 	}
-	dir := folderBundle(t, map[string]string{"weft/packages/ui/package.json": "{}\n"})
+	files := map[string]string{"weft/packages/ui/package.json": "{}\n"}
+	if withGo {
+		files["weft/go/go.mod.bundle"] = "module github.com/flakerimi/weft\n\ngo 1.26\n"
+	}
+	dir := folderBundle(t, files)
 	if err := copyFS(os.DirFS("../../templates/app"), filepath.Join(dir, "template")); err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +45,7 @@ func readFile(t *testing.T, name string) string {
 // A release's app requires Warp's module at the release, from GitHub through
 // the module proxy, with no replace; the bundle carries no Go package.
 func TestCreateRequiresTheReleaseModule(t *testing.T) {
-	templateBundle(t)
+	templateBundle(t, false)
 	setVersion(t, "0.0.12")
 	t.Chdir(t.TempDir())
 	if code, out, errs := runCmd("create", "myapp", "--no-install"); code != 0 {
@@ -51,12 +58,16 @@ func TestCreateRequiresTheReleaseModule(t *testing.T) {
 	if exists(t, "myapp/.weft/go") {
 		t.Error(".weft/go is unpacked from a bundle without it")
 	}
+	// The app's own guide says so, for the agent working in it.
+	if guide := readFile(t, "myapp/AGENTS.md"); !strings.Contains(guide, "\nGo gets Warp from GitHub: `go.mod` requires `github.com/flakerimi/weft` at the tag of this app's Weft release, and `go.sum` holds its checksums; commit both, and move the version with `weft upgrade`, not by hand.\n") {
+		t.Errorf("AGENTS.md does not say how Go gets Warp:\n%s", guide)
+	}
 }
 
 // A development build keeps the module in .weft/go, so working on Weft
 // itself needs no tag and no network.
 func TestCreateDevReplacesTheModule(t *testing.T) {
-	templateBundle(t)
+	templateBundle(t, true)
 	t.Chdir(t.TempDir())
 	if code, out, errs := runCmd("create", "myapp", "--no-install"); code != 0 {
 		t.Fatalf("exit %d: %s%s", code, out, errs)
@@ -65,6 +76,86 @@ func TestCreateDevReplacesTheModule(t *testing.T) {
 	if got := readFile(t, "myapp/go.mod"); got != want {
 		t.Errorf("go.mod = %q, want %q", got, want)
 	}
+	if guide := readFile(t, "myapp/AGENTS.md"); !strings.Contains(guide, "\nGo finds Warp in `.weft/go`, which `go.mod` replaces `github.com/flakerimi/weft` with, since a development build of `weft` made this app.\n") {
+		t.Errorf("AGENTS.md does not say how Go gets Warp:\n%s", guide)
+	}
+}
+
+// A development weft gives an app the module in .weft/go, so a bundle staged
+// for a release, which has none, is refused before anything is written.
+func TestCreateDevRefusesAReleaseBundle(t *testing.T) {
+	dir := templateBundle(t, false)
+	t.Chdir(t.TempDir())
+	code, _, errs := runCmd("create", "myapp", "--no-install")
+	want := "weft create: the bundle in " + dir + " was staged for a release, so it has no Go package (weft/go) for the replace a development weft writes; stage it with scripts/bundle.sh without WEFT_VERSION.\n"
+	if code != 1 || errs != want {
+		t.Fatalf("exit %d, stderr %q, want %q", code, errs, want)
+	}
+	if exists(t, "myapp") {
+		t.Error("the refused create wrote myapp")
+	}
+}
+
+// okPnpm puts a pnpm on PATH that says it is 10.0.0 and does nothing else.
+func okPnpm(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the stand-in pnpm is a shell script")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pnpm"), []byte("#!/bin/sh\n[ \"$1\" != --version ] || echo 10.0.0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// When Go cannot fetch the module, weft create says what finishes the app:
+// weft dev or weft build in it, which fetch it again. Running weft create
+// again would be refused, since the folder is there.
+func TestCreateSaysHowToFinishAfterAFailedFetch(t *testing.T) {
+	templateBundle(t, false)
+	okPnpm(t)
+	setVersion(t, "0.0.12")
+	t.Setenv("GOPROXY", "off")
+	t.Setenv("GOMODCACHE", t.TempDir())
+	t.Setenv("GOFLAGS", "-modcacherw")
+	t.Chdir(t.TempDir())
+	code, _, errs := runCmd("create", "myapp")
+	want := "weft create: Go could not fetch github.com/flakerimi/weft v0.0.12 for myapp (see its output above; the module proxy must be reachable); once it can, run cd myapp && weft dev (or weft build), which fetches it again.\n"
+	if code != 1 || !strings.HasSuffix(errs, want) {
+		t.Fatalf("exit %d, stderr %q, want it to end %q", code, errs, want)
+	}
+	if !exists(t, "myapp/go.mod") {
+		t.Error("the app is not left for weft dev to finish")
+	}
+}
+
+// pnpm install runs when node_modules is missing, or older than .weft: as
+// after weft upgrade --no-install, which unpacked a new .weft over the old
+// version's node_modules.
+func TestStaleInstall(t *testing.T) {
+	app := t.TempDir()
+	os.MkdirAll(filepath.Join(app, ".weft"), 0o755)
+	os.WriteFile(filepath.Join(app, ".weft", "VERSION"), []byte("0.0.12\n"), 0o644)
+	if !staleInstall(app) {
+		t.Error("no node_modules is not stale")
+	}
+	os.MkdirAll(filepath.Join(app, "node_modules"), 0o755)
+	if !staleInstall(app) {
+		t.Error("node_modules without pnpm's .modules.yaml is not stale")
+	}
+	modules := filepath.Join(app, "node_modules", ".modules.yaml")
+	os.WriteFile(modules, []byte("x\n"), 0o644)
+	now := time.Now()
+	os.Chtimes(filepath.Join(app, ".weft", "VERSION"), now, now)
+	os.Chtimes(modules, now.Add(-time.Minute), now.Add(-time.Minute))
+	if !staleInstall(app) {
+		t.Error("node_modules installed before .weft was unpacked is not stale")
+	}
+	os.Chtimes(modules, now.Add(time.Minute), now.Add(time.Minute))
+	if staleInstall(app) {
+		t.Error("node_modules installed after .weft was unpacked is stale")
+	}
 }
 
 // madeAt is an app made by a development build (its go.mod replaces the
@@ -72,7 +163,7 @@ func TestCreateDevReplacesTheModule(t *testing.T) {
 // and recorded at version, as an app weft 0.0.11 made is; the test runs in it.
 func madeAt(t *testing.T, version string) {
 	t.Helper()
-	templateBundle(t)
+	templateBundle(t, true)
 	t.Chdir(t.TempDir())
 	if code, out, errs := runCmd("create", "myapp", "--no-install"); code != 0 {
 		t.Fatalf("exit %d: %s%s", code, out, errs)

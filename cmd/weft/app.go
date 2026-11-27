@@ -262,7 +262,8 @@ func unpackCmd(args []string, stdout, stderr io.Writer) int {
 // checks the prerequisites, unpacks the bundle into .weft/ when that holds
 // another version or nothing (a fresh clone), or, for a development weft,
 // another bundle (refreshWeft), runs pnpm install when it
-// unpacked or node_modules/ is missing, runs go mod download when go.sum
+// unpacked or node_modules/ is missing or older than .weft (staleInstall),
+// runs go mod download when go.sum
 // lacks the checksums of the Weft module go.mod requires from GitHub
 // (fetchModule), and writes the components' declaration file when it
 // installed or the file is missing.
@@ -279,7 +280,7 @@ func ensure(appDir string, stdout, stderr io.Writer) (appConfig, error) {
 	if err != nil {
 		return cfg, err
 	}
-	if info, err := os.Stat(filepath.Join(appDir, "node_modules")); err != nil || !info.IsDir() {
+	if staleInstall(appDir) {
 		install = true
 	}
 	if install {
@@ -296,6 +297,20 @@ func ensure(appDir string, stdout, stderr io.Writer) (appConfig, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// staleInstall says whether appDir's node_modules is missing, or was
+// installed before .weft was last unpacked: pnpm writes
+// node_modules/.modules.yaml at every install, and an unpack .weft/VERSION,
+// so a .modules.yaml older than VERSION (as weft upgrade --no-install
+// leaves it) holds the packages of another Weft version.
+func staleInstall(appDir string) bool {
+	modules, err := os.Stat(filepath.Join(appDir, "node_modules", ".modules.yaml"))
+	if err != nil {
+		return true
+	}
+	unpackedAt, err := os.Stat(filepath.Join(appDir, ".weft", "VERSION"))
+	return err == nil && modules.ModTime().Before(unpackedAt.ModTime())
 }
 
 // componentTypes is the declaration file that tells TypeScript what each

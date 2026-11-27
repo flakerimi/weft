@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -91,6 +92,10 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "weft create: %v.\n", strings.TrimSuffix(err.Error(), "."))
 		return 1
 	}
+	if localModule(weft.Version) && !hasLocalModule(bundle) {
+		fmt.Fprintf(stderr, "weft create: the bundle in %s was staged for a release, so it has no Go package (weft/go) for the replace a development weft writes; stage it with scripts/bundle.sh without WEFT_VERSION.\n", os.Getenv("WEFT_BUNDLE"))
+		return 1
+	}
 	data := templateData{Name: name, Module: *module, Version: weft.Version, Theme: *theme, LocalGo: localModule(weft.Version)}
 	if err := writeTemplate(bundle, name, data); err != nil {
 		fmt.Fprintf(stderr, "weft create: cannot write %s (%v); fix that and run the command again.\n", name, err)
@@ -109,7 +114,14 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		if err := fetchModule(name, stdout, stderr); err != nil {
-			fmt.Fprintf(stderr, "weft create: %v.\n", strings.TrimSuffix(err.Error(), "."))
+			// weft create again would be refused, the folder being there:
+			// weft dev or weft build in it fetches the module again.
+			var fe *fetchError
+			if errors.As(err, &fe) {
+				fmt.Fprintf(stderr, "weft create: Go could not fetch %s %s for %s (see its output above; the module proxy must be reachable); once it can, run cd %s && weft dev (or weft build), which fetches it again.\n", weftModule, fe.version, name, name)
+			} else {
+				fmt.Fprintf(stderr, "weft create: %v.\n", strings.TrimSuffix(err.Error(), "."))
+			}
 			return 1
 		}
 		if err := writeTypes(name, stdout, stderr); err != nil {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -160,7 +161,21 @@ func fetchModule(appDir string, stdout, stderr io.Writer) error {
 	cmd.Dir, cmd.Env = appDir, hostBuildEnv(os.Environ())
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("go mod download %s did not finish in %s, so the app cannot build against Weft %s; fix what its output above says (Go fetches the module from the module proxy, so the network must be up) and run the command again", weftModule, appDir, strings.TrimPrefix(version, "v"))
+		return &fetchError{app: appDir, version: version}
 	}
 	return nil
+}
+
+// fetchError is a go mod download of the module that did not finish.
+type fetchError struct{ app, version string }
+
+func (e *fetchError) Error() string {
+	return fmt.Sprintf("go mod download %s did not finish in %s, so the app cannot build against Weft %s; fix what its output above says (Go fetches the module from the module proxy, so the network must be up) and run the command again", weftModule, e.app, strings.TrimPrefix(e.version, "v"))
+}
+
+// hasLocalModule says whether bundle carries the Go package a development
+// weft's apps replace the module with.
+func hasLocalModule(bundle fs.FS) bool {
+	_, err := fs.Stat(bundle, "weft/go/go.mod.bundle")
+	return err == nil
 }

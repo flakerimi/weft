@@ -18,6 +18,8 @@ It writes the app into a new folder, `myapp`, puts Weft's packages in `myapp/.we
 Created myapp. Next: cd myapp && weft dev
 ```
 
+If Go cannot fetch Warp (offline, or behind a proxy that refuses it), `weft create` says so and leaves the app; once Go can reach the module proxy, `cd myapp && weft dev` (or `weft build`) fetches it and finishes.
+
 The app has:
 
 | Path | What it is |
