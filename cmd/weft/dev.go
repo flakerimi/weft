@@ -473,21 +473,24 @@ func sameFiles(a, b map[string]time.Time) bool {
 	return true
 }
 
-// portFree says whether port is free at localhost: whether it can be
-// listened on at 127.0.0.1 and at ::1, as localhost may be either, and
-// nothing answers there. The dial finds a server on the wildcard address,
-// beside which macOS lets a socket bind 127.0.0.1 or ::1.
+// portFree says whether port is free at localhost: whether nothing answers
+// at 127.0.0.1 and at ::1, as localhost may be either, and it can be
+// listened on at both. The dial finds a server on the wildcard address,
+// beside which macOS lets a socket bind 127.0.0.1 or ::1. It dials before it
+// listens: a probe listener just closed can still be held open for a moment
+// by a process forked meanwhile, and a dial after it then reports the free
+// port in use.
 func portFree(port int) bool {
 	for _, host := range []string{"127.0.0.1", "::1"} {
 		addr := net.JoinHostPort(host, strconv.Itoa(port))
+		if c, err := net.DialTimeout("tcp", addr, 500*time.Millisecond); err == nil {
+			c.Close()
+			return false
+		}
 		l, err := net.Listen("tcp", addr)
 		if err == nil {
 			l.Close()
 		} else if addrInUse(err) {
-			return false
-		}
-		if c, err := net.DialTimeout("tcp", addr, 500*time.Millisecond); err == nil {
-			c.Close()
 			return false
 		}
 	}

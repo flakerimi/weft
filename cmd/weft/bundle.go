@@ -13,7 +13,9 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -138,9 +140,19 @@ func unpackFailed(appDir string, err error) error {
 	var le *os.LinkError
 	var se *os.SyscallError
 	if errors.As(err, &pe) || errors.As(err, &le) || errors.As(err, &se) {
+		if heldOpen(err, runtime.GOOS) {
+			return fmt.Errorf("cannot unpack weft's packages into %s (%v); another program has a file in it open (an editor, weft dev, a virus scan): close it, and run the command again", filepath.Join(appDir, ".weft"), err)
+		}
 		return fmt.Errorf("cannot unpack weft's packages into %s (%v); make the app folder writable, and run the command again", filepath.Join(appDir, ".weft"), err)
 	}
 	return err
+}
+
+// heldOpen says whether err is Windows refusing a rename or a removal because
+// a file is open in another process: ERROR_ACCESS_DENIED (5) or
+// ERROR_SHARING_VIOLATION (32). Elsewhere an open file never stops either.
+func heldOpen(err error, goos string) bool {
+	return goos == "windows" && (errors.Is(err, syscall.Errno(5)) || errors.Is(err, syscall.Errno(32)))
 }
 
 // unreadableBundle is the sentence for a bundle a file of which cannot be

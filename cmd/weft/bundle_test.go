@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -795,6 +796,31 @@ func TestUnpackRemovesWhatAKilledOneLeft(t *testing.T) {
 	for d, want := range map[string]bool{".weft-new-123": false, ".weft-old-456": false, ".weft-mine": true, ".weft-new-x": true, ".weft": true} {
 		if got := exists(t, filepath.Join(app, d)); got != want {
 			t.Errorf("%s there: %v, want %v", d, got, want)
+		}
+	}
+}
+
+// On Windows a rename or a removal is refused while another program has a
+// file open; the sentence says so there, and only there.
+func TestHeldOpenOnlyOnWindows(t *testing.T) {
+	for _, c := range []struct {
+		err  error
+		goos string
+		want bool
+	}{
+		{&os.LinkError{Op: "rename", Old: "a", New: "b", Err: syscall.Errno(32)}, "windows", true},
+		{&os.LinkError{Op: "rename", Old: "a", New: "b", Err: syscall.Errno(5)}, "windows", true},
+		{&os.LinkError{Op: "rename", Old: "a", New: "b", Err: syscall.Errno(32)}, "linux", false},
+		{&os.PathError{Op: "mkdir", Path: "a", Err: syscall.Errno(28)}, "windows", false},
+	} {
+		if got := heldOpen(c.err, c.goos); got != c.want {
+			t.Errorf("heldOpen(%v, %s) = %v, want %v", c.err, c.goos, got, c.want)
+		}
+	}
+	if runtime.GOOS != "windows" {
+		err := unpackFailed(t.TempDir(), &os.LinkError{Op: "rename", Old: "a", New: "b", Err: syscall.Errno(32)})
+		if !strings.Contains(err.Error(), "make the app folder writable") {
+			t.Errorf("off Windows the sentence is %q", err)
 		}
 	}
 }
