@@ -22,9 +22,9 @@
 
 ## Review Focus
 
-1. **Template frame (`weft create`):** A created app has `data.Module()`, `auth.Module()` and `hello.Module()`; `.env` has a fresh 48-byte base64url `AUTH_SECRET` (different on each `weft create`) and `.env.sample` has a placeholder; `GET /api/hello` still answers 200 without a session; `/login` and `/setup` build and guard their password forms before hydration; `go test -tags dev ./...`, `pnpm typecheck` and `weft build` pass in the created app.
+1. **Template frame (`weft create`):** A created app has `data.Module()`, `auth.Module()` and `hello.Module()`; `.env` has a fresh 48-byte base64url `AUTH_SECRET` (different on each `weft create`) and `.env.sample` has a placeholder; `GET /api/hello` still answers 200 without a session; `/login` and `/setup` build and guard their password forms before hydration; `go test ./...`, `pnpm typecheck` and `weft build` pass in the created app.
 2. **`weft scaffold` argument parsing and refusals:** Refuses missing fields, `id`/`created_at`/`updated_at`, duplicate fields, `required` on `bool` or with `nullable`, a `?` in a field, `unique` on `bool`/`text`/`date`/`datetime`, relations (`0.3.0`), attachments (`0.4.0`), `json`/`translated` (`0.6.0`), and existing `app/<plural>` or page files before writing anything.
-3. **`weft scaffold` generated code and AST edit:** `app/<plural>/{model,routes,<plural>_test}.go` are valid, `gofmt`-clean Go; `data` tags follow the type rule (every scalar except `text` sortable, text searchable, `enum` and `bool` filterable); `app/modules.go` has `<plural>.Module()` added cleanly via `go/ast` + `go/format`; permissions use `data.PerAction(auth.Per("<plural>"))` when `auth` is in `app/modules.go` (and none, with a one-line notice, when `auth` is absent); `--api` writes only the Go files; without `--api`, the generated pages and islands use `DataTable` and `useParams('/<plural>/:id')`, `weft gen` runs at the end, and `go test -tags dev ./...`, `pnpm typecheck` and `weft build` pass.
+3. **`weft scaffold` generated code and AST edit:** `app/<plural>/{model,routes,<plural>_test}.go` are valid, `gofmt`-clean Go; `data` tags follow the type rule (every scalar except `text` sortable, text searchable, `enum` and `bool` filterable); `app/modules.go` has `<plural>.Module()` added cleanly via `go/ast` + `go/format`; permissions use `data.PerAction(auth.Per("<plural>"))` when `auth` is in `app/modules.go` (and none, with a one-line notice, when `auth` is absent); `--api` writes only the Go files; without `--api`, the generated pages and islands use `DataTable` and `useParams('/<plural>/:id')`, `weft gen` runs at the end, and `go test ./...`, `pnpm typecheck` and `weft build` pass.
 
 ---
 
@@ -44,7 +44,7 @@
 - [ ] **Step 1: Write failing unit tests** in `cmd/weft/scaffold_test.go` for `pluralOf`, field/type/modifier parsing, milestone refusal sentences (`belongs_to` → `0.3.0`, `image` → `0.4.0`, `json` → `0.6.0`), pre-flight collision refusals, Go model/routes/test generation, `app/modules.go` AST editing (with and without `auth`), and Vue page/component generation (`--api` vs full).
 - [ ] **Step 2: Run tests to verify failure:** `go test -short ./cmd/weft -run TestScaffold`.
 - [ ] **Step 3: Implement** `cmd/weft/scaffold.go` and register `"scaffold"` in `cmd/weft/main.go`.
-- [ ] **Step 4: Run unit and integration tests** (`go test ./cmd/weft -run TestScaffold`) to verify that scaffolding a resource in a created app passes `go test -tags dev ./...`, `pnpm typecheck` and `weft build`.
+- [ ] **Step 4: Run unit and integration tests** (`go test ./cmd/weft -run TestScaffold`) to verify that scaffolding a resource in a created app passes `go test ./...`, `pnpm typecheck` and `weft build`.
 
 ### Task 3: Update docs and skills for `weft scaffold`, `DataTable`, `EntityDialog` and the new template
 

@@ -956,7 +956,7 @@ func TestBuildRunsGen(t *testing.T) {
 	if code != 1 || !strings.HasSuffix(errs, want) || !strings.Contains(errs, "no app here") {
 		t.Errorf("exit %d, stdout %q, stderr %q, want it to end %q", code, out, errs, want)
 	}
-	if exists(t, filepath.Join(app, "web", "dist")) {
+	if exists(t, filepath.Join(app, "web", "dist", "routes.json")) {
 		t.Error("the pages were built")
 	}
 }

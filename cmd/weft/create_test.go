@@ -127,6 +127,9 @@ func assertCreated(t *testing.T, dir string) {
 			t.Errorf("%s is missing", p)
 		}
 	}
+	if got := read("web/dist/.weft-build"); got != `{"weft":1,"files":[]}`+"\n" {
+		t.Errorf("web/dist/.weft-build = %q, want the empty marker the page build replaces", got)
+	}
 	if exists(t, filepath.Join(dir, "api", "api.go")) {
 		t.Error("api/api.go is written: the template's API is in app/")
 	}
@@ -387,12 +390,28 @@ func TestCreatedAppGoTests(t *testing.T) {
 	if code, _, errs := create(t, "myapp", "--no-install"); code != 0 {
 		t.Fatalf("exit %d: %s", code, errs)
 	}
-	for _, args := range [][]string{{"vet", "-tags", "dev", "./..."}, {"test", "-tags", "dev", "./..."}} {
+	// Before any build, with or without the dev tag: web/dist holds the
+	// empty marker weft create writes, which dist.go's embed matches.
+	for _, args := range [][]string{{"vet", "-tags", "dev", "./..."}, {"test", "-tags", "dev", "./..."}, {"vet", "./..."}, {"test", "./..."}} {
 		cmd := exec.Command("go", args...)
 		cmd.Dir = "myapp"
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("go %v: %v\n%s", args, err, out)
 		}
+	}
+	// A binary built so, without its pages, refuses to start and says why.
+	bin := filepath.Join(t.TempDir(), "myapp"+exeSuffix(runtime.GOOS))
+	build := exec.Command("go", "build", "-o", bin, ".")
+	build.Dir = "myapp"
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v\n%s", err, out)
+	}
+	run := exec.Command(bin)
+	run.Dir = "myapp"
+	run.Env = append(os.Environ(), "PORT="+strconv.Itoa(freeTestPort(t)))
+	out, err := run.CombinedOutput()
+	if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 1 || !strings.Contains(string(out), "warp: the pages are not built (dist holds only the empty marker weft create writes); run weft build, which builds them into the binary.") {
+		t.Errorf("the unbuilt binary: %v\n%s", err, out)
 	}
 }
 
@@ -708,6 +727,10 @@ func TestCreatedAppIsTheFrame(t *testing.T) {
 	}
 	if code, out, errs := build(t); code != 0 {
 		t.Fatalf("weft build: exit %d: %s%s", code, out, errs)
+	}
+	// The page build took the marker's place.
+	if !exists(t, filepath.Join(app, "web", "dist", "routes.json")) {
+		t.Error("weft build did not replace weft create's web/dist")
 	}
 	url, token := startApp(t, filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS)), app)
 	if token == "" {

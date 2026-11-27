@@ -2,6 +2,8 @@
 package warp
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -48,7 +50,9 @@ const (
 // and first gets a 103 with them when the request is a navigation over HTTP/2
 // or later, or through a proxy. The build's own files (manifest.json,
 // routes.json, .weft-build and the page files under /pages/) are never served
-// as they are. Serve panics, naming the file, if the build is incomplete.
+// as they are. Serve panics, naming the file, if the build is incomplete,
+// and with a sentence saying to run weft build if dist is only the empty
+// marker weft create writes.
 //
 // Otherwise dist is a single-page app, and a manifest.json in it is just a
 // file. Files in dist are served as they are, and every other path gets
@@ -123,10 +127,34 @@ func serveBuild(dist fs.FS, api http.Handler, opts ...ServeOption) http.Handler 
 	})
 }
 
+// errUnbuilt is a dist that is only the marker weft create writes into
+// web/dist, so an app's embed pattern matches before its first build.
+var errUnbuilt = errors.New("warp: the pages are not built (dist holds only the empty marker weft create writes); run weft build, which builds them into the binary.")
+
+// unbuilt says whether dist is weft create's placeholder: a .weft-build
+// listing no files, and nothing else a page build or an app would have.
+func unbuilt(dist fs.FS) bool {
+	raw, err := fs.ReadFile(dist, ".weft-build")
+	if err != nil {
+		return false
+	}
+	var m struct {
+		Files []json.RawMessage `json:"files"`
+	}
+	if json.Unmarshal(raw, &m) != nil || len(m.Files) != 0 {
+		return false
+	}
+	entries, err := fs.ReadDir(dist, ".")
+	return err == nil && len(entries) == 1
+}
+
 // spa serves a single-page app's dist, as Serve describes.
 func spa(dist fs.FS) http.Handler {
 	index, err := fs.ReadFile(dist, "index.html")
 	if err != nil {
+		if unbuilt(dist) {
+			panic(errUnbuilt.Error())
+		}
 		panic("warp.Serve: dist has no index.html")
 	}
 	files := http.FileServerFS(dist)

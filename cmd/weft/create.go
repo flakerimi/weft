@@ -111,6 +111,13 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "weft create: cannot write %s (%v); fix that and run the command again.\n", name, err)
 		return 1
 	}
+	// An empty page build's marker, so dist.go's embed matches and go test
+	// ./... works before the first weft build, which replaces it; a binary
+	// built with it refuses to start, saying the pages are not built.
+	if err := writeUnbuilt(name); err != nil {
+		fmt.Fprintf(stderr, "weft create: cannot write %s (%v); fix that and run the command again.\n", filepath.Join(name, "web", "dist", ".weft-build"), err)
+		return 1
+	}
 	if err := unpack(bundle, name, weft.Version); err != nil {
 		fmt.Fprintf(stderr, "weft create: %v.\n", strings.TrimSuffix(err.Error(), "."))
 		return 1
@@ -223,6 +230,19 @@ func writeTemplate(bundle fs.FS, dir string, data templateData) error {
 		}
 		return os.WriteFile(target, content, mode)
 	})
+}
+
+// unbuiltMarker is the .weft-build of a page build with no files, which
+// weft-build-pages takes as its own and replaces, and warp.Serve refuses.
+const unbuiltMarker = `{"weft":1,"files":[]}` + "\n"
+
+// writeUnbuilt writes unbuiltMarker into dir/web/dist.
+func writeUnbuilt(dir string) error {
+	d := filepath.Join(dir, "web", "dist")
+	if err := os.MkdirAll(d, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(d, ".weft-build"), []byte(unbuiltMarker), 0o644)
 }
 
 // ownerLine is what weft create says of AUTH_OWNER_EMAIL in the app's .env.

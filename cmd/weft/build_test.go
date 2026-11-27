@@ -311,7 +311,8 @@ func TestCreatedAppChecksComponentProps(t *testing.T) {
 	inTempDir(t, "work")
 	app := copyApp(t, ".")
 	t.Chdir(app)
-	if exists(t, filepath.Join(app, "web", "dist")) {
+	// web/dist holds only weft create's empty marker until a build.
+	if exists(t, filepath.Join(app, "web", "dist", "routes.json")) {
 		t.Fatal("the created app was built")
 	}
 	dts := filepath.Join(app, "web", ".weft-types", "components.d.ts")
@@ -443,7 +444,7 @@ func TestBuildRefusesOtherVersion(t *testing.T) {
 	if got := unpacked("."); got != "0.0.0-dev" {
 		t.Errorf(".weft/VERSION = %q", got)
 	}
-	if exists(t, "node_modules") || exists(t, "web/dist") {
+	if exists(t, "node_modules") || exists(t, "web/dist/routes.json") {
 		t.Error("the refused build installed or built something")
 	}
 }
@@ -645,7 +646,7 @@ func TestBuildFromSubfolder(t *testing.T) {
 	if want := "Built " + filepath.Join("..", "..", "myapp"+exeSuffix(runtime.GOOS)) + "\n"; !strings.HasSuffix(out, want) {
 		t.Errorf("stdout ends %q, want %q", out[max(0, len(out)-80):], want)
 	}
-	if !exists(t, filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS))) || !exists(t, filepath.Join(app, "web", "dist")) {
+	if !exists(t, filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS))) || !exists(t, filepath.Join(app, "web", "dist", "routes.json")) {
 		t.Error("the app was not built")
 	}
 	if exists(t, "myapp"+exeSuffix(runtime.GOOS)) || exists(t, "web") {

@@ -13,7 +13,7 @@ weft scaffold product name:string:required price:float   # a resource: app/produ
 weft routes     # every route, with its module, name and permission
 weft upgrade    # move the app to the Weft version of the weft you run
 weft catalog    # the components; weft catalog <Name> for one, --find <word> to search
-go test -tags dev ./...   # the Go tests
+go test ./...   # the Go tests
 pnpm typecheck  # check the Vue files
 ```
 
@@ -21,7 +21,7 @@ To add a resource (a model and its five routes), run `weft scaffold` with its na
 
 The app keeps its records in SQLite (`data.Module()`, the file `DB_URL` names in `.env`) and signs its owner in (`auth.Module()`). At its first start, while no user exists, it logs a one-time link, `/setup#token=…`, that sets the owner's password; the owner's email is `AUTH_OWNER_EMAIL` in `.env`. `GET /api/hello` answers anyone.
 
-Go commands need `-tags dev` until the first `weft build`: without it `dist.go` embeds `web/dist`, which does not exist yet.
+Until the first `weft build`, `web/dist` holds only an empty marker (`weft create` writes it, `weft unpack` puts it back in a fresh clone), so Go commands work; a binary built from it refuses to start, saying the pages are not built.
 
 ## Layout
 

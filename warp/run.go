@@ -29,6 +29,10 @@ const stopLimit = 10 * time.Second
 // API alone. Nothing listens while the modules migrate and start; a port that
 // is taken stops the modules it started.
 //
+// A dist that is only the empty page build marker weft create writes into
+// web/dist (the pages not built) is refused with a sentence, before anything
+// starts.
+//
 // Under weft dev (WEFT_DEV_PARENT=1) it logs nothing, and it also stops when
 // standard input closes, which is when weft dev is gone.
 //
@@ -43,6 +47,9 @@ func (a *App) Serve(dist fs.FS, opts ...ServeOption) error {
 	}
 	if err := a.Err(); err != nil {
 		return err
+	}
+	if dist != nil && unbuilt(dist) {
+		return errUnbuilt
 	}
 	ctx, stop := notifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

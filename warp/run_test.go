@@ -764,3 +764,35 @@ func TestServeStoppedWhileStartingSaysWhatCouldNotStop(t *testing.T) {
 		t.Fatal("Serve did not return after its context ended")
 	}
 }
+
+// unbuiltDist is web/dist as weft create leaves it before the first build:
+// only an empty marker, which the embed pattern matches and the page build
+// replaces.
+var unbuiltDist = fstest.MapFS{".weft-build": {Data: []byte(`{"weft":1,"files":[]}` + "\n")}}
+
+const unbuiltSentence = "warp: the pages are not built (dist holds only the empty marker weft create writes); run weft build, which builds them into the binary."
+
+// A binary built without its pages refuses to start, saying why, rather
+// than serve nothing; nothing is started.
+func TestServeRefusesUnbuiltPages(t *testing.T) {
+	captureLog(t)
+	var log []string
+	app := New(Config{Host: "127.0.0.1", Port: "0"})
+	app.Use(mod("a", &log))
+	if err := app.Serve(unbuiltDist); errText(err) != unbuiltSentence {
+		t.Fatalf("Serve = %q, want %q", errText(err), unbuiltSentence)
+	}
+	if want := []string{"register:a"}; !reflect.DeepEqual(log, want) {
+		t.Errorf("log %v, want only the registration", log)
+	}
+}
+
+// warp.Serve, the handler alone, panics with the same sentence.
+func TestServeHandlerRefusesUnbuiltPages(t *testing.T) {
+	defer func() {
+		if r := recover(); r != unbuiltSentence {
+			t.Fatalf("recovered %v, want %q", r, unbuiltSentence)
+		}
+	}()
+	Serve(unbuiltDist, nil)
+}
