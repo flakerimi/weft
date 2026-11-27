@@ -58,8 +58,13 @@ func (a *App) Serve(dist fs.FS, opts ...ServeOption) error {
 	// the modules migrate, and a start that fails never says it listens.
 	if err := a.Start(ctx); err != nil {
 		// Stopped while the modules started, such as while one opened the
-		// database: asked to stop, it is a clean exit, not a failed start.
+		// database: asked to stop, it is a clean exit, not a failed start;
+		// but a module Start undid that could not stop is still said. Start
+		// joins its cause first, then the undo's errors.
 		if ctx.Err() != nil {
+			if j, ok := err.(interface{ Unwrap() []error }); ok && len(j.Unwrap()) > 1 {
+				return errors.Join(j.Unwrap()[1:]...)
+			}
 			return nil
 		}
 		return err

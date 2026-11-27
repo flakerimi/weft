@@ -732,3 +732,35 @@ func TestServeStoppedWhileStarting(t *testing.T) {
 		t.Fatal("Serve did not return after its context ended")
 	}
 }
+
+// Stopped while starting, a module already migrated that cannot be stopped
+// is still said: only the start's own context error is a clean stop.
+func TestServeStoppedWhileStartingSaysWhatCouldNotStop(t *testing.T) {
+	signal := make(chan struct{})
+	was := notifyContext
+	notifyContext = func(parent context.Context, _ ...os.Signal) (context.Context, context.CancelFunc) {
+		ctx, cancel := context.WithCancel(parent)
+		go func() { <-signal; cancel() }()
+		return ctx, cancel
+	}
+	t.Cleanup(func() { notifyContext = was })
+	captureLog(t)
+	var log []string
+	first := mod("first", &log)
+	first.stopErr = errors.New("the database cannot be closed")
+	m := waitsInMigrate{migrating: make(chan struct{})}
+	app := New(Config{Host: "127.0.0.1", Port: "0"})
+	app.Use(first, m)
+	done := make(chan error, 1)
+	go func() { done <- app.Serve(nil) }()
+	<-m.migrating
+	close(signal)
+	select {
+	case err := <-done:
+		if err == nil || !errors.Is(err, first.stopErr) || strings.Contains(err.Error(), "could not migrate") {
+			t.Fatalf("Serve = %v, want only first's stop error", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve did not return after its context ended")
+	}
+}
