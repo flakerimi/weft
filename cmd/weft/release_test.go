@@ -134,6 +134,8 @@ func TestReleasedBinaryCreatesAndBuilds(t *testing.T) {
 	if err != nil || cfg.Version != "0.0.0-test" {
 		t.Errorf("readApp = %+v, %v", cfg, err)
 	}
+	// From the app's folder, whose .env has the settings data and auth need.
+	t.Chdir(app)
 	assertServes(t, filepath.Join(app, "demo"))
 }
 

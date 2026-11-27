@@ -825,7 +825,11 @@ func TestGenInApp(t *testing.T) {
 	}
 
 	code, out, errs = runCmd("routes")
-	if want := "METHOD  PATH        MODULE  NAME   PERMISSION\nGET     /api/hello  hello   hello  -\n"; code != 0 || out != want {
+	// The frame's routes: auth's four and hello.
+	want := "METHOD  PATH              MODULE  NAME    PERMISSION\n" +
+		"POST    /api/auth/login   auth    login   -\nPOST    /api/auth/logout  auth    logout  -\nGET     /api/auth/me      auth    me      -\n" +
+		"POST    /api/auth/setup   auth    setup   -\nGET     /api/hello        hello   hello   -\n"
+	if code != 0 || out != want {
 		t.Errorf("weft routes: exit %d, stdout %q, stderr %q, want %q", code, out, errs, want)
 	}
 
@@ -854,6 +858,11 @@ func TestGenInApp(t *testing.T) {
 		t.Errorf("pnpm typecheck passed a page reading a field the Go type no longer has: %v\n%s", err, out2)
 	}
 	os.Remove(filepath.Join(app, "web", "pages", "typed.vue"))
+	// The field back as it was: the template's Hello island reads it too.
+	os.WriteFile(routes, goSrc, 0o644)
+	if code, out, errs := runCmd("gen"); code != 0 {
+		t.Fatalf("gen after the rename back: exit %d: %s%s", code, out, errs)
+	}
 
 	// C1: adding a runtime page that calls useParams('/items/:id') and running
 	// weft gen refreshes components.d.ts so pnpm typecheck passes without weft dev.
