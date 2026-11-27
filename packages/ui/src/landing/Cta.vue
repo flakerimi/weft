@@ -58,6 +58,7 @@ defineSlots<{
 
 const root = useTemplateRef<HTMLElement>('root')
 const width = useWidth(root)
+const widthId = width.id
 const resolvedAlign = computed(() => props.align ?? (props.orientation === 'horizontal' ? 'start' : 'center'))
 </script>
 
@@ -70,6 +71,7 @@ const resolvedAlign = computed(() => props.align ?? (props.orientation === 'hori
     :data-orientation="orientation"
     :data-align="resolvedAlign"
     :data-width="width"
+    :data-weft-w="widthId"
   >
     <div class="weft-cta__box">
       <div class="weft-cta__copy">

@@ -20,6 +20,7 @@ const props = withDefaults(defineProps<{
 
 const root = useTemplateRef<HTMLElement>('root')
 const width = useWidth(root)
+const widthId = width.id
 const order = ['narrow', 'regular', 'wide'] as const
 const defaults = { narrow: 1, regular: 2, wide: 3 }
 
@@ -46,6 +47,7 @@ const count = computed(() => colsAt(width.value))
     class="weft-grid"
     :data-gap="gap"
     :data-width="width"
+    :data-weft-w="widthId"
     :style="{
       '--weft-grid-cols': count,
       '--weft-grid-cols-narrow': narrowCols,

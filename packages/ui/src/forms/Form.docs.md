@@ -99,5 +99,11 @@ exactly (`'sha256-tx8/QjztXL6iQA+dqwGLMSVBWxKaWIfL8huD/H0v4SY='`)
 and a page whose other components register pre-paint code too (Grid or the
 landing blocks Hero, FeatureGrid, Pricing, Testimonials, Faq and Cta via
 `useWidth`, AppShell with `persist`, or a closable Banner with an `id`) has
-each wrapped snippet joined into the same script with `;\n`, one per line, so
-the hash depends on the page's components.
+each wrapped snippet joined into the same script with `;\n`, one per line.
+Because the script's text — and so its hash — changes with which components
+a page renders, the order they register in, and each AppShell `persist` key
+or Banner `id`, a strict Content-Security-Policy needs one `'sha256-…'` entry
+per distinct `<script data-weft-prepaint>` across the site's built pages. To
+collect every hash from a build in `dist/`:
+
+    node -e 'const fs=require("node:fs"),crypto=require("node:crypto");console.log([...new Set(fs.globSync("dist/**/*.html").flatMap(f=>[...fs.readFileSync(f,"utf8").matchAll(/<script data-weft-prepaint>([\s\S]*?)<\/script>/g)].map(m=>"sha256-"+crypto.createHash("sha256").update(m[1]).digest("base64"))))])'

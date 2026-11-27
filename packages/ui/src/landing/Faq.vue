@@ -75,6 +75,7 @@ defineSlots<{
 
 const root = useTemplateRef<HTMLElement>('root')
 const width = useWidth(root)
+const widthId = width.id
 const model = useControllable(
   props,
   'modelValue',
@@ -101,6 +102,7 @@ const namedItemSlots = computed(() => {
     :data-orientation="orientation"
     :data-align="align"
     :data-width="width"
+    :data-weft-w="widthId"
   >
     <div class="weft-faq__inner">
       <header v-if="headline || title || description || $slots.headline || $slots.header || $slots.aside" class="weft-faq__header">
