@@ -64,6 +64,14 @@ describe.each(themes.map((t) => [t.name, t] as const))('%s', (_, theme) => {
       }
     })
 
+    // Muted text (descriptions, captions, placeholders, a footer's links) is
+    // drawn on the page, on cards and on raised surfaces.
+    it(`${scheme}: muted text reads on every ground`, () => {
+      for (const [name, ground] of grounds) {
+        expect(contrast(v['color-text-muted']!, ground), `${v['color-text-muted']} on ${name} ${ground}`).toBeGreaterThanOrEqual(4.5)
+      }
+    })
+
     it(`${scheme}: neutral text reads on every ground and tint of itself`, () => {
       for (const [name, ground] of grounds) {
         for (const share of [0, ...Object.values(tints)]) {
