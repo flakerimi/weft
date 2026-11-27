@@ -43,9 +43,9 @@ for (let i = 0; i < 200 && !port; i++) {
 // seconds on, ask for one every two seconds, for up to a minute.
 let page
 for (let i = 0; i < 600 && !page; i++) {
-  try { page = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((t) => t.type === 'page') } catch {}
+  try { page = (await (await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(2000) })).json()).find((t) => t.type === 'page') } catch {}
   if (!page && i >= 20 && i % 20 === 0) {
-    try { await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' }) } catch {}
+    try { await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT', signal: AbortSignal.timeout(2000) }) } catch {}
   }
   if (!page) await sleep(100)
 }
