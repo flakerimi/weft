@@ -1,6 +1,6 @@
 import { hasInjectionContext, inject, onScopeDispose, readonly, ref, watch, type Ref } from 'vue'
 import { usePrePaint } from '../head/usePrePaint.ts'
-import { ID_SCOPE, type IdScope } from '../headless/useId.ts'
+import { useId } from '../headless/useId.ts'
 import { weftKey } from './context.ts'
 import { NARROW_MAX, REGULAR_MAX, widthOf, type Width } from './detect.ts'
 
@@ -26,22 +26,10 @@ export const widthPrePaint =
   `s();if(document.readyState==="loading"){var m=new MutationObserver(s);m.observe(document,{childList:true,subtree:true});` +
   `addEventListener("DOMContentLoaded",function(){m.disconnect();s()},{once:true})}}`
 
-const claimed = new WeakSet<Element>()
-
-function preHydratedWidth(): Width | undefined {
-  if (typeof document === 'undefined' || !hasInjectionContext()) return undefined
-  const scope = inject<IdScope | null>(ID_SCOPE, null)
-  const index = scope?.prefix.startsWith('i') ? Number(scope.prefix.slice(1)) : NaN
-  const island = Number.isInteger(index) ? document.querySelectorAll('weft-island')[index] : undefined
-  if (!island) return undefined
-  for (const node of island.querySelectorAll('[data-width]:not([data-weft-width])')) {
-    if (!claimed.has(node)) {
-      claimed.add(node)
-      const attr = node.getAttribute('data-width')
-      if (attr === 'narrow' || attr === 'regular' || attr === 'wide') return attr
-      break
-    }
-  }
+function preHydratedWidth(id: string): Width | undefined {
+  if (typeof document === 'undefined') return undefined
+  const attr = document.querySelector(`[data-weft-w="${id}"]`)?.getAttribute('data-width')
+  if (attr === 'narrow' || attr === 'regular' || attr === 'wide') return attr
   return undefined
 }
 
@@ -61,20 +49,27 @@ export interface UseWidthOptions {
   prepaint?: boolean
 }
 
+export interface WidthRef extends Readonly<Ref<Width>> {
+  /** Hydration-stable id for `data-weft-w` (defined when `prepaint` is not `false`) so `useWidth` reads the element's pre-paint `data-width` before Vapor's first render effect. */
+  readonly id?: string
+}
+
 /**
  * The width class of an element, measured from the element itself, not the
  * window. Until it is measured (on the server, while hydrating) it is the
  * width the nearest WeftProvider gives, else the `data-width` attribute the
- * pre-paint script already set on the element, else `wide`. On the server,
- * when no WeftProvider forces a fixed width and `prepaint` is not `false`, it
- * registers one page-wide pre-paint script (`weft:width`) that keeps
- * `[data-width]` elements updated from their own width before paint and on
- * resize even without hydration.
+ * pre-paint script already set on the element (`[data-weft-w="<width.id>"]`),
+ * else `wide`. On the server, when no WeftProvider forces a fixed width and
+ * `prepaint` is not `false`, it registers one page-wide pre-paint script
+ * (`weft:width`) that keeps `[data-width]` elements updated from their own
+ * width before paint and on resize even without hydration.
  */
-export function useWidth(el: Readonly<Ref<HTMLElement | null>>, options?: UseWidthOptions): Readonly<Ref<Width>> {
+export function useWidth(el: Readonly<Ref<HTMLElement | null>>, options?: UseWidthOptions): WidthRef {
+  const prepaint = options?.prepaint !== false
+  const id = prepaint ? useId('w') : undefined
   const given = hasInjectionContext() ? inject(weftKey, null)?.width.value : undefined
-  if (import.meta.env.SSR && given === undefined && options?.prepaint !== false) usePrePaint('weft:width', widthPrePaint)
-  const initial = given ?? (!import.meta.env.SSR && options?.prepaint !== false ? preHydratedWidth() : undefined) ?? 'wide'
+  if (import.meta.env.SSR && given === undefined && prepaint) usePrePaint('weft:width', widthPrePaint)
+  const initial = given ?? (!import.meta.env.SSR && id ? preHydratedWidth(id) : undefined) ?? 'wide'
   const width = ref<Width>(initial)
   let observer: ResizeObserver | undefined
   let current: HTMLElement | null = null
@@ -111,5 +106,7 @@ export function useWidth(el: Readonly<Ref<HTMLElement | null>>, options?: UseWid
     stop()
     release()
   })
-  return readonly(width)
+  const out = readonly(width) as WidthRef
+  Object.defineProperty(out, 'id', { value: id })
+  return out
 }

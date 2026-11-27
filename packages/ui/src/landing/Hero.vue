@@ -55,6 +55,7 @@ defineSlots<{
 const inset = useInset()
 const root = useTemplateRef<HTMLElement>('root')
 const width = useWidth(root)
+const widthId = width.id
 const headingTag = computed(() => `h${props.level ?? (inset ? 2 : 1)}`)
 const resolvedAlign = computed(() => props.align ?? (props.orientation === 'horizontal' ? 'start' : 'center'))
 </script>
@@ -66,6 +67,7 @@ const resolvedAlign = computed(() => props.align ?? (props.orientation === 'hori
     :data-orientation="orientation"
     :data-align="resolvedAlign"
     :data-width="width"
+    :data-weft-w="widthId"
   >
     <div v-if="$slots.background" class="weft-hero__background" aria-hidden="true"><slot name="background" /></div>
     <div class="weft-hero__inner">

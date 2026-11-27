@@ -63,8 +63,9 @@ What a newcomer meets first works, on every platform.
   replacing it with `./.weft/go`; tag each release (`vX.Y.Z`) and attach the
   six archives to a public GitHub Release made from the same build the site
   serves (the release workflow already builds them).
-- **W2 finished:** an `enum` typed as its values, `useParams()` typed from the
-  routes.
+- **W2 finished (done):** an `enum` typed as its values (comparing or assigning
+  a value outside the list is now a TypeScript error; an optional non-pointer
+  struct field includes `''` or `0`), `useParams()` typed from the routes.
 - **W5, scaffolding and app blocks:** `weft scaffold`, `DataTable` (server
   paging, sorting, filtering over the list shape) and `EntityDialog`; the app
   template becomes the shop's shape (data, the login, one resource).

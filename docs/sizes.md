@@ -34,7 +34,7 @@ component uses. Neither is counted in the rows below.
 | --- | ---: | ---: | ---: | ---: |
 | Accordion | 2.79 | — | 0.76 | 3.55 |
 | Alert | 2.70 | — | 1.72 | 4.42 |
-| AppShell | 18.68 | — | 3.79 | 22.47 |
+| AppShell | 18.63 | — | 3.79 | 22.42 |
 | Avatar | 1.33 | — | 0.53 | 1.86 |
 | AvatarGroup | 1.34 | — | 0.41 | 1.75 |
 | Badge | 0.86 | — | 0.80 | 1.66 |
@@ -50,28 +50,28 @@ component uses. Neither is counted in the rows below.
 | Collapsible | 1.33 | — | 0.48 | 1.81 |
 | Combobox | 22.07 | — | 2.67 | 24.75 |
 | CommandPalette | 11.57 | — | 1.90 | 13.46 |
-| ConfirmDialog | 6.76 | — | 1.96 | 8.73 |
+| ConfirmDialog | 6.70 | — | 1.96 | 8.66 |
 | Container | 0.77 | — | 0.14 | 0.91 |
 | ContextMenu | 14.59 | — | 1.88 | 16.47 |
-| Cta | 2.38 | — | 1.79 | 4.17 |
+| Cta | 2.37 | — | 1.79 | 4.17 |
 | DatePicker | 12.15 | 14.85 | 2.71 | 14.87 |
 | DateRangePicker | 25.47 | — | 2.72 | 28.19 |
-| Dialog | 7.91 | — | 2.27 | 10.19 |
+| Dialog | 7.85 | — | 2.27 | 10.12 |
 | Divider | 0.47 | — | 0.34 | 0.81 |
 | Drawer | 6.78 | — | 2.29 | 9.07 |
 | DropdownMenu | 14.89 | — | 2.32 | 17.21 |
 | EmptyState | 2.21 | — | 1.59 | 3.80 |
 | ErrorState | 2.18 | — | 1.54 | 3.72 |
-| Faq | 3.83 | — | 1.11 | 4.94 |
-| FeatureGrid | 2.84 | — | 1.26 | 4.10 |
+| Faq | 3.78 | — | 1.11 | 4.89 |
+| FeatureGrid | 2.88 | — | 1.26 | 4.15 |
 | FieldGroup | 2.47 | — | 1.63 | 4.09 |
 | FileUpload | 6.31 | — | 2.23 | 8.54 |
-| Footer | 1.56 | — | 0.55 | 2.12 |
-| Form | 6.65 | — | 2.13 | 8.78 |
+| Footer | 1.54 | — | 0.55 | 2.10 |
+| Form | 6.68 | — | 2.13 | 8.81 |
 | FormField | 2.64 | — | 1.13 | 3.78 |
-| Grid | 1.17 | — | 0.46 | 1.63 |
-| Header | 17.22 | — | 3.38 | 20.60 |
-| Hero | 2.38 | — | 1.67 | 4.04 |
+| Grid | 1.16 | — | 0.46 | 1.62 |
+| Header | 17.11 | — | 3.38 | 20.49 |
+| Hero | 2.39 | — | 1.67 | 4.06 |
 | Icon | 0.67 | — | 0.33 | 1.00 |
 | Input | 2.42 | — | 0.97 | 3.39 |
 | InputNumber | 2.83 | — | 1.00 | 3.83 |
@@ -81,13 +81,13 @@ component uses. Neither is counted in the rows below.
 | Kbd | 0.59 | — | 0.27 | 0.86 |
 | Link | 0.88 | — | 0.32 | 1.20 |
 | Listbox | 8.41 | — | 1.51 | 9.92 |
-| NavigationMenu | 16.84 | — | 3.04 | 19.88 |
+| NavigationMenu | 16.78 | — | 3.04 | 19.82 |
 | OverlayPanel | 1.85 | — | 1.51 | 3.36 |
 | Page | 1.70 | — | 1.39 | 3.09 |
-| Pagination | 3.38 | — | 1.41 | 4.79 |
+| Pagination | 3.36 | — | 1.41 | 4.77 |
 | PinInput | 2.68 | — | 0.53 | 3.21 |
 | Popover | 13.46 | — | 2.55 | 16.01 |
-| Pricing | 5.60 | — | 2.23 | 7.83 |
+| Pricing | 5.63 | — | 2.23 | 7.85 |
 | Progress | 0.78 | — | 0.85 | 1.63 |
 | RadioGroup | 3.06 | — | 0.99 | 4.05 |
 | ScrollArea | 1.02 | — | 0.56 | 1.58 |
@@ -100,13 +100,13 @@ component uses. Neither is counted in the rows below.
 | Spinner | 0.52 | — | 0.53 | 1.05 |
 | Stack | 0.35 | — | 0.27 | 0.62 |
 | StatCard | 2.69 | — | 1.06 | 3.75 |
-| Stepper | 3.22 | — | 1.04 | 4.26 |
+| Stepper | 3.21 | — | 1.04 | 4.25 |
 | Switch | 1.97 | — | 1.42 | 3.39 |
-| Table | 11.56 | — | 2.79 | 14.35 |
-| Tabs | 3.97 | — | 1.30 | 5.26 |
-| Testimonials | 3.02 | — | 1.05 | 4.07 |
+| Table | 11.52 | — | 2.79 | 14.31 |
+| Tabs | 3.91 | — | 1.30 | 5.21 |
+| Testimonials | 3.01 | — | 1.05 | 4.06 |
 | Textarea | 2.12 | — | 0.54 | 2.66 |
-| Timeline | 2.10 | — | 0.92 | 3.02 |
+| Timeline | 2.09 | — | 0.92 | 3.00 |
 | Toast | 3.19 | — | 1.94 | 5.13 |
 | Toaster | 4.22 | — | 2.12 | 6.34 |
 | Toggle | 2.30 | — | 1.39 | 3.69 |
@@ -115,7 +115,7 @@ component uses. Neither is counted in the rows below.
 | Tree | 3.94 | — | 0.74 | 4.68 |
 | WeftProvider | 0.97 | — | 0.27 | 1.25 |
 
-The five heaviest: DateRangePicker (28.19 KB), Combobox (24.75 KB), AppShell (22.47 KB), Select (22.45 KB), Header (20.60 KB).
+The five heaviest: DateRangePicker (28.19 KB), Combobox (24.75 KB), Select (22.45 KB), AppShell (22.42 KB), Header (20.49 KB).
 
 ## Tree-shaking
 

@@ -165,7 +165,7 @@ export interface Product {
   name: string
   price: number
   stock: number
-  status: string
+  status: 'draft' | 'live'
   live: boolean
   site?: string | null
   contact: string
@@ -183,7 +183,7 @@ export interface ProductInput {
   name: string
   price: number
   stock: number
-  status: string
+  status: 'draft' | 'live'
   live: boolean
   site?: string | null
   contact: string

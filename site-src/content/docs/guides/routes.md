@@ -203,7 +203,7 @@ Rules go in a field's `warp` tag, separated by commas. They run on every typed i
 | `url` | text | it is not an `http://` or `https://` address with a host, as the browser's `Form` defines it | `Enter a web address that starts with http:// or https://.` |
 | `min=N` | text, a number, a list | it has fewer than N characters, is below N, or has fewer than N items | `Use at least N characters.`, `Enter N or more.`, `Choose at least N.` |
 | `max=N` | the same | more than N | `Use at most N characters.`, `Enter N or less.`, `Choose at most N.` |
-| `enum=a\|b` | text | it is not one of them | `Choose one of: a, b.` |
+| `enum=a\|b` | text, a number | it is not one of them | `Choose one of: a, b.` |
 | `unique` | text, a number | another record has the value: checked by [Data](data.md)'s store, nothing else | `This is already taken.` |
 | `readonly` | anything | never: the field is answered and not read (see above) | |
 

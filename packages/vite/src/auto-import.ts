@@ -38,6 +38,7 @@ import { dirname, join, resolve } from 'node:path'
 import MagicString, { type SourceMap } from 'magic-string'
 import { normalizePath, type Plugin } from 'vite'
 import { babelParse, parse, type SFCScriptBlock } from 'vue/compiler-sfc'
+import { listPageFilesSync, patternParams, toPath } from './routes.ts'
 
 export interface AutoImportOptions {
   /** Where to write the components' declaration file, from the root; `false` for none. */
@@ -205,9 +206,75 @@ function loadComponents(root: string): { names: Set<string>; dir: string } | nul
   return { names: new Set(componentNames(readFileSync(index, 'utf8'))), dir: normalizePath(dirname(index)) + '/' }
 }
 
-/** The declaration file: every name, as the component `@weft/ui` exports. */
-function declaration(names: string[]): string {
+interface RouteParamEntry {
+  pattern: string
+  params: string[]
+}
+
+/** Whether a dynamic page's plain `<script>` exports `runtime = true` (so it is a runtime page, not a built-ahead `getPaths()` page). */
+function exportsRuntimeTrue(file: string): boolean {
+  let code: string
+  try {
+    code = readFileSync(file, 'utf8')
+  } catch {
+    return false
+  }
+  const { descriptor, errors } = parse(code, { filename: file, sourceMap: false })
+  if (errors.length || !descriptor.script) return false
+  const lang = descriptor.script.lang ?? 'js'
+  const plugins: ('typescript' | 'jsx')[] = []
+  if (/^tsx?$/.test(lang)) plugins.push('typescript')
+  if (/x$/.test(lang)) plugins.push('jsx')
+  let body: Node[]
+  try {
+    body = (babelParse(descriptor.script.content, { sourceType: 'module', plugins }) as unknown as { program: { body: Node[] } }).program.body
+  } catch {
+    return false
+  }
+  for (const stmt of body) {
+    if (stmt.type !== 'ExportNamedDeclaration') continue
+    const decl = stmt.declaration as Node | null
+    if (decl?.type === 'VariableDeclaration') {
+      for (const d of decl.declarations as Node[]) {
+        const id = d.id as { type?: string; name?: string } | null
+        const init = d.init as { type?: string; value?: unknown } | null
+        if (id?.type === 'Identifier' && id.name === 'runtime' && init?.type === 'BooleanLiteral' && init.value === true) return true
+      }
+    }
+  }
+  return false
+}
+
+/**
+ * The runtime dynamic page patterns under `<root>/pages` (`/products/:id`,
+ * `/docs/:...slug`) and their parameter names, in sorted order, for
+ * `WeftRouteParams` in `.weft-types/components.d.ts`.
+ */
+function routeParamEntries(root: string): RouteParamEntry[] {
+  const pagesDir = join(root, 'pages')
+  const byPattern = new Map<string, string[]>()
+  for (const file of listPageFilesSync(pagesDir)) {
+    let pattern: string
+    try {
+      pattern = toPath(file)
+    } catch {
+      continue
+    }
+    const params = patternParams(pattern)
+    if (!params.length || !exportsRuntimeTrue(join(pagesDir, file))) continue
+    if (!byPattern.has(pattern)) byPattern.set(pattern, params)
+  }
+  return [...byPattern.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([pattern, params]) => ({ pattern, params }))
+}
+
+const tsProp = (s: string) => (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(s) ? s : JSON.stringify(s))
+
+/** The declaration file: every name, as the component `@weft/ui` exports, and the dynamic page route patterns for `useParams()`. */
+function declaration(names: string[], routes: RouteParamEntry[] = []): string {
   const lines = [...names].sort().map((n) => `    ${n}: typeof import('${SOURCE}')['${n}']`)
+  const routeLines = routes.map(
+    ({ pattern, params }) => `    ${JSON.stringify(pattern)}: { ${params.map((p) => `${tsProp(p)}: string`).join('; ')} }`,
+  )
   return [
     "// Written by @weft/vite's weftAutoImport() on each build: do not edit.",
     'export {}',
@@ -217,6 +284,9 @@ function declaration(names: string[]): string {
     ...lines,
     '  }',
     '}',
+    ...(routeLines.length
+      ? ['', `declare module '${SOURCE}' {`, '  interface WeftRouteParams {', ...routeLines, '  }', '}']
+      : []),
     '',
   ].join('\n')
 }
@@ -243,7 +313,7 @@ export function writeComponentTypes(root: string, dts: string = DTS): string | n
   const ui = loadComponents(root)
   if (!ui) return null
   const file = resolve(root, dts)
-  writeIfChanged(file, declaration([...ui.names]))
+  writeIfChanged(file, declaration([...ui.names], routeParamEntries(root)))
   return file
 }
 
@@ -258,6 +328,11 @@ export function weftAutoImport(opts: AutoImportOptions = {}): Plugin {
     return found
   }
 
+  function refreshTypes() {
+    const ui = load()
+    if (ui && opts.dts !== false) writeIfChanged(resolve(root, opts.dts ?? DTS), declaration([...ui.names], routeParamEntries(root)))
+  }
+
   return {
     name: 'weft:auto-import',
     // Before vite:vue compiles the SFC, which is what reads the line.
@@ -267,8 +342,12 @@ export function weftAutoImport(opts: AutoImportOptions = {}): Plugin {
       found = undefined
     },
     buildStart() {
-      const ui = load()
-      if (ui && opts.dts !== false) writeIfChanged(resolve(root, opts.dts ?? DTS), declaration([...ui.names]))
+      refreshTypes()
+    },
+    configureServer(server) {
+      server.watcher.on('add', (f) => f.endsWith('.vue') && refreshTypes())
+      server.watcher.on('change', (f) => f.endsWith('.vue') && refreshTypes())
+      server.watcher.on('unlink', (f) => f.endsWith('.vue') && refreshTypes())
     },
     transform(code, id) {
       if (!id.endsWith('.vue') || id.startsWith('\0') || id.includes('/node_modules/')) return

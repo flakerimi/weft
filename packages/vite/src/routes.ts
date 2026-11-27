@@ -1,3 +1,4 @@
+import { existsSync, readdirSync } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -54,7 +55,7 @@ const pathKey = (path: string) => path.normalize('NFC').toLowerCase()
  * A page file's path: `[name]` is a param (`:name`) that fills one segment,
  * `[...name]` a catch-all (`:...name`) that fills the rest of the path, or none of it.
  */
-function toPath(file: string): string {
+export function toPath(file: string): string {
   const parts = file.slice(0, -'.vue'.length).split('/')
   if (parts[parts.length - 1] === 'index') parts.pop()
   const rest = parts.findIndex((p) => /^\[\.\.\..+\]$/.test(p))
@@ -64,6 +65,41 @@ function toPath(file: string): string {
     )
   }
   return '/' + parts.map((p) => p.replace(/^\[(.+)\]$/, ':$1')).join('/')
+}
+
+/**
+ * The parameter names a route pattern (`/products/:id`, `/docs/:...slug`) takes,
+ * in path order (`['id']`, `['slug']`).
+ */
+export function patternParams(pattern: string): string[] {
+  return segmentsOf(pattern)
+    .filter(isParam)
+    .map((p) => p.replace(/^:(\.\.\.)?/, ''))
+}
+
+/**
+ * Every `.vue` page file under `pagesDir`, in sorted order, skipping names
+ * starting with `_` or `.` and symlinks. Used by `weftAutoImport` and
+ * `weft-types` to write `WeftRouteParams` synchronously.
+ */
+export function listPageFilesSync(pagesDir: string): string[] {
+  if (!existsSync(pagesDir)) return []
+  const files: string[] = []
+  const walkSync = (dir: string, prefix: string) => {
+    let entries
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const e of entries) {
+      if (e.name.startsWith('_') || e.name.startsWith('.') || e.isSymbolicLink()) continue
+      if (e.isDirectory()) walkSync(join(dir, e.name), `${prefix}${e.name}/`)
+      else if (e.isFile() && e.name.endsWith('.vue')) files.push(`${prefix}${e.name}`)
+    }
+  }
+  walkSync(pagesDir, '')
+  return files.sort()
 }
 
 const byOrder = (a: Route, b: Route) =>

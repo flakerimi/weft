@@ -22,4 +22,10 @@ alone is `'sha256-9BDYcqAvUSo5sGyREfywnuaJMRGECCNSMPtWf2EQYPM='`):
 
 It observes `[data-width]` elements added while the page parses until
 `DOMContentLoaded`; `[data-width]` markup inserted after `DOMContentLoaded`
-by code outside Vue keeps its server attribute.
+by code outside Vue keeps its server attribute. A page that renders other
+pre-paint components too (`Form`, `AppShell` with `persist`, or a closable
+`Banner` with an `id`) joins their wrapped snippets into the same script with
+`;\n` in registration order (embedding any `persist` key or Banner `id`); a
+strict Content-Security-Policy needs one `'sha256-…'` hash per distinct
+`<script data-weft-prepaint>` in `dist/` (see `Form`'s docs for the command
+that lists them).
