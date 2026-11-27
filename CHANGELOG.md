@@ -7,7 +7,7 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
 0.0.12 have no GitHub Release: they were published at weft.base.al, and
 `site/releases.txt` lists them (only 0.0.1 and 0.0.2 have a tag).
 
-## Unreleased
+## 0.0.18
 
 - `weft scaffold <name> <field[:type[:modifier...]]>...` writes a resource:
   its Go package (model, routes and a story test, added to `app/modules.go`)
@@ -23,6 +23,16 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
 - A fresh app's `go test ./...` builds before the first `weft build`, from
   the page build's empty marker in `web/dist`; a binary built before
   `weft build` refuses to start instead of serving nothing.
+- A `Footer` in an island keeps its width through hydration; `useWidth`
+  reads a stored width back only inside an island.
+- The CSP docs collect the speculation rules' hash with the pre-paint ones;
+  `'inline-speculation-rules'` is not offered, since Chrome ignores it beside
+  a hash.
+- An integer `enum=` choice must be written as its type prints it (`+5`, `-0`,
+  `05` and `-05` are refused), and an unsigned one out of range is told its
+  range.
+- A page counts as run-time only from `export const runtime = true` or a
+  `const` exported as `runtime`.
 
 ## 0.0.17
 
