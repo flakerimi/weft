@@ -55,9 +55,9 @@ platforms it claims, and the docs saying what it brought.
 What a newcomer meets first works, on every platform.
 
 - **Windows supported:** the release workflow's Windows tests pass; `weft dev`
-  stops its process trees with a Job Object; the installer has a PowerShell
-  form; the docs say Windows is supported. The suite runs on all three
-  platforms on every push (free now that the repository is public).
+  stops its process trees with a Job Object (done); the installer has a
+  PowerShell form; the docs say Windows is supported. The suite runs on all
+  three platforms on every push (free now that the repository is public).
 - **The Go module from GitHub:** with the repository public, an app's `go.mod`
   can require `github.com/flakerimi/weft` at the release's tag instead of
   replacing it with `./.weft/go`; tag each release (`vX.Y.Z`) and attach the

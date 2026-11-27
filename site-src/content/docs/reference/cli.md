@@ -118,7 +118,7 @@ Every 300 ms it looks for a changed `.go` file outside `.weft/`, `.git/`, `node_
 
 The Go server must answer on `PORT` within 30 s, as must the page server, or `weft dev` stops both, saying which and what to check, with exit status 1. The app has 5 s to describe itself after each build, else `weft dev` says so and goes on with `web/.weft-types/api.ts` as it was.
 
-Ctrl-C, SIGTERM, SIGHUP or SIGQUIT stops both servers, with exit status 0; killed, `weft dev` leaves neither running, as each exits when its standard input, a pipe `weft dev` holds, ends. If one server stops by itself, `weft dev` stops the other and says `weft dev: the page server stopped; see its output above.` (or `the Go server`), with exit status 1. A port in use is `weft dev: port <n> is in use; stop what is using it or pass --port.`, checked first. Wrong usage exits with status 2.
+Ctrl-C, SIGTERM, SIGHUP or SIGQUIT stops both servers, with exit status 0; killed, `weft dev` leaves neither running, as each exits when its standard input, a pipe `weft dev` holds, ends (and on Windows is in a Job Object). If one server stops by itself, `weft dev` stops the other and says `weft dev: the page server stopped; see its output above.` (or `the Go server`), with exit status 1. A port in use is `weft dev: port <n> is in use; stop what is using it or pass --port.`, checked first. Wrong usage exits with status 2.
 
 ### weft build
 
