@@ -46,6 +46,7 @@ func (things) Register(app *warp.App) error {
 		}
 		return map[string]string{"email": u.Email, "role": u.Role}, nil
 	}, auth.Can("things:read"))
+	warp.Post(app, "/things/purge", func(ctx context.Context, _ warp.None) (warp.None, error) { return warp.None{}, nil }, auth.Can("things:purge"))
 	return nil
 }
 
@@ -328,16 +329,18 @@ func TestGuard(t *testing.T) {
 		t.Fatalf("the guarded route saw %v", got)
 	}
 
-	clerk, err := auth.AddUser(context.Background(), c.App, " Clerk@Example.com", "clerk password", "clerk")
+	clerk, err := auth.AddUser(context.Background(), c.App, " Clerk@Example.com", "clerk password", "member")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if clerk.Email != "clerk@example.com" || clerk.Role != "clerk" || clerk.ID == 0 {
+	if clerk.Email != "clerk@example.com" || clerk.Role != "member" || clerk.ID == 0 {
 		t.Fatalf("AddUser made %+v", clerk)
 	}
 	cc := c.Fork()
 	login(cc, "clerk@example.com", "clerk password").Want(200)
-	wantError(t, cc.Get("/api/things"), 403, "forbidden", "Your account cannot do that.")
+	cc.Get("/api/things").Want(200)
+	wantError(t, cc.Post("/api/things/purge", nil), 403, "forbidden", "Your account cannot do that.")
+	c.Post("/api/things/purge", nil).Want(204)
 	var me auth.User
 	cc.Get("/api/auth/me").Want(200).JSON(&me)
 	if me != clerk {
@@ -356,11 +359,13 @@ func TestAddUserMistakes(t *testing.T) {
 	authtest.Owner(t, c)
 	for _, tc := range []struct{ email, password, role, field, message string }{
 		{" OWNER@example.com", "a good password", "owner", "email", "This is already taken."},
-		{"not an address", "a good password", "clerk", "email", "Enter an email address."},
-		{"", "a good password", "clerk", "email", "This is required."},
-		{"a@example.com", "short", "clerk", "password", "Use at least 8 characters."},
-		{"a@example.com", strings.Repeat("x", 201), "clerk", "password", "Use at most 200 characters."},
+		{"not an address", "a good password", "member", "email", "Enter an email address."},
+		{"", "a good password", "member", "email", "This is required."},
+		{"a@example.com", "short", "member", "password", "Use at least 8 characters."},
+		{"a@example.com", strings.Repeat("x", 201), "member", "password", "Use at most 200 characters."},
 		{"a@example.com", "a good password", "", "role", "This is required."},
+		{"a@example.com", "a good password", "clerk", "role", "Choose one of: owner, administrator, member, viewer."},
+		{"a@example.com", "a good password", "Owner", "role", "Choose one of: owner, administrator, member, viewer."},
 	} {
 		_, err := auth.AddUser(context.Background(), c.App, tc.email, tc.password, tc.role)
 		var e *warp.Error
@@ -370,7 +375,7 @@ func TestAddUserMistakes(t *testing.T) {
 			t.Errorf("AddUser(%q, %q, %q) names %v", tc.email, tc.password, tc.role, e.Fields)
 		}
 	}
-	if _, err := auth.AddUser(context.Background(), c.App, "a@example.com", strings.Repeat("x", 200), "clerk"); err != nil {
+	if _, err := auth.AddUser(context.Background(), c.App, "a@example.com", strings.Repeat("x", 200), "viewer"); err != nil {
 		t.Errorf("a 200-character password: %v", err)
 	}
 }
@@ -622,21 +627,21 @@ func TestDescribeHidesTheHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var user *warp.TypeInfo
+	var me *warp.TypeInfo
 	for i, ty := range d.Types {
-		if ty.Name == "User" {
-			user = &d.Types[i]
+		if ty.Name == "Me" {
+			me = &d.Types[i]
 		}
 	}
-	if user == nil {
-		t.Fatalf("Describe lists no User: %+v", d.Types)
+	if me == nil {
+		t.Fatalf("Describe lists no Me: %+v", d.Types)
 	}
 	var names []string
-	for _, f := range user.Fields {
+	for _, f := range me.Fields {
 		names = append(names, f.Name)
 	}
-	if got := strings.Join(names, ","); got != "id,created_at,updated_at,email,role" {
-		t.Fatalf("User has the fields %s", got)
+	if got := strings.Join(names, ","); got != "id,created_at,updated_at,email,name,role,permissions" {
+		t.Fatalf("Me has the fields %s", got)
 	}
 	all, _ := json.Marshal(d)
 	for _, hidden := range []string{"password_hash", "userRow"} {

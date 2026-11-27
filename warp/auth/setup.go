@@ -15,15 +15,15 @@ var errSetupDone = errors.New("a user exists")
 // owner in. It needs the token of the logged link and works while no user
 // exists: the count and the insert run in one transaction, and the unique
 // email is the last guard, so two setups at once make one owner.
-func (m *module) setup(ctx context.Context, in SetupInput) (User, error) {
+func (m *module) setup(ctx context.Context, in SetupInput) (Me, error) {
 	if !m.tokenIs(in.Token) {
-		return User{}, warp.Forbidden(errNotSetup)
+		return Me{}, warp.Forbidden(errNotSetup)
 	}
 	hash, err := m.hash(ctx, in.Password) // before the transaction, which holds the write lock
 	if err != nil {
-		return User{}, err
+		return Me{}, err
 	}
-	row := userRow{Email: m.owner, Role: "owner", PasswordHash: hash}
+	row := userRow{Email: m.owner, Role: RoleOwner, PasswordHash: hash}
 	err = m.db.Tx(ctx, func(ctx context.Context) error {
 		n, err := m.users.Count(ctx)
 		if err != nil {
@@ -46,11 +46,11 @@ func (m *module) setup(ctx context.Context, in SetupInput) (User, error) {
 	case errors.Is(err, errSetupDone),
 		errors.As(err, &e) && e.Status == http.StatusUnprocessableEntity: // someone else just became the owner
 		m.endSetup()
-		return User{}, warp.Forbidden(errNotSetup)
+		return Me{}, warp.Forbidden(errNotSetup)
 	case err != nil:
-		return User{}, err
+		return Me{}, err
 	}
 	m.endSetup()
 	m.signIn(ctx, row)
-	return row.user(), nil
+	return m.meOf(row.user()), nil
 }

@@ -32,7 +32,8 @@ import (
 type User struct {
 	data.Record
 	Email string `json:"email" warp:"required,email,unique"`
-	Role  string `json:"role"`
+	Name  string `json:"name" warp:"max=120"`
+	Role  string `json:"role" warp:"enum=owner|administrator|member|viewer"`
 }
 
 // userRow is a user as the users table keeps it, with the hash. No route takes
@@ -40,22 +41,36 @@ type User struct {
 type userRow struct {
 	data.Record
 	Email        string `json:"email" warp:"unique"`
+	Name         string `json:"name"`
 	Role         string `json:"role"`
 	PasswordHash string `json:"password_hash"`
 }
 
-func (r userRow) user() User { return User{Record: r.Record, Email: r.Email, Role: r.Role} }
+func (r userRow) user() User {
+	return User{Record: r.Record, Email: r.Email, Name: r.Name, Role: r.Role}
+}
 
 // Module is the auth module, named "auth", which needs the data module before
 // it. Registering adds its routes under /api/auth and the users store, and
 // reads nothing; its Start reads the AUTH_ settings and, while no user exists,
-// logs the link that sets up the owner.
-func Module() warp.Module { return newModule(time.Now) }
+// logs the link that sets up the owner. Grant adds permissions to a role.
+func Module(opts ...Option) warp.Module {
+	m := newModule(time.Now)
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&m.opts)
+		}
+	}
+	return m
+}
 
 type module struct {
 	app   *warp.App
 	db    *data.DB
 	users *data.Store[userRow]
+	opts  options
+	roles *roles // set by Register
+	known known  // the permissions Me may list
 
 	perKey     *limiter      // tries per email and address
 	perAddress *limiter      // tries per address, across emails
@@ -89,6 +104,11 @@ func (m *module) Name() string { return "auth" }
 
 func (m *module) Register(app *warp.App) error {
 	m.app = app
+	r, mistakes := newRoles(m.opts.grants)
+	for _, s := range mistakes {
+		app.Mistake("%s", s)
+	}
+	m.roles = r
 	m.db = data.For(app)
 	m.users = data.NewStore[userRow](m.db, "users")
 	m.find = func(ctx context.Context, email string) (userRow, bool, error) {
@@ -191,8 +211,8 @@ func SetupToken(app *warp.App) string {
 	return m.setupToken
 }
 
-// AddUser makes a user with a role. The role owner has every permission; any
-// other has none yet. The email is kept lower-cased and trimmed, and the
+// AddUser makes a user with a role, one of owner, administrator, member and
+// viewer. The email is kept lower-cased and trimmed, and the
 // password is held to setup's rules, 8 to 200 characters; a mistake is a
 // warp.Invalid on email, password or role, and an email another user has is
 // a warp.Invalid on email. It is for seeding and tools, after the app has
@@ -206,7 +226,7 @@ func AddUser(ctx context.Context, app *warp.App, email, password, role string) (
 	if err := warp.Validate(struct {
 		Email    string `json:"email" warp:"required,email"`
 		Password string `json:"password" warp:"required,min=8,max=200"`
-		Role     string `json:"role" warp:"required"`
+		Role     string `json:"role" warp:"required,enum=owner|administrator|member|viewer"`
 	}{email, password, role}); err != nil {
 		return User{}, err
 	}

@@ -30,9 +30,10 @@ func (m *module) carry(next http.Handler) http.Handler {
 // Can is the route option that records permission on the route and guards
 // it: a request without a session is answered 401, and one whose user's role
 // lacks the permission 403. The user is read from the users table on every
-// request, so a removed user is out at once; UserOf gives it to the handler.
-// The role owner has every permission, and no other role has any yet. An
-// app that lists no auth module has a registration mistake that says so.
+// request, so a removed user is out at once and a changed role counts at
+// once; UserOf gives it to the handler. What a role is allowed is Allows's
+// answer. An app that lists no auth module has a registration mistake that
+// says so.
 func Can(permission string) warp.RouteOption {
 	return warp.Options(warp.Permission(permission), warp.Requires("auth", "auth.Module()"), warp.With(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -46,7 +47,7 @@ func Can(permission string) warp.RouteOption {
 				warp.WriteError(w, r, err)
 				return
 			}
-			if !allowed(u.Role, permission) {
+			if !m.roles.allowed(u.Role, permission) {
 				warp.WriteError(w, r, warp.Forbidden(errCannot))
 				return
 			}
@@ -54,9 +55,6 @@ func Can(permission string) warp.RouteOption {
 		})
 	}))
 }
-
-// allowed reports whether role has permission: the owner has every one.
-func allowed(role, permission string) bool { return role == "owner" }
 
 // UserOf returns the signed-in user of a route guarded by Can, read when the
 // request came in.

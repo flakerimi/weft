@@ -37,14 +37,14 @@ func (m *module) routes() {
 
 // login signs a user in. A wrong email and a wrong password get one answer,
 // after one hash either way.
-func (m *module) login(ctx context.Context, in LoginInput) (User, error) {
+func (m *module) login(ctx context.Context, in LoginInput) (Me, error) {
 	r := warp.Request(ctx)
 	row, err := m.attempt(ctx, in.Email, in.Password, m.app.ClientKey(r))
 	if err != nil {
-		return User{}, err
+		return Me{}, err
 	}
 	m.signIn(ctx, row)
-	return row.user(), nil
+	return m.meOf(row.user()), nil
 }
 
 // attempt checks one login from the client ip, as ClientKey names it (an
@@ -111,7 +111,11 @@ func (m *module) logout(ctx context.Context, _ warp.None) (warp.None, error) {
 	return warp.None{}, nil
 }
 
-// me answers the signed-in user, or the 401.
-func (m *module) me(ctx context.Context, _ warp.None) (User, error) {
-	return m.signedIn(warp.Request(ctx))
+// me answers the signed-in user with their permissions, or the 401.
+func (m *module) me(ctx context.Context, _ warp.None) (Me, error) {
+	u, err := m.signedIn(warp.Request(ctx))
+	if err != nil {
+		return Me{}, err
+	}
+	return m.meOf(u), nil
 }
