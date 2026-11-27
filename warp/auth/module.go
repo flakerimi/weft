@@ -336,10 +336,19 @@ func RemoveUser(ctx context.Context, app *warp.App, id int64) error {
 }
 
 // removeUser removes the user with the id and, in one transaction, every
-// session and API key of theirs and every invitation they sent: what
-// RemoveUser and the route remove_user do.
+// session, API key and mailed link of theirs and every invitation they
+// sent: what RemoveUser and the route remove_user do. A reset link never
+// outlives its user, so it cannot act on an account made later with the
+// same address.
 func (m *module) removeUser(ctx context.Context, id int64) error {
 	return m.db.Tx(ctx, func(ctx context.Context) error {
+		u, err := m.users.Get(ctx, id)
+		if err != nil {
+			return err
+		}
+		if _, err := m.tokens.DeleteBy(ctx, "email", u.Email); err != nil {
+			return err
+		}
 		if _, err := m.sessions.DeleteBy(ctx, "user_id", id); err != nil {
 			return err
 		}

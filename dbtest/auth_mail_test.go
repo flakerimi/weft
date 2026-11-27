@@ -630,3 +630,39 @@ func TestAuthNeedsMail(t *testing.T) {
 		t.Fatalf("Err = %v, want %q", err, want)
 	}
 }
+
+// Review I1: a reset link dies with its user, and never acts on a new
+// account made later with the same address.
+func TestResetLinkDiesWithItsUser(t *testing.T) {
+	c, _ := startAuth(t, authEnv(t))
+	authtest.Owner(t, c)
+	const email = "jane@example.com"
+	old, err := auth.AddUser(ctx, c.App, email, "jane's old password", auth.RoleAdministrator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Fork().Post("/api/auth/forgot", map[string]string{"email": email}).Want(204)
+	token := mailToken(t, lastMail(t, c.App, email))
+	if err := auth.RemoveUser(ctx, c.App, old.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n := rowsIn(t, c, "auth_tokens"); n != 0 {
+		t.Fatalf("%d reset tokens outlive their user", n)
+	}
+	if _, err := auth.AddUser(ctx, c.App, email, "the new jane's password", auth.RoleViewer); err != nil {
+		t.Fatal(err)
+	}
+	wantError(t, tokenInfo(c, token), 403, "forbidden", linkGone)
+	wantError(t, setPassword(c.Fork(), token, newPassword), 403, "forbidden", linkGone)
+	login(c.Fork(), email, "the new jane's password").Want(200)
+
+	// Through the route as well: remove_user takes the user's reset links.
+	_, u := authtest.As(t, c, auth.RoleMember)
+	c.Fork().Post("/api/auth/forgot", map[string]string{"email": u.Email}).Want(204)
+	token = mailToken(t, lastMail(t, c.App, u.Email))
+	c.Delete(fmt.Sprintf("/api/auth/users/%d", u.ID)).Want(204)
+	if _, err := auth.AddUser(ctx, c.App, u.Email, "another password", auth.RoleViewer); err != nil {
+		t.Fatal(err)
+	}
+	wantError(t, setPassword(c.Fork(), token, newPassword), 403, "forbidden", linkGone)
+}

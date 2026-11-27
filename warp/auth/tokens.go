@@ -52,11 +52,13 @@ const (
 )
 
 // tokenRow is a mailed token of register or reset, as the table auth_tokens
-// keeps it: its purpose, the address it was mailed to, its hash and its end.
+// keeps it: its purpose, the address it was mailed to, for a reset the user
+// it resets (0 for register), its hash and its end.
 type tokenRow struct {
 	data.Record
 	Purpose   string    `json:"purpose"`
 	Email     string    `json:"email"`
+	UserID    int64     `json:"user_id"`
 	TokenHash string    `json:"token_hash" warp:"unique"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
@@ -179,14 +181,14 @@ func (m *module) register(ctx context.Context, in RegisterInput) (warp.None, err
 	if err := m.mailTry(ctx, email); err != nil {
 		return warp.None{}, err
 	}
-	_, found, err := m.find(ctx, email)
+	u, found, err := m.find(ctx, email)
 	if err != nil {
 		return warp.None{}, err
 	}
 	if found {
-		return warp.None{}, m.mailToken(ctx, email, purposeReset, m.mails.known)
+		return warp.None{}, m.mailToken(ctx, email, u.ID, purposeReset, m.mails.known)
 	}
-	return warp.None{}, m.mailToken(ctx, email, purposeRegister, m.mails.register)
+	return warp.None{}, m.mailToken(ctx, email, 0, purposeRegister, m.mails.register)
 }
 
 // forgot mails a reset link to an address with an account, and nothing to
@@ -196,23 +198,23 @@ func (m *module) forgot(ctx context.Context, in ForgotInput) (warp.None, error) 
 	if err := m.mailTry(ctx, email); err != nil {
 		return warp.None{}, err
 	}
-	_, found, err := m.find(ctx, email)
+	u, found, err := m.find(ctx, email)
 	if err != nil || !found {
 		return warp.None{}, err
 	}
-	return warp.None{}, m.mailToken(ctx, email, purposeReset, m.mails.reset)
+	return warp.None{}, m.mailToken(ctx, email, u.ID, purposeReset, m.mails.reset)
 }
 
-// mailToken makes a token of purpose for email, ending the address's
-// earlier one, and mails its link, in one transaction, so a mail the mail
-// module refuses (a full queue) leaves no token.
-func (m *module) mailToken(ctx context.Context, email, purpose string, tpl *letterTemplate) error {
+// mailToken makes a token of purpose for email (a reset for the user id),
+// ending the address's earlier one, and mails its link, in one transaction,
+// so a mail the mail module refuses (a full queue) leaves no token.
+func (m *module) mailToken(ctx context.Context, email string, userID int64, purpose string, tpl *letterTemplate) error {
 	lasts := resetLasts
 	if purpose == purposeRegister {
 		lasts = registerLasts
 	}
 	token := newToken()
-	row := tokenRow{Purpose: purpose, Email: email, TokenHash: tokenHash(token), ExpiresAt: m.now().Add(lasts)}
+	row := tokenRow{Purpose: purpose, Email: email, UserID: userID, TokenHash: tokenHash(token), ExpiresAt: m.now().Add(lasts)}
 	msg, err := tpl.message(email, mailData{Host: m.host, Link: m.link(token)})
 	if err != nil {
 		return err
@@ -229,15 +231,16 @@ func (m *module) mailToken(ctx context.Context, email, purpose string, tpl *lett
 }
 
 // mailed is what a good mailed token is for: its purpose, its address, the
-// invited role, and the id of its row in auth_tokens or invitations.
+// invited role, the user a reset resets, and the id of its row in
+// auth_tokens or invitations.
 type mailed struct {
 	purpose, email, role string
-	id                   int64
+	id, userID           int64
 }
 
 // readToken returns what token is for, or the 403 for a token no one has,
-// one that has ended, and an invitation whose inviter is gone or now ranks
-// below the role invited. A token is looked up by its hash, which is all
+// one that has ended, a reset whose user is gone, and an invitation whose
+// inviter is gone or now ranks below the role invited. A token is looked up by its hash, which is all
 // that is kept.
 func (m *module) readToken(ctx context.Context, token string) (mailed, error) {
 	gone := warp.Forbidden(errLinkGone)
@@ -249,10 +252,20 @@ func (m *module) readToken(ctx context.Context, token string) (mailed, error) {
 	switch {
 	case err != nil:
 		return mailed{}, err
-	case ok && now.Before(t.ExpiresAt):
-		return mailed{purpose: t.Purpose, email: t.Email, id: t.ID}, nil
-	case ok:
+	case ok && !now.Before(t.ExpiresAt):
 		return mailed{}, gone
+	case ok && t.Purpose == purposeReset:
+		// A reset is its user's: gone with them, never another account's.
+		u, err := m.users.Get(ctx, t.UserID)
+		switch {
+		case isNotFound(err) || err == nil && u.Email != t.Email:
+			return mailed{}, gone
+		case err != nil:
+			return mailed{}, err
+		}
+		fallthrough
+	case ok:
+		return mailed{purpose: t.Purpose, email: t.Email, id: t.ID, userID: t.UserID}, nil
 	}
 	inv, ok, err := m.invitations.First(ctx, "token_hash", hash)
 	switch {
@@ -331,7 +344,7 @@ func (m *module) setPassword(ctx context.Context, in PasswordInput) (Me, error) 
 			return err
 		}
 		switch {
-		case t.purpose == purposeReset && !found: // the user was removed since
+		case t.purpose == purposeReset && (!found || u.ID != t.userID): // the user was removed since
 			return gone
 		case t.purpose == purposeReset:
 			u.PasswordHash = hash
