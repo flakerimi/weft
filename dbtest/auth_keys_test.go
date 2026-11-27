@@ -273,3 +273,28 @@ func TestKeyFormatRefused(t *testing.T) {
 	}
 	bearer(c, k.Secret, http.MethodGet, "/api/things", nil).Want(200)
 }
+
+// Review I5, the owner's ruling: a password change ends the user's other
+// sessions and keeps their API keys, which are for programs and revoked one
+// by one; a password reset, the way back from a stolen password, ends every
+// session and deletes every key, in its transaction.
+func TestResetEndsKeysAndChangeKeepsThem(t *testing.T) {
+	c := startShop(t, keysOn(t))
+	k := makeKey(t, c, "Script", auth.RoleOwner, 30)
+	other, _ := authtest.As(t, c, auth.RoleMember)
+	theirs := makeKey(t, other, "Theirs", auth.RoleMember, 30)
+
+	c.Post("/api/auth/password/change", map[string]string{"current": authtest.Password, "password": newPassword}).Want(204)
+	bearer(c, k.Secret, http.MethodGet, "/api/things", nil).Want(200)
+	if n := rowsIn(t, c, "api_keys"); n != 2 {
+		t.Fatalf("%d keys after a password change, want 2", n)
+	}
+
+	c.Fork().Post("/api/auth/forgot", map[string]string{"email": ownerEmail}).Want(204)
+	setPassword(c.Fork(), mailToken(t, lastMail(t, c.App, ownerEmail)), "a third password, for tests").Want(200)
+	wantError(t, bearer(c, k.Secret, http.MethodGet, "/api/things", nil), 401, "unauthorized", keyNotValid)
+	if n := rowsIn(t, c, "api_keys"); n != 1 {
+		t.Fatalf("%d keys after a reset, want the other user's alone", n)
+	}
+	bearer(c, theirs.Secret, http.MethodGet, "/api/things", nil).Want(200)
+}

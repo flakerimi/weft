@@ -144,7 +144,8 @@ func (m *module) updateMe(ctx context.Context, in ProfileInput) (Me, error) {
 
 // changePassword sets a new password once current is checked as a login is,
 // through attempt's three counts, so it cannot be used to guess; every other
-// session of the user ends, and this one stays.
+// session of the user ends, and this one stays. API keys stay too: they are
+// for programs, and each can be removed; a reset ends them.
 func (m *module) changePassword(ctx context.Context, in ChangePasswordInput) (warp.None, error) {
 	r := warp.Request(ctx)
 	u, current, err := m.signedIn(r)

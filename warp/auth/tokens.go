@@ -352,7 +352,7 @@ func (m *module) tokenInfo(ctx context.Context, in TokenInput) (TokenInfo, error
 }
 
 // setPassword uses a mailed token: for reset it sets the user's password and
-// ends every session of theirs; for register it makes a viewer; for invite
+// ends every session and API key of theirs; for register it makes a viewer; for invite
 // it makes the user with the role invited. The token ends in the same
 // transaction, first, so it works once. Then it signs in and answers Me.
 func (m *module) setPassword(ctx context.Context, in PasswordInput) (Me, error) {
@@ -395,7 +395,12 @@ func (m *module) setPassword(ctx context.Context, in PasswordInput) (Me, error) 
 			if row, err = m.users.Update(ctx, u.ID, &u, []string{"password_hash"}); err != nil {
 				return err
 			}
-			_, err = m.sessions.DeleteBy(ctx, "user_id", u.ID)
+			// A reset is the way back from a stolen password: every session
+			// and every API key the thief could have made ends with it.
+			if _, err = m.sessions.DeleteBy(ctx, "user_id", u.ID); err != nil {
+				return err
+			}
+			_, err = m.keys.DeleteBy(ctx, "user_id", u.ID)
 			return err
 		case found: // the address has an account since
 			return gone

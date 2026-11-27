@@ -57,6 +57,10 @@ data.Resource(app, "/products", store, data.PerAction(auth.Per("products")))
 
 For tools and tests, `auth.AddUser(ctx, app, email, password, role)` makes a user and `auth.RemoveUser(ctx, app, id)` removes one, whose sessions end at once; both work once the app has started.
 
+## Passwords, sessions and keys
+
+Sessions are kept in the table `sessions`, so `logout` ends its own, `logout_everywhere` ends every one of the user's, and `end_session` ends one. A password change, `change_password` with the current password and a new one, ends the user's other sessions and keeps this one; it keeps their API keys too, since a key is for a program and each can be removed on its own. A password reset, through the link `forgot` mails, is the way back from a stolen password: it ends every session of the user and deletes every API key of theirs, in the same transaction that sets the password.
+
 ## Limits
 
 Each login try is counted before anything is looked up or hashed: 5 tries a minute for one email from one address, and 30 a minute from one address across every email. Past either, the answer is 429 `Too many tries; wait a minute and try again.`, until a minute after the first of those tries. A success clears the email's count. The address is [`ClientKey`](warp.md#behind-a-proxy): an IPv4 address, or the /64 an IPv6 one is in.
@@ -213,10 +217,10 @@ func Owner(t testing.TB, c *warptest.Client) auth.User
 
 ## What it does not protect against
 
-- **Stolen cookies.** Signing out only clears the cookie in that browser. A copied cookie stays good until it expires (up to `AUTH_SESSION_DAYS`), because nothing is kept on the server: there is no sign-out everywhere and no revoking one session.
+- **Stolen cookies, until the session ends.** A copied cookie works until its session is ended (signing out, `logout_everywhere`, `end_session`, a password change or reset) or expires, up to `AUTH_SESSION_DAYS` after sign-in.
 - **Whoever holds `AUTH_SECRET`.** They can sign in as any user, if they also know the user's id and the nanosecond the user was made (both are in any cookie of that user). The secret has no rotation: changing it ends every session at once.
-- **Replacing the database is safe for old cookies.** A cookie names its user's `created_at`, so a fresh database whose user 1 is someone else refuses an old cookie.
-- **Role changes apply at once; password changes would not.** The row is read on each request, so a removed user or a changed role applies to the next request. A signed-in user whose password is changed (once that exists) stays signed in.
+- **Replacing the database is safe for old cookies.** A cookie names a session of its database by its token, kept there as a hash, so a fresh database refuses an old cookie.
+- **Role and password changes apply at once.** The row is read on each request, so a removed user or a changed role applies to the next request; a password change ends the user's other sessions, and a reset all of them and their API keys.
 - **Limits are per process and per address.** The counts (5 per email and address a minute, 30 per address a minute) are in memory: several app processes each keep their own counts, and a restart forgets them; past 10,000 keys per limiter the oldest are dropped; many addresses (a botnet) are not limited together; a client holding a /48 holds many /64 keys.
 - **Anyone sharing the owner's address can lock the owner out**, with 5 wrong tries a minute on the owner's email or 30 tries a minute on any emails. That includes every client when the app is behind a proxy and `TRUST_PROXY` is off, since every request then has the proxy's address.
 - **Spending the CPU.** At most `GOMAXPROCS` hashes run at once, so a flood cannot take every core, but it can still fill the hashing slots. Logins then wait, the owner's included, and get the 503 after 3 seconds.
@@ -225,4 +229,4 @@ func Owner(t testing.TB, c *warptest.Client) auth.User
 - **Same-site requests.** The core refuses a cross-origin state-changing request, same-site ones included. What same-site still allowed was cookie planting, and that is closed under HTTPS only.
 - **`TRUSTED_ORIGINS`.** Every origin listed there is fully trusted for login, setup and every other API request.
 - **A leaked setup link.** Until the owner is set up, anyone with the logged link can become the owner. The token is in the fragment, so it reaches no proxy access log or `Referer`, but the app's own log holds it and must be private.
-- **Missing account features.** There is no second factor, no lockout notice, no password reset, no email verification and no breached-password check. Any 8-character password is accepted.
+- **Missing account features.** There is no second factor, no lockout notice and no breached-password check. Any 8-character password is accepted.
