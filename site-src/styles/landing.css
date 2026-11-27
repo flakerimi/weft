@@ -504,11 +504,13 @@
   #agent-prompt { margin-inline: 12px; }
   .landing-tile__stage { padding: 24px 16px; }
   .landing-end { grid-template-columns: minmax(0, 1fr); }
-  /* On a phone the weave shows in the first screen: a band of it between the
-     copy and the phone. The copy is set tighter, so the band and the prompt
-     both fit there, down to 320 px. */
-  .landing-hero__grid { gap: 180px; padding-block-start: 96px; }
+  /* On a phone the phone picture follows the install block closely, a short
+     band of weave between them: the weave starts where the copy ends, fades
+     in over that band, and is whole behind the phone and beside it (580 + 56
+     + 64 px). The copy is set tighter, so the prompt is in the first screen,
+     down to 320 px. */
+  .landing-hero__grid { gap: 64px; padding-block-start: 96px; }
   .landing .landing-hero h1 { font-size: min(42px, 12vw); }
   .landing-lead { margin-block-end: 24px; font-size: 18px; }
-  .landing-hero__ground::after { block-size: 816px; mask-image: linear-gradient(transparent, black 14%); }
+  .landing-hero__ground::after { block-size: 700px; mask-image: linear-gradient(transparent, black 80px); }
 }
