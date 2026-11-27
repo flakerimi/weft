@@ -16,9 +16,10 @@ import (
 // rule is one comma-separated part of a warp tag.
 type rule struct {
 	name  string
-	arg   string  // what follows "=", as written
-	num   float64 // arg as a number, for min and max
-	items []string
+	arg   string    // what follows "=", as written
+	num   float64   // arg as a number, for min and max
+	items []string  // choices of an enum, as written
+	nums  []float64 // choices of a numeric enum
 }
 
 // fieldSpec is a validated field of a struct type: its key, where it sits, its
@@ -509,13 +510,17 @@ func checkRule(v reflect.Value, r rule) string {
 			return "Enter a web address that starts with http:// or https://."
 		}
 	case "enum":
-		if k != reflect.String {
-			return ""
-		}
-		for _, item := range r.items {
-			if v.String() == item {
+		switch {
+		case k == reflect.String:
+			if slices.Contains(r.items, v.String()) {
 				return ""
 			}
+		case isNumberKind(k):
+			if slices.Contains(r.nums, toFloat(v)) {
+				return ""
+			}
+		default:
+			return ""
 		}
 		return "Choose one of: " + strings.Join(r.items, ", ") + "."
 	case "min", "max":
@@ -651,6 +656,7 @@ func parseRules(owner reflect.Type, f reflect.StructField, tag string) ([]rule, 
 	}
 	var rules []rule
 	var problems []string
+	seenEnum := false
 	for _, part := range strings.Split(tag, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
@@ -660,19 +666,42 @@ func parseRules(owner reflect.Type, f reflect.StructField, tag string) ([]rule, 
 		r := rule{name: name, arg: arg}
 		switch name {
 		case "required":
-		case "email", "url", "enum":
+		case "email", "url":
 			if !isText {
 				problems = append(problems, fmt.Sprintf("%s has the rule %q, which is for text; remove it or make the field a string.", at, name))
 				continue
 			}
-			if name == "enum" {
-				for _, item := range strings.Split(arg, "|") {
-					if item != "" {
-						r.items = append(r.items, item)
-					}
+		case "enum":
+			if !isText && !isNumber {
+				problems = append(problems, fmt.Sprintf("%s has the rule %q, which is for text and numbers; remove it or make the field a string or a number.", at, name))
+				continue
+			}
+			if seenEnum {
+				problems = append(problems, fmt.Sprintf("%s has the rule \"enum\" more than once; list every value in one enum=a|b.", at))
+				continue
+			}
+			seenEnum = true
+			for _, item := range strings.Split(arg, "|") {
+				if item != "" {
+					r.items = append(r.items, item)
 				}
-				if len(r.items) == 0 {
-					problems = append(problems, fmt.Sprintf("%s has \"enum=\" with nothing to choose from; write enum=a|b.", at))
+			}
+			if len(r.items) == 0 {
+				problems = append(problems, fmt.Sprintf("%s has \"enum=\" with nothing to choose from; write enum=a|b.", at))
+				continue
+			}
+			if isNumber {
+				bad := false
+				for _, item := range r.items {
+					n, err := strconv.ParseFloat(item, 64)
+					if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
+						bad = true
+						break
+					}
+					r.nums = append(r.nums, n)
+				}
+				if bad {
+					problems = append(problems, fmt.Sprintf("%s has %q; write numbers separated by | after enum=.", at, part))
 					continue
 				}
 			}

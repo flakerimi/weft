@@ -67,7 +67,7 @@ component uses. Neither is counted in the rows below.
 | FieldGroup | 2.47 | — | 1.63 | 4.09 |
 | FileUpload | 6.31 | — | 2.23 | 8.54 |
 | Footer | 1.54 | — | 0.55 | 2.10 |
-| Form | 6.65 | — | 2.13 | 8.78 |
+| Form | 6.68 | — | 2.13 | 8.81 |
 | FormField | 2.64 | — | 1.13 | 3.78 |
 | Grid | 1.16 | — | 0.46 | 1.62 |
 | Header | 17.11 | — | 3.38 | 20.49 |

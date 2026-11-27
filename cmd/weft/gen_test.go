@@ -195,27 +195,31 @@ func TestGenerateEdges(t *testing.T) {
 	d := description{
 		Routes: []routeInfo{
 			{Module: "x", Name: "show", Method: "GET", Path: "/api/x/{class}/{search}/{$}", Typed: true,
-				PathParams: []paramInfo{{Name: "search", TS: "string"}, {Name: "class", TS: "number"}},
-				Query:      []paramInfo{{Name: "sort-by", TS: "string"}},
-				Output:     &outputInfo{TS: "Thing | null", List: true}},
+				PathParams: []paramInfo{
+					{Name: "search", TS: "string", Rules: []ruleInfo{{Name: "enum", Arg: "fast|full"}}},
+					{Name: "class", TS: "number", Rules: []ruleInfo{{Name: "enum", Arg: "1|2|3"}}},
+				},
+				Query:  []paramInfo{{Name: "sort-by", TS: "string", Rules: []ruleInfo{{Name: "enum", Arg: "name|-name"}}}},
+				Output: &outputInfo{TS: "Thing | null", List: true}},
 			{Module: "x", Name: "count", Method: "GET", Path: "/api/x/count", Typed: true, Output: &outputInfo{TS: "number"}},
 			{Module: "x", Name: "put_x", Method: "PUT", Path: "/api/x/{body}", Typed: true, Body: "Thing",
 				PathParams: []paramInfo{{Name: "body", TS: "string"}}, Output: &outputInfo{TS: "Thing"}},
 		},
 		Types: []typeInfo{{Name: "Thing", Go: "example.com/x.Thing", Fields: []fieldInfo{
 			{Name: "x-y", TS: "string", Rules: []ruleInfo{{Name: "required"}, {Name: "unique"}, {Name: "later", Arg: "1"}}},
-			{Name: "it's", TS: "number", Rules: []ruleInfo{{Name: "min", Arg: "1.5"}, {Name: "enum", Arg: "a'b|c"}}},
+			{Name: "it's", TS: "string", Rules: []ruleInfo{{Name: "enum", Arg: `a'b|c\d`}}},
+			{Name: "tier", TS: "number | null", Optional: true, Rules: []ruleInfo{{Name: "min", Arg: "1"}, {Name: "enum", Arg: "1|2|5"}}},
 			{Name: "__proto__", TS: "string"},
 		}}},
 	}
 	got := mustGenerate(t, d)
 	for _, want := range []string{
-		"  'x-y': string\n  'it\\'s': number\n",
-		"    async show(class_: number, search_: string, query?: { 'sort-by'?: string }): Promise<(Thing | null)[]> {\n" +
+		"  'x-y': string\n  'it\\'s': 'a\\'b' | 'c\\\\d'\n  tier?: 1 | 2 | 5 | null\n",
+		"    async show(class_: 1 | 2 | 3, search_: 'fast' | 'full', query?: { 'sort-by'?: 'name' | '-name' }): Promise<(Thing | null)[]> {\n" +
 			"      return send('GET', `/api/x/${segment('class', class_)}/${segment('search', search_)}/${search(query)}`)\n",
 		"    async count(): Promise<number> {\n      return send('GET', '/api/x/count')\n",
 		"    async putX(body_: string, body: Thing): Promise<Thing> {\n      return send('PUT', `/api/x/${segment('body', body_)}`, { body })\n",
-		"    'x-y': { kind: 'string', required: true },\n    'it\\'s': { kind: 'number', min: 1.5, enum: ['a\\'b', 'c'] },\n",
+		"    'x-y': { kind: 'string', required: true },\n    'it\\'s': { kind: 'string', enum: ['a\\'b', 'c\\\\d'] },\n    tier: { kind: 'number', min: 1, enum: ['1', '2', '5'], nullable: true },\n",
 		"  __proto__: string\n",
 		"    ['__proto__']: { kind: 'string' },\n",
 	} {

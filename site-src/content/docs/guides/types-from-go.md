@@ -37,14 +37,14 @@ export interface Product {
   updated_at: string
   name: string
   price: number
-  status: string
+  status: 'draft' | 'live'
 }
 
 /** shop/app/products.Product as a route takes it: without its readonly fields. */
 export interface ProductInput {
   name: string
   price: number
-  status: string
+  status: 'draft' | 'live'
 }
 ```
 
@@ -63,7 +63,7 @@ Then `api`, a function for each typed route, under its module's name and the rou
 
 Path parameters come first, in the path's order, then the body, then the query, which may be left out: `api.products.list({ page: 2, sort: '-price', filter: { status: 'live' } })`. A `PATCH` takes a `Partial` body. A route that answers `warp.None` resolves to `undefined`.
 
-Text and times are `string`, numbers `number`, a pointer `T | null`, a list `T[]` and a map `Record<string, T>`. A pointer field may be left out, `name?:`, and so may an answered field tagged `omitempty` or `omitzero`, and a field an answered type has from an embedded pointer, which a nil pointer leaves out. A list, a map or bytes is never `null` on the wire, since [the server never answers one so](routes.md#a-route), except in a field typed `any`.
+Text and times are `string`, numbers `number`, a field or parameter with `enum=a|b` its literal values (`'a' | 'b'` for text, `1 | 2` for numbers), a pointer `T | null`, a list `T[]` and a map `Record<string, T>`. A pointer field may be left out, `name?:`, and so may an answered field tagged `omitempty` or `omitzero`, and a field an answered type has from an embedded pointer, which a nil pointer leaves out. A list, a map or bytes is never `null` on the wire, since [the server never answers one so](routes.md#a-route), except in a field typed `any`.
 
 - A 64-bit integer is `number`, which is exact only up to 2^53: an id above 9007199254740991 is read as another.
 - A fixed-size array, `[3]int`, is `number[]`; the server takes a list of exactly 3.

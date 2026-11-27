@@ -107,7 +107,10 @@ export function validateField(value: unknown, rule: FieldRule): string | undefin
   if (typeof value === 'number') {
     if (rule.min !== undefined && value < rule.min) return fail(`Enter ${rule.min} or more.`)
     if (rule.max !== undefined && value > rule.max) return fail(`Enter ${rule.max} or less.`)
-    return textRules(String(value), rule, fail)
+    const textErr = textRules(String(value), rule, fail)
+    if (textErr !== undefined) return textErr
+    if (rule.enum && !rule.enum.some((item) => Number(item) === value)) return fail(`Choose one of: ${rule.enum.join(', ')}.`)
+    return undefined
   } else if (Array.isArray(value)) {
     if (rule.min !== undefined && value.length < rule.min) return fail(`Choose at least ${rule.min}.`)
     if (rule.max !== undefined && value.length > rule.max) return fail(`Choose at most ${rule.max}.`)

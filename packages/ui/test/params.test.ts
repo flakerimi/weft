@@ -16,8 +16,10 @@ afterEach(() => {
 it('useParams reads the params of the address against the pattern the build wrote', () => {
   open('/products/:id', '/products/42')
   expect(useParams()).toEqual({ id: '42' })
+  expect(useParams('/products/:id' as never)).toEqual({ id: '42' })
   open('/:section/:id', '/shop/7/')
   expect(useParams()).toEqual({ section: 'shop', id: '7' })
+  expect(useParams('/:section/:id' as never)).toEqual({ section: 'shop', id: '7' })
 })
 
 it('decodes each value, and leaves one that does not decode as it is', () => {
@@ -95,4 +97,17 @@ it('in development, says once that a page built ahead has no params in the brows
   expect(fresh()).toEqual({})
   expect(warn).toHaveBeenCalledTimes(1)
   expect(String(warn.mock.calls[0]![0])).toContain('runtime = true')
+})
+
+it('in development, warns once and returns {} when given a pattern that differs from the page\'s route', async () => {
+  vi.resetModules()
+  const fresh = (await import('../src/head/useParams.ts')).useParams as (route?: string) => Record<string, string>
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  open('/products/:id', '/products/42')
+  expect(fresh('/orders/:id')).toEqual({})
+  expect(fresh('/orders/:id')).toEqual({})
+  expect(warn).toHaveBeenCalledTimes(1)
+  expect(String(warn.mock.calls[0]![0])).toBe(
+    'useParams: asked for the params of "/orders/:id" on a page whose route is "/products/:id"; pass "/products/:id" or call useParams() with no argument.',
+  )
 })

@@ -209,10 +209,55 @@ describe('weftAutoImport()', () => {
     symlinkSync(fileURLToPath(new URL('../node_modules', import.meta.url)), join(site, 'node_modules'))
     const bin = fileURLToPath(new URL('../bin/weft-types.mjs', import.meta.url))
     // Relative to where it runs, as `weft` gives it: `--root web` in the app.
+    writeFileSync(
+      join(site, 'pages', '[section]', '[id].vue'),
+      (mkdirSync(join(site, 'pages', '[section]'), { recursive: true }), '<script lang="ts">\nexport const runtime = true\n</script>\n<template><p /></template>\n'),
+    )
+    writeFileSync(
+      join(site, 'pages', 'docs', '[...slug].vue'),
+      (mkdirSync(join(site, 'pages', 'docs'), { recursive: true }), '<script lang="ts">\nexport const runtime = true\n</script>\n<template><p /></template>\n'),
+    )
     const ran = spawnSync(process.execPath, [bin, '--root', 'types-site'], { encoding: 'utf8', cwd: parent })
     expect(ran).toMatchObject({ status: 0, stdout: '', stderr: '' })
     const written = readFileSync(join(site, '.weft-types', 'components.d.ts'), 'utf8')
-    expect(written).toBe(readFileSync(join(parent, 'types', 'components.d.ts'), 'utf8'))
+    expect(written).toContain("declare module '@weft/ui' {\n  interface WeftRouteParams {\n    '/:section/:id': { section: string; id: string }\n    '/docs/:...slug': { slug: string }\n  }\n}")
+
+    // Type-check useParams(route) against the generated WeftRouteParams: known
+    // patterns and their param names compile, and an unknown pattern or a
+    // param name the pattern lacks fails vue-tsc.
+    const vueTsc = fileURLToPath(new URL('../../ui/node_modules/.bin/vue-tsc', import.meta.url))
+    writeFileSync(
+      join(site, 'tsconfig.json'),
+      JSON.stringify({
+        compilerOptions: {
+          target: 'ES2022',
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          noEmit: true,
+          skipLibCheck: true,
+          allowImportingTsExtensions: true,
+          types: ['vite/client'],
+        },
+        include: ['.weft-types/components.d.ts', 'check.ts'],
+      }),
+    )
+    writeFileSync(
+      join(site, 'check.ts'),
+      [
+        "import { useParams } from '@weft/ui'",
+        "const a: string = useParams('/:section/:id').id",
+        "const b: string = useParams('/docs/:...slug').slug",
+        'const c: Record<string, string> = useParams()',
+        '// @ts-expect-error wrong param name on /:section/:id',
+        "useParams('/:section/:id').slug",
+        '// @ts-expect-error unknown route pattern',
+        "useParams('/missing/:id')",
+        'void a, b, c',
+      ].join('\n') + '\n',
+    )
+    const checked = spawnSync(vueTsc, ['-p', join(site, 'tsconfig.json')], { encoding: 'utf8' })
+    expect(checked.status, checked.stdout + checked.stderr).toBe(0)
 
     const bare = mkdtempSync(join(tmpdir(), 'weft-types-bare-'))
     try {

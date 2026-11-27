@@ -105,8 +105,9 @@ type routeInfo struct {
 }
 
 type paramInfo struct {
-	Name string `json:"name"`
-	TS   string `json:"ts"`
+	Name  string     `json:"name"`
+	TS    string     `json:"ts"`
+	Rules []ruleInfo `json:"rules"`
 }
 
 type outputInfo struct {
@@ -788,7 +789,7 @@ func generate(d description) ([]byte, error) {
 			if f.Optional {
 				opt = "?"
 			}
-			fmt.Fprintf(&b, "  %s%s: %s\n", key(f.Name), opt, f.TS)
+			fmt.Fprintf(&b, "  %s%s: %s\n", key(f.Name), opt, enumTS(f.TS, f.Rules))
 		}
 		b.WriteString("}\n")
 	}
@@ -935,7 +936,7 @@ func checkParams(r routeInfo, where string) error {
 func writeRoute(b *strings.Builder, name string, r routeInfo) {
 	types := map[string]string{}
 	for _, p := range r.PathParams {
-		types[p.Name] = p.TS
+		types[p.Name] = enumTS(p.TS, p.Rules)
 	}
 	var params []string
 	var path strings.Builder // a template literal's text
@@ -980,7 +981,7 @@ func writeRoute(b *strings.Builder, name string, r routeInfo) {
 	if len(r.Query) > 0 {
 		fields := make([]string, len(r.Query))
 		for i, q := range r.Query {
-			fields[i] = key(q.Name) + "?: " + q.TS
+			fields[i] = key(q.Name) + "?: " + enumTS(q.TS, q.Rules)
 		}
 		params = append(params, "query?: { "+strings.Join(fields, "; ")+" }")
 		path.WriteString("${search(query)}")
@@ -1078,17 +1079,59 @@ func fieldRules(f fieldInfo) []string {
 				entries = append(entries, r.Name+": "+strconv.FormatFloat(n, 'f', -1, 64))
 			}
 		case "enum":
-			values := strings.Split(r.Arg, "|")
-			for i, v := range values {
-				values[i] = quote(v)
+			var values []string
+			for _, v := range strings.Split(r.Arg, "|") {
+				if v != "" {
+					values = append(values, quote(v))
+				}
 			}
-			entries = append(entries, "enum: ["+strings.Join(values, ", ")+"]")
+			if len(values) > 0 {
+				entries = append(entries, "enum: ["+strings.Join(values, ", ")+"]")
+			}
 		}
 	}
 	if strings.HasSuffix(f.TS, " | null") {
 		entries = append(entries, "nullable: true") // a pointer, which null clears
 	}
 	return entries
+}
+
+// enumTS refines a string or number TypeScript type with an enum rule into a
+// literal union of its values ('draft' | 'live' or 1 | 2 | 3), keeping | null
+// for a pointer.
+func enumTS(ts string, rules []ruleInfo) string {
+	nullable := strings.HasSuffix(ts, " | null")
+	base := strings.TrimSuffix(ts, " | null")
+	if base != "string" && base != "number" {
+		return ts
+	}
+	for _, r := range rules {
+		if r.Name != "enum" {
+			continue
+		}
+		var literals []string
+		for _, v := range strings.Split(r.Arg, "|") {
+			if v == "" {
+				continue
+			}
+			if base == "string" {
+				literals = append(literals, quote(v))
+			} else if n, err := strconv.ParseFloat(v, 64); err == nil {
+				literals = append(literals, strconv.FormatFloat(n, 'f', -1, 64))
+			} else {
+				return ts
+			}
+		}
+		if len(literals) == 0 {
+			continue
+		}
+		union := strings.Join(literals, " | ")
+		if nullable {
+			return union + " | null"
+		}
+		return union
+	}
+	return ts
 }
 
 // kind is the kind of value a field of TypeScript type ts holds, for a form

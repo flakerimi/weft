@@ -32,7 +32,7 @@
  * `siteConfig` adds this plugin to every page build and render server; an
  * app built with plain Vite adds `weftAutoImport()` to its plugins.
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import MagicString, { type SourceMap } from 'magic-string'
@@ -205,9 +205,62 @@ function loadComponents(root: string): { names: Set<string>; dir: string } | nul
   return { names: new Set(componentNames(readFileSync(index, 'utf8'))), dir: normalizePath(dirname(index)) + '/' }
 }
 
-/** The declaration file: every name, as the component `@weft/ui` exports. */
-function declaration(names: string[]): string {
+interface RouteParamEntry {
+  pattern: string
+  params: string[]
+}
+
+/**
+ * The dynamic page patterns under `<root>/pages` (`/products/:id`, `/docs/:...slug`)
+ * and their parameter names, in sorted order, for `WeftRouteParams` in
+ * `.weft-types/components.d.ts`.
+ */
+function routeParamEntries(root: string): RouteParamEntry[] {
+  const pagesDir = join(root, 'pages')
+  if (!existsSync(pagesDir)) return []
+  const files: string[] = []
+  const walk = (dir: string, prefix: string) => {
+    let entries
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const e of entries) {
+      if (e.name.startsWith('_') || e.name.startsWith('.') || e.isSymbolicLink()) continue
+      if (e.isDirectory()) walk(join(dir, e.name), `${prefix}${e.name}/`)
+      else if (e.isFile() && e.name.endsWith('.vue')) files.push(`${prefix}${e.name}`)
+    }
+  }
+  walk(pagesDir, '')
+  const byPattern = new Map<string, string[]>()
+  for (const file of files.sort()) {
+    const parts = file.slice(0, -'.vue'.length).split('/')
+    if (parts[parts.length - 1] === 'index') parts.pop()
+    const rest = parts.findIndex((p) => /^\[\.\.\..+\]$/.test(p))
+    if (rest !== -1 && rest !== parts.length - 1) continue
+    const params: string[] = []
+    const segs = parts.map((p) => {
+      const m = /^\[(\.\.\.)?(.+)\]$/.exec(p)
+      if (!m) return p
+      params.push(m[2]!)
+      return `:${m[1] ?? ''}${m[2]!}`
+    })
+    if (!params.length) continue
+    const pattern = '/' + segs.join('/')
+    if (!byPattern.has(pattern)) byPattern.set(pattern, params)
+  }
+  return [...byPattern.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([pattern, params]) => ({ pattern, params }))
+}
+
+const tsProp = (s: string) => (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(s) ? s : JSON.stringify(s))
+
+/** The declaration file: every name, as the component `@weft/ui` exports, and the dynamic page route patterns for `useParams()`. */
+function declaration(names: string[], routes: RouteParamEntry[] = []): string {
   const lines = [...names].sort().map((n) => `    ${n}: typeof import('${SOURCE}')['${n}']`)
+  const routeLines = routes.map(
+    ({ pattern, params }) => `    ${JSON.stringify(pattern).replace(/^"|"$/g, "'")}: { ${params.map((p) => `${tsProp(p)}: string`).join('; ')} }`,
+  )
   return [
     "// Written by @weft/vite's weftAutoImport() on each build: do not edit.",
     'export {}',
@@ -217,6 +270,9 @@ function declaration(names: string[]): string {
     ...lines,
     '  }',
     '}',
+    ...(routeLines.length
+      ? ['', `declare module '${SOURCE}' {`, '  interface WeftRouteParams {', ...routeLines, '  }', '}']
+      : []),
     '',
   ].join('\n')
 }
@@ -243,7 +299,7 @@ export function writeComponentTypes(root: string, dts: string = DTS): string | n
   const ui = loadComponents(root)
   if (!ui) return null
   const file = resolve(root, dts)
-  writeIfChanged(file, declaration([...ui.names]))
+  writeIfChanged(file, declaration([...ui.names], routeParamEntries(root)))
   return file
 }
 
@@ -258,6 +314,11 @@ export function weftAutoImport(opts: AutoImportOptions = {}): Plugin {
     return found
   }
 
+  function refreshTypes() {
+    const ui = load()
+    if (ui && opts.dts !== false) writeIfChanged(resolve(root, opts.dts ?? DTS), declaration([...ui.names], routeParamEntries(root)))
+  }
+
   return {
     name: 'weft:auto-import',
     // Before vite:vue compiles the SFC, which is what reads the line.
@@ -267,8 +328,11 @@ export function weftAutoImport(opts: AutoImportOptions = {}): Plugin {
       found = undefined
     },
     buildStart() {
-      const ui = load()
-      if (ui && opts.dts !== false) writeIfChanged(resolve(root, opts.dts ?? DTS), declaration([...ui.names]))
+      refreshTypes()
+    },
+    configureServer(server) {
+      server.watcher.on('add', (f) => f.endsWith('.vue') && refreshTypes())
+      server.watcher.on('unlink', (f) => f.endsWith('.vue') && refreshTypes())
     },
     transform(code, id) {
       if (!id.endsWith('.vue') || id.startsWith('\0') || id.includes('/node_modules/')) return

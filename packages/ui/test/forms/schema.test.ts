@@ -71,12 +71,15 @@ describe('validateField', () => {
     for (const bad of rows.refuse) expect(validateField(bad, { email: true }), JSON.stringify(bad)).toBe('Enter an email address.')
   })
 
-  it('checks enum: the value must be one of them, in the order given', () => {
+  it('checks enum: the value must be one of them, in the order given, for text and numbers', () => {
     const rule = { enum: ['draft', 'live', 'gone'] }
     expect(validateField('live', rule)).toBeUndefined()
     expect(validateField('Live', rule)).toBe('Choose one of: draft, live, gone.')
     expect(validateField('other', { enum: ['a'] })).toBe('Choose one of: a.')
     expect(validateField('other', { enum: ['a'], message: 'Pick one.' })).toBe('Pick one.')
+    const numRule = { enum: ['1', '2', '5'] }
+    expect(validateField(2, numRule)).toBeUndefined()
+    expect(validateField(3, numRule)).toBe('Choose one of: 1, 2, 5.')
   })
 
   it('checks url as Go does: no blanks, http(s)://, a host, and a port of one to five digits', () => {

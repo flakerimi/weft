@@ -72,7 +72,7 @@ import { useParams } from '@weft/ui'
 const id = ref('')
 // In the browser only: at build the page has no address, and useParams() is {}.
 onMounted(() => {
-  id.value = useParams().id ?? ''
+  id.value = useParams('/products/:id').id ?? ''
 })
 </script>
 
@@ -81,7 +81,7 @@ onMounted(() => {
 </template>
 ```
 
-`useParams()` runs in the browser only; on the server it returns `{}`.
+`useParams()` runs in the browser only; on the server it returns `{}`. Passing the page's pattern (`useParams('/products/:id')`) types the returned object's parameter names from `pages/` (written into `.weft-types/components.d.ts` by `weftAutoImport()` and `weft-types`); converting a string parameter to a number stays the page's job, as the example shop's `productId` does.
 
 The build makes the page once, as a shell, with every param the empty string, and writes it to `pages/products/[id]/index.html`. The Go server answers every path that matches `/products/:id` with that shell and status 200, when no other page and no file has the path: `/products/new` from `pages/products/new.vue` wins. `[id]` matches one segment that is not empty, and `[...rest]` the rest of the path, or none of it. A record that does not exist is the API's 404, which the page shows; the page itself is always 200. `weft dev` serves the page the same way.
 
