@@ -2702,7 +2702,7 @@
       "use": "For a resource table backed by a generated Warp client (`api.<plural>`) and schema (`schema.<Name>Input`), with server-paged listing, search, filters, creation, editing and deletion.",
       "avoid": "For a read-only table over an array or a custom fetcher without CRUD dialogs, use Table; for a few key metrics, use StatCard.",
       "adapts": {
-        "input": "Inherits Table's, Button's and the dialog controls' touch hit areas (at least 44 px).",
+        "input": "Inherits Table's, Button's and the dialog controls' touch hit areas (at least 44 px, with row action buttons switching to `md` on coarse pointers).",
         "surface": "Nothing changes in behaviour; `size` sets the row height and text follows the surface's type scale.",
         "width": "When its own box is narrow (under 640 px), Table switches rows to cards, toolbar filter definitions with four or fewer choices switch from a horizontal RadioGroup to a Select, and EntityDialog goes full-screen."
       },
@@ -2712,168 +2712,168 @@
           "type": "TableColumn<T>[]",
           "required": true,
           "default": null,
-          "description": "Table columns; `actions` is appended when `update` or `remove` is given."
+          "description": "Table columns."
         },
         {
           "name": "resource",
           "type": "DataResource<T, TInput>",
           "required": false,
           "default": "undefined",
-          "description": "Shorthand `{ list, create, update, remove }` (e.g. `api.products`)."
+          "description": "Generated resource `{ list, create, update, remove }`."
         },
         {
           "name": "fetch",
           "type": "TableFetch<T>",
           "required": false,
           "default": "undefined",
-          "description": "List fetcher (overrides `resource.list`)."
+          "description": "List fetcher."
         },
         {
           "name": "create",
           "type": "(body: TInput) => Promise<T>",
           "required": false,
           "default": "undefined",
-          "description": "Create handler (overrides `resource.create`)."
+          "description": "Create handler."
         },
         {
           "name": "update",
           "type": "(id: any, body: Partial<TInput>) => Promise<T>",
           "required": false,
           "default": "undefined",
-          "description": "Update handler (overrides `resource.update`)."
+          "description": "Update handler."
         },
         {
           "name": "remove",
           "type": "(id: any) => Promise<unknown>",
           "required": false,
           "default": "undefined",
-          "description": "Delete handler (overrides `resource.remove`)."
+          "description": "Delete handler."
         },
         {
           "name": "schema",
           "type": "{ [K in Name]?: EntityFieldRule }",
           "required": false,
           "default": "undefined",
-          "description": "Schema passed to `EntityDialog`."
+          "description": "Field schema."
         },
         {
           "name": "fields",
-          "type": "Record<string, EntityFieldConfig>",
+          "type": "EntityFieldConfig[]",
           "required": false,
           "default": "undefined",
-          "description": "Field overrides passed to `EntityDialog`."
+          "description": "Field configs."
         },
         {
           "name": "defaults",
-          "type": "Record<string, unknown>",
+          "type": "Partial<TInput> | (() => Partial<TInput>)",
           "required": false,
           "default": "undefined",
-          "description": "Default values for create mode."
+          "description": "Default values."
         },
         {
           "name": "name",
           "type": "string",
           "required": false,
           "default": "'item'",
-          "description": "Singular entity name (e.g. `'product'`)."
+          "description": "Singular name."
         },
         {
           "name": "idKey",
           "type": "string",
           "required": false,
           "default": "'id'",
-          "description": "Primary key property; default `'id'`."
+          "description": "ID property."
         },
         {
           "name": "labelKey",
           "type": "string",
           "required": false,
           "default": "'name'",
-          "description": "Display label property; default `'name'`."
+          "description": "Label property."
         },
         {
           "name": "searchable",
           "type": "boolean",
           "required": false,
           "default": "true",
-          "description": "Show the search input; default `true`."
+          "description": "Show search input."
         },
         {
           "name": "search",
           "type": "string",
           "required": false,
           "default": "undefined",
-          "description": "Bound with `v-model:search`."
+          "description": "Search string."
         },
         {
           "name": "defaultSearch",
           "type": "string",
           "required": false,
           "default": "''",
-          "description": "Initial search string."
+          "description": "Initial search."
         },
         {
           "name": "searchPlaceholder",
           "type": "string",
           "required": false,
           "default": "undefined",
-          "description": "Placeholder for the search input."
+          "description": "Search placeholder."
         },
         {
           "name": "searchDebounce",
           "type": "number",
           "required": false,
           "default": "250",
-          "description": "Debounce delay in ms; default `250`."
+          "description": "Debounce in ms."
         },
         {
           "name": "filterDefs",
           "type": "DataTableFilter[]",
           "required": false,
           "default": "undefined",
-          "description": "Toolbar filter controls."
+          "description": "Toolbar filters."
         },
         {
           "name": "filters",
           "type": "Record<string, string>",
           "required": false,
           "default": "undefined",
-          "description": "Active filter values, bound with `v-model:filters`."
+          "description": "Active filters."
         },
         {
           "name": "defaultFilters",
           "type": "Record<string, string>",
           "required": false,
           "default": null,
-          "description": "Initial filter values."
+          "description": "Initial filters."
         },
         {
           "name": "perPage",
           "type": "number",
           "required": false,
           "default": "20",
-          "description": "Rows per page; default `20`."
+          "description": "Rows per page."
         },
         {
           "name": "page",
           "type": "number",
           "required": false,
           "default": "undefined",
-          "description": "Current page, bound with `v-model:page`."
+          "description": "Current page."
         },
         {
           "name": "defaultPage",
           "type": "number",
           "required": false,
           "default": "1",
-          "description": "Initial page; default `1`."
+          "description": "Initial page."
         },
         {
           "name": "sort",
           "type": "string | null",
           "required": false,
           "default": "undefined",
-          "description": "Current sort, bound with `v-model:sort`."
+          "description": "Current sort."
         },
         {
           "name": "defaultSort",
@@ -2887,21 +2887,21 @@
           "type": "boolean",
           "required": false,
           "default": "false",
-          "description": "Enable row selection checkboxes."
+          "description": "Row checkboxes."
         },
         {
           "name": "selected",
           "type": "RowKey[]",
           "required": false,
           "default": "undefined",
-          "description": "Selected row keys, bound with `v-model:selected`."
+          "description": "Selected keys."
         },
         {
           "name": "defaultSelected",
           "type": "RowKey[]",
           "required": false,
           "default": null,
-          "description": "Initial selected row keys."
+          "description": "Initial selected."
         },
         {
           "name": "caption",
@@ -2915,42 +2915,42 @@
           "type": "boolean",
           "required": false,
           "default": "true",
-          "description": "Visually hide the caption; default `true`."
+          "description": "Hide caption."
         },
         {
           "name": "emptyTitle",
           "type": "string",
           "required": false,
           "default": "undefined",
-          "description": "EmptyState title when there are no rows."
+          "description": "Empty title."
         },
         {
           "name": "emptyDescription",
           "type": "string",
           "required": false,
           "default": "undefined",
-          "description": "EmptyState description when there are no rows."
+          "description": "Empty description."
         },
         {
           "name": "emptyIcon",
           "type": "string",
           "required": false,
           "default": "undefined",
-          "description": "EmptyState icon when there are no rows."
+          "description": "Empty icon."
         },
         {
           "name": "size",
           "type": "'sm' | 'md' | 'lg'",
           "required": false,
           "default": "'md'",
-          "description": "Row size (`'sm' | 'md' | 'lg'`)."
+          "description": "Row size."
         },
         {
           "name": "labels",
           "type": "Partial<DataTableLabels>",
           "required": false,
           "default": null,
-          "description": "Labels override for i18n."
+          "description": "Labels override."
         }
       ],
       "emits": [
@@ -3010,7 +3010,8 @@
           "name": "dialog",
           "props": [
             "state",
-            "record"
+            "record",
+            "schema"
           ],
           "dynamic": false
         },
@@ -3037,7 +3038,7 @@
           "dynamic": true
         }
       ],
-      "notes": "It has no stylesheet of its own: it composes `Stack`, `FormField`, `Input`,\n`RadioGroup`, `Select`, `Button`, `Table`, `EmptyState`, `EntityDialog` and\n`ConfirmDialog`.\n\n`DataTable` composes a toolbar, `Table`, `EntityDialog` and `ConfirmDialog`\naround a generated Warp resource (`{ list, create, update, remove }`) and its\nfield schema (`schema.ProductInput` from `weft gen`). Pass\n`:resource=\"api.products\"` (or individual `fetch`, `create`, `update` and\n`remove` functions) and `:schema=\"schema.ProductInput\"`.\n\n**Toolbar.** When `searchable` is true (the default), the toolbar renders a\nsearch `Input` bound to `v-model:search` and forwarded to `Table` with\n`search-debounce` (default 250 ms). Each entry in `filter-defs`\n(`{ key, label, items, control }`) renders a filter control bound into\n`v-model:filters`, prepending `labels.anyFilter` (default `\"Any\"`, value\n`\"\"`) when no item has an empty value; filters with four or fewer options\nrender a horizontal `RadioGroup` on regular and wide containers and a\n`Select` when narrow. When `create` (or `resource.create`) is present, a\n`\"New <name>\"` button at the end of the toolbar opens `EntityDialog` in\ncreate mode. The `toolbar` slot adds controls beside search and filters, and\n`toolbar-actions` adds buttons beside `\"New <name>\"`.\n\n**Columns and row actions.** `columns` takes the same typed array as `Table`,\nand every `#<key>-cell` and `#<key>-header` slot forwards directly to\n`Table`. Unslotted cells format numbers with `toLocaleString()` and booleans\nwith `labels.booleanYes` / `labels.booleanNo` (`\"Yes\"` / `\"No\"`). When\n`update` or `remove` is present and `columns` has no `actions` column,\n`DataTable` appends a trailing `Actions` column with `Edit` (opening\n`EntityDialog` with the row) and `Delete` (opening `ConfirmDialog` for the\nrow). Omitting `create`, `update` or `remove` omits the corresponding button,\nand omitting both `update` and `remove` omits the `Actions` column.\n\n**Dialogs and refresh.** Saving in `EntityDialog` emits `saved` and calls\n`refresh()` on the inner `Table`. Confirming in `ConfirmDialog` calls\n`remove(row[idKey])`, emits `deleted` and refreshes the table; if `remove`\nrejects with an `ApiError`, the dialog stays open and shows the server's\nsentence in an `Alert`. `defineExpose` provides `refresh()`, `edit(record)`\nand `askRemove(record)`.",
+      "notes": "It has no stylesheet of its own: it composes `Stack`, `FormField`, `Input`,\n`RadioGroup`, `Select`, `Button`, `Table`, `EmptyState`, `EntityDialog` and\n`ConfirmDialog`.\n\n`DataTable` pairs a toolbar, `Table`, `EntityDialog` and `ConfirmDialog`\naround a generated Warp resource (`{ list, create, update, remove }`) and its\nfield schema (`schema.ProductInput` from `weft gen`). Pass\n`:resource=\"api.products\"` (or individual `fetch`, `create`, `update` and\n`remove` functions) and `:schema=\"schema.ProductInput\"`.\n\n**Toolbar.** When `searchable` is true (the default), the toolbar renders a\nsearch `Input` bound to `v-model:search` with `search-debounce` (default\n250 ms). Each entry in `filter-defs` (`{ key, label, items, allLabel, control }`)\nrenders a filter control bound into `v-model:filters`, prepending\n`allLabel || labels.anyFilter` (default `\"Any\"`, value `\"\"`) unless\n`allLabel: false`; filters with four or fewer options render a horizontal\n`RadioGroup` on regular and wide containers and a `Select` when narrow. When\n`create` and `schema` (or `#dialog`) are present, a `\"New <name>\"` button\nopens `EntityDialog` in create mode.\n\n**Columns and row actions.** `columns` takes the same typed array as `Table`,\nand every `#<key>-cell` and `#<key>-header` slot forwards to `Table`.\nUnslotted cells format numbers in the `WeftProvider`'s locale (`en-US` by\ndefault) and booleans with `labels.booleanYes` / `labels.booleanNo`. When\n`update` (with `schema` or `#dialog`) or `remove` is present and `columns` has\nno `actions` column, `DataTable` appends a trailing `Actions` column with\n`Edit` (`aria-label` `\"Edit <itemLabel>\"`) and `Delete` (`aria-label`\n`\"Delete <itemLabel>\"`).\n\n**Dialogs and refresh.** Saving in `EntityDialog` emits `saved` and refreshes\n`Table`. Confirming in `ConfirmDialog` calls `remove(row[idKey])`, emits\n`deleted`, refreshes the table, and moves focus to the next row's action\nbutton (or `\"New <name>\"` when empty); if `remove` rejects, the dialog stays\nopen with an `Alert` (`role=\"alert\"`). `defineExpose` provides `refresh()`,\n`edit(record)` and `askRemove(record)`.",
       "examples": [
         {
           "name": "basic",
@@ -4107,7 +4108,7 @@
           "type": "string",
           "required": false,
           "default": "'name'",
-          "description": "Key used to read the record's display name for the edit title; default `'name'`, falling back to `idKey`."
+          "description": "Key used to read the record's display name for the edit title; default `'name'`, falling back to `'title'`, then `name`."
         },
         {
           "name": "name",
@@ -4132,17 +4133,17 @@
         },
         {
           "name": "defaults",
-          "type": "Record<string, unknown>",
+          "type": "Partial<TInput> | (() => Partial<TInput>)",
           "required": false,
           "default": "undefined",
           "description": "Initial field values for create mode."
         },
         {
           "name": "fields",
-          "type": "Record<string, EntityFieldConfig>",
+          "type": "EntityFieldConfig[]",
           "required": false,
           "default": "undefined",
-          "description": "Per-field overrides (`label`, `hint`, `description`, `placeholder`, `control`, `step`, `rows`, `items`, `hidden`)."
+          "description": "Ordered field configurations (`name`, `label`, `hint`, `description`, `placeholder`, `control`, `step`, `rows`, `items`, `hidden`)."
         },
         {
           "name": "labels",
@@ -4161,7 +4162,7 @@
         {
           "name": "saved",
           "payload": "[record: T]",
-          "description": "Emitted after `create` or `update` resolves (or when edit mode closes with no changes)."
+          "description": "Emitted after `create` or `update` resolves."
         },
         {
           "name": "error",
@@ -4183,19 +4184,20 @@
           "name": "<key>-field",
           "props": [
             "state",
+            "record",
             "rule",
-            "config"
+            "field"
           ],
           "dynamic": true
         }
       ],
-      "notes": "It has no stylesheet of its own: it composes `Dialog`, `Form`, `Stack`,\n`Alert`, `FormField`, `Button` and the form controls.\n\n`EntityDialog` pairs `Dialog` and `Form` around a generated `schema`\n(`schema.ProductInput` from `weft gen`). In create mode (`record` null or\nomitted) it starts each field from `defaults` (or the schema's empty value)\nand calls `create(body)` on submit. In edit mode (`record` set) it populates\nthe form from `record`, diffs the submitted values against `record`, calls\n`update(record[idKey], changed)` with only the fields that changed, and closes\nwithout a request when nothing changed.\n\n**Controls from the schema.** Each field in `schema` renders a `FormField`\nwhose label defaults to the sentence-cased field name (`firstName` →\n`First name`, `unit_price` → `Unit price`) and whose control follows the rule:\n- `enum` (or `fields[name].items`) with four or fewer choices renders a\n  horizontal `RadioGroup` on regular and wide viewports and a `Select` when\n  narrow; five or more choices render a `Select`. An optional non-nullable\n  enum prepends `labels.noneOption` (default `\"None\"`).\n- `kind: 'boolean'` (or `type: 'boolean'`) renders a `Checkbox` (or a `Switch` with\n  `fields[name].control = 'switch'`).\n- `kind: 'number'` (or `type: 'number'`) renders an `InputNumber` with `min` and `max` from the\n  rule and `step` from `fields[name].step` when given.\n- `email: true` renders `<Input type=\"email\">`, `url: true` renders\n  `<Input type=\"url\">`, `fields[name].control = 'textarea'` renders\n  `Textarea`, and everything else renders `<Input type=\"text\">`.\n\n**Customizing fields.** `fields` configures any field by name (`label`,\n`hint`, `description`, `placeholder`, `control`, `step`, `rows`, `items`,\n`hidden`). The `#<name>-field=\"{ state, rule, config }\"` slot replaces one\nfield's control inside its `FormField`, and the default slot\n`#default=\"{ state, record, schema }\"` replaces the whole field list while\nkeeping the top `Alert` and the Cancel and Create/Save buttons.\n\n**Errors.** Before calling `create` or `update`, `Form` checks every field\nagainst `schema` (with non-nullable number fields marked required so an\nemptied number is caught before sending). When `create` or `update` rejects\nwith Warp's `ApiError` shape (`{ status, code, message, fields }`), field\nerrors matching rendered fields attach to their `FormField`s, unknown field\nkeys or a top-level `message` appear in an `Alert` at the top of the form,\n`code === 'network'` shows `labels.unreachable`, and any other error logs to\n`console.error` and shows `labels.failed`. Reopening the dialog or switching\n`record` resets the draft and clears every error.",
+      "notes": "It has no stylesheet of its own: it composes `Dialog`, `Form`, `Stack`,\n`Alert`, `FormField`, `Button` and the form controls.\n\n`EntityDialog` pairs `Dialog` and `Form` around a generated `schema`\n(`schema.ProductInput` from `weft gen`). In create mode (`record` null or\nomitted) it starts each field from `defaults` (an object or factory function,\nor the schema's empty value) and calls `create(body)` on submit. In edit mode\n(`record` set) it populates the form from `record`, diffs the submitted values\nagainst `record`, calls `update(record[idKey], changed)` with only the fields\nthat changed, and closes without a request or `saved` event when nothing\nchanged.\n\n**Controls from the schema.** Each field in `schema` renders a `FormField`\nwhose label defaults to the sentence-cased field name (`firstName` →\n`First name`, `unit_price` → `Unit price`) and whose control follows the rule:\n- `enum` (or a `fields` entry's `items`) with four or fewer choices renders a\n  horizontal `RadioGroup` on regular and wide viewports and a `Select` when\n  narrow; five or more choices render a `Select`. An optional non-nullable\n  enum prepends `labels.noneOption` (default `\"None\"`).\n- `kind: 'boolean'` (or `type: 'boolean'`) renders a `Checkbox` (or a `Switch`\n  with `control: 'switch'`).\n- `kind: 'number'` (or `type: 'number'`) renders an `InputNumber` with `min`\n  and `max` from the rule and `step` from the field's `step` when given.\n- `email: true` renders `<Input type=\"email\">`, `url: true` renders\n  `<Input type=\"url\">`, `control: 'textarea'` renders `Textarea`, and\n  everything else scalar renders `<Input type=\"text\">`. Non-scalar kinds\n  (`list`, `record`, `object`) start as `[]` or `{}` and render only when\n  given a `#<name>-field` slot.\n\n**Customizing fields.** `fields` takes an array of `EntityFieldConfig` objects\n(`{ name, label, hint, description, placeholder, control, step, rows, items, hidden }`),\nordering the fields it lists first and configuring any field by `name`. The\n`#<name>-field=\"{ state, record, rule, field }\"` slot replaces one field's\ncontrol inside its `FormField`, and the default slot\n`#default=\"{ state, record, schema }\"` replaces the whole field list while\nkeeping the top `Alert` (`role=\"alert\"`) and the Cancel and Create/Save\nbuttons.\n\n**Errors.** Before calling `create` or `update`, `Form` checks every rendered\nfield against `schema` (with non-nullable number fields in edit mode marked\nrequired so an emptied number is caught before sending). When `create` or\n`update` rejects with Warp's `ApiError` shape (`{ status, code, message, fields }`),\nfield errors matching rendered fields attach to their `FormField`s and focus\nmoves to the first invalid control once the form is no longer busy; unknown\nfield keys or a top-level `message` appear in an `Alert` (`role=\"alert\"`) at\nthe top of the form; `code === 'network'` or `code === 'http'` shows\n`labels.unreachable`; and any other error logs to `console.error` and shows\n`labels.pageFailed`. Reopening the dialog or switching `record` resets the\ndraft and clears every error.",
       "examples": [
         {
           "name": "basic",
           "title": "Basic",
           "file": "packages/ui/examples/EntityDialog/basic.vue",
-          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Button, EntityDialog, type EntitySchema } from '@weft/ui'\n\ninterface Product {\n  id: number\n  name: string\n  price: number\n  sale: number | null\n  status: 'draft' | 'live'\n}\n\nconst open = ref(false)\nconst schema: EntitySchema = {\n  name: { type: 'string', required: true },\n  price: { type: 'number', required: true, min: 0 },\n  sale: { type: 'number', min: 0, nullable: true },\n  status: { type: 'string', required: true, enum: ['draft', 'live'] },\n}\n\nasync function create(body: Omit<Product, 'id'>): Promise<Product> {\n  return { id: 1, ...body }\n}\n</script>\n\n<template>\n  <Button label=\"New product\" icon=\"plus\" @click=\"open = true\" />\n  <EntityDialog\n    v-model:open=\"open\"\n    name=\"product\"\n    :schema=\"schema\"\n    :defaults=\"{ price: 0, status: 'draft' }\"\n    :fields=\"{\n      price: { step: 0.01 },\n      sale: { step: 0.01, hint: 'Empty when it is not on sale.' },\n    }\"\n    :create=\"create\"\n  />\n</template>\n"
+          "source": "<script setup vapor lang=\"ts\">\nimport { ref } from 'vue'\nimport { Button, EntityDialog, type EntitySchema } from '@weft/ui'\n\ninterface Product {\n  id: number\n  name: string\n  price: number\n  sale: number | null\n  status: 'draft' | 'live'\n}\n\nconst open = ref(false)\nconst schema: EntitySchema = {\n  name: { type: 'string', required: true },\n  price: { type: 'number', required: true, min: 0 },\n  sale: { type: 'number', min: 0, nullable: true },\n  status: { type: 'string', required: true, enum: ['draft', 'live'] },\n}\n\nasync function create(body: Omit<Product, 'id'>): Promise<Product> {\n  return { id: 1, ...body }\n}\n</script>\n\n<template>\n  <Button label=\"New product\" icon=\"plus\" @click=\"open = true\" />\n  <EntityDialog\n    v-model:open=\"open\"\n    name=\"product\"\n    :schema=\"schema\"\n    :defaults=\"{ price: 0, status: 'draft' }\"\n    :fields=\"[\n      { name: 'price', step: 0.01 },\n      { name: 'sale', step: 0.01, hint: 'Empty when it is not on sale.' },\n    ]\"\n    :create=\"create\"\n  />\n</template>\n"
         }
       ]
     },

@@ -3,11 +3,12 @@ import { ref } from 'vue'
 import WeftProvider from '../../../src/adaptive/WeftProvider.vue'
 import EntityDialog from '../../../src/data/EntityDialog.vue'
 import Input from '../../../src/forms/Input.vue'
-import type { EntityDialogLabels, EntityFieldConfig, EntitySchema } from '../../../src/data/entity.ts'
+import type { EntityDialogLabels, EntityFieldConfig, EntityFieldRule, EntitySchema } from '../../../src/data/entity.ts'
 
 export interface Item {
   id: number
   name: string
+  title?: string
   price: number
   sale: number | null
   status: string
@@ -16,6 +17,9 @@ export interface Item {
   website?: string
   notes?: string
   active?: boolean
+  count?: number
+  tags?: string[]
+  meta?: Record<string, unknown>
 }
 
 export type ItemInput = Omit<Item, 'id'>
@@ -32,8 +36,8 @@ const props = withDefaults(
     name?: string
     title?: string
     description?: string
-    defaults?: Partial<ItemInput>
-    fields?: Record<string, EntityFieldConfig>
+    defaults?: Partial<ItemInput> | (() => Partial<ItemInput>)
+    fields?: EntityFieldConfig[]
     labels?: Partial<EntityDialogLabels>
     customBody?: boolean
     customNameSlot?: boolean
@@ -60,8 +64,14 @@ const isOpen = ref(props.open)
 const currentRecord = ref<Item | null>(props.record ?? null)
 const savedRecords = ref<Item[]>([])
 const errors = ref<unknown[]>([])
+const slotPropsSeen = ref<{ record: Item | null; rule: EntityFieldRule; field: EntityFieldConfig } | null>(null)
 
-defineExpose({ isOpen, currentRecord, savedRecords, errors })
+function captureSlot(p: { state: ItemInput; record: Item | null; rule: EntityFieldRule; field: EntityFieldConfig }) {
+  slotPropsSeen.value = { record: p.record, rule: p.rule, field: p.field }
+  return true
+}
+
+defineExpose({ isOpen, currentRecord, savedRecords, errors, slotPropsSeen })
 </script>
 
 <template>
@@ -88,9 +98,9 @@ defineExpose({ isOpen, currentRecord, savedRecords, errors })
           <Input :model-value="String(state.name ?? '')" @update:model-value="state.name = String($event ?? '')" />
         </div>
       </template>
-      <template v-if="customNameSlot" #name-field="{ state }">
-        <div class="custom-name-field">
-          <Input :model-value="String(state.name ?? '')" @update:model-value="state.name = String($event ?? '')" />
+      <template v-if="customNameSlot" #name-field="slotProps">
+        <div v-if="captureSlot(slotProps)" class="custom-name-field">
+          <Input :model-value="String(slotProps.state.name ?? '')" @update:model-value="slotProps.state.name = String($event ?? '')" />
         </div>
       </template>
     </EntityDialog>

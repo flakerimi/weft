@@ -150,7 +150,7 @@ onMounted(() => (mounted.value = true))
 watch(
   [() => props.search, () => JSON.stringify(activeFilters(props.filters) ?? {}), () => page.value],
   ([q, f, p], [oldQ, oldF, oldP]) => {
-    if (props.fetch && p === oldP && (q !== oldQ || f !== oldF) && page.value !== 1) page.value = 1
+    if (p === oldP && (q !== oldQ || f !== oldF) && page.value !== 1 && props.fetch) page.value = 1
   },
 )
 const data = useTableData<T>({

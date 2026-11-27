@@ -6,7 +6,9 @@
 // Actions column of Edit and Delete buttons when `update` or `remove` is
 // present), `EntityDialog` for create and edit, and `ConfirmDialog` for
 // delete.
-import { computed, ref, shallowRef, useSlots, useTemplateRef } from 'vue'
+import { computed, nextTick, ref, shallowRef, useSlots, useTemplateRef } from 'vue'
+import { useWeft } from '../adaptive/context.ts'
+import { useLocale } from '../adaptive/locale.ts'
 import { useWidth } from '../adaptive/useWidth.ts'
 import Button from '../basics/Button.vue'
 import Alert from '../feedback/Alert.vue'
@@ -36,75 +38,75 @@ import '../styles/base.css'
 
 const props = withDefaults(
   defineProps<{
-    /** Table columns; `actions` is appended when `update` or `remove` is given. */
+    /** Table columns. */
     columns: TableColumn<T>[]
-    /** Shorthand `{ list, create, update, remove }` (e.g. `api.products`). */
+    /** Generated resource `{ list, create, update, remove }`. */
     resource?: DataResource<T, TInput>
-    /** List fetcher (overrides `resource.list`). */
+    /** List fetcher. */
     fetch?: TableFetch<T>
-    /** Create handler (overrides `resource.create`). */
+    /** Create handler. */
     create?: (body: TInput) => Promise<T>
-    /** Update handler (overrides `resource.update`). */
+    /** Update handler. */
     update?: (id: any, body: Partial<TInput>) => Promise<T>
-    /** Delete handler (overrides `resource.remove`). */
+    /** Delete handler. */
     remove?: (id: any) => Promise<unknown>
-    /** Schema passed to `EntityDialog`. */
+    /** Field schema. */
     schema?: EntitySchema
-    /** Field overrides passed to `EntityDialog`. */
-    fields?: Record<string, EntityFieldConfig>
-    /** Default values for create mode. */
-    defaults?: Record<string, unknown>
-    /** Singular entity name (e.g. `'product'`). */
+    /** Field configs. */
+    fields?: EntityFieldConfig[]
+    /** Default values. */
+    defaults?: Partial<TInput> | (() => Partial<TInput>)
+    /** Singular name. */
     name?: string
-    /** Primary key property; default `'id'`. */
+    /** ID property. */
     idKey?: string
-    /** Display label property; default `'name'`. */
+    /** Label property. */
     labelKey?: string
-    /** Show the search input; default `true`. */
+    /** Show search input. */
     searchable?: boolean
-    /** Bound with `v-model:search`. */
+    /** Search string. */
     search?: string
-    /** Initial search string. */
+    /** Initial search. */
     defaultSearch?: string
-    /** Placeholder for the search input. */
+    /** Search placeholder. */
     searchPlaceholder?: string
-    /** Debounce delay in ms; default `250`. */
+    /** Debounce in ms. */
     searchDebounce?: number
-    /** Toolbar filter controls. */
+    /** Toolbar filters. */
     filterDefs?: DataTableFilter[]
-    /** Active filter values, bound with `v-model:filters`. */
+    /** Active filters. */
     filters?: Record<string, string>
-    /** Initial filter values. */
+    /** Initial filters. */
     defaultFilters?: Record<string, string>
-    /** Rows per page; default `20`. */
+    /** Rows per page. */
     perPage?: number
-    /** Current page, bound with `v-model:page`. */
+    /** Current page. */
     page?: number
-    /** Initial page; default `1`. */
+    /** Initial page. */
     defaultPage?: number
-    /** Current sort, bound with `v-model:sort`. */
+    /** Current sort. */
     sort?: string | null
     /** Initial sort. */
     defaultSort?: string | null
-    /** Enable row selection checkboxes. */
+    /** Row checkboxes. */
     selectable?: boolean
-    /** Selected row keys, bound with `v-model:selected`. */
+    /** Selected keys. */
     selected?: RowKey[]
-    /** Initial selected row keys. */
+    /** Initial selected. */
     defaultSelected?: RowKey[]
     /** Table caption. */
     caption?: string
-    /** Visually hide the caption; default `true`. */
+    /** Hide caption. */
     hideCaption?: boolean
-    /** EmptyState title when there are no rows. */
+    /** Empty title. */
     emptyTitle?: string
-    /** EmptyState description when there are no rows. */
+    /** Empty description. */
     emptyDescription?: string
-    /** EmptyState icon when there are no rows. */
+    /** Empty icon. */
     emptyIcon?: string
-    /** Row size (`'sm' | 'md' | 'lg'`). */
+    /** Row size. */
     size?: Size
-    /** Labels override for i18n. */
+    /** Labels override. */
     labels?: Partial<DataTableLabels>
   }>(),
   {
@@ -167,7 +169,7 @@ defineSlots<{
   /** Custom buttons placed beside the `"New <name>"` button at the end of the toolbar. */
   'toolbar-actions'?: () => unknown
   /** Custom form body forwarded to the built-in `EntityDialog`'s default slot. */
-  dialog?: (props: { state: TInput; record: T | null }) => unknown
+  dialog?: (props: { state: TInput; record: T | null; schema: EntitySchema }) => unknown
   /** Custom empty state forwarded to `Table`. */
   empty?: () => unknown
   /** Forwarded to `Table` for custom column cells. */
@@ -177,20 +179,24 @@ defineSlots<{
 }>()
 
 const slots = useSlots()
+const weft = useWeft()
+const locale = useLocale(() => undefined)
 const t = computed<DataTableLabels>(() => ({ ...DATA_TABLE_LABELS, ...props.labels }))
 const root = useTemplateRef<HTMLElement>('root')
 const width = useWidth(root, { prepaint: false })
 const table = useTemplateRef<{ refresh(): Promise<void> }>('table')
+const actionSize = computed<Size>(() => (weft.input.value === 'touch' ? 'md' : 'sm'))
 
-const search = useControllable(props, 'search', emit, () => props.defaultSearch)
-const filters = useControllable(props, 'filters', emit, () => ({ ...(props.defaultFilters ?? {}) }))
-const sort = useControllable(props, 'sort', emit, () => props.defaultSort)
-const page = useControllable(props, 'page', emit, () => props.defaultPage)
-const selected = useControllable(props, 'selected', emit, () => [...(props.defaultSelected ?? [])])
+const search = useControllable<{ search?: string }, 'search'>(props, 'search', emit, () => props.defaultSearch)
+const filters = useControllable<{ filters?: Record<string, string> }, 'filters'>(props, 'filters', emit, () => ({ ...(props.defaultFilters ?? {}) }))
+const sort = useControllable<{ sort?: string | null }, 'sort'>(props, 'sort', emit, () => props.defaultSort)
+const page = useControllable<{ page?: number }, 'page'>(props, 'page', emit, () => props.defaultPage)
+const selected = useControllable<{ selected?: RowKey[] }, 'selected'>(props, 'selected', emit, () => [...(props.defaultSelected ?? [])])
 
+const hasDialog = computed(() => Boolean(props.schema || slots.dialog))
 const fetchFn = computed(() => props.fetch ?? props.resource?.list)
-const createFn = computed(() => props.create ?? props.resource?.create)
-const updateFn = computed(() => props.update ?? props.resource?.update)
+const createFn = computed(() => (hasDialog.value ? (props.create ?? props.resource?.create) : undefined))
+const updateFn = computed(() => (hasDialog.value ? (props.update ?? props.resource?.update) : undefined))
 const removeFn = computed(() => props.remove ?? props.resource?.remove)
 const hasRowActions = computed(() => Boolean(updateFn.value || removeFn.value))
 
@@ -219,8 +225,8 @@ const resolvedFilters = computed<ResolvedFilter[]>(() => {
     const items: { label: string; value: string }[] = def.items.map((item) =>
       typeof item === 'string' ? { label: humanLabel(item), value: item } : { label: item.label, value: item.value },
     )
-    if (!items.some((i) => i.value === '')) {
-      items.unshift({ label: t.value.anyFilter, value: '' })
+    if (def.allLabel !== false && !items.some((i) => i.value === '')) {
+      items.unshift({ label: def.allLabel || t.value.anyFilter, value: '' })
     }
     const control = def.control ?? (items.length <= 4 && width.value !== 'narrow' ? 'radio' : 'select')
     return {
@@ -253,6 +259,7 @@ const hasToolbar = computed(() =>
 // Create / Edit dialog state
 const dialogOpen = ref(false)
 const editing = shallowRef<T | null>(null)
+const dialogSchema = computed<EntitySchema>(() => props.schema ?? {})
 
 function edit(record: T | null) {
   editing.value = record
@@ -267,30 +274,63 @@ function onSaved(record: T) {
 // Delete confirmation state
 const confirming = ref(false)
 const removing = shallowRef<T | null>(null)
+const removingIndex = ref(-1)
 const removeProblem = ref('')
 
 function itemLabel(record: T | null): string {
-  if (!record) return `this ${props.name}`
+  if (!record) return props.name
   const rec = record as Record<string, unknown>
   const headerCol = props.columns.find((c) => c.rowHeader)
-  const raw = rec[props.labelKey] ?? (headerCol ? valueOf(headerCol, record) : undefined) ?? rec[props.idKey]
-  return raw !== undefined && raw !== null && String(raw) !== '' ? String(raw) : `this ${props.name}`
+  const raw = rec[props.labelKey] ?? rec.title ?? (headerCol ? valueOf(headerCol, record) : undefined) ?? rec[props.idKey]
+  return raw !== undefined && raw !== null && String(raw) !== '' ? String(raw) : props.name
 }
 
-function askRemove(record: T) {
+function askRemove(record: T, index = -1) {
   removing.value = record
+  removingIndex.value = index
   removeProblem.value = ''
   confirming.value = true
+}
+
+function focusAfterDelete(deletedIndex: number) {
+  const el = root.value
+  if (!el) return
+  const deleteButtons = [...el.querySelectorAll<HTMLElement>('[data-weft-row-action="delete"]')]
+  if (deleteButtons.length > 0) {
+    const idx = deletedIndex >= 0 ? Math.min(deletedIndex, deleteButtons.length - 1) : 0
+    deleteButtons[idx]?.focus()
+    return
+  }
+  const editButtons = [...el.querySelectorAll<HTMLElement>('[data-weft-row-action="edit"]')]
+  if (editButtons.length > 0) {
+    const idx = deletedIndex >= 0 ? Math.min(deletedIndex, editButtons.length - 1) : 0
+    editButtons[idx]?.focus()
+    return
+  }
+  const fallback =
+    [...el.querySelectorAll<HTMLElement>('button')].find((b) => b.textContent?.trim() === t.value.newAction(props.name)) ??
+    el.querySelector<HTMLElement>('input[type="search"]') ??
+    el
+  fallback.focus()
 }
 
 async function doRemove() {
   if (!removing.value || !removeFn.value) return
   removeProblem.value = ''
   const target = removing.value
+  const deletedIndex = removingIndex.value
   const id = (target as Record<string, unknown>)[props.idKey]
   await removeFn.value(id)
   emit('deleted', target)
   await table.value?.refresh()
+  void nextTick(() => {
+    setTimeout(() => {
+      const active = typeof document !== 'undefined' ? document.activeElement : null
+      if (!active || active === document.body || !active.isConnected) {
+        focusAfterDelete(deletedIndex)
+      }
+    }, 0)
+  })
 }
 
 function onRemoveError(e: unknown) {
@@ -303,7 +343,7 @@ function formatCell(column: TableColumn<T>, row: T): string {
   if (column.format) return column.format(val, row)
   if (val === null || val === undefined) return ''
   if (typeof val === 'boolean') return val ? t.value.booleanYes : t.value.booleanNo
-  if (typeof val === 'number') return val.toLocaleString()
+  if (typeof val === 'number') return val.toLocaleString(locale.value)
   return String(val)
 }
 
@@ -313,12 +353,12 @@ defineExpose({
   /** Open the built-in `EntityDialog` for `record` (or `null` for create mode). */
   edit,
   /** Open the built-in delete `ConfirmDialog` for `record`. */
-  askRemove,
+  askRemove: (record: T) => askRemove(record, -1),
 })
 </script>
 
 <template>
-  <div ref="root" class="weft-data-table">
+  <div ref="root" class="weft-data-table" tabindex="-1">
     <Stack :gap="4">
       <Stack v-if="hasToolbar" direction="row" :gap="3" align="end" justify="between" wrap>
         <Stack direction="row" :gap="3" align="end" wrap>
@@ -330,7 +370,7 @@ defineExpose({
               @update:model-value="search = $event == null ? '' : String($event)"
             />
           </FormField>
-          <FormField v-for="f in resolvedFilters" :key="f.key" :label="f.label">
+          <FormField v-for="f in resolvedFilters" :key="`${f.key}-${f.control}`" :label="f.label">
             <RadioGroup
               v-if="f.control === 'radio'"
               :model-value="getFilter(f.key)"
@@ -380,10 +420,29 @@ defineExpose({
           <slot v-if="$slots[`${col.key}-cell`]" :name="`${col.key}-cell`" :row="row" :value="value" :index="index" :column="column" />
           <template v-else>{{ formatCell(column, row) }}</template>
         </template>
-        <template v-if="hasRowActions && !$slots['actions-cell']" #actions-cell="{ row }">
+        <template v-if="hasRowActions && !$slots['actions-cell']" #actions-cell="{ row, index }">
           <Stack direction="row" :gap="2" justify="end">
-            <Button v-if="updateFn" :label="t.editAction" icon="pencil" variant="ghost" size="sm" @click="edit(row)" />
-            <Button v-if="removeFn" :label="t.deleteAction" icon="trash" variant="ghost" tone="danger" size="sm" @click="askRemove(row)" />
+            <Button
+              v-if="updateFn"
+              data-weft-row-action="edit"
+              :label="t.editAction"
+              :aria-label="t.editRowAction(itemLabel(row))"
+              icon="pencil"
+              variant="ghost"
+              :size="actionSize"
+              @click="edit(row)"
+            />
+            <Button
+              v-if="removeFn"
+              data-weft-row-action="delete"
+              :label="t.deleteAction"
+              :aria-label="t.deleteRowAction(itemLabel(row))"
+              icon="trash"
+              variant="ghost"
+              tone="danger"
+              :size="actionSize"
+              @click="askRemove(row, index)"
+            />
           </Stack>
         </template>
         <template #empty>
@@ -402,10 +461,10 @@ defineExpose({
     </Stack>
 
     <EntityDialog
-      v-if="schema && (createFn || updateFn)"
+      v-if="hasDialog && (createFn || updateFn)"
       v-model:open="dialogOpen"
       :record="editing"
-      :schema="schema"
+      :schema="dialogSchema"
       :create="createFn"
       :update="updateFn"
       :id-key="idKey"
@@ -417,8 +476,8 @@ defineExpose({
       @saved="onSaved($event as T)"
       @error="emit('error', $event)"
     >
-      <template v-if="$slots.dialog" #default="{ state, record: rec }">
-        <slot name="dialog" :state="state as TInput" :record="(rec ?? null) as T | null" />
+      <template v-if="$slots.dialog" #default="{ state, record: rec, schema: s }">
+        <slot name="dialog" :state="state as TInput" :record="(rec ?? null) as T | null" :schema="s" />
       </template>
     </EntityDialog>
 
@@ -434,7 +493,7 @@ defineExpose({
       @error="onRemoveError"
     >
       <template #body>
-        <Alert v-if="removeProblem" tone="danger" :title="removeProblem" />
+        <Alert v-if="removeProblem" role="alert" tone="danger" :title="removeProblem" />
       </template>
     </ConfirmDialog>
   </div>

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import TableCases, { type Person } from '../fixtures/data/TableCases.vue'
+import TableInlineFetch from '../fixtures/data/TableInlineFetch.vue'
 import TableWire, { type ListQuery } from '../fixtures/data/TableWire.vue'
 import { compareValues, nextSort, parseSort, selectRange, sortRows, tableSearch, type TableFetch, type TableQuery, type TableResult } from '../../src/data/table.ts'
 import { mount } from '../mount.ts'
@@ -699,6 +700,33 @@ describe('Table', () => {
         vi.advanceTimersByTime(300)
         await nextTick()
         expect(answers).toHaveLength(4)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('debounces search when fetch is an inline arrow in the parent template', async () => {
+      vi.useFakeTimers()
+      try {
+        const m = mount(TableInlineFetch)
+        unmount = m.unmount
+        await nextTick()
+        const exposed = m.exposed as { q: string; asked: (string | undefined)[] }
+        expect(exposed.asked).toEqual([undefined])
+
+        exposed.q = 'A'
+        await nextTick()
+        vi.advanceTimersByTime(60)
+        exposed.q = 'Ad'
+        await nextTick()
+        vi.advanceTimersByTime(60)
+        exposed.q = 'Ada'
+        await nextTick()
+        expect(exposed.asked).toEqual([undefined])
+
+        vi.advanceTimersByTime(250)
+        await nextTick()
+        expect(exposed.asked).toEqual([undefined, 'Ada'])
       } finally {
         vi.useRealTimers()
       }

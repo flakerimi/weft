@@ -92,7 +92,7 @@ const helpers = `
       return l && (l.htmlFor ? document.getElementById(l.htmlFor) : l.querySelector('input'))
     },
     button(label, root = document) {
-      return [...root.querySelectorAll('button')].find((b) => (b.getAttribute('aria-label') || b.textContent).trim() === label)
+      return [...root.querySelectorAll('button')].find((b) => b.textContent.trim() === label || (b.getAttribute('aria-label') || '').trim() === label)
     },
     dialog: () => document.querySelector('[role=dialog][aria-modal=true], [role=alertdialog]'),
     // Hydration takes the island's props script out.

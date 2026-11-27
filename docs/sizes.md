@@ -48,41 +48,41 @@ component uses. Neither is counted in the rows below.
 | Chip | 1.55 | — | 1.08 | 2.63 |
 | CloseButton | 0.62 | — | 0.54 | 1.16 |
 | Collapsible | 1.33 | — | 0.48 | 1.81 |
-| Combobox | 22.07 | — | 2.67 | 24.75 |
+| Combobox | 22.11 | — | 2.67 | 24.79 |
 | CommandPalette | 11.57 | — | 1.90 | 13.46 |
 | ConfirmDialog | 6.69 | — | 1.96 | 8.66 |
 | Container | 0.77 | — | 0.14 | 0.91 |
 | ContextMenu | 14.62 | — | 1.88 | 16.50 |
 | Cta | 2.37 | — | 1.79 | 4.17 |
-| DataTable | 38.26 | — | 5.64 | 43.90 |
-| DatePicker | 12.15 | 14.85 | 2.71 | 14.87 |
-| DateRangePicker | 25.47 | — | 2.72 | 28.19 |
+| DataTable | 38.84 | — | 5.64 | 44.48 |
+| DatePicker | 12.19 | 14.87 | 2.71 | 14.90 |
+| DateRangePicker | 25.48 | — | 2.72 | 28.20 |
 | Dialog | 7.85 | — | 2.27 | 10.12 |
 | Divider | 0.47 | — | 0.34 | 0.81 |
 | Drawer | 6.78 | — | 2.29 | 9.07 |
 | DropdownMenu | 14.93 | — | 2.32 | 17.25 |
 | EmptyState | 2.21 | — | 1.59 | 3.80 |
-| EntityDialog | 30.23 | — | 4.61 | 34.84 |
+| EntityDialog | 30.52 | — | 4.61 | 35.13 |
 | ErrorState | 2.18 | — | 1.54 | 3.72 |
 | Faq | 3.78 | — | 1.11 | 4.89 |
 | FeatureGrid | 2.88 | — | 1.26 | 4.15 |
 | FieldGroup | 2.47 | — | 1.63 | 4.09 |
-| FileUpload | 6.31 | — | 2.23 | 8.54 |
+| FileUpload | 6.32 | — | 2.23 | 8.55 |
 | Footer | 1.54 | — | 0.55 | 2.10 |
-| Form | 6.68 | — | 2.13 | 8.81 |
+| Form | 6.71 | — | 2.13 | 8.84 |
 | FormField | 2.64 | — | 1.13 | 3.78 |
 | Grid | 1.16 | — | 0.46 | 1.62 |
 | Header | 17.11 | — | 3.38 | 20.49 |
 | Hero | 2.39 | — | 1.67 | 4.06 |
 | Icon | 0.67 | — | 0.33 | 1.01 |
-| Input | 2.42 | — | 0.97 | 3.39 |
+| Input | 2.43 | — | 0.97 | 3.40 |
 | InputNumber | 2.83 | — | 1.00 | 3.83 |
-| InputTags | 4.38 | — | 1.24 | 5.62 |
-| InputTime | 6.10 | — | 0.95 | 7.05 |
+| InputTags | 4.38 | — | 1.24 | 5.63 |
+| InputTime | 6.11 | — | 0.95 | 7.06 |
 | Island | 0.77 | — | 0.25 | 1.03 |
 | Kbd | 0.59 | — | 0.27 | 0.86 |
 | Link | 0.88 | — | 0.32 | 1.20 |
-| Listbox | 8.41 | — | 1.51 | 9.92 |
+| Listbox | 8.42 | — | 1.51 | 9.93 |
 | NavigationMenu | 16.78 | — | 3.04 | 19.82 |
 | OverlayPanel | 1.85 | — | 1.51 | 3.36 |
 | Page | 1.70 | — | 1.39 | 3.09 |
@@ -91,10 +91,10 @@ component uses. Neither is counted in the rows below.
 | Popover | 13.46 | — | 2.55 | 16.01 |
 | Pricing | 5.63 | — | 2.23 | 7.85 |
 | Progress | 0.78 | — | 0.85 | 1.63 |
-| RadioGroup | 3.06 | — | 0.99 | 4.05 |
+| RadioGroup | 3.07 | — | 0.99 | 4.06 |
 | ScrollArea | 1.02 | — | 0.56 | 1.58 |
 | Section | 1.45 | — | 1.30 | 2.75 |
-| Select | 20.03 | — | 2.42 | 22.45 |
+| Select | 20.06 | — | 2.42 | 22.48 |
 | Separator | 1.67 | — | 1.49 | 3.16 |
 | Sheet | 6.41 | — | 2.26 | 8.67 |
 | Skeleton | 0.53 | — | 0.45 | 0.97 |
@@ -117,7 +117,7 @@ component uses. Neither is counted in the rows below.
 | Tree | 3.94 | — | 0.74 | 4.68 |
 | WeftProvider | 0.97 | — | 0.27 | 1.25 |
 
-The five heaviest: DataTable (43.90 KB), EntityDialog (34.84 KB), DateRangePicker (28.19 KB), Combobox (24.75 KB), Select (22.45 KB).
+The five heaviest: DataTable (44.48 KB), EntityDialog (35.13 KB), DateRangePicker (28.20 KB), Combobox (24.79 KB), Select (22.48 KB).
 
 ## Tree-shaking
 

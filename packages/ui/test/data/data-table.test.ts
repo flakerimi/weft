@@ -4,6 +4,7 @@ import { registerIcon } from '../../src/basics/icons.ts'
 import type { EntitySchema } from '../../src/data/entity.ts'
 import type { TableQuery, TableResult } from '../../src/data/table.ts'
 import { mount } from '../mount.ts'
+import { installResizeObserver } from '../resize-observer.ts'
 import { $, $$, overlays, reset, settle } from '../overlays/helpers.ts'
 
 beforeAll(() => {
@@ -11,9 +12,12 @@ beforeAll(() => {
 })
 
 let unmount: (() => void) | undefined
+let ro: ReturnType<typeof installResizeObserver> | undefined
 afterEach(() => {
   unmount?.()
   unmount = undefined
+  ro?.restore()
+  ro = undefined
   reset()
 })
 
@@ -71,20 +75,23 @@ async function cases(props: Record<string, unknown> = {}) {
 }
 
 describe('DataTable', () => {
-  it('wires resource.list to Table, renders debounced search and filterDefs (with labels.anyFilter), and forwards cell slots', async () => {
+  it('wires resource.list to Table, renders debounced search and filterDefs (with labels.anyFilter and allLabel), and forwards cell slots', async () => {
     const { resource, listCalls } = makeResource()
     await cases({
       resource,
       searchDebounce: 0,
-      filterDefs: [{ key: 'status', label: 'Status', items: ['draft', 'live'] }],
+      filterDefs: [
+        { key: 'status', label: 'Status', items: ['draft', 'live'], allLabel: 'All statuses' },
+        { key: 'mode', label: 'Mode', items: ['auto', 'manual'], allLabel: false },
+      ],
       customStatusCell: true,
     })
     expect(listCalls).toHaveLength(1)
     expect($$('.custom-status').map((el) => el.textContent)).toEqual(['LIVE', 'DRAFT'])
 
-    // Filter radio options include Any ('') + Draft + Live
+    // Filter radio options include 'All statuses' ('') + Draft + Live, while allLabel: false adds none
     const filterRadios = $$('.weft-radio__label').map((el) => el.textContent!.trim())
-    expect(filterRadios).toEqual(['Any', 'Draft', 'Live'])
+    expect(filterRadios).toEqual(['All statuses', 'Draft', 'Live', 'Auto', 'Manual'])
 
     // Choosing 'live' filters the table
     const liveInput = $$<HTMLInputElement>('.weft-radio__input')[2]!
@@ -100,6 +107,34 @@ describe('DataTable', () => {
     searchInput.dispatchEvent(new Event('input', { bubbles: true }))
     await settle()
     expect(listCalls.at(-1)?.q).toBe('Brass')
+  })
+
+  it('switches toolbar filter from RadioGroup to a labelled Select combobox when narrow', async () => {
+    ro = installResizeObserver()
+    const { resource } = makeResource()
+    const m = await cases({
+      resource,
+      filterDefs: [{ key: 'status', label: 'Status', items: ['draft', 'live'] }],
+    })
+    const dtRoot = m.el.querySelector<HTMLElement>('.weft-data-table')!
+    ro.report(dtRoot, 375)
+    await settle()
+    expect(dtRoot.querySelector('[role="radiogroup"]')).toBeNull()
+    const combo = dtRoot.querySelector<HTMLElement>('[role="combobox"]')!
+    expect(combo).not.toBeNull()
+    const statusLabel = [...dtRoot.querySelectorAll('label')].find((l) => l.textContent!.trim() === 'Status')!
+    expect(statusLabel.getAttribute('for')).toBe(combo.id)
+  })
+
+  it('gives row Edit and Delete buttons aria-labels with the item name, and uses md size on touch input', async () => {
+    const { resource } = makeResource()
+    await cases({ resource, input: 'touch' })
+    const editBtns = $$<HTMLButtonElement>('button[data-weft-row-action="edit"]')
+    const delBtns = $$<HTMLButtonElement>('button[data-weft-row-action="delete"]')
+    expect(editBtns.map((b) => b.getAttribute('aria-label'))).toEqual(['Edit Brass Lamp', 'Edit Cast Kettle'])
+    expect(delBtns.map((b) => b.getAttribute('aria-label'))).toEqual(['Delete Brass Lamp', 'Delete Cast Kettle'])
+    expect(editBtns[0]!.dataset.size).toBe('md')
+    expect(delBtns[0]!.dataset.size).toBe('md')
   })
 
   it('opens EntityDialog in create mode from the New button, calls create, and refreshes the table', async () => {
@@ -151,7 +186,7 @@ describe('DataTable', () => {
     expect($('tbody').textContent).toContain('Polished Brass Lamp')
   })
 
-  it('opens ConfirmDialog from a row Delete button, shows an Alert when remove fails, and refreshes when it succeeds', async () => {
+  it('opens ConfirmDialog from a row Delete button, shows an Alert (role="alert") when remove fails, and restores focus to the next row Delete button (or New button) when it succeeds', async () => {
     const { resource } = makeResource()
     let shouldFail = true
     const remove = vi.fn(async (id: number) => {
@@ -162,6 +197,7 @@ describe('DataTable', () => {
       resource: { ...resource, remove },
     })
     const delBtn = $$('tbody button').find((b) => b.textContent!.trim() === 'Delete')!
+    delBtn.focus()
     delBtn.click()
     await settle()
 
@@ -172,21 +208,38 @@ describe('DataTable', () => {
     confirmBtn().click()
     await settle()
 
-    // Failed: dialog stays open and shows the error sentence inside ConfirmDialog
-    expect($('.weft-alert', alertDialog()).textContent).toContain('Product is in an open order.')
+    // Failed: dialog stays open and shows the error sentence with role="alert" inside ConfirmDialog
+    const alert = $('.weft-alert', alertDialog())
+    expect(alert.getAttribute('role')).toBe('alert')
+    expect(alert.textContent).toContain('Product is in an open order.')
 
     // Retry and succeed
     shouldFail = false
     confirmBtn().click()
     await settle()
+    await new Promise((r) => setTimeout(r, 20))
+    await settle()
     expect(m.exposed.deletedRecords).toHaveLength(1)
     expect($('tbody').textContent).not.toContain('Brass Lamp')
+    // Focus moved to the remaining row's Delete button, not body
+    const remainingDelBtn = $('button[data-weft-row-action="delete"]')
+    expect(document.activeElement).toBe(remainingDelBtn)
+
+    // Delete the last remaining row: focus moves to the "New product" button
+    remainingDelBtn.click()
+    await settle()
+    confirmBtn().click()
+    await settle()
+    await new Promise((r) => setTimeout(r, 20))
+    await settle()
+    expect(document.activeElement).toBe($$('button').find((b) => b.textContent!.trim() === 'New product'))
   })
 
-  it('omits New when create is absent, omits Edit/Delete when update/remove are absent, and omits Actions column when both are absent', async () => {
+  it('omits New and Edit when schema (and #dialog) is absent or when create/update are absent, and omits Actions column when both update and remove are absent', async () => {
     const { resource } = makeResource()
     await cases({
-      resource: { list: resource.list },
+      schema: undefined,
+      resource: { list: resource.list, create: resource.create, update: resource.update },
     })
     expect($$('button').find((b) => b.textContent!.trim() === 'New product')).toBeUndefined()
     expect($$('thead th').map((th) => th.textContent!.trim())).toEqual(['Name', 'Price', 'Status'])

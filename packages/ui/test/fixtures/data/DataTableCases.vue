@@ -1,6 +1,7 @@
 <script setup vapor lang="ts">
 import { ref } from 'vue'
 import WeftProvider from '../../../src/adaptive/WeftProvider.vue'
+import type { Input } from '../../../src/adaptive/detect.ts'
 import DataTable from '../../../src/data/DataTable.vue'
 import type {
   DataResource,
@@ -30,8 +31,8 @@ const props = withDefaults(
     update?: (id: number, body: Partial<ProductInput>) => Promise<Product>
     remove?: (id: number) => Promise<unknown>
     schema?: EntitySchema
-    fields?: Record<string, EntityFieldConfig>
-    defaults?: Partial<ProductInput>
+    fields?: EntityFieldConfig[]
+    defaults?: Partial<ProductInput> | (() => Partial<ProductInput>)
     name?: string
     searchable?: boolean
     search?: string
@@ -49,6 +50,9 @@ const props = withDefaults(
     emptyIcon?: string
     labels?: Partial<DataTableLabels>
     customStatusCell?: boolean
+    customDialogSlot?: boolean
+    input?: Input
+    locale?: string
   }>(),
   {
     columns: undefined,
@@ -77,6 +81,9 @@ const props = withDefaults(
     emptyIcon: undefined,
     labels: undefined,
     customStatusCell: false,
+    customDialogSlot: false,
+    input: undefined,
+    locale: undefined,
   },
 )
 
@@ -94,7 +101,13 @@ const selected = ref<RowKey[]>([])
 const savedRecords = ref<Product[]>([])
 const deletedRecords = ref<Product[]>([])
 const errors = ref<unknown[]>([])
+const dialogSchemaSeen = ref<EntitySchema | null>(null)
 const dt = ref<{ refresh(): Promise<void>; edit(r: Product | null): void; askRemove(r: Product): void } | null>(null)
+
+function captureDialog(s: EntitySchema) {
+  dialogSchemaSeen.value = s
+  return true
+}
 
 defineExpose({
   searchText,
@@ -105,12 +118,13 @@ defineExpose({
   savedRecords,
   deletedRecords,
   errors,
+  dialogSchemaSeen,
   dt,
 })
 </script>
 
 <template>
-  <WeftProvider>
+  <WeftProvider :input="input" :locale="locale">
     <DataTable
       ref="dt"
       v-model:search="searchText"
@@ -147,6 +161,9 @@ defineExpose({
     >
       <template v-if="customStatusCell" #status-cell="{ row }">
         <span class="custom-status">{{ row.status.toUpperCase() }}</span>
+      </template>
+      <template v-if="customDialogSlot" #dialog="{ schema: s }">
+        <div v-if="captureDialog(s)" class="custom-dt-dialog">Custom dialog</div>
       </template>
     </DataTable>
   </WeftProvider>

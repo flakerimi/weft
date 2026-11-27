@@ -94,17 +94,24 @@ const form = useTemplateRef<HTMLFormElement>('form')
 
 /** The control in the form that had focus as it turned busy; undefined when none was noted. */
 let had: HTMLElement | null | undefined
+let pendingFocusInvalid = false
 const inForm = (el: Element | null) => (el instanceof HTMLElement && form.value?.contains(el) ? el : null)
 // Synchronous, so the focus is noted before busy disables the field that has it.
 watch(busy, (on) => on && (had ??= inForm(document.activeElement)), { flush: 'sync' })
 // After the DOM update that enables the fields again: a field that had focus
-// was disabled while busy, which drops focus to the body; give it back.
+// was disabled while busy, which drops focus to the body; give it back, unless
+// setErrors asked to focus the first invalid field while the form was busy.
 watch(
   busy,
   (on) => {
     if (on) return
     const back = had
     had = undefined
+    if (pendingFocusInvalid) {
+      pendingFocusInvalid = false
+      void focusFirstInvalid()
+      return
+    }
     const now = document.activeElement
     if (back?.isConnected && (!now || now === document.body)) back.focus()
   },
@@ -190,7 +197,15 @@ function copy<V>(value: V, seen = new Map<object, unknown>()): V {
 }
 
 async function focusFirstInvalid() {
+  if (off.value) {
+    pendingFocusInvalid = true
+    return
+  }
   await nextTick()
+  if (off.value) {
+    pendingFocusInvalid = true
+    return
+  }
   const invalid = form.value?.querySelector<HTMLElement>('[aria-invalid="true"]')
   if (!invalid) return
   const target = invalid.matches('input, textarea, select, [tabindex]') ? invalid : tabbables(invalid)[0]

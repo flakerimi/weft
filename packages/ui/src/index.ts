@@ -163,6 +163,7 @@ export {
   humanLabel,
   inferControl,
   initialDraft,
+  isNonScalarRule,
   ruleKind,
   type DataResource,
   type DataTableFilter,

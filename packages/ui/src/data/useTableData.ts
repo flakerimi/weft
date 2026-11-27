@@ -163,8 +163,14 @@ export function useTableData<T>(opts: TableDataOptions<T>): TableData<T> {
         (p !== prev?.[1] && !(searchChanged && p === 1)) ||
         pp !== prev?.[2] ||
         s !== prev?.[3] ||
-        f !== prev?.[5] ||
-        fn !== prev?.[6]
+        f !== prev?.[5]
+      // Note: fn !== prev?.[6] is intentionally omitted from nonSearchChanged
+      // when searchChanged is true, because in Vue Vapor a parent template with
+      // `:fetch="(q) => list(q)"` re-evaluates every prop getter in a single
+      // RenderEffect whenever `:search` changes, giving `fetch` a fresh closure
+      // on every keystroke. When `fetch` changes on its own (`!searchChanged`),
+      // `void ask()` runs immediately below.
+      void fn
       if (searchChanged && !nonSearchChanged && q && delay > 0) {
         asked++
         searchTimer = setTimeout(() => {

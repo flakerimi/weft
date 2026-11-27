@@ -10,7 +10,7 @@ import { TABLE_LABELS, type TableFetch, type TableLabels } from './table.ts'
 
 export interface EntityFieldRule extends FieldRule {
   kind?: 'string' | 'number' | 'boolean' | 'list' | 'record' | 'object' | 'unknown'
-  type?: 'string' | 'number' | 'boolean'
+  type?: 'string' | 'number' | 'boolean' | 'list' | 'record' | 'object' | 'unknown'
 }
 
 export function ruleKind(rule: EntityFieldRule | undefined): string | undefined {
@@ -22,6 +22,7 @@ export type EntitySchema<Name extends string = string> = {
 }
 
 export type EntityControlKind =
+  | 'input'
   | 'text'
   | 'email'
   | 'url'
@@ -33,39 +34,50 @@ export type EntityControlKind =
   | 'select'
 
 export interface EntityFieldConfig {
+  /** The field's key in `schema` and `state`. */
+  name: string
+  /** Label shown on the FormField; default humanized from `name`. */
   label?: string
+  /** Hint text beside the FormField label. */
   hint?: string
+  /** Description text under the FormField label. */
   description?: string
+  /** Placeholder text for text/number/select controls. */
   placeholder?: string
+  /** Control override (`'textarea'`, `'select'`, `'radio'`, `'switch'`, `'checkbox'`, `'number'`, `'input'`, `'text'`, `'email'`, `'url'`). */
   control?: EntityControlKind
+  /** Step for InputNumber (e.g. `0.01` for money, `1` for integers). */
   step?: number
+  /** Rows for Textarea. */
   rows?: number
+  /** Choice items for an enum field; default `{ label: humanLabel(v), value: v }` for each value in `rule.enum`. */
   items?: (string | { label: string; value: string | number })[]
+  /** Hide the field from the auto-rendered form (its rules and field errors are also excluded from the auto-rendered form). */
   hidden?: boolean
 }
 
 export interface EntityDialogLabels {
   createTitle: (name: string) => string
-  editTitle: (itemLabel: string) => string
+  editTitle: (name: string, itemLabel?: string) => string
   createSubmit: string
   editSubmit: string
   cancel: string
   close: string
   noneOption: string
   unreachable: string
-  failed: string
+  pageFailed: string
 }
 
 export const ENTITY_DIALOG_LABELS: EntityDialogLabels = {
   createTitle: (name) => `New ${name}`,
-  editTitle: (itemLabel) => `Edit ${itemLabel}`,
+  editTitle: (name, itemLabel) => `Edit ${itemLabel || name}`,
   createSubmit: 'Create',
   editSubmit: 'Save',
   cancel: 'Cancel',
   close: 'Close',
   noneOption: 'None',
   unreachable: 'The server could not be reached; check the connection and try again.',
-  failed: 'Something went wrong on this page; reload it and try again.',
+  pageFailed: 'Something went wrong on this page; reload it and try again.',
 }
 
 export interface DataResource<T, TInput extends object = any> {
@@ -76,9 +88,15 @@ export interface DataResource<T, TInput extends object = any> {
 }
 
 export interface DataTableFilter {
+  /** The filter key sent as `filter[key]=value`. */
   key: string
+  /** The FormField label above the control; default humanized from `key`. */
   label?: string
+  /** The choices; when no choice has `value: ''`, `{ label: allLabel || labels.anyFilter, value: '' }` is prepended unless `allLabel: false`. */
   items: (string | { label: string; value: string })[]
+  /** Label for the auto-prepended `''` choice; default `labels.anyFilter` (`'Any'`), or `false` to add none. */
+  allLabel?: string | false
+  /** Control style: default `'radio'` when `<= 4` total options (and not narrow), else `'select'`. */
   control?: 'radio' | 'select'
 }
 
@@ -91,7 +109,9 @@ export interface DataTableLabels extends TableLabels, EntityDialogLabels {
   newAction: (name: string) => string
   actionsColumn: string
   editAction: string
+  editRowAction: (itemLabel: string) => string
   deleteAction: string
+  deleteRowAction: (itemLabel: string) => string
   deleteTitle: (itemLabel: string) => string
   deleteDescription: string
   deleteConfirm: string
@@ -108,7 +128,9 @@ export const DATA_TABLE_LABELS: DataTableLabels = {
   newAction: (name) => `New ${name}`,
   actionsColumn: 'Actions',
   editAction: 'Edit',
+  editRowAction: (itemLabel) => `Edit ${itemLabel}`,
   deleteAction: 'Delete',
+  deleteRowAction: (itemLabel) => `Delete ${itemLabel}`,
   deleteTitle: (itemLabel) => `Delete ${itemLabel}?`,
   deleteDescription: 'It is gone for good; this cannot be undone.',
   deleteConfirm: 'Delete',
@@ -124,9 +146,15 @@ export function humanLabel(key: string): string {
   return spaced[0]!.toUpperCase() + spaced.slice(1).toLowerCase()
 }
 
+/** Returns true when a schema rule is a non-scalar kind (`list`, `record`, `object`) that requires a slot rather than an auto-rendered scalar input. */
+export function isNonScalarRule(rule: EntityFieldRule | undefined): boolean {
+  const k = ruleKind(rule)
+  return k === 'list' || k === 'record' || k === 'object'
+}
+
 /** Chooses the control kind for a schema rule and optional field configuration at `width`. */
-export function inferControl(rule: EntityFieldRule | undefined, config: EntityFieldConfig | undefined, width: Width): EntityControlKind {
-  if (config?.control) return config.control
+export function inferControl(rule: EntityFieldRule | undefined, config: Partial<EntityFieldConfig> | undefined, width: Width): Exclude<EntityControlKind, 'input'> {
+  if (config?.control) return config.control === 'input' ? (rule?.email ? 'email' : rule?.url ? 'url' : 'text') : config.control
   const choices = config?.items ?? rule?.enum
   if (choices && choices.length > 0) {
     return choices.length <= 4 && width !== 'narrow' ? 'radio' : 'select'
@@ -142,7 +170,7 @@ export function inferControl(rule: EntityFieldRule | undefined, config: EntityFi
 /** Normalizes enum or configured items into `{ label, value }` options, prepending a `noneOption` choice when optional. */
 export function fieldChoices(
   rule: EntityFieldRule | undefined,
-  config: EntityFieldConfig | undefined,
+  config: Partial<EntityFieldConfig> | undefined,
   noneLabel: string,
 ): { label: string; value: string | number }[] {
   const raw = config?.items ?? rule?.enum ?? []
@@ -170,19 +198,25 @@ export function fieldChoices(
 export function initialDraft<T extends object, TInput extends object>(
   schema: EntitySchema,
   record: T | null | undefined,
-  defaults?: Partial<TInput>,
+  defaults?: Partial<TInput> | (() => Partial<TInput>),
+  fields?: EntityFieldConfig[],
 ): TInput {
   const out: Record<string, unknown> = {}
-  const def = defaults as Record<string, unknown> | undefined
+  const resolvedDefaults = typeof defaults === 'function' ? defaults() : defaults
+  const def = resolvedDefaults as Record<string, unknown> | undefined
   const rec = record as Record<string, unknown> | null | undefined
-  for (const [name, rule] of Object.entries(schema)) {
-    if (!rule) continue
+  const keys = new Set<string>(Object.keys(schema))
+  if (fields) {
+    for (const f of fields) keys.add(f.name)
+  }
+  for (const name of keys) {
+    const rule = schema[name]
     const k = ruleKind(rule)
     if (rec && name in rec && rec[name] !== undefined) {
       out[name] = rec[name]
       continue
     }
-    if (rec && rule.nullable) {
+    if (rec && rule?.nullable) {
       out[name] = rec[name] ?? null
       continue
     }
@@ -190,13 +224,17 @@ export function initialDraft<T extends object, TInput extends object>(
       out[name] = def[name]
       continue
     }
-    if (rule.nullable) {
+    if (rule?.nullable) {
       out[name] = null
     } else if (k === 'boolean') {
       out[name] = false
     } else if (k === 'number') {
-      out[name] = rule.enum?.length ? Number(rule.enum[0]) : 0
-    } else if (rule.enum?.length) {
+      out[name] = rule?.enum?.length ? Number(rule.enum[0]) : 0
+    } else if (k === 'list') {
+      out[name] = []
+    } else if (k === 'record' || k === 'object') {
+      out[name] = {}
+    } else if (rule?.enum?.length) {
       out[name] = rule.required ? rule.enum[0]! : ''
     } else {
       out[name] = ''
@@ -258,13 +296,13 @@ function isApiErrorLike(e: unknown): e is ApiErrorLike {
 export function entityProblem(
   e: unknown,
   knownFields: ReadonlySet<string>,
-  labels: Pick<EntityDialogLabels, 'unreachable' | 'failed'> = ENTITY_DIALOG_LABELS,
+  labels: Pick<EntityDialogLabels, 'unreachable' | 'pageFailed'> = ENTITY_DIALOG_LABELS,
 ): { fields: Record<string, string>; message: string } {
   if (!isApiErrorLike(e)) {
-    console.error('EntityDialog failed:', e)
-    return { fields: {}, message: labels.failed }
+    console.error('The page failed:', e)
+    return { fields: {}, message: labels.pageFailed }
   }
-  if (e.code === 'network') {
+  if (e.code === 'network' || e.code === 'http') {
     return { fields: {}, message: labels.unreachable }
   }
   const fields: Record<string, string> = {}

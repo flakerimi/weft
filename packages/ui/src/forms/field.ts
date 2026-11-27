@@ -33,7 +33,7 @@ export interface FieldContext {
    * thumb), during setup: it names itself through `labelId`, so the label
    * drops `for`, which would point at no form control.
    */
-  namedByLabel(): void
+  namedByLabel(on?: boolean): void
 }
 
 /** What a FieldGroup gives the controls in it. */
