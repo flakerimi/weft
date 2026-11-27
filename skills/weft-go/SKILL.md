@@ -25,7 +25,7 @@ func main() {
 - `dist` embeds `web/dist`, and is nil under `-tags dev`, as `weft dev` builds it: `go test -tags dev ./...` until the first `weft build`.
 - `app/modules.go` lists the modules in the order they start; a new one is `app/<name>/` with a `Module()`, added there.
 - A module is `Name() string` and `Register(app *warp.App) error`, and may add `Migrate`, `Start` and `Stop(ctx) error`: in order before serving, stop in reverse after.
-- `go.mod` requires Warp (`github.com/flakerimi/weft`) at the release's tag, fetched from GitHub; `weft upgrade` moves it. Never edit `.weft/`.
+- `go.mod` requires Warp (`github.com/flakerimi/weft`) at the release's tag, from GitHub; `weft upgrade` moves it. Never edit `.weft/`.
 
 ## Typed routes
 
@@ -37,8 +37,8 @@ type CreateIn struct {
 }
 
 func (module) Register(app *warp.App) error {
-	warp.Get(app, "/products/{id}", show) // func(ctx context.Context, in ShowIn) (Product, error)
-	warp.Post(app, "/products", create)   // answers 201
+	warp.Get(app, "/products/{id}", show) // func(ctx, ShowIn) (Product, error)
+	warp.Post(app, "/products", create)   // 201
 	return nil
 }
 ```
@@ -89,7 +89,7 @@ Each file is read once at start for its ETag; one changed since gets 500, a new 
 ## One binary
 
 ```sh
-weft build  # the pages into web/dist, then ./<name>
+weft build  # web/dist, then ./<name>
 GOOS=linux GOARCH=arm64 weft build -o myapp-linux-arm64
 ```
 

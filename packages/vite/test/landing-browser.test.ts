@@ -315,9 +315,12 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1
 
   afterAll(async () => {
     ws?.close()
-    browser?.kill('SIGKILL')
+    if (browser && browser.exitCode === null) {
+      browser.kill('SIGKILL')
+      await new Promise((r) => browser!.once('close', r))
+    }
     for (const s of servers) await new Promise<void>((done) => s.close(() => done()))
-    if (dir) rmSync(dir, { recursive: true, force: true })
+    if (dir) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
   })
 
   async function openAt(url: string, width: number, scheme: 'light' | 'dark' = 'light') {

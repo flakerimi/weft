@@ -22,7 +22,7 @@ myapp/
   web/
     pages/              one .vue file per route
     components/         your components and islands
-    content/<name>/     Markdown collections, declared in content.config.ts
+    content/<name>/     Markdown collections (content.config.ts)
     content.config.ts   only if the site has content/
     public/             copied to the build's root as it is
     vite.config.ts      optional; the build adds Vue, icons and content itself
