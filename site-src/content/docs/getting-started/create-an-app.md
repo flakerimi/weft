@@ -12,7 +12,7 @@ On this page you make an app, add a resource to it, run it while you change a pa
 weft create myapp
 ```
 
-It writes the app into a new folder, `myapp`, puts Weft's packages in `myapp/.weft/`, and runs `pnpm install`, which fetches Vue, Vite and the other public packages from the npm registry, `go mod download`, which fetches Warp from GitHub, and `weft gen`, which writes the typed client. Then it prints:
+It writes the app into a new folder, `myapp`, puts Weft's packages in `myapp/.weft/`, and runs `pnpm install`, which fetches Vue, Vite and the other public packages from the npm registry, `go mod download`, which fetches Warp from GitHub and the SQLite driver, and `weft gen`, which writes the typed client. Then it prints:
 
 ```text
 Set AUTH_OWNER_EMAIL in myapp/.env to the owner's email address; it is owner@example.com until you do.
@@ -21,7 +21,7 @@ Created myapp. Next: cd myapp && weft dev
 
 The app keeps its records in SQLite and has one user, its owner, whose email is `AUTH_OWNER_EMAIL` in `.env`: set it to yours. `.env` also holds `AUTH_SECRET`, 48 random bytes made for this app, which sign the session cookie.
 
-If Go cannot fetch Warp (offline, or behind a proxy that refuses it), `weft create` says so and leaves the app; once Go can reach the module proxy, `cd myapp && weft dev` (or `weft build`) fetches it and finishes.
+If Go cannot fetch them (offline, or behind a proxy that refuses it), `weft create` says so and leaves the app; once Go can reach the module proxy, `cd myapp && weft gen` (or `weft dev`) fetches them and finishes.
 
 The app has:
 
@@ -69,8 +69,8 @@ weft dev
 It builds the Go server, starts it beside the page server, and prints the address to open once both answer:
 
 ```text
-weft dev: http://localhost:5173
 2026/11/27 09:00:00 Set up the owner at http://localhost:5173/setup#token=…
+weft dev: http://localhost:5173
 ```
 
 Open the setup link to choose the owner's password; it works once, while no user exists. The front page shows three cards and a badge that says `Hello from Go`, which the `Hello` island fetched from `/api/hello`. The page server sends `/api` on to the Go server.

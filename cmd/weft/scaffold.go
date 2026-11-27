@@ -30,6 +30,27 @@ import (
 
 const scaffoldUsage = "usage is weft scaffold <name> <field[:type[:modifier...]]>... [--plural <word>] [--api]."
 
+// scaffoldHelp is what --help says after the usage line.
+const scaffoldHelp = `
+Types (written, never guessed; none is string):
+  string, text, email, url   text; text is searched only, the rest sorted and searched
+  int, float                 int64, float64; sorted
+  bool                       sorted and filtered
+  enum=a,b                   one of the choices, comma-separated; sorted and filtered
+  date, datetime             time.Time, RFC 3339 in JSON; with --api only until 0.2.0
+Modifiers, after the type in any order:
+  nullable    a pointer, which may be null
+  required    not on bool or with nullable
+  unique      not on bool, text, date or datetime
+  min=N max=N characters for text, the value for int and float
+Flags:
+  --plural <word>  the plural, for the package app/<plural>, the table and /api/<plural>
+  --api            write only the Go, not the pages
+A wrong argument is one sentence and exit 2; a type of a later release, an
+existing file, or an app/modules.go it cannot edit is one sentence and exit 1.
+Nothing is written then. https://weft.base.al/docs/reference/cli#weft-scaffold
+`
+
 // scaffoldSpec is what the command line asks for.
 type scaffoldSpec struct {
 	Name, Plural string
@@ -77,7 +98,16 @@ var (
 	// storyNames are the identifiers the story test uses, which the package's
 	// name would hide.
 	storyNames = []string{"http", "filepath", "slices", "strconv", "testing", "time", "authtest", "warptest", "sqlite",
-		"start", "idsOf", "idOf", "c", "t", "l", "tc", "first", "second", "changed", "shown", "left", "anon", "name", "r", "e", "got"}
+		"start", "idsOf", "idOf", "c", "t", "l", "tc", "first", "second", "changed", "shown", "left", "anon", "name", "r", "e", "got", "out", "v"}
+	// stdlibPackages are standard library packages a resource's package
+	// would hide or be mistaken for, in the files weft scaffold writes and
+	// in an author's own beside them.
+	stdlibPackages = map[string]bool{
+		"bytes": true, "context": true, "errors": true, "fmt": true, "io": true, "log": true, "math": true, "net": true,
+		"os": true, "path": true, "regexp": true, "sort": true, "strconv": true, "strings": true, "sync": true, "time": true,
+		"url": true, "json": true, "sql": true, "embed": true, "maps": true, "unicode": true, "reflect": true, "runtime": true,
+		"http": true, "httptest": true, "filepath": true, "slices": true, "testing": true,
+	}
 	futureTypes = map[string]string{
 		"belongs_to":   "and relations land in Weft 0.3.0 (W3)",
 		"has_many":     "and relations land in Weft 0.3.0 (W3)",
@@ -156,6 +186,7 @@ func scaffoldCmd(args []string, stdout, stderr io.Writer) int {
 	if perr != nil {
 		if perr.code == 0 { // --help
 			fmt.Fprintln(stdout, strings.ToUpper(scaffoldUsage[:1])+scaffoldUsage[1:])
+			fmt.Fprint(stdout, scaffoldHelp)
 			return 0
 		}
 		fmt.Fprintf(stderr, "weft scaffold: %s\n", perr.msg)
@@ -243,6 +274,9 @@ func parseScaffold(args []string) (scaffoldSpec, *scaffoldError) {
 			return spec, refuse(2, "%q is a name Weft uses in an app (%s); choose another.", n, strings.Join(scaffoldReserved, ", "))
 		}
 	}
+	if pascal(spec.Name) == "Module" {
+		return spec, refuse(2, "%q would make the type Module, the name of the func Module() the package has; choose another name, such as unit.", spec.Name)
+	}
 	if takenTypes[pascal(spec.Name)] {
 		return spec, refuse(2, "%q would make the type %s, which Weft's own modules or the generated client use already; choose another name.", spec.Name, pascal(spec.Name))
 	}
@@ -251,6 +285,9 @@ func parseScaffold(args []string) (scaffoldSpec, *scaffoldError) {
 	}
 	if token.IsKeyword(spec.Plural) || types.Universe.Lookup(spec.Plural) != nil {
 		return spec, refuse(2, "%q is a word Go keeps for itself, so it cannot name the package app/%s; give another with --plural.", spec.Plural, spec.Plural)
+	}
+	if stdlibPackages[spec.Plural] {
+		return spec, refuse(2, "%q is a package of Go's standard library, which the files weft scaffold writes may import; give another with --plural.", spec.Plural)
 	}
 	if slices.Contains(storyNames, spec.Plural) {
 		return spec, refuse(2, "%q is a name the test weft scaffold writes uses for something else; give another with --plural.", spec.Plural)
@@ -271,6 +308,12 @@ func parseScaffold(args []string) (scaffoldSpec, *scaffoldError) {
 		}
 		goNames[pascal(f.Name)] = f.Name
 		spec.Fields = append(spec.Fields, f)
+	}
+	// The pages have no control for a time yet: Go only, with --api.
+	for _, f := range spec.Fields {
+		if !spec.API && (f.Type == "date" || f.Type == "datetime") {
+			return spec, refuse(1, "field %q is a %s, and date and time fields in the pages weft scaffold writes land in Weft 0.2.0; give --api to write only the Go for now.", f.Name, f.Type)
+		}
 	}
 	return spec, nil
 }
@@ -378,6 +421,9 @@ func parseField(arg string) (scaffoldField, *scaffoldError) {
 	}
 	if f.Required && f.Null {
 		return f, refuse(2, "field %q is nullable, which may be empty, so it cannot be required; remove :nullable or :required.", f.Name)
+	}
+	if f.Type == "enum" && f.Unique && len(f.Choices) < 2 {
+		return f, refuse(2, "field %q is a unique enum with one choice, so only one record could have it; give two choices or more, or remove :unique.", f.Name)
 	}
 	if f.Min != "" && f.Max != "" {
 		lo, _ := strconv.ParseFloat(f.Min, 64)
@@ -494,7 +540,8 @@ func (f scaffoldField) samples() ([3]sample, bool) {
 		for i := range out {
 			var s string
 			if f.Type == "enum" {
-				s = f.Choices[i%len(f.Choices)]
+				// The third, the change to the first record, is never the first.
+				s = f.Choices[min(i, len(f.Choices)-1)]
 			} else {
 				var ok bool
 				if s, ok = f.text(i); !ok {
@@ -629,7 +676,7 @@ func planScaffold(appDir string, s scaffoldSpec) (*scaffoldPlan, error) {
 	}
 	r := newResource(s)
 	if !s.API {
-		for _, rel := range []string{"web/pages/" + s.Plural, "web/components/" + r.Table + ".vue", "web/components/" + r.View + ".vue"} {
+		for _, rel := range []string{"web/pages/" + s.Plural, "web/pages/" + s.Plural + ".vue", "web/components/" + r.Table + ".vue", "web/components/" + r.View + ".vue"} {
 			if _, err := os.Stat(filepath.Join(appDir, filepath.FromSlash(rel))); err == nil {
 				return nil, fmt.Errorf("%s already exists; move it away, choose another resource name, or give --api to write only the Go.", rel)
 			}
@@ -650,7 +697,8 @@ func planScaffold(appDir string, s scaffoldSpec) (*scaffoldPlan, error) {
 	}
 	p.auth, r.Auth = hasAuth, hasAuth
 	_, serr := os.Stat(filepath.Join(appDir, "web", "session.ts"))
-	r.Session = serr == nil
+	// The islands wait on the session only when there is one to ask for.
+	r.Session = hasAuth && serr == nil
 
 	for _, f := range []struct {
 		name string

@@ -186,15 +186,10 @@ func TestCreateWritesApp(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errs)
 	}
-	if out != ownerLine("myapp")+"Created myapp. Next: cd myapp && weft dev\n" {
+	if out != "Set AUTH_OWNER_EMAIL in "+filepath.Join("myapp", ".env")+" to the owner's email address; it is owner@example.com until you do.\nCreated myapp. Next: cd myapp && weft dev\n" {
 		t.Errorf("stdout %q", out)
 	}
 	assertCreated(t, "myapp")
-}
-
-// ownerLine is what weft create says of the owner's email in the app's .env.
-func ownerLine(app string) string {
-	return "Set AUTH_OWNER_EMAIL in " + filepath.Join(app, ".env") + " to the owner's email address; it is owner@example.com until you do.\n"
 }
 
 // envLines reads the KEY=value lines of a .env, leaving comments out.
@@ -739,5 +734,26 @@ func TestCreatedAppIsTheFrame(t *testing.T) {
 	}
 	if !exists(t, filepath.Join(app, "data", "myapp.db")) {
 		t.Error("the app kept no database in data/myapp.db, which DB_URL in .env names")
+	}
+}
+
+// With the module proxy out of reach and an empty module cache, weft create
+// makes the app, says the owner's line, and ends on one sentence saying Go
+// could not download the modules and what to do.
+func TestCreateWithoutTheModuleProxy(t *testing.T) {
+	inTempDir(t, "work")
+	t.Setenv("GOPROXY", "off")
+	t.Setenv("GOMODCACHE", t.TempDir())
+	t.Setenv("GOFLAGS", "-modcacherw")
+	code, out, errs := create(t, "myapp")
+	want := "weft create: Go could not download the modules myapp/go.mod requires, such as the SQLite driver (see its output above), so myapp is made but does not build yet; check the network or GOPROXY, then run cd myapp && weft gen.\n"
+	if code != 1 || !strings.HasSuffix(errs, want) {
+		t.Errorf("exit %d, stderr %q, want it to end %q", code, errs, want)
+	}
+	if !strings.Contains(out, ownerLine("myapp")) {
+		t.Errorf("stdout %q lacks the owner line", out)
+	}
+	if !exists(t, filepath.Join("myapp", "package.json")) {
+		t.Error("the app was not left in place")
 	}
 }

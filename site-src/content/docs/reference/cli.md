@@ -48,17 +48,11 @@ Replaces the running `weft` with another release from `weft.base.al`.
 | `--check` | Only says whether the latest release differs from yours, and changes nothing. After a rollback of the site the latest may be older than yours. |
 | `--version X` | Installs release `X` instead of the latest, older ones included |
 
-It downloads the archive for your platform and `SHA256SUMS`, checks the archive against it, writes the new binary beside the running one and renames it into place, keeping the old one whole until the new one is complete. It follows a symlink to the real file.
-
-It says `weft X is up to date.` when there is nothing to do, and `Updated weft X → Y.` when done. Any failure is one sentence on standard error (exit status 1); an unknown flag exits 2. A development build refuses to update and says to run the installer.
-
-| Variable | What it does |
-| --- | --- |
-| `WEFT_BASE` | Where the releases are. Default `https://weft.base.al` |
+It downloads your platform's archive and `SHA256SUMS`, checks one against the other, and renames the new binary into place (through a symlink to the real file), the old one whole until then. It says `weft X is up to date.` or `Updated weft X → Y.`; a failure is one sentence (exit 1), an unknown flag exits 2, and a development build says to run the installer. `WEFT_BASE` is where the releases are (default `https://weft.base.al`).
 
 ### weft create
 
-Makes an app in a new folder named after it: `data` (SQLite), `auth` (the owner's login, with `/login` and `/setup`) and `hello`. It writes the app's files from the template `weft` carries, with a fresh `AUTH_SECRET` (48 random bytes, base64url) in `.env`, which only you may read, unpacks Weft's packages into `.weft/`, records the Weft version and theme in `package.json`'s `"weft"` object, and runs `pnpm install`, `go mod download` (Warp's module, from GitHub at the release's tag) and `weft gen`. Then it prints `Set AUTH_OWNER_EMAIL in <name>/.env to the owner's email address; it is owner@example.com until you do.` and `Created <name>. Next: cd <name> && weft dev`. [Create an app](../getting-started/create-an-app.md) walks through it.
+Makes an app in a new folder named after it: `data` (SQLite), `auth` (the owner's login, with `/login` and `/setup`) and `hello`. It writes the app's files from the template `weft` carries, with a fresh `AUTH_SECRET` (48 random bytes, base64url) in `.env`, which only you may read, unpacks Weft's packages into `.weft/`, records the Weft version and theme in `package.json`'s `"weft"` object, and runs `pnpm install`, `go mod download` (Warp's module, from GitHub at the release's tag, and the SQLite driver) and `weft gen`. Then it prints `Set AUTH_OWNER_EMAIL in <name>/.env to the owner's email address; it is owner@example.com until you do.` and `Created <name>. Next: cd <name> && weft dev`. [Create an app](../getting-started/create-an-app.md) walks through it.
 
 ```text
 weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install]
@@ -72,7 +66,7 @@ weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install]
 
 The name is a lowercase letter, then lowercase letters, digits and hyphens, at most 64. It is also the binary's name, so `web`, `api`, `app` and `dist` are refused: the binary would land in a folder of the app. Wrong usage, such as a bad name, theme or flag, is one sentence with exit status 2.
 
-Before it writes anything it checks that `go`, `node` 22.18 or later and `pnpm` 10 or later are on `PATH`, and that the folder is missing or empty; otherwise it says `weft create: <name> already exists and is not empty; choose another name or move it away.`, or names the missing tool, with exit status 1. If `pnpm install` fails, the app stays, and it says `weft create: pnpm install did not finish; run pnpm install in <name> to finish.`
+Before it writes anything it checks that `go`, `node` 22.18 or later and `pnpm` 10 or later are on `PATH`, and that the folder is missing or empty; otherwise it says `weft create: <name> already exists and is not empty; choose another name or move it away.`, or names the missing tool, with exit status 1. If `pnpm install` fails, the app stays, and it says `weft create: pnpm install did not finish; run pnpm install in <name> to finish.` If Go cannot download the modules, it says so, naming the network and `GOPROXY`.
 
 ### weft scaffold
 
@@ -83,7 +77,7 @@ weft scaffold <name> <field[:type[:modifier...]]>... [--plural <word>] [--api]
 weft scaffold product name:string:required:max=120:unique price:float:min=0 sale:float:nullable status:enum=draft,live:required
 ```
 
-`<name>` is singular snake_case (`line_item`). Its plural, made by a fixed rule (`person` → `people`, `category` → `categories`, `box` → `boxes`, else `s`) or given with `--plural`, names the package `app/<plural>`, the table, `/api/<plural>` and the permissions. `data`, `auth`, `warp`, `app`, `web`, `test`, `main`, Go's own words, `user` and `users` are refused.
+`<name>` is singular snake_case (`line_item`). Its plural, made by a fixed rule (`person` → `people`, `category` → `categories`, `box` → `boxes`, else `s`) or given with `--plural`, names the package `app/<plural>`, the table, `/api/<plural>` and the permissions. Refused: `data`, `auth`, `warp`, `app`, `web`, `test`, `main`, Go's words and standard packages, names the story test uses, and names whose type Weft or the client has (`user`, `module`, `record`, `list`, `login`…).
 
 A field's type is written, never guessed from its name; with none it is `string`.
 
@@ -94,7 +88,7 @@ A field's type is written, never guessed from its name; with none it is `string`
 | `email`, `url` | `string` | `email`, `url` | `sort,search` |
 | `int`, `float` | `int64`, `float64` | | `sort` |
 | `bool` | `bool` | | `sort,filter` |
-| `date`, `datetime` | `time.Time` | | `sort` |
+| `date`, `datetime` | `time.Time`, RFC 3339 | | `sort`; with `--api` only, until 0.2.0 |
 | `enum=a,b` | `string` | `enum=a\|b` | `sort,filter` |
 
 The modifiers, in any order after the type, are `nullable`, a pointer that may be `null` (`sale:float:nullable` is `*float64`); `required` (not on `bool` or with `nullable`); `unique` (not on `bool`, `text`, `date`, `datetime`); and `min=N` and `max=N`, in characters for text (not on `bool`, `date`, `datetime`, `enum`); a field has only the rules written. Enum choices are separated by commas: `|` or `(` is refused with `weft scaffold: write enum choices separated by commas after enum=, as in status:enum=draft,live.`, and a `?` with the `:nullable` form.
@@ -108,13 +102,13 @@ The modifiers, in any order after the type, are `nullable`, a pointer that may b
 | `web/components/<Plural>Table.vue`, `<Singular>View.vue` | Islands: a `DataTable` over `api.<plural>` and `schema.<Singular>Input`, and one record |
 | `web/pages/<plural>/index.vue`, `[id].vue` | The table's page and the record's run-time page |
 
-`--api` writes only the Go; until `DataTable` is in `@weft/ui` ([Coming next](../coming-next.md#scaffolding-and-app-blocks)) the pages do not build, so give it. It lists what it wrote under `Scaffolded <name> as <plural>:`.
+`--api` writes only the Go (and is needed for `date` and `datetime`, whose controls in the pages land in 0.2.0); until `DataTable` is in `@weft/ui` ([Coming next](../coming-next.md#scaffolding-and-app-blocks)) the pages do not build, so give it. It lists what it wrote under `Scaffolded <name> as <plural>:`.
 
 Nothing is written, with one sentence and exit status 1, when `app/<plural>` is there, or without `--api` the page folder or an island, or when `app/modules.go` has no `func Modules() []warp.Module` returning a `[]warp.Module{...}` with `data.Module()`. `id`, `created_at` and `updated_at` (from `data.Record`), `actions` (`DataTable`'s), a field given twice, an unknown type or modifier, or a modifier its type does not take exit 2. A later release's type exits 1 naming it, as `weft scaffold: field "maker" has type "belongs_to", and relations land in Weft 0.3.0 (W3); use a scalar type for now.`: `belongs_to`, `has_many`, `many_to_many` (0.3.0), `image`, `file` (0.4.0), `json`, `translated` (0.6.0).
 
 ### weft dev
 
-Runs an app while you work. It builds the Go code with the `dev` tag into `.weft/dev/app` and runs it on a free port, starts [weft-dev](page-tools.md#weft-dev) beside it with the app's theme, which renders each page when asked for and sends `/api` to the Go server, and prints `weft dev: http://localhost:<n>` once both answer. Open that address with `localhost`, not `127.0.0.1`: the page server may listen on `::1` only. Run it anywhere inside the app; it checks the app as `weft build` does. It reads the theme once: restart it after changing `"theme"` in `package.json`.
+Runs an app while you work. It builds the Go code with the `dev` tag into `.weft/dev/app` and runs it on a free port, starts [weft-dev](page-tools.md#weft-dev) beside it with the app's theme, which renders each page when asked for and sends `/api` to the Go server, and prints `weft dev: http://localhost:<n>` once both answer. Open it with `localhost`, not `127.0.0.1`: the page server may listen on `::1` only. It checks the app as `weft build` does, and reads the theme once.
 
 | Flag | What it does |
 | --- | --- |
@@ -150,13 +144,13 @@ Outside an app it says `weft build: no Weft app here; run it in a folder made by
 
 ### weft unpack
 
-Makes `.weft/` present and current as `weft build` does first, with no `pnpm install`. In a fresh clone of an app a development build made, whose `go.mod` replaces Warp's module with `./.weft/go`, it lets `go test ./...` and an editor resolve it. It prints `Unpacked .weft (Weft <version>)` or `.weft is current (Weft <version>)`, and refuses an app on another Weft version as `weft build` does.
+Makes `.weft/` present and current as `weft build` does, with no `pnpm install`, so in a fresh clone whose `go.mod` replaces Warp's module with `./.weft/go`, `go test` and an editor resolve it. It prints `Unpacked .weft (Weft <version>)` or `.weft is current (Weft <version>)`.
 
 ### weft gen
 
 Writes `web/.weft-types/api.ts` from the app's Go code. It builds the app with the `dev` tag, as `weft dev` does, and runs it with `WARP_DESCRIBE=1`, a free `PORT` and `HOST=127.0.0.1`, so warp's `Serve` prints the routes and types as JSON. From that it writes an interface per Go type, `api.<module>.<name>()` per typed route (`api.app` for routes outside a module), the `ApiError` every failed call rejects with, and `schema`, the rules of each body type for a form to check before it sends; `unique` and the rules of nested types are checked by the server only, and arrive as its field errors. It prints `Wrote web/.weft-types/api.ts`, or `web/.weft-types/api.ts is up to date` and leaves the file alone. `weft dev` runs it after each Go build that succeeds, and `weft build` before the page build. Never edit the file. An app no package of which calls `warp.New`, as `go list` finds them with the `dev` tag, is not run: it gets the client of an app with no routes, which `weft gen` says, or keeps one that has routes, saying so (`weft gen` exits 1).
 
-A compile error ends `weft gen: go build failed; fix what its output above says and run weft gen again.`; an app that exits with an error, or prints something else or nothing, its own output and `weft gen: the app did not describe itself; fix what its output above says and run weft gen again.`; one still running after 30 s is stopped. Each exits 1 and leaves the file as it was. `weft build` stops on the first two only; on the others it says so, as `weft dev` does, and goes on. A name the file cannot use (two routes that become one in camelCase, a type named as TypeScript reserves, an optional field, or any field of a partial body's type, named `constructor` or `toString`) is a sentence that says what to rename.
+A compile error, an app that exits with an error or prints something else or nothing, or one still running after 30 s (stopped) is one sentence after its output, exit 1, with the file as it was. `weft build` stops on the first two only; on the others it says so, as `weft dev` does, and goes on. A name the file cannot use (two routes that become one in camelCase, a type named as TypeScript reserves, an optional field, or any field of a partial body's type, named `constructor` or `toString`) is a sentence that says what to rename.
 
 ### weft routes
 
@@ -164,18 +158,21 @@ Builds and describes the app as `weft gen` does, and prints its routes in the or
 
 ```text
 METHOD  PATH                MODULE    NAME    PERMISSION
+POST    /api/auth/login     auth      login   -
+POST    /api/auth/logout    auth      logout  -
+GET     /api/auth/me        auth      me      -
+POST    /api/auth/setup     auth      setup   -
 GET     /api/hello          hello     hello   -
 GET     /api/products       products  list    products:read
+GET     /api/products/{id}  products  show    products:read
+POST    /api/products       products  create  products:create
+PATCH   /api/products/{id}  products  update  products:edit
 DELETE  /api/products/{id}  products  remove  products:delete
 ```
 
 ### weft upgrade
 
-Moves an app to the Weft version of the `weft` you run: it rewrites `weft.version` in `package.json`, changing no other byte, moves `go.mod`'s require of Warp's module to that release, dropping a replace into `./.weft/go` (another is kept, and named), unpacks that version's packages into `.weft/`, and runs `pnpm install` and `go mod download`. It prints `Moved <name> from Weft <a> to <b>`, or `<name> is already on Weft <b>` when there is nothing to do. It never moves an app backwards: an app on a newer Weft is refused with `weft upgrade: this app is on Weft <a>, newer than this weft <b>; run weft update to get <a> or later.`, and exit status 1. A development build's `0.0.0-dev` is older than any release.
-
-| Flag | What it does |
-| --- | --- |
-| `--no-install` | Skip `pnpm install` and `go mod download` |
+Moves an app to the Weft version of the `weft` you run: it rewrites `weft.version` in `package.json`, changing no other byte, moves `go.mod`'s require of Warp's module to that release, dropping a replace into `./.weft/go` (another is kept, and named), unpacks that version's packages into `.weft/`, and runs `pnpm install` and `go mod download`. It prints `Moved <name> from Weft <a> to <b>`, or `<name> is already on Weft <b>` when there is nothing to do. It never moves an app backwards: an app on a newer Weft is refused (exit 1), saying to run `weft update`; `0.0.0-dev` is older than any release. `--no-install` skips `pnpm install` and `go mod download`.
 
 #### Moving an app to Warp
 

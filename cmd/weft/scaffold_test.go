@@ -85,7 +85,7 @@ func TestScaffoldTypes(t *testing.T) {
 		"code:string:unique":          {"string", `json:"code" warp:"unique" data:"sort,search"`},
 		"n:int:unique:min=1":          {"int64", `json:"n" warp:"min=1,unique" data:"sort"`},
 	} {
-		s, err := parseScaffold([]string{"thing", arg})
+		s, err := parseScaffold([]string{"thing", arg, "--api"})
 		if err != nil {
 			t.Errorf("%s: %s", arg, err.msg)
 			continue
@@ -114,6 +114,16 @@ func TestScaffoldRefuses(t *testing.T) {
 		{[]string{"data", "name"}, 2, `weft scaffold: "data" is a name Weft uses in an app (data, auth, warp, app, web, test, main); choose another.`},
 		{[]string{"thing", "name", "--plural", "main"}, 2, `weft scaffold: "main" is a name Weft uses in an app (data, auth, warp, app, web, test, main); choose another.`},
 		{[]string{"thing", "name", "--plural", "type"}, 2, `weft scaffold: "type" is a word Go keeps for itself, so it cannot name the package app/type; give another with --plural.`},
+		// The package's own names: the type would be the func Module routes.go has.
+		{[]string{"module", "name"}, 2, `weft scaffold: "module" would make the type Module, the name of the func Module() the package has; choose another name, such as unit.`},
+		{[]string{"thing", "name", "--plural", "out"}, 2, `weft scaffold: "out" is a name the test weft scaffold writes uses for something else; give another with --plural.`},
+		{[]string{"thing", "name", "--plural", "fmt"}, 2, `weft scaffold: "fmt" is a package of Go's standard library, which the files weft scaffold writes may import; give another with --plural.`},
+		{[]string{"thing", "name", "--plural", "strings"}, 2, `weft scaffold: "strings" is a package of Go's standard library, which the files weft scaffold writes may import; give another with --plural.`},
+		// A one-choice unique enum holds one record: the story makes two.
+		{[]string{"thing", "kind:enum=a:unique"}, 2, `weft scaffold: field "kind" is a unique enum with one choice, so only one record could have it; give two choices or more, or remove :unique.`},
+		// Dates in the pages are 0.2.0: Go only, with --api.
+		{[]string{"event", "title", "starts_on:date"}, 1, `weft scaffold: field "starts_on" is a date, and date and time fields in the pages weft scaffold writes land in Weft 0.2.0; give --api to write only the Go for now.`},
+		{[]string{"event", "title", "seen_at:datetime:nullable"}, 1, `weft scaffold: field "seen_at" is a datetime, and date and time fields in the pages weft scaffold writes land in Weft 0.2.0; give --api to write only the Go for now.`},
 		{[]string{"user", "name"}, 2, `weft scaffold: "user" would make the type User, which Weft's own modules or the generated client use already; choose another name.`},
 		{[]string{"thing", "name", "--plural", "users"}, 2, `weft scaffold: "users" is the table auth keeps its users in; give another with --plural.`},
 		{[]string{"product", "status:enum(draft|live)"}, 2, "weft scaffold: write enum choices separated by commas after enum=, as in status:enum=draft,live."},
@@ -179,10 +189,45 @@ func TestScaffoldRefuses(t *testing.T) {
 	}
 }
 
+// --help says the types, the modifiers and the exit codes, for an agent
+// with no site at hand.
 func TestScaffoldHelp(t *testing.T) {
 	code, out, errs := scaffold(t, "--help")
 	if code != 0 || errs != "" || !strings.HasPrefix(out, "Usage is weft scaffold <name>") {
 		t.Errorf("exit %d, stdout %q, stderr %q", code, out, errs)
+	}
+	for _, want := range []string{"string", "text", "email", "url", "int", "float", "bool", "date", "datetime", "enum=a,b", "nullable", "required", "unique", "min=N", "max=N", "--plural", "--api", "exit 2", "exit 1"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("--help does not say %q:\n%s", want, out)
+		}
+	}
+}
+
+// With --api, date and datetime are Go only: a time.Time, RFC 3339 in JSON.
+func TestScaffoldDatesWithAPI(t *testing.T) {
+	s, err := parseScaffold([]string{"event", "title", "starts_on:date", "seen_at:datetime:nullable", "--api"})
+	if err != nil {
+		t.Fatal(err.msg)
+	}
+	if s.Fields[1].goType() != "time.Time" || s.Fields[2].goType() != "*time.Time" {
+		t.Errorf("fields = %+v", s.Fields)
+	}
+}
+
+// A two-choice enum's change in the story is to a value the record does not
+// have, so the PATCH proves something.
+func TestScaffoldEnumSamplesChange(t *testing.T) {
+	f, err := parseField("kind:enum=a,b")
+	if err != nil {
+		t.Fatal(err.msg)
+	}
+	got, _ := f.samples()
+	if got[0].lit != `"a"` || got[1].lit != `"b"` || got[2].lit != `"b"` {
+		t.Errorf("samples = %s, %s, %s; want a, b, b", got[0].lit, got[1].lit, got[2].lit)
+	}
+	files, _ := planned(t, templateModules, true, "thing", "kind:enum=a,b", "--api")
+	if story := files["app/things/things_test.go"]; !strings.Contains(story, `map[string]any{"kind": "b"}).Want(http.StatusOK)`) {
+		t.Errorf("the PATCH does not change kind:\n%s", story)
 	}
 }
 
@@ -279,6 +324,7 @@ func TestScaffoldPreflight(t *testing.T) {
 		{"the package is there", templateModules, "app/products/old.go", nil, "weft scaffold: app/products already exists; remove it by hand or choose another resource name."},
 		{"the pages are there", templateModules, "web/pages/products/index.vue", nil, "weft scaffold: web/pages/products already exists; move it away, choose another resource name, or give --api to write only the Go."},
 		{"the table is there", templateModules, "web/components/ProductsTable.vue", nil, "weft scaffold: web/components/ProductsTable.vue already exists; move it away, choose another resource name, or give --api to write only the Go."},
+		{"a page of that path is there", templateModules, "web/pages/products.vue", nil, "weft scaffold: web/pages/products.vue already exists; move it away, choose another resource name, or give --api to write only the Go."},
 		{"the view is there", templateModules, "web/components/ProductView.vue", nil, "weft scaffold: web/components/ProductView.vue already exists; move it away, choose another resource name, or give --api to write only the Go."},
 		{"no Modules", "package app\n", "", nil, "weft scaffold: app/modules.go has no func Modules() []warp.Module returning a []warp.Module{...} list; write the modules as weft create does, then run weft scaffold again."},
 		{"Modules built another way", "package app\n\nimport \"github.com/flakerimi/weft/warp\"\n\nfunc Modules() []warp.Module {\n\tvar m []warp.Module\n\treturn m\n}\n", "", nil, "weft scaffold: app/modules.go has no func Modules() []warp.Module returning a []warp.Module{...} list; write the modules as weft create does, then run weft scaffold again."},
@@ -379,7 +425,7 @@ func planned(t *testing.T, modules string, session bool, args ...string) (map[st
 
 // The Go weft scaffold writes is gofmt's, and says what the spec says.
 func TestScaffoldWritesGo(t *testing.T) {
-	files, p := planned(t, templateModules, true, "product", "name:string:required:max=120:unique", "price:float:min=0", "sale:float:nullable", "status:enum=draft,live:required", "published_at:datetime:nullable")
+	files, p := planned(t, templateModules, true, "product", "name:string:required:max=120:unique", "price:float:min=0", "sale:float:nullable", "status:enum=draft,live:required", "published_at:datetime:nullable", "--api")
 	if !p.auth {
 		t.Error("the plan does not see auth.Module() in app/modules.go")
 	}
@@ -495,7 +541,7 @@ func TestScaffoldEditsModules(t *testing.T) {
 // Without --api, the islands and the two pages, against DataTable's props
 // and the generated client; the session is waited on when the app has one.
 func TestScaffoldWritesPages(t *testing.T) {
-	files, _ := planned(t, templateModules, true, "line_item", "name:string:required", "body:text", "qty:int:min=1", "price:float:nullable", "live:bool", "kind:enum=a,b_c", "on:date:nullable", "at:datetime")
+	files, _ := planned(t, templateModules, true, "line_item", "name:string:required", "body:text", "qty:int:min=1", "price:float:nullable", "live:bool", "kind:enum=a,b_c")
 	table := files["web/components/LineItemsTable.vue"]
 	for _, want := range []string{
 		"<script setup vapor lang=\"ts\">",
@@ -505,8 +551,6 @@ func TestScaffoldWritesPages(t *testing.T) {
 		"const columns: TableColumn<LineItem>[] = [",
 		"{ key: 'name', label: 'Name', sortable: true, rowHeader: true },",
 		"{ key: 'qty', label: 'Qty', sortable: true, align: 'end', format: number },",
-		"{ key: 'on', label: 'On', sortable: true, format: day },",
-		"{ key: 'at', label: 'At', sortable: true, format: moment },",
 		"{ key: 'kind', label: 'Kind', items: [{ label: 'A', value: 'a' }, { label: 'B c', value: 'b_c' }] },",
 		"{ key: 'live', label: 'Live', items: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },",
 		"{ name: 'body', label: 'Body', control: 'textarea' },",
@@ -557,6 +601,16 @@ func TestScaffoldWritesPages(t *testing.T) {
 	for name, src := range files {
 		if strings.HasSuffix(name, ".vue") && strings.Contains(src, "fetch(") {
 			t.Errorf("%s calls fetch, not the generated client:\n%s", name, src)
+		}
+	}
+
+	// web/session.ts kept but auth gone: api.auth.me is not in the client,
+	// so nothing waits on a session.
+	noAuth := strings.Replace(strings.Replace(templateModules, "\t\"github.com/flakerimi/weft/warp/auth\"\n", "", 1), "\t\tauth.Module(),\n", "", 1)
+	files, _ = planned(t, noAuth, true, "note", "title")
+	for _, name := range []string{"web/components/NotesTable.vue", "web/components/NoteView.vue"} {
+		if src := files[name]; strings.Contains(src, "session") || strings.Contains(src, "requireUser") {
+			t.Errorf("%s waits on a session in an app without auth:\n%s", name, src)
 		}
 	}
 

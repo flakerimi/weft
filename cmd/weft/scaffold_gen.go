@@ -267,12 +267,6 @@ func (r *resource) tableVue() string {
 		case "int", "float":
 			col += ", align: 'end', format: number"
 			used["number"] = true
-		case "date":
-			col += ", format: day"
-			used["day"] = true
-		case "datetime":
-			col += ", format: moment"
-			used["moment"] = true
 		}
 		if f.Name == label {
 			col += ", rowHeader: true"
@@ -313,12 +307,6 @@ func (r *resource) tableVue() string {
 	}
 	if used["number"] {
 		b.WriteString("const number = (v: unknown) => (v == null ? '' : (v as number).toLocaleString())\n")
-	}
-	if used["day"] {
-		b.WriteString("const day = (v: unknown) => (v == null ? '' : new Date(v as string).toLocaleDateString())\n")
-	}
-	if used["moment"] {
-		b.WriteString("const moment = (v: unknown) => (v == null ? '' : new Date(v as string).toLocaleString())\n")
 	}
 	if len(used) > 0 {
 		b.WriteString("\n")
@@ -394,7 +382,7 @@ func (r *resource) viewVue() string {
 	b.WriteString("  } catch (e) {\n    if (e instanceof ApiError && e.status === 404) missing.value = true\n")
 	b.WriteString("    else if (!(e instanceof ApiError)) {\n      console.error(e)\n      problem.value = 'Something went wrong on this page; reload it and try again.'\n    } else problem.value = e.code === 'network' ? 'The server could not be reached; check the connection and try again.' : e.message\n")
 	b.WriteString("  } finally {\n    loading.value = false\n  }\n})\n\n")
-	b.WriteString("const shown = (v: unknown) => (v == null ? '' : String(v))\nconst number = (v: number | null | undefined) => (v == null ? '' : v.toLocaleString())\nconst day = (v: string | null | undefined) => (v == null ? '' : new Date(v).toLocaleDateString())\nconst moment = (v: string | null | undefined) => (v == null ? '' : new Date(v).toLocaleString())\nconst yesNo = (v: boolean | null | undefined) => (v == null ? '' : v ? 'Yes' : 'No')\n")
+	b.WriteString("const shown = (v: unknown) => (v == null ? '' : String(v))\nconst number = (v: number | null | undefined) => (v == null ? '' : v.toLocaleString())\nconst moment = (v: string | null | undefined) => (v == null ? '' : new Date(v).toLocaleString())\nconst yesNo = (v: boolean | null | undefined) => (v == null ? '' : v ? 'Yes' : 'No')\n")
 	b.WriteString("</script>\n\n<template>\n  <Stack :gap=\"4\">\n    <Skeleton v-if=\"loading\" height=\"8rem\" />\n")
 	fmt.Fprintf(&b, "    <EmptyState v-else-if=\"missing\" title=\"No %s has that id.\" />\n", human(r.Name))
 	b.WriteString("    <Alert v-else-if=\"problem\" tone=\"danger\" :title=\"problem\" />\n    <Card v-else-if=\"record\">\n")
@@ -409,10 +397,6 @@ func (r *resource) viewVue() string {
 		switch f.Type {
 		case "int", "float":
 			show = "number"
-		case "date":
-			show = "day"
-		case "datetime":
-			show = "moment"
 		case "bool":
 			show = "yesNo"
 		}

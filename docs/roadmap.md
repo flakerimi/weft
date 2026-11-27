@@ -88,6 +88,7 @@ What a newcomer meets first works, on every platform.
   user can sign out everywhere and one session can be ended.
 - `useSession()` in `@weft/ui` (the template has its own `web/session.ts` and
   login page), `perm` on `Button` and row actions, and a route guard in Vue.
+- Date and time fields in `EntityDialog` and the pages `weft scaffold` writes.
 - From W7, brought forward because accounts need them: the `middleware` module's
   security headers, request logging, a rate limit and API keys; body-read and
   idle timeouts on the server.

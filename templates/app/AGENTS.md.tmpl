@@ -9,7 +9,7 @@
 weft dev        # run the app, rebuilding pages and Go as you save
 weft build      # build the pages, then the binary
 weft gen        # write web/.weft-types/api.ts, the typed client, from the Go
-weft scaffold product name:string:required price:float   # a resource: app/products/, its test, its pages
+weft scaffold product name:string:required price:float --api   # a resource: app/products/ and its test
 weft routes     # every route, with its module, name and permission
 weft upgrade    # move the app to the Weft version of the weft you run
 weft catalog    # the components; weft catalog <Name> for one, --find <word> to search
@@ -17,7 +17,7 @@ go test -tags dev ./...   # the Go tests
 pnpm typecheck  # check the Vue files
 ```
 
-To add a resource (a model and its five routes), run `weft scaffold` with its name and typed fields (https://weft.base.al/docs/reference/cli#weft-scaffold); give `--api` while `DataTable`, which its pages use, is not in `@weft/ui`. To add a route, add it in a module's `Register` with `warp.Get(app, "/path", fn)`; to add a module, make `app/<name>/` with a `Module()` and list it in `app/modules.go`. `weft dev` restarts the Go server when a `.go` file or `.env` changes.
+To add a resource (a model and its five routes), run `weft scaffold` with its name and typed fields (https://weft.base.al/docs/reference/cli#weft-scaffold); give `--api` while `DataTable`, which its pages use, is not in `@weft/ui`, and for `date` and `datetime` fields until Weft 0.2.0. To add a route, add it in a module's `Register` with `warp.Get(app, "/path", fn)`; to add a module, make `app/<name>/` with a `Module()` and list it in `app/modules.go`. `weft dev` restarts the Go server when a `.go` file or `.env` changes.
 
 The app keeps its records in SQLite (`data.Module()`, the file `DB_URL` names in `.env`) and signs its owner in (`auth.Module()`). At its first start, while no user exists, it logs a one-time link, `/setup#token=…`, that sets the owner's password; the owner's email is `AUTH_OWNER_EMAIL` in `.env`. `GET /api/hello` answers anyone.
 

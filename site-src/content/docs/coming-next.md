@@ -48,6 +48,8 @@ The `auth` module works today, with one role, the owner ([Login](guides/login.md
 
 Phase W5, with the blocks the Weft design had in its phase 5: `DataTable`, with server-side paging, sorting and filtering over the list shape, and `EntityDialog`, which creates and edits records from a form schema; the shop writes them plainly with `Table`, `Dialog` and `Form`. `weft scaffold` and the app template work today; the pages `weft scaffold` writes use `DataTable`, so until it is in `@weft/ui` they do not build: give `--api`, which writes only the Go.
 
+Date and time fields in `EntityDialog` and in the pages `weft scaffold` writes: a date control, and the schema saying a field is a time. Weft 0.2.0. Until then `weft scaffold` takes `date` and `datetime` only with `--api`.
+
 ## The browser's rules and Go's
 
 `Form` and Go's validation differ on a few values, such as a `0` with `required` or `min` (see [Types from Go](guides/types-from-go.md#where-the-browser-and-go-differ)). The server's answer lands on the field. The designs give this no phase.

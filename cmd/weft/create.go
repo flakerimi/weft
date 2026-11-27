@@ -134,6 +134,16 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 			}
 			return 1
 		}
+		// Every module go.mod requires, the SQLite driver too, so a proxy
+		// out of reach is said here, not by the build weft gen runs.
+		dl := exec.Command("go", "mod", "download")
+		dl.Dir, dl.Env = name, hostBuildEnv(os.Environ())
+		dl.Stdout, dl.Stderr = stdout, stderr
+		if err := dl.Run(); err != nil {
+			fmt.Fprint(stdout, ownerLine(name))
+			fmt.Fprintf(stderr, "weft create: Go could not download the modules %s/go.mod requires, such as the SQLite driver (see its output above), so %s is made but does not build yet; check the network or GOPROXY, then run cd %s && weft gen.\n", name, name, name)
+			return 1
+		}
 		if err := writeTypes(name, stdout, stderr); err != nil {
 			fmt.Fprintf(stderr, "weft create: %v.\n", strings.TrimSuffix(err.Error(), "."))
 			return 1
@@ -146,11 +156,12 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 			_, err = genTypes(context.Background(), "create", abs, stderr)
 		}
 		if err != nil {
+			fmt.Fprint(stdout, ownerLine(name))
 			fmt.Fprintf(stderr, "weft create: weft gen did not write %s in %s (see the output above); once that is fixed, run cd %s && weft gen.\n", filepath.ToSlash(apiTypes), name, name)
 			return 1
 		}
 	}
-	fmt.Fprintf(stdout, "Set AUTH_OWNER_EMAIL in %s to the owner's email address; it is owner@example.com until you do.\n", filepath.Join(name, ".env"))
+	fmt.Fprint(stdout, ownerLine(name))
 	fmt.Fprintf(stdout, "Created %s. Next: cd %s && weft dev\n", name, name)
 	return 0
 }
@@ -212,6 +223,11 @@ func writeTemplate(bundle fs.FS, dir string, data templateData) error {
 		}
 		return os.WriteFile(target, content, mode)
 	})
+}
+
+// ownerLine is what weft create says of AUTH_OWNER_EMAIL in the app's .env.
+func ownerLine(app string) string {
+	return "Set AUTH_OWNER_EMAIL in " + filepath.Join(app, ".env") + " to the owner's email address; it is owner@example.com until you do.\n"
 }
 
 // newSecret is a fresh AUTH_SECRET: 48 bytes from crypto/rand in base64url
