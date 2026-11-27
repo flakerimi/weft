@@ -387,8 +387,16 @@ func parseEnumChoice(ft reflect.Type, item string) (float64, string) {
 	case k >= reflect.Uint && k <= reflect.Uint64:
 		n, err := strconv.ParseUint(item, 10, ft.Bits())
 		if err != nil {
-			if ft.Bits() < 64 && errors.Is(err, strconv.ErrRange) {
-				return 0, fmt.Sprintf("write whole numbers from 0 to %d separated by | after enum=", uint64(1)<<ft.Bits()-1)
+			isSignedInt := false
+			if strings.HasPrefix(item, "-") {
+				_, sErr := strconv.ParseInt(item, 10, 64)
+				isSignedInt = sErr == nil || errors.Is(sErr, strconv.ErrRange)
+			}
+			if errors.Is(err, strconv.ErrRange) || isSignedInt {
+				if ft.Bits() < 64 {
+					return 0, fmt.Sprintf("write whole numbers from 0 to %d separated by | after enum=", uint64(1)<<ft.Bits()-1)
+				}
+				return 0, "write whole numbers 0 or more separated by | after enum="
 			}
 			return 0, "write whole numbers separated by | after enum="
 		}
@@ -402,7 +410,13 @@ func parseEnumChoice(ft reflect.Type, item string) (float64, string) {
 			return 0, "write numbers separated by | after enum="
 		}
 		if k == reflect.Float32 {
-			n = float64(float32(n))
+			f32 := float32(n)
+			exact64, err64 := strconv.ParseFloat(item, 64)
+			rt64, _ := strconv.ParseFloat(strconv.FormatFloat(float64(f32), 'g', -1, 32), 64)
+			if err64 != nil || rt64 != exact64 {
+				return 0, "write numbers that a float32 can hold exactly separated by | after enum="
+			}
+			n = float64(f32)
 		}
 		return n, ""
 	}

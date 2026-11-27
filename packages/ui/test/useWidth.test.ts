@@ -117,6 +117,35 @@ it('widthPrePaint batches all getBoundingClientRect reads before any setAttribut
   }
 })
 
+it('starts useWidth from the pre-hydrated [data-weft-w="<id>"] only inside an island scope (with CSS.escape)', () => {
+  const pageGrid = document.createElement('div')
+  pageGrid.setAttribute('data-width', 'narrow')
+  pageGrid.setAttribute('data-weft-w', 'w-v-0')
+  const oddEl = document.createElement('div')
+  oddEl.setAttribute('data-width', 'regular')
+  oddEl.setAttribute('data-weft-w', 'w-i:0.1-0')
+  document.body.append(pageGrid, oddEl)
+  try {
+    // Client-mounted app outside an island scope must NOT match the page's static w-v-0 element.
+    const { el, unmount } = mount(WidthProbe)
+    expect((el.querySelector('.box') as HTMLElement).dataset.width).toBe('wide')
+    unmount()
+
+    // Inside an island scope, CSS.escape finds the right element.
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const app = createVaporApp(WidthProbe as never)
+    app.provide(ID_SCOPE, { prefix: 'i:0.1', next: 0 })
+    app.mount(host)
+    expect((host.querySelector('.box') as HTMLElement).dataset.width).toBe('regular')
+    app.unmount()
+    host.remove()
+  } finally {
+    pageGrid.remove()
+    oddEl.remove()
+  }
+})
+
 it('measures the border box everywhere: the pre-paint script and useWidth agree on a padded element (650 px border box, 618 px content)', async () => {
   const el = document.createElement('div')
   el.setAttribute('data-width', 'wide')

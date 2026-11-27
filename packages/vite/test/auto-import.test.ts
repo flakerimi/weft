@@ -218,8 +218,16 @@ describe('weftAutoImport()', () => {
       (mkdirSync(join(site, 'pages', 'docs'), { recursive: true }), '<script lang="ts">\nexport const runtime = true\n</script>\n<template><p /></template>\n'),
     )
     writeFileSync(
-      join(site, 'pages', "it's a \"quote\"\\dir", '[id].vue'),
-      (mkdirSync(join(site, 'pages', "it's a \"quote\"\\dir"), { recursive: true }), '<script lang="ts">\nexport const runtime = true\n</script>\n<template><p /></template>\n'),
+      join(site, 'pages', "it's a \"quote\"dir", '[id].vue'),
+      (mkdirSync(join(site, 'pages', "it's a \"quote\"dir"), { recursive: true }), '<script lang="ts">\nexport const runtime = true\n</script>\n<template><p /></template>\n'),
+    )
+    writeFileSync(
+      join(site, 'pages', 'orders', '[orderId].vue'),
+      (mkdirSync(join(site, 'pages', 'orders'), { recursive: true }), '<script lang="ts">\nexport const runtime = true as const\n</script>\n<template><p /></template>\n'),
+    )
+    writeFileSync(
+      join(site, 'pages', 'invoices', '[invoiceId].vue'),
+      (mkdirSync(join(site, 'pages', 'invoices'), { recursive: true }), '<script lang="ts">\nconst runtime = true satisfies boolean\nexport { runtime }\n</script>\n<template><p /></template>\n'),
     )
     writeFileSync(
       join(site, 'pages', 'blog', '[slug].vue'),
@@ -229,7 +237,7 @@ describe('weftAutoImport()', () => {
     expect(ran).toMatchObject({ status: 0, stdout: '', stderr: '' })
     const written = readFileSync(join(site, '.weft-types', 'components.d.ts'), 'utf8')
     expect(written).toContain(
-      `declare module '@weft/ui' {\n  interface WeftRouteParams {\n    "/:section/:id": { section: string; id: string }\n    "/docs/:...slug": { slug: string }\n    "/it's a \\"quote\\"\\\\dir/:id": { id: string }\n  }\n}`,
+      `declare module '@weft/ui' {\n  interface WeftRouteParams {\n    "/:section/:id": { section: string; id: string }\n    "/docs/:...slug": { slug: string }\n    "/invoices/:invoiceId": { invoiceId: string }\n    "/it's a \\"quote\\"dir/:id": { id: string }\n    "/orders/:orderId": { orderId: string }\n  }\n}`,
     )
     // Built-ahead getPaths pages are not runtime pages, so they are omitted from WeftRouteParams.
     expect(written).not.toContain('/blog/:slug')
@@ -289,7 +297,9 @@ describe('weftAutoImport()', () => {
         "import { useParams } from '@weft/ui'",
         "const a: string = useParams('/:section/:id').id",
         "const b: string = useParams('/docs/:...slug').slug",
-        `const q: string = useParams('/it\\'s a "quote"\\\\dir/:id').id`,
+        `const q: string = useParams('/it\\'s a "quote"dir/:id').id`,
+        "const o: string = useParams('/orders/:orderId').orderId",
+        "const inv: string = useParams('/invoices/:invoiceId').invoiceId",
         'const c: Record<string, string> = useParams()',
         '// @ts-expect-error wrong param name on /:section/:id',
         "useParams('/:section/:id').slug",
@@ -297,7 +307,7 @@ describe('weftAutoImport()', () => {
         "useParams('/missing/:id')",
         '// @ts-expect-error built-ahead getPaths page is not in WeftRouteParams',
         "useParams('/blog/:slug')",
-        'void a, b, q, c',
+        'void a, b, q, o, inv, c',
       ].join('\n') + '\n',
     )
     const checked = spawnSync(vueTsc, ['-p', join(site, 'tsconfig.json')], { encoding: 'utf8' })

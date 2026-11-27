@@ -211,6 +211,15 @@ interface RouteParamEntry {
   params: string[]
 }
 
+/** Whether an AST expression unwraps (through `as` / `satisfies` / parentheses) to the boolean literal `true`. */
+function isTrueLiteral(node: unknown): boolean {
+  let cur = node as { type?: string; value?: unknown; expression?: unknown } | null | undefined
+  while (cur && (cur.type === 'TSAsExpression' || cur.type === 'TSSatisfiesExpression' || cur.type === 'TSTypeAssertion' || cur.type === 'ParenthesizedExpression')) {
+    cur = cur.expression as typeof cur
+  }
+  return cur?.type === 'BooleanLiteral' && cur.value === true
+}
+
 /** Whether a dynamic page's plain `<script>` exports `runtime = true` (so it is a runtime page, not a built-ahead `getPaths()` page). */
 function exportsRuntimeTrue(file: string): boolean {
   let code: string
@@ -231,14 +240,32 @@ function exportsRuntimeTrue(file: string): boolean {
   } catch {
     return false
   }
+  const trueConsts = new Set<string>()
+  for (const stmt of body) {
+    if (stmt.type === 'VariableDeclaration' && stmt.kind === 'const') {
+      for (const d of stmt.declarations as Node[]) {
+        const id = d.id as { type?: string; name?: string } | null
+        if (id?.type === 'Identifier' && id.name && isTrueLiteral(d.init)) trueConsts.add(id.name)
+      }
+    }
+  }
   for (const stmt of body) {
     if (stmt.type !== 'ExportNamedDeclaration') continue
     const decl = stmt.declaration as Node | null
     if (decl?.type === 'VariableDeclaration') {
       for (const d of decl.declarations as Node[]) {
         const id = d.id as { type?: string; name?: string } | null
-        const init = d.init as { type?: string; value?: unknown } | null
-        if (id?.type === 'Identifier' && id.name === 'runtime' && init?.type === 'BooleanLiteral' && init.value === true) return true
+        if (id?.type === 'Identifier' && id.name === 'runtime' && isTrueLiteral(d.init)) return true
+      }
+    }
+    const specs = stmt.specifiers as Node[] | undefined
+    if (specs && !stmt.source) {
+      for (const s of specs) {
+        const exported = s.exported as { type?: string; name?: string; value?: string } | undefined
+        const local = s.local as { type?: string; name?: string } | undefined
+        const exportedName = exported?.type === 'Identifier' ? exported.name : exported?.value
+        const localName = local?.type === 'Identifier' ? local.name : undefined
+        if (exportedName === 'runtime' && localName && trueConsts.has(localName)) return true
       }
     }
   }
