@@ -49,7 +49,7 @@ func TestHelp(t *testing.T) {
 func TestCommandHelp(t *testing.T) {
 	t.Chdir(t.TempDir())
 	for _, c := range []struct{ command, usage string }{
-		{"create", "Usage is weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install].\n"},
+		{"create", "Usage is weft create <name> [--module <path>] [--theme neutral|lisa|weft|synthwave|editor|sandstorm] [--no-install].\n"},
 		{"build", "Usage is weft build [-o <file>].\n"},
 		{"dev", "Usage is weft dev [--port n].\n"},
 		{"gen", "Usage is weft gen.\n"},

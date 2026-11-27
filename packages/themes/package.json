@@ -8,6 +8,9 @@
     "./neutral.css": "./dist/neutral.css",
     "./lisa.css": "./dist/lisa.css",
     "./weft.css": "./dist/weft.css",
+    "./synthwave.css": "./dist/synthwave.css",
+    "./editor.css": "./dist/editor.css",
+    "./sandstorm.css": "./dist/sandstorm.css",
     "./tailwind.css": "./tailwind.css"
   },
   "scripts": {

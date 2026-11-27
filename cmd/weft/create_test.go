@@ -282,7 +282,7 @@ func TestCreateRefusesReservedName(t *testing.T) {
 func TestCreateRefusesTailwind(t *testing.T) {
 	inTempDir(t, "work")
 	code, _, errs := create(t, "shop", "--tailwind", "--no-install")
-	want := "weft create: flag provided but not defined: -tailwind; usage is weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install].\n"
+	want := "weft create: flag provided but not defined: -tailwind; usage is weft create <name> [--module <path>] [--theme neutral|lisa|weft|synthwave|editor|sandstorm] [--no-install].\n"
 	if code != 2 || errs != want {
 		t.Errorf("exit %d, stderr %q, want %q", code, errs, want)
 	}
@@ -304,6 +304,26 @@ func TestCreateOptions(t *testing.T) {
 	cfg, err := readApp("shop")
 	if err != nil || cfg.Theme != "lisa" || cfg.Version != "0.0.0-dev" {
 		t.Errorf("readApp = %+v, %v", cfg, err)
+	}
+}
+
+// Every theme @weft/themes builds is a choice, the showcase themes too; any
+// other name is refused in a sentence that lists them.
+func TestCreateThemes(t *testing.T) {
+	inTempDir(t, "work")
+	for _, theme := range []string{"neutral", "lisa", "weft", "synthwave", "editor", "sandstorm"} {
+		code, _, errs := create(t, "--no-install", "app-"+theme, "--theme", theme)
+		if code != 0 {
+			t.Fatalf("--theme %s: exit %d: %s", theme, code, errs)
+		}
+		if cfg, err := readApp("app-" + theme); err != nil || cfg.Theme != theme {
+			t.Errorf("--theme %s: readApp = %+v, %v", theme, cfg, err)
+		}
+	}
+	code, _, errs := create(t, "--no-install", "other", "--theme", "monokai")
+	want := "weft create: \"monokai\" is not a theme; use neutral, lisa, weft, synthwave, editor or sandstorm.\n"
+	if code != 2 || errs != want {
+		t.Errorf("exit %d, stderr %q, want %q", code, errs, want)
 	}
 }
 
