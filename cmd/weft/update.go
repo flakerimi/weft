@@ -49,10 +49,18 @@ func updateCmd(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// installCommand returns the one-line command that installs weft on goos from base.
+func installCommand(base, goos string) string {
+	if goos == "windows" {
+		return "irm " + base + "/install.ps1 | iex"
+	}
+	return "curl -fsSL " + base + "/install | sh"
+}
+
 func update(stdout io.Writer, check bool, pinned string) error {
 	current := weft.Version
 	if strings.HasSuffix(current, "-dev") {
-		return updateError("this is a development build; install a release with: curl -fsSL " + defaultBase + "/install | sh")
+		return updateError("this is a development build; install a release with: " + installCommand(defaultBase, runtime.GOOS))
 	}
 	base := strings.TrimRight(os.Getenv("WEFT_BASE"), "/")
 	if base == "" {
@@ -194,7 +202,7 @@ func replaceExecutable(binary []byte) error {
 	dir := filepath.Dir(exe)
 	tmp, err := os.CreateTemp(dir, ".weft.new-")
 	if err != nil {
-		return updateError(fmt.Sprintf("could not write to %s; run the installer instead: curl -fsSL %s/install | sh", dir, defaultBase))
+		return updateError(fmt.Sprintf("could not write to %s; run the installer instead: %s", dir, installCommand(defaultBase, runtime.GOOS)))
 	}
 	tmpName := tmp.Name()
 	ok := false

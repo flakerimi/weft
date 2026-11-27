@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -58,10 +59,18 @@ type browser struct {
 	// What is being waited for, and until when: a page that hangs fails with its path.
 	doing    string
 	deadline time.Time
+	// limit is how long the current step may take, said when it does not answer.
+	limit time.Duration
+	// chromeLog is the file Chrome's own output goes to, shown when a step fails.
+	chromeLog string
 }
 
 // pageTimeout is how long one page may take, from navigating to its last answer.
 const pageTimeout = 20 * time.Second
+
+// startTimeout is how long Chrome may take to start and answer: on a CI
+// runner busy with other tests it has taken more than 20 s.
+const startTimeout = 60 * time.Second
 
 type cdpMessage struct {
 	ID        int             `json:"id"`
@@ -97,15 +106,24 @@ func startBrowser(t *testing.T) *browser {
 		args = append(args, "--no-sandbox")
 	}
 	cmd := exec.Command(path, args...)
-	// Chrome reads the protocol from fd 3 and writes it to fd 4.
+	// Chrome reads the protocol from fd 3 and writes it to fd 4. Its own
+	// output goes to a file, shown when a step fails, so a crash or a missing
+	// library says what it was.
 	cmd.ExtraFiles = []*os.File{toChrome, fromChrome}
+	chromeLog := filepath.Join(t.TempDir(), "chrome.log")
+	logFile, err := os.Create(chromeLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer logFile.Close()
+	cmd.Stdout, cmd.Stderr = logFile, logFile
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("starting %s: %v", path, err)
 	}
 	toChrome.Close()
 	fromChrome.Close()
 	b := &browser{t: t, in: in, msgs: make(chan cdpMessage), failed: make(chan error, 1), cmd: cmd,
-		doing: "starting Chrome", deadline: time.Now().Add(pageTimeout)}
+		doing: "starting Chrome", deadline: time.Now().Add(startTimeout), limit: startTimeout, chromeLog: chromeLog}
 	// Chrome's messages, each ending with a NUL, read where a wait can give up on them.
 	go func() {
 		r := bufio.NewReader(out)
@@ -145,7 +163,21 @@ func startBrowser(t *testing.T) *browser {
 	b.decode(b.call("", "Target.attachToTarget", map[string]any{"targetId": target.TargetID, "flatten": true}), &attached)
 	b.session = attached.SessionID
 	b.call(b.session, "Page.enable", nil)
+	b.limit = pageTimeout
 	return b
+}
+
+// output is the end of Chrome's own output, for a failure's message.
+func (b *browser) output() string {
+	out, _ := os.ReadFile(b.chromeLog)
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) > 30 {
+		lines = lines[len(lines)-30:]
+	}
+	if text := strings.Join(lines, "\n"); text != "" {
+		return "\nChrome's output:\n" + text
+	}
+	return "\nChrome printed nothing"
 }
 
 func (b *browser) decode(raw json.RawMessage, v any) {
@@ -165,9 +197,9 @@ func (b *browser) read() cdpMessage {
 	case m := <-b.msgs:
 		return m
 	case err := <-b.failed:
-		b.t.Fatalf("%s: reading from Chrome: %v", b.doing, err)
+		b.t.Fatalf("%s: reading from Chrome: %v%s", b.doing, err, b.output())
 	case <-timer.C:
-		b.t.Fatalf("%s: no answer from Chrome within %v", b.doing, pageTimeout)
+		b.t.Fatalf("%s: no answer from Chrome within %v%s", b.doing, b.limit, b.output())
 	}
 	return cdpMessage{}
 }

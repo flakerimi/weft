@@ -163,7 +163,7 @@ func resolves(r builtRoutes, m builtFiles, link string) bool {
 	if p == "" {
 		p = "/"
 	}
-	if p == "/install" || strings.HasPrefix(p, "/releases/") {
+	if p == "/install" || p == "/install.ps1" || strings.HasPrefix(p, "/releases/") {
 		return true
 	}
 	if _, ok := m.Files[p]; ok {

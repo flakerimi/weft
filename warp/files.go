@@ -154,6 +154,8 @@ func diskType(name string, head []byte) string {
 	switch ext {
 	case ".gz", ".tgz":
 		return "application/gzip"
+	case ".ps1":
+		return "text/plain; charset=utf-8"
 	case "":
 		return http.DetectContentType(head)
 	}

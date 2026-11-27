@@ -132,9 +132,21 @@ func TestUpdateUnreachable(t *testing.T) {
 func TestUpdateDevBuild(t *testing.T) {
 	updateEnv(t, "0.0.0-dev", "0.0.2")
 	code, _, errs := runCmd("update")
-	want := "weft update: this is a development build; install a release with: curl -fsSL https://weft.base.al/install | sh\n"
+	want := "weft update: this is a development build; install a release with: " + installCommand(defaultBase, runtime.GOOS) + "\n"
 	if code != 1 || errs != want {
-		t.Fatalf("exit %d, stderr %q", code, errs)
+		t.Fatalf("exit %d, stderr %q, want %q", code, errs, want)
+	}
+}
+
+func TestUpdateInstallCommandForEachSystem(t *testing.T) {
+	for goos, want := range map[string]string{
+		"windows": "irm https://weft.base.al/install.ps1 | iex",
+		"darwin":  "curl -fsSL https://weft.base.al/install | sh",
+		"linux":   "curl -fsSL https://weft.base.al/install | sh",
+	} {
+		if got := installCommand(defaultBase, goos); got != want {
+			t.Errorf("installCommand(%q, %q) = %q, want %q", defaultBase, goos, got, want)
+		}
 	}
 }
 

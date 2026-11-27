@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -147,6 +148,100 @@ func TestLandingHeroLayout(t *testing.T) {
 		}
 		if p.Button < 60 || !p.ButtonWhole {
 			t.Errorf("%s: the prompt's button is %.0f px wide, its label whole %v", b.doing, p.Button, p.ButtonWhole)
+		}
+	}
+}
+
+// On a phone (under 640 px, emulated as a device) the phone picture follows
+// the install block closely, not a screen further down: its top is 24 to
+// 128 px below the install command's box (the note under it and a short band
+// of weave between). It is whole on the screen, centred, with its open
+// sheet inside it, and the weave is drawn behind it, under no text of the copy.
+func TestLandingPhoneFollowsTheInstall(t *testing.T) {
+	dist(t)
+	b := startBrowser(t)
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
+	defer srv.Close()
+	b.call(b.session, "Emulation.setEmulatedMedia", map[string]any{"features": []map[string]string{{"name": "prefers-reduced-motion", "value": "reduce"}}})
+	for _, width := range []int{320, 360, 390, 430, 600} {
+		b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": width, "height": 844, "deviceScaleFactor": 2, "mobile": true})
+		b.open(srv.URL + "/")
+		b.doing, b.deadline = fmt.Sprintf("the phone picture at %d px", width), time.Now().Add(pageTimeout)
+		b.eval(`document.fonts.ready.then(() => true)`, new(bool))
+		var got struct {
+			Gap, Left, Right, Inner float64
+			Sheet                   bool
+			WeaveTop, CopyBottom    float64
+			WeaveBottom, HeroBottom float64
+		}
+		b.eval(`(() => {
+			const install = document.querySelector('.landing-hero .landing-install').getBoundingClientRect()
+			const phone = document.querySelector('.hero-frame--phone'), p = phone.getBoundingClientRect()
+			const sheet = phone.querySelector('[role="menu"]')
+			const s = sheet ? sheet.getBoundingClientRect() : null
+			const ground = document.querySelector('.landing-hero__ground'), g = ground.getBoundingClientRect(), art = getComputedStyle(ground, '::after')
+			return {
+				gap: p.top - install.bottom, left: p.left, right: p.right, inner: innerWidth,
+				sheet: !!s && s.width > 0 && s.left >= p.left - 1 && s.right <= p.right + 1 && s.bottom <= p.bottom + 1,
+				weaveTop: g.bottom - parseFloat(art.bottom) - parseFloat(art.height), weaveBottom: g.bottom - parseFloat(art.bottom),
+				copyBottom: document.querySelector('.landing-hero__copy').getBoundingClientRect().bottom, heroBottom: g.bottom,
+			}
+		})()`, &got)
+		if got.Gap < 24 || got.Gap > 128 {
+			t.Errorf("%s: the phone's top is %.0f px below the install command, want 24 to 128", b.doing, got.Gap)
+		}
+		if got.Left < 0 || got.Right > got.Inner {
+			t.Errorf("%s: the phone lies from %.0f to %.0f px, past the %.0f px screen", b.doing, got.Left, got.Right, got.Inner)
+		}
+		if d := got.Left - (got.Inner - got.Right); d > 2 || d < -2 {
+			t.Errorf("%s: the phone is off centre by %.0f px", b.doing, d)
+		}
+		if !got.Sheet {
+			t.Errorf("%s: the phone's open sheet is not drawn whole inside it", b.doing)
+		}
+		if got.WeaveTop < got.CopyBottom-1 || got.WeaveBottom < got.HeroBottom-1 {
+			t.Errorf("%s: the weave runs from %.0f to %.0f px; want it from the copy's end (%.0f) to the hero's (%.0f)", b.doing, got.WeaveTop, got.WeaveBottom, got.CopyBottom, got.HeroBottom)
+		}
+	}
+}
+
+// Nothing in the landing's header or hero reaches past the screen's edges, at
+// every width from a phone to a tablet, emulated as a device: not even what
+// the page's overflow-x: clip would hide, which the page's scroll width does
+// not show. The weave and the thread are drawn inside the hero's own box.
+func TestLandingHeroInsideTheScreen(t *testing.T) {
+	dist(t)
+	b := startBrowser(t)
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
+	defer srv.Close()
+	for _, width := range []int{320, 360, 390, 430, 600, 768} {
+		b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": width, "height": 844, "deviceScaleFactor": 1, "mobile": width < 700})
+		b.open(srv.URL + "/")
+		b.doing, b.deadline = fmt.Sprintf("the hero at %d px", width), time.Now().Add(pageTimeout)
+		b.eval(`document.fonts.ready.then(() => true)`, new(bool))
+		var got struct {
+			Scroll, Inner float64
+			Out           []string
+			Nav           []string
+		}
+		b.eval(`(() => {
+			const name = (e) => e.tagName.toLowerCase() + (typeof e.className == 'string' && e.className.trim() ? '.' + e.className.trim().split(/\s+/).join('.') : '')
+			const out = []
+			for (const e of document.querySelectorAll('.landing-top *, .landing-hero *')) {
+				const r = e.getBoundingClientRect()
+				if (r.width > 0 && (r.right > innerWidth + 0.5 || r.left < -0.5)) out.push(name(e) + ' (' + Math.round(r.left) + '–' + Math.round(r.right) + ' px)')
+			}
+			const nav = [...document.querySelectorAll('.landing-top .site-nav a')].filter((a) => a.getBoundingClientRect().width > 0).map((a) => a.textContent.trim())
+			return { scroll: document.documentElement.scrollWidth, inner: innerWidth, out: out.slice(0, 5), nav }
+		})()`, &got)
+		if got.Scroll > got.Inner {
+			t.Errorf("%s: the page is %.0f px wide on a %.0f px screen", b.doing, got.Scroll, got.Inner)
+		}
+		if len(got.Out) > 0 {
+			t.Errorf("%s: past the screen's edge: %s", b.doing, strings.Join(got.Out, ", "))
+		}
+		if !slices.Contains(got.Nav, "Docs") || !slices.Contains(got.Nav, "For agents") {
+			t.Errorf("%s: the header shows %v, want Docs and For agents", b.doing, got.Nav)
 		}
 	}
 }

@@ -8,9 +8,12 @@ export default defineConfig({
   test: {
     // Node by default (renderPage); browser tests opt in with `@vitest-environment happy-dom`.
     environment: 'node',
-    // Many tests build a whole site or start Node: on a CI runner some take
-    // more than vitest's default 5 s, and two failed only by that limit.
-    testTimeout: 30_000,
+    // Many tests build a whole site or start Node, and so do the beforeAll
+    // hooks that build a fixture site: on a CI runner, or a machine running
+    // other suites at once, some take more than vitest's defaults (5 s for a
+    // test, 10 s for a hook), and failed only by those limits.
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
     // A date picker's on-demand chunk, taken as fetched (see test/setup.ts).
     setupFiles: ['test/setup.ts'],
     // Under Node, Vue's packages resolve to their CommonJS builds, which lack the
