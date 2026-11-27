@@ -288,3 +288,49 @@ func TestFetchModule(t *testing.T) {
 		t.Errorf("fetchModule with no proxy = %v, want %q", err, want)
 	}
 }
+
+// The module an app downloads at a tag leaves out the top folders that hold
+// no Go an app needs: each has a go.mod of its own, which makes it another
+// module. None of them holds Go, so go vet ./... and go test ./... at the
+// root still reach every Go package but those of the two modules that are
+// apps of their own, dbtest and examples/shop.
+func TestModuleLeavesOutFoldersWithoutGo(t *testing.T) {
+	files := repoModule(t)
+	var size int
+	for name, data := range files {
+		size += len(data)
+		for _, dir := range []string{"docs/", "packages/", "catalog/"} {
+			if strings.HasPrefix(name, dir) {
+				t.Errorf("the module holds %s; %sgo.mod should leave the folder out", name, dir)
+			}
+		}
+	}
+	if size > 6<<20 {
+		t.Errorf("the module is %d B before compression, over 6 MB", size)
+	}
+	out, err := exec.Command("git", "-C", "../..", "ls-files", "-z", "--cached", "--others", "--exclude-standard").Output()
+	if err != nil {
+		t.Skipf("git ls-files: %v", err)
+	}
+	names := strings.Split(strings.TrimRight(string(out), "\x00"), "\x00")
+	modules := map[string]bool{}
+	for _, n := range names {
+		if path.Base(n) == "go.mod" && n != "go.mod" {
+			modules[path.Dir(n)] = true
+		}
+	}
+	withGo := map[string]bool{}
+	for _, n := range names {
+		if !strings.HasSuffix(n, ".go") {
+			continue
+		}
+		for d := path.Dir(n); d != "."; d = path.Dir(d) {
+			if modules[d] {
+				withGo[d] = true
+			}
+		}
+	}
+	if len(withGo) != 2 || !withGo["dbtest"] || !withGo["examples/shop"] {
+		t.Errorf("the nested modules that hold Go are %v, want only dbtest and examples/shop", withGo)
+	}
+}
