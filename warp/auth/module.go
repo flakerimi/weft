@@ -74,6 +74,7 @@ type module struct {
 
 	perKey     *limiter      // tries per email and address
 	perAddress *limiter      // tries per address, across emails
+	perAccount *limiter      // tries per email, across addresses
 	slots      chan struct{} // one per password hash running
 	slotWait   time.Duration // how long a request waits for a slot
 	hashes     atomic.Int64  // hashes begun, for tests
@@ -88,16 +89,46 @@ type module struct {
 	mu         sync.Mutex
 	setupHash  []byte // the SHA-256 of the setup token; nil when there is none
 	setupToken string // the token itself, for SetupToken alone
+	clock      func() time.Time
 }
 
-// newModule is a module whose limiters read the clock now.
+// newModule is a module whose limiters, sessions and tokens read the clock
+// now.
 func newModule(now func() time.Time) *module {
-	return &module{
-		perKey:     newLimiter(now, maxKeys, maxTries),
-		perAddress: newLimiter(now, maxKeys, maxAddressTries),
-		slots:      make(chan struct{}, runtime.GOMAXPROCS(0)),
-		slotWait:   slotWait,
+	m := &module{
+		slots:    make(chan struct{}, runtime.GOMAXPROCS(0)),
+		slotWait: slotWait,
+		clock:    now,
 	}
+	m.perKey = newLimiter(m.now, maxKeys, maxTries, window)
+	m.perAddress = newLimiter(m.now, maxKeys, maxAddressTries, window)
+	m.perAccount = newLimiter(m.now, maxKeys, maxAccountTries, accountWindow)
+	return m
+}
+
+// now is the time by the module's clock.
+func (m *module) now() time.Time {
+	m.mu.Lock()
+	clock := m.clock
+	m.mu.Unlock()
+	return clock()
+}
+
+// SetClock replaces the clock the login reads the time from, for its limits,
+// sessions and mailed links, for a test; nil is the real one. It does nothing
+// to an app without the auth module. The stores keep their own clock, which
+// data.DB's SetClock sets.
+func SetClock(app *warp.App, now func() time.Time) {
+	m := of(app)
+	if m == nil {
+		return
+	}
+	if now == nil {
+		now = time.Now
+	}
+	m.mu.Lock()
+	m.clock = now
+	m.mu.Unlock()
 }
 
 func (m *module) Name() string { return "auth" }

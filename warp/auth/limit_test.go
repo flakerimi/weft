@@ -27,7 +27,7 @@ func (c *testClock) set(t time.Time) {
 
 func TestLimit(t *testing.T) {
 	clock := &testClock{now: testNow}
-	l := newLimiter(clock.Now, maxKeys, maxTries)
+	l := newLimiter(clock.Now, maxKeys, maxTries, window)
 	key := limitKey("owner@example.com", "192.0.2.1")
 
 	for i := range maxTries {
@@ -79,7 +79,7 @@ func TestLimit(t *testing.T) {
 
 // Tries at the same moment are counted at once: of 20, 5 pass.
 func TestLimitIsAtomic(t *testing.T) {
-	l := newLimiter((&testClock{now: testNow}).Now, maxKeys, maxTries)
+	l := newLimiter((&testClock{now: testNow}).Now, maxKeys, maxTries, window)
 	key := limitKey("owner@example.com", "192.0.2.1")
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -101,7 +101,7 @@ func TestLimitIsAtomic(t *testing.T) {
 
 func TestLimitKeepsAtMostMaxKeys(t *testing.T) {
 	clock := &testClock{now: testNow}
-	l := newLimiter(clock.Now, maxKeys, maxTries)
+	l := newLimiter(clock.Now, maxKeys, maxTries, window)
 	block := func(key string) {
 		for range maxTries {
 			l.take(key)
@@ -142,5 +142,43 @@ func TestLimitKeyIsBounded(t *testing.T) {
 	}
 	if limitKey(huge+"x", "192.0.2.1") != limitKey(huge, "192.0.2.1") {
 		t.Error("two emails alike in their first 200 bytes have two keys")
+	}
+}
+
+// Each limiter has its own window, on one clock.
+func TestLimiterWindowPerLimiter(t *testing.T) {
+	clock := &testClock{now: testNow}
+	short := newLimiter(clock.Now, maxKeys, 1, time.Minute)
+	long := newLimiter(clock.Now, maxKeys, 1, 10*time.Minute)
+	if short.take("k") == nil || long.take("k") == nil {
+		t.Fatal("a first try is refused")
+	}
+	if short.take("k") != nil || long.take("k") != nil {
+		t.Fatal("a second try passes a limit of 1")
+	}
+	clock.set(testNow.Add(time.Minute))
+	if short.take("k") == nil {
+		t.Error("the one-minute limiter still refuses after a minute")
+	}
+	if long.take("k") != nil {
+		t.Error("the ten-minute limiter passes after a minute")
+	}
+	clock.set(testNow.Add(10*time.Minute - time.Nanosecond))
+	if long.take("k") != nil {
+		t.Error("the ten-minute limiter passes before ten minutes")
+	}
+	clock.set(testNow.Add(10 * time.Minute))
+	if long.take("k") == nil {
+		t.Error("the ten-minute limiter still refuses after ten minutes")
+	}
+}
+
+func TestAccountKeyIsBounded(t *testing.T) {
+	huge := strings.Repeat("a", 1<<20) + "@example.com"
+	if k := accountKey(huge); len(k) != maxKeyEmail {
+		t.Fatalf("the account key of a %d-byte email is %d bytes", len(huge), len(k))
+	}
+	if accountKey("  Owner@Example.COM ") != "owner@example.com" {
+		t.Error("the account key differs by case or spaces")
 	}
 }

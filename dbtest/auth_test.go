@@ -300,15 +300,20 @@ func TestLoginIsLimited(t *testing.T) {
 	wantError(t, try("other@example.com", "wrong", a), 401, "unauthorized", "That email and password do not match.")
 	try(ownerEmail, authtest.Password, b).Want(200)
 
-	// A success clears the email's count.
-	for range 4 {
-		try(ownerEmail, "wrong", b).Want(401)
+	// A success clears the email and address's count (another account,
+	// since the owner's has spent six of its ten).
+	const clerk = "clerk@example.com"
+	if _, err := auth.AddUser(ctx, c.App, clerk, "clerk password", auth.RoleMember); err != nil {
+		t.Fatal(err)
 	}
-	try(ownerEmail, authtest.Password, b).Want(200)
 	for range 4 {
-		try(ownerEmail, "wrong", b).Want(401)
+		try(clerk, "wrong", b).Want(401)
 	}
-	try(ownerEmail, authtest.Password, b).Want(200)
+	try(clerk, "clerk password", b).Want(200)
+	for range 4 {
+		try(clerk, "wrong", b).Want(401)
+	}
+	try(clerk, "clerk password", b).Want(200)
 }
 
 func TestGuard(t *testing.T) {
@@ -734,5 +739,65 @@ func TestTheLoginsTableIsReserved(t *testing.T) {
 	want := `warp: the table users is the login's, which warp/auth keeps its users in; give the store of Note another table.`
 	if err := app.Err(); err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("Err = %v\nwant %s", err, want)
+	}
+}
+
+// startClocked starts an app as startAuth does, with its owner, the login
+// and the stores reading the time from clock.
+func startClocked(t *testing.T, vars map[string]string, clock *clock) *warptest.Client {
+	t.Helper()
+	c, _ := startAuth(t, vars)
+	data.For(c.App).SetClock(clock.Now)
+	auth.SetClock(c.App, clock.Now)
+	authtest.Owner(t, c)
+	return c
+}
+
+const tooManyForAccount = "Too many tries for this account; wait 10 minutes, or reset the password."
+
+// Review Focus 4: ten failed logins for one account from ten addresses
+// refuse the eleventh from a fresh address, the right password included,
+// until ten minutes have passed.
+func TestLoginLimitedPerAccountAcrossAddresses(t *testing.T) {
+	at := &clock{now: time.Date(2026, 11, 28, 9, 0, 0, 0, time.UTC)}
+	c := startClocked(t, authEnv(t), at)
+	try := func(email, password, remote string) *warptest.Response {
+		return c.Fork().Do(request(http.MethodPost, "/api/auth/login", map[string]string{"email": email, "password": password}, remote))
+	}
+	for i := range 10 {
+		wantError(t, try(ownerEmail, "wrong", fmt.Sprintf("192.0.2.%d:1000", i+1)), 401, "unauthorized", "That email and password do not match.")
+	}
+	wantError(t, try(ownerEmail, authtest.Password, "198.51.100.1:1000"), 429, "rate_limited", tooManyForAccount)
+	wantError(t, try(" OWNER@example.com", authtest.Password, "198.51.100.2:1000"), 429, "rate_limited", tooManyForAccount)
+	// Another account from the same addresses is not refused.
+	if _, err := auth.AddUser(ctx, c.App, "clerk@example.com", "clerk password", auth.RoleMember); err != nil {
+		t.Fatal(err)
+	}
+	try("clerk@example.com", "clerk password", "198.51.100.1:1000").Want(200)
+	// The session the owner already has is not touched.
+	c.Get("/api/auth/me").Want(200)
+
+	at.now = at.now.Add(10*time.Minute - time.Second)
+	wantError(t, try(ownerEmail, authtest.Password, "198.51.100.3:1000"), 429, "rate_limited", tooManyForAccount)
+	at.now = at.now.Add(time.Second)
+	try(ownerEmail, authtest.Password, "198.51.100.3:1000").Want(200)
+}
+
+// An email no one has is counted the same way, so the answer says nothing
+// of who has an account.
+func TestAccountCountForAnEmailWithNoUser(t *testing.T) {
+	at := &clock{now: time.Date(2026, 11, 28, 9, 0, 0, 0, time.UTC)}
+	c := startClocked(t, authEnv(t), at)
+	try := func(email, remote string) *warptest.Response {
+		return c.Fork().Do(request(http.MethodPost, "/api/auth/login", map[string]string{"email": email, "password": "wrong"}, remote))
+	}
+	for i := range 10 {
+		try("nobody@example.com", fmt.Sprintf("192.0.2.%d:1000", i+1)).Want(401)
+		try(ownerEmail, fmt.Sprintf("192.0.2.%d:1000", i+1)).Want(401)
+	}
+	none, owner := try("nobody@example.com", "198.51.100.1:1000"), try(ownerEmail, "198.51.100.1:1000")
+	wantError(t, none, 429, "rate_limited", tooManyForAccount)
+	if none.Status != owner.Status || !bytes.Equal(none.Body, owner.Body) {
+		t.Fatalf("an email with no user answered %d %s, one with a user %d %s", none.Status, none.Body, owner.Status, owner.Body)
 	}
 }

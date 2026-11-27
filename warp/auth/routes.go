@@ -22,9 +22,11 @@ type SetupInput struct {
 }
 
 const (
-	errNoMatch  = "That email and password do not match."
-	errTooMany  = "Too many tries; wait a minute and try again."
-	errNotSetup = "This setup link is not valid; restart the app to get a new one."
+	errNoMatch = "That email and password do not match."
+	errTooMany = "Too many tries; wait a minute and try again."
+
+	errTooManyForAccount = "Too many tries for this account; wait 10 minutes, or reset the password."
+	errNotSetup          = "This setup link is not valid; restart the app to get a new one."
 )
 
 // routes adds login, logout, me and setup under /auth.
@@ -49,11 +51,16 @@ func (m *module) login(ctx context.Context, in LoginInput) (Me, error) {
 
 // attempt checks one login from the client ip, as ClientKey names it (an
 // IPv6 client by its /64). Before anything is looked up or hashed it takes a
-// try from the address's count and from the email's, either of which, when
-// spent, is the 429; when the email's is spent, the address's try stays
-// taken, as it always was. A success clears the email's count. A try that
-// learned nothing, since its user could not be looked up or it found no
-// hashing slot in time, gives both back, to the counts it took them from.
+// try from the address's count, then from the account's, then from the
+// email and address's, any of which, when spent, is the 429. A spent account
+// gives back the address's try, and a spent email and address the
+// account's, so that only a try that is tried counts against an account; a
+// spent email and address keeps the address's try taken, as it always was. A
+// success clears the email and address's count, never the account's, which
+// only its window or a completed reset ends: otherwise someone who knows the
+// password could clear the count for a guesser elsewhere. A try that learned
+// nothing, since its user could not be looked up or it found no hashing slot
+// in time, gives all three back, to the counts it took them from.
 func (m *module) attempt(ctx context.Context, email, password, ip string) (userRow, error) {
 	email = normalEmail(email)
 	key := limitKey(email, ip)
@@ -61,12 +68,19 @@ func (m *module) attempt(ctx context.Context, email, password, ip string) (userR
 	if byAddress == nil {
 		return userRow{}, warp.TooMany(errTooMany)
 	}
+	byAccount := m.perAccount.take(accountKey(email))
+	if byAccount == nil {
+		m.perAddress.give(byAddress)
+		return userRow{}, warp.TooMany(errTooManyForAccount)
+	}
 	byKey := m.perKey.take(key)
 	if byKey == nil {
+		m.perAccount.give(byAccount)
 		return userRow{}, warp.TooMany(errTooMany)
 	}
 	giveBack := func() {
 		m.perAddress.give(byAddress)
+		m.perAccount.give(byAccount)
 		m.perKey.give(byKey)
 	}
 	row, found, err := m.find(ctx, email)

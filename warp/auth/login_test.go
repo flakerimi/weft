@@ -69,7 +69,9 @@ func TestLoginLimitPerKeyIsAtomic(t *testing.T) {
 	if _, err := m.attempt(context.Background(), "owner@example.com", "right", "192.0.2.1"); status(err) != 429 {
 		t.Fatalf("the right password in the same minute: %v, want 429", err)
 	}
-	clock.set(testNow.Add(window))
+	// Past the minute, and past the account's ten minutes, which the guesses
+	// spent half of.
+	clock.set(testNow.Add(accountWindow))
 	if _, err := m.attempt(context.Background(), "owner@example.com", "right", "192.0.2.1"); err != nil {
 		t.Fatalf("the right password after the minute: %v", err)
 	}
@@ -218,7 +220,7 @@ func TestSlotWait(t *testing.T) {
 // none left, and gives nothing to a later count of the same key.
 func TestLimitGive(t *testing.T) {
 	clock := &testClock{now: testNow}
-	l := newLimiter(clock.Now, maxKeys, 2)
+	l := newLimiter(clock.Now, maxKeys, 2, window)
 	a := l.take("k")
 	b := l.take("k")
 	if a != b || l.take("k") != nil {
@@ -355,5 +357,71 @@ func TestRefusedEmailSpendsTheAddress(t *testing.T) {
 	}
 	if a := triesOf(m.perAddress, ip); a != maxTries+1 {
 		t.Fatalf("the address's count is %d, want %d", a, maxTries+1)
+	}
+}
+
+// The account's count is taken after the address's and before the email and
+// address's: a spent account gives back the address's try, and a spent email
+// and address gives back the account's, so only tries that were tried count
+// against an account.
+func TestAccountCountOrder(t *testing.T) {
+	const email = "owner@example.com"
+	clock := &testClock{now: testNow}
+	m := fastModule(t, clock)
+	for i := range maxAccountTries {
+		ip := fmt.Sprintf("192.0.2.%d", i+1)
+		if _, err := m.attempt(context.Background(), email, "wrong", ip); status(err) != 401 {
+			t.Fatalf("guess %d: %v, want 401", i+1, err)
+		}
+	}
+	const fresh = "198.51.100.1"
+	_, err := m.attempt(context.Background(), email, "right", fresh)
+	var e *warp.Error
+	if !errors.As(err, &e) || e.Status != 429 || e.Code != "rate_limited" || e.Message != "Too many tries for this account; wait 10 minutes, or reset the password." {
+		t.Fatalf("the right password from a fresh address: %v, want the account's 429", err)
+	}
+	if a, k := triesOf(m.perAddress, fresh), triesOf(m.perKey, limitKey(email, fresh)); a != 0 || k != 0 {
+		t.Fatalf("a spent account left the address's count at %d and the key's at %d, want 0 and 0", a, k)
+	}
+	// Another email is not this account.
+	if _, err := m.attempt(context.Background(), "other@example.com", "right", fresh); err != nil {
+		t.Fatalf("another email: %v", err)
+	}
+	// A success does not clear the account's count; its window ends it.
+	clock.set(testNow.Add(accountWindow))
+	if _, err := m.attempt(context.Background(), email, "right", fresh); err != nil {
+		t.Fatalf("after ten minutes: %v", err)
+	}
+	if n := triesOf(m.perAccount, accountKey(email)); n != 1 {
+		t.Fatalf("a success left the account's count at %d, want 1", n)
+	}
+
+	// A spent email and address gives back the account's try.
+	m = fastModule(t, &testClock{now: testNow})
+	for range maxTries {
+		m.attempt(context.Background(), email, "wrong", "192.0.2.1")
+	}
+	if _, err := m.attempt(context.Background(), email, "wrong", "192.0.2.1"); status(err) != 429 || err.Error() != errTooMany {
+		t.Fatalf("a sixth guess from one address: %v, want %q", err, errTooMany)
+	}
+	if n := triesOf(m.perAccount, accountKey(email)); n != maxTries {
+		t.Fatalf("the account's count is %d after a refused try, want %d", n, maxTries)
+	}
+}
+
+// A login that finds no hashing slot counts nothing on the account either.
+func TestAccountCountGivenBackWhenBusy(t *testing.T) {
+	const email, ip = "owner@example.com", "192.0.2.1"
+	m := fastModule(t, &testClock{now: testNow})
+	m.slotWait = 10 * time.Millisecond
+	free := fill(m)
+	defer free()
+	for range maxAccountTries + 2 {
+		if _, err := m.attempt(context.Background(), email, "right", ip); status(err) != 503 {
+			t.Fatalf("with no slot: %v, want 503", err)
+		}
+	}
+	if n := triesOf(m.perAccount, accountKey(email)); n != 0 {
+		t.Fatalf("the account's count is %d, want 0", n)
 	}
 }
