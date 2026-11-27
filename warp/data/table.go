@@ -291,6 +291,17 @@ func (t *table) deleteSQL(d dialect) string {
 	return "DELETE FROM " + d.quote(t.name) + " WHERE " + d.quote("id") + " = " + d.placeholder(1)
 }
 
+func (t *table) deleteBySQL(d dialect, c *column) string {
+	return "DELETE FROM " + d.quote(t.name) + " WHERE " + d.quote(c.name) + " = " + d.placeholder(1)
+}
+
+// deleteBeforeSQL removes the rows whose time column c is before the value.
+// The store's text for a time has a fixed width, in UTC, so text compares as
+// time does.
+func (t *table) deleteBeforeSQL(d dialect, c *column) string {
+	return "DELETE FROM " + d.quote(t.name) + " WHERE " + d.quote(c.name) + " < " + d.placeholder(1)
+}
+
 // value is what column c of the model rv is written as.
 func (t *table) value(d dialect, c *column, rv reflect.Value) (any, error) {
 	fv := rv.FieldByIndex(c.index)
