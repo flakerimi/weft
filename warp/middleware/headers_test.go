@@ -68,7 +68,7 @@ func get(t *testing.T, method, url string) *http.Response {
 // apiApp is an app with the middleware module and a route at /api/x.
 func apiApp(vars map[string]string, opts ...Option) *warp.App {
 	app := warp.New(warp.ConfigFrom(vars))
-	app.Use(Module(opts...))
+	app.Use(Module(append([]Option{LogTo(io.Discard)}, opts...)...))
 	app.Handle("GET /x", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "x") }))
 	app.Handle("GET /framed", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
@@ -102,7 +102,7 @@ func TestHeadersOnEveryAnswer(t *testing.T) {
 }
 
 func TestHSTSOnlyOverHTTPS(t *testing.T) {
-	plain := warptest.New(t, nil, Module())
+	plain := warptest.New(t, nil, Module(LogTo(io.Discard)))
 	if h := plain.Get("/api/nothing").Header.Get("Strict-Transport-Security"); h != "" {
 		t.Errorf("over HTTP the answer has Strict-Transport-Security %q", h)
 	}
@@ -113,7 +113,7 @@ func TestHSTSOnlyOverHTTPS(t *testing.T) {
 		t.Errorf("an X-Forwarded-Proto not trusted gives Strict-Transport-Security %q", h)
 	}
 
-	proxied := warptest.New(t, map[string]string{"TRUST_PROXY": "on"}, Module())
+	proxied := warptest.New(t, map[string]string{"TRUST_PROXY": "on"}, Module(LogTo(io.Discard)))
 	r = httptest.NewRequest("GET", "http://warptest.local/api/nothing", nil)
 	r.Header.Set("X-Forwarded-Proto", "https")
 	if h := proxied.Do(r).Header.Get("Strict-Transport-Security"); h != "max-age=31536000" {
