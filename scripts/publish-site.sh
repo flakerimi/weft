@@ -21,6 +21,18 @@
 # one per version. Each release a verified push served is kept once, in
 # site/pushed/releases/<version>/: the trees hold hard links to it, not copies.
 # Rollback: scripts/rollback-site.sh <version> pushes such a kept tree again.
+# A publish also tags and releases on GitHub. The annotated tag v<version> is
+# made on the commit HEAD names, which the release is built from (tracked
+# files must match it), and pushed to origin before the site, so the module
+# github.com/flakerimi/weft is at that tag before any app this release makes
+# requires it. A tag of that name on the same commit (a publish that stopped
+# after pushing it) is used as it is; on another commit it stops the publish
+# before anything is built. After the site push, scripts/github-release.sh
+# makes the public GitHub Release v<version> from the files the site serves;
+# a release of that name stops the publish before anything is built, and gh
+# missing or signed out is said after the site push, with the commands to run.
+# A dry run checks the tag and the release and prints the git and gh commands
+# a publish would run.
 set -eu
 dry=
 if [ "${1:-}" = --dry-run ]; then
@@ -49,6 +61,52 @@ grep -qxF "$version" site/releases.txt 2>/dev/null &&
 	fail "$version is already released (site/releases/$version exists), and building it again would change its tarballs; publish a new version."
 [ ! -e "site/pushed/$version" ] ||
 	fail "site/pushed/$version already holds a pushed tree, so $version was pushed before; publish a new version, or roll back with scripts/rollback-site.sh $version."
+
+# The tag names the commit the release is built from: the module Go fetches at
+# it must be the Go this release's apps are made for. site/releases.txt is
+# left out, since a publish writes it and the owner commits it afterwards.
+tag="v$version"
+commit=$(git rev-parse -q --verify 'HEAD^{commit}') ||
+	fail "cannot read the commit HEAD names, which the tag $tag would name; publish from a git checkout of the repository with a commit."
+changed=$(git status --porcelain --untracked-files=no -- . ':(exclude)site/releases.txt') ||
+	fail "git status cannot read the checkout, so whether $commit is what is built is unknown; fix the checkout and publish again."
+if [ -n "$changed" ]; then
+	[ -n "$dry" ] ||
+		fail "tracked files differ from $commit, which the tag $tag would name, so the module at the tag would not be what this release is built from; commit them, or set them aside, and publish again."
+	echo "publish: tracked files differ from $commit, which a publish refuses (the tag $tag would not name what is built); not refused in a dry run" >&2
+fi
+# A tag of this name: the same commit's is used, another's stops the publish.
+tag_here=
+tag_there=
+if old=$(git rev-parse -q --verify "refs/tags/$tag^{commit}"); then
+	[ "$old" = "$commit" ] ||
+		fail "the tag $tag already names $old, not $commit, which this publish builds from; publish a new version (a tag the module proxy has served never moves)."
+	tag_here=1
+fi
+if remote=$(git ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}"); then
+	# An annotated tag is listed twice: its own object, and ^{}, its commit.
+	peeled=$(printf '%s\n' "$remote" | awk -v t="refs/tags/$tag^{}" '$2 == t { print $1 }')
+	[ -n "$peeled" ] || peeled=$(printf '%s\n' "$remote" | awk -v t="refs/tags/$tag" '$2 == t { print $1 }')
+	if [ -n "$peeled" ]; then
+		[ "$peeled" = "$commit" ] ||
+			fail "origin already has the tag $tag on $peeled, not on $commit, which this publish builds from; publish a new version (a tag the module proxy has served never moves)."
+		tag_there=1
+	fi
+elif [ -n "$dry" ]; then
+	echo "publish: cannot read the tags of origin, so whether $tag is there is not checked in a dry run" >&2
+else
+	fail "cannot read the tags of origin (git ls-remote origin failed), so whether $tag is there already is unknown; fix the connection to origin and publish again."
+fi
+# A GitHub Release of this name stops the publish; gh missing or signed out
+# is said after the site push, which does not need it.
+gh_ready=
+if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+	gh_ready=1
+	! gh release view "$tag" --repo "${WEFT_GITHUB_REPO:-flakerimi/weft}" >/dev/null 2>&1 ||
+		fail "the GitHub Release $tag already exists, and a publish never replaces one; publish a new version."
+elif [ -n "$dry" ]; then
+	echo "publish: gh is missing or not signed in, so whether the GitHub Release $tag exists is not checked; a publish would say so after the site push" >&2
+fi
 
 # A push replaces the whole site: every release it has published must be staged again.
 scripts/published-releases.sh check site || exit 1
@@ -83,10 +141,11 @@ tmp=${TMPDIR:-/tmp}
 releases=$(mktemp -d "${tmp%/}/weft-release.XXXXXX")
 tree=
 pushed=
+tagged=
 stopped() {
 	status=$?
 	[ "$status" -ne 0 ] && [ -z "$pushed" ] || return 0
-	echo "publish: stopped before $version was pushed; site/releases and site/releases.txt are as they were. This run's release build is in $releases${tree:+ and its push tree in $tree}; trash them when you no longer need them." >&2
+	echo "publish: stopped before $version was pushed; site/releases and site/releases.txt are as they were${tagged:+, and the tag $tag is on origin, naming $commit (publishing $version again from that commit uses it)}. This run's release build is in $releases${tree:+ and its push tree in $tree}; trash them when you no longer need them." >&2
 }
 trap stopped EXIT
 scripts/release.sh "$version" "$releases"
@@ -137,10 +196,35 @@ echo "push tree:"
 (cd "$tree" && find . -type f | sort)
 
 if [ -n "$dry" ]; then
+	if [ -n "$tag_here" ]; then
+		echo "dry run: the tag $tag names $commit already; a publish would not make it again"
+	else
+		echo "dry run: would run, before the site push: git tag -a $tag -m 'Weft $version' $commit"
+	fi
+	if [ -n "$tag_there" ]; then
+		echo "dry run: origin has the tag $tag on $commit already; a publish would not push it again"
+	else
+		echo "dry run: would run, before the site push: git push origin refs/tags/$tag"
+	fi
+	echo "dry run: after the site push, scripts/github-release.sh $version would make the GitHub Release from site/releases/$version, the copy of $releases/$version:"
+	scripts/github-release.sh --dry-run "$version" "$releases/$version" | sed "s|$releases/$version/|site/releases/$version/|g"
 	echo "dry run: built $version in $releases/$version; site/releases is as it was, so $version can still be published."
 	echo "dry run: not pushed; the tree is $tree (trash it and $releases when you no longer need them)"
 	exit 0
 fi
+
+# The tag first, so the module is at it before any app this release makes
+# requires it; a site push that fails leaves it, for the next publish of this
+# version from the same commit to use.
+if [ -z "$tag_here" ]; then
+	git tag -a "$tag" -m "Weft $version" "$commit" ||
+		fail "cannot make the tag $tag on $commit (see above); fix that and publish again."
+fi
+if [ -z "$tag_there" ]; then
+	git push origin "refs/tags/$tag" ||
+		fail "cannot push the tag $tag to origin (see above), so nothing is pushed; fix that and publish again, which uses the tag made here."
+fi
+tagged=1
 
 lisa server push --name weft "$tree"
 pushed=1
@@ -154,9 +238,21 @@ for v in $unlisted "$version"; do
 done
 # And copied (never moved) into site/releases, as it was pushed, for the next
 # publish to stage; the build folder stays for the owner to trash.
-mkdir -p site/releases && cp -R "$releases/$version" "site/releases/$version" && diff -r "$releases/$version" "site/releases/$version" >/dev/null &&
-	printf '%s\n' "$version" >site/releases/latest ||
-	fail "$version was pushed and is listed in site/releases.txt, but its release could not be copied from $releases/$version into site/releases/$version; copy it there by hand, since the next publish stages it from there."
+if ! { mkdir -p site/releases && cp -R "$releases/$version" "site/releases/$version" &&
+	diff -r "$releases/$version" "site/releases/$version" >/dev/null &&
+	printf '%s\n' "$version" >site/releases/latest; }; then
+	fail "$version was pushed and is listed in site/releases.txt, but its release could not be copied from $releases/$version into site/releases/$version; copy it there by hand, since the next publish stages it from there (and makes the GitHub Release from there: scripts/github-release.sh $version)."
+fi
+
+# The GitHub Release, from the files the site serves (site/releases/$version,
+# copied from what was pushed and compared with it). The site is live without
+# it; a release that could not be made is said now and again at the end.
+released=
+if [ -z "$gh_ready" ]; then
+	echo "publish: $version is pushed and tagged $tag, but gh is missing or not signed in, so its GitHub Release is not made; run gh auth login, then scripts/github-release.sh $version." >&2
+elif scripts/github-release.sh "$version"; then
+	released=1
+fi
 
 # The server builds the image after the push; wait for the new site to answer.
 scripts/wait-live.sh "$version" ||
@@ -186,4 +282,7 @@ keep_releases() {
 }
 keep_releases ||
 	echo "publish: $kept holds every release it served, but not all could be kept once in $store; the next publish copies those again." >&2
-echo "published weft $version at $url; listed in site/releases.txt (commit it); its tree is $kept; its release build in $releases can be trashed"
+echo "published weft $version at $url, tagged $tag; listed in site/releases.txt (commit it); its tree is $kept; its release build in $releases can be trashed"
+[ -n "$released" ] ||
+	fail "$version is live and tagged $tag, but its GitHub Release is not made (see above); run gh auth login if gh is not signed in, then scripts/github-release.sh $version."
+echo "published the GitHub Release $tag"
