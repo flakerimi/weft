@@ -61,6 +61,19 @@ function getRaw(base: string, path: string): Promise<{ status: number; body: str
 }
 
 /** The body's text, without its tags. */
+/**
+ * Waits until `messages` has had no new entry for 600 ms (at most 5 s). The
+ * file watcher can report the fixture's own files, copied just before the
+ * server started, some time later (macOS's FSEvents does): a test that counts
+ * reloads waits for those to pass first.
+ */
+async function quiet(messages: unknown[]) {
+  for (let seen = -1, i = 0; i < 20 && seen !== messages.length; i++) {
+    seen = messages.length
+    await new Promise((r) => setTimeout(r, 600))
+  }
+}
+
 const text = (html: string) => html.replace(/<style>[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/g, '').replace(/<[^>]+>/g, '')
 
 describe('devSite', { timeout: 30_000 }, () => {
@@ -321,6 +334,7 @@ describe('devSite', { timeout: 30_000 }, () => {
     const entry = await get(new URL(/src="(\/@id\/[^"]+)"/.exec(page.body)![1]!, dev.url).href)
     const island = /import\("([^"]+Counter\.vue[^"]*)"\)/.exec(entry.body)![1]!
     expect((await get(new URL(island, dev.url).href)).status).toBe(200)
+    await quiet(messages)
     for (const file of ['components/Counter.vue', 'content/posts.json']) {
       messages.length = 0
       writeFileSync(join(root, file), file.endsWith('.json') ? '["first", "third"]\n' : '<template><b>reloaded</b></template>\n')
@@ -342,6 +356,7 @@ describe('devSite', { timeout: 30_000 }, () => {
     socket.addEventListener('message', (e) => messages.push(JSON.parse(String(e.data))))
     for (let i = 0; i < 200 && !messages.some((m) => m.type === 'connected'); i++) await new Promise((r) => setTimeout(r, 25))
     expect((await get(dev.url + 'counter')).status).toBe(200)
+    await quiet(messages)
     for (const file of ['components/Counter.vue', 'content/posts.json']) {
       for (let round = 0; round < 3; round++) {
         messages.length = 0
@@ -368,6 +383,8 @@ describe('devSite', { timeout: 30_000 }, () => {
     const opened = await new Promise<boolean>((done) => socket.addEventListener('open', () => done(true)))
     expect(opened).toBe(true)
     expect((await get(dev.url + 'counter')).status).toBe(200)
+    await quiet(reloads)
+    reloads.length = 0
     // A writer that never pauses for the quiet period: every 60 ms for 2.4 s.
     const start0 = Date.now()
     for (let i = 0; i < 40; i++) {
