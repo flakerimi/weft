@@ -68,7 +68,7 @@ Briefs and reports for a plan's tasks live in `.superpowers/sdd/<plan>/`, which 
 ## Rules
 
 - **Vapor only.** Every component is `<script setup vapor lang="ts">`. Never use the Options API, `getCurrentInstance`, `app.config.globalProperties`, `v-memo` or VNode render functions, and never install `vaporInteropPlugin`.
-- **Pinned versions.** `vue` is pinned to exactly `3.6.0-rc.16`. Before adding any dependency, run `npm view <pkg> version` and use the latest.
+- **Pinned versions.** `vue` is the latest Vue 3.6 build, pinned exactly in every `package.json` that uses it; `scripts/vue-update.sh` moves every pin to the newest 3.6 build on npm (the stable 3.6.x once Vue publishes it), and runs before each release. Before adding any dependency, run `npm view <pkg> version` and use the latest.
 - **Go uses the standard library only.** Nothing is compressed, rendered or hashed per request: it all comes from the build's manifest. The one exception is the nested modules `dbtest/` and `examples/shop/`, which may require a database driver; `warp/` never imports one, not even in a test.
 - **Styles use only `--weft-*` tokens**, each with a fallback. New tokens go in `@weft/themes`.
 - **Components adapt from inside**, through `useWeft()` and `useWidth()`. Never write a `Mobile*` variant, and never check device names.

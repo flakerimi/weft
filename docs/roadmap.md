@@ -22,7 +22,8 @@ the owner; each milestone gets its own design or plan before it is built.
 - **Distributed:** from weft.base.al (installer, releases with checksums,
   `weft update`); the repository is public since 2026-11-26.
 - **Not stable:** every 0.0.x may change any name. Vue is pinned to
-  `3.6.0-rc.16` because Vapor is in 3.6, which is not yet a stable release.
+  the latest Vue 3.6 build because Vapor is in 3.6, which is not yet a stable
+  release; `scripts/vue-update.sh` moves the pins before each release.
 
 ## What 1.0.0 promises
 
@@ -37,7 +38,7 @@ the owner; each milestone gets its own design or plan before it is built.
 3. **Three platforms**, each on amd64 and arm64: macOS, Linux and Windows, with
    the whole suite passing on every push.
 4. **On pinned, tested dependencies:** Go's current stable release, Node's
-   active LTS, and Vue pinned to `3.6.0-rc.16`, the build Weft is tested with. By
+   active LTS, and the latest Vue 3.6 build, pinned exactly and tested. By
    the owner's decision of 2026-11-28, 1.0.0 does not wait for Vue 3.6 to be
    stable: it ships on the pinned release candidate, and moving to Vue 3.6
    stable is an ordinary 1.x update when Vue publishes it.
@@ -138,9 +139,9 @@ No new features; only what 1.0.0 promises.
 - Every exported name, prop and command reviewed once more and renamed now if
   it is wrong, since after 1.0.0 it cannot be.
 - The security review and the accessibility audit, and their findings fixed.
-- Vue stays pinned to `3.6.0-rc.16`, the build Weft is tested with; 3.6
-  stable is adopted in a 1.x release once Vue publishes it (the owner's
-  decision of 2026-11-28: 1.0.0 does not wait for it).
+- Vue: the latest 3.6 build at each release (`scripts/vue-update.sh`, then the
+  whole suite); 3.6 stable comes in the release after Vue publishes it (the
+  owner's decision of 2026-11-28: 1.0.0 does not wait for it).
 - `weft upgrade` tested from 0.9.0 and across the 0.9.x releases.
 - Release candidates (`1.0.0-rc.N`) used to build the example apps and the
   site, and one outside app, before 1.0.0 is tagged.
