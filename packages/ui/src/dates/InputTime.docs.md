@@ -11,7 +11,9 @@ adapts:
 Bind the time with `v-model`: `HH:mm` (`HH:mm:ss` with `granularity="second"`,
 `HH:00` with `hour`), or a `Time` of `@internationalized/date` with
 `value-format="object"`; it is null until every part is filled. With a `name`
-it submits that string in a hidden input.
+it submits that string in a hidden input. Outside a FormField, with no `id`
+prop, it takes a generated id (on touch, the native time input's; a range's
+two are that id with `-start` and `-end`).
 
 On pointer the parts follow the locale (`1:05 PM` in en-US, `13:05` in en-GB,
 `오후 1:05` in ko-KR); `hour-cycle` (12 or 24) overrides its hour cycle. Each
