@@ -13,8 +13,9 @@ disabled }` (a value defaults to the item's place). Bind `v-model` to the
 pressed value (null for none), or, with `multiple`, to the list of pressed
 values. Pressing the pressed item of a single group releases it.
 
-It is a `role="group"` (give it an `aria-label`) of buttons that say
-`aria-pressed`. **Keyboard:** the group is one tab stop, which rests on the
+It is a `role="group"` (give it an `aria-label`, or, inside a FormField, it
+takes the field's id and the field's label names it through
+`aria-labelledby`) of buttons that say `aria-pressed`. **Keyboard:** the group is one tab stop, which rests on the
 pressed item; the arrow keys move along it (Left and Right, mirrored right
 to left; Up and Down when `orientation="vertical"`), wrapping round unless
 `loop` is off; Home and End go to the ends; disabled items are passed by;

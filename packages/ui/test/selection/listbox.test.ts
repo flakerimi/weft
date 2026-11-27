@@ -32,8 +32,10 @@ describe('Listbox', () => {
     expect(new Set(options().map((o) => o.id)).size).toBe(5)
     expect(options().every((o) => o.getAttribute('aria-selected') === 'false')).toBe(true)
     expect(named('Blueberry').getAttribute('aria-disabled')).toBe('true')
-    const label = $('label')
+    // A list is not a labelable element: the field's label is no <label>, and names it by id.
+    const label = $('.weft-form-field__label')
     expect(list().getAttribute('aria-labelledby')).toBe(label.id)
+    expect(label.tagName).toBe('SPAN')
     expect(label.hasAttribute('for')).toBe(false)
     expect(list().getAttribute('aria-describedby')).toBe($('.weft-form-field__hint').id)
     expect(list().hasAttribute('aria-multiselectable')).toBe(false)

@@ -15,7 +15,7 @@ export { formKey, useForm, useFormState, type FormContext } from './form-state.t
 export interface FieldContext {
   /** The control's id, which the field's label is `for`. */
   id: string
-  /** The label's id, for a group control (radios, checkboxes, a slider) to be `aria-labelledby`. */
+  /** The label's id, for a control that is not a labelable element (radios, checkboxes, a slider) to be `aria-labelledby`. */
   labelId: string
   name: () => string | undefined
   /** The ids of the hint and the error shown now, space-separated, or undefined. */
@@ -30,10 +30,13 @@ export interface FieldContext {
   input(): void
   /**
    * For a control that is not a labelable element (a group, a slider
-   * thumb), during setup: it names itself through `labelId`, so the label
-   * drops `for`, which would point at no form control.
+   * thumb), during setup: it names itself through `labelId` (aria-labelledby),
+   * so the field draws its label as no `<label>`, which must label a form
+   * control. `on` may be a getter, for a control that is one only at times
+   * (InputTime's segments, not its native time input); `false` gives the
+   * field its `<label for>` back, as a control does when it goes.
    */
-  namedByLabel(on?: boolean): void
+  namedByLabel(on?: boolean | (() => boolean)): void
 }
 
 /** What a FieldGroup gives the controls in it. */

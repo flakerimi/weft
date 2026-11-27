@@ -3,7 +3,7 @@
 // legend or its FormField's label, whose value is the list. Give the options
 // as `items`, or put Checkboxes with a `value` in the default slot. Tab
 // visits each box, as native checkboxes do; Space ticks.
-import { computed } from 'vue'
+import { computed, onScopeDispose } from 'vue'
 import { useControllable } from '../headless/useControllable.ts'
 import Checkbox from './Checkbox.vue'
 import { choice, provideCheckboxGroup, type ChoiceItem } from './choice.ts'
@@ -50,7 +50,9 @@ defineSlots<{
 }>()
 
 const f = useField(props)
+// A fieldset is not a labelable element: the label names it with aria-labelledby.
 f.field?.namedByLabel()
+onScopeDispose(() => f.field?.namedByLabel(false))
 const model = useControllable(props, 'modelValue', emit, () => [...props.defaultValue])
 const options = computed(() => (props.items ?? []).map(choice))
 

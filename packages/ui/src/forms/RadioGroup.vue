@@ -56,7 +56,8 @@ defineSlots<{
 }>()
 
 const f = useField(props)
-f.field?.namedByLabel(true)
+// A fieldset is not a labelable element: the label names it with aria-labelledby.
+f.field?.namedByLabel()
 onScopeDispose(() => f.field?.namedByLabel(false))
 hideField()
 const model = useControllable(props, 'modelValue', emit, () => props.defaultValue)

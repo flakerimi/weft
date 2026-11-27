@@ -6,7 +6,7 @@ import Input from '../../src/forms/Input.vue'
 import InputCases from '../fixtures/forms/InputCases.vue'
 import { mount } from '../mount.ts'
 import { loadStyles, ruleFor } from '../styles.ts'
-import { px, type } from './helpers.ts'
+import { px, settle, type } from './helpers.ts'
 
 registerIcon('search', '<path d="M11 11"></path>')
 registerIcon('mail', '<path d="M4 4"></path>')
@@ -194,6 +194,15 @@ describe('FormField', () => {
     expect(input.getAttribute('aria-describedby')).toBe(`extra ${description.id} ${hint.id}`)
     expect(input.hasAttribute('aria-invalid')).toBe(false)
     expect(field.querySelector('.weft-form-field__error')).toBeNull()
+  })
+
+  it('is a <label> whose control is its labelable control', async () => {
+    const el = cases({ case: 'field' }).el
+    await settle()
+    const label = el.querySelector<HTMLLabelElement>('.weft-form-field__label')!
+    expect(label.tagName).toBe('LABEL')
+    // A press on it focuses that control (in a browser: site-src's TestFieldLabelsInChrome).
+    expect(label.control).toBe(el.querySelector('input'))
   })
 
   it('marks a required field with an asterisk read only by sight, and the control as aria-required', () => {

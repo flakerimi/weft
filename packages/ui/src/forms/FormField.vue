@@ -1,14 +1,16 @@
 <script setup vapor lang="ts">
 // A label, a description, a hint, an error and a required marker around one
-// form control. The label is `for` the control, or, for a control that is not
-// a labelable element (a group, a slider), names it by id instead; the
-// description, the hint and the error describe it through aria-describedby;
-// an error marks it aria-invalid. Inside a Form, a field with a name shows the
-// Form's error for that name and is required when the Form's schema says so.
-import { computed, ref, useSlots } from 'vue'
-import { useId } from '../headless/useId.ts'
+// form control. The label is a <label> `for` the control, or, over a control
+// that is not a labelable element (a group, a slider), a <span> that names it
+// by id (FieldLabel); the description, the hint and the error describe it
+// through aria-describedby; an error marks it aria-invalid. Inside a Form, a
+// field with a name shows the Form's error for that name and is required when
+// the Form's schema says so.
+import { computed, hasInjectionContext, inject, shallowRef, useSlots } from 'vue'
+import { ID_SCOPE, useId, type IdScope } from '../headless/useId.ts'
 import { joinIds } from './dom.ts'
 import { provideField, useForm } from './field.ts'
+import FieldLabel from './parts/FieldLabel.vue'
 import type { Size } from '../types.ts'
 import '../styles/base.css'
 import '../styles/form-field.css'
@@ -59,10 +61,15 @@ const descriptionId = `${base}-description`
 const hintId = `${base}-hint`
 const errorId = `${base}-error`
 // A control that names itself by the label's id (a group, a slider) says so
-// in its setup; the label then points at no control. (The server renders
-// the label before the control's setup runs, so there the label keeps `for`
-// until hydration drops it.)
-const namedByLabel = ref(false)
+// in its setup, and the label is then no <label>. The server draws the label
+// after the control (FieldLabel). Hydrating an island, the label is drawn
+// before the control's setup runs, as the server drew it; the control then
+// takes over.
+const inIsland = hasInjectionContext() && inject<IdScope | null>(ID_SCOPE, null) !== null
+const drawn = !import.meta.env.SSR && inIsland && typeof document !== 'undefined' ? document.getElementById(labelId) : null
+const asDrawn = !!drawn && drawn.tagName !== 'LABEL'
+const named = shallowRef<() => boolean>(() => asDrawn)
+const isNamed = () => named.value()
 
 const message = computed(() => {
   if (typeof props.error === 'string') return props.error || undefined
@@ -86,17 +93,17 @@ provideField({
   size: () => props.size,
   blur: () => props.name && form?.blur(props.name),
   input: () => props.name && form?.input(props.name),
-  namedByLabel: (on = true) => (namedByLabel.value = on),
+  namedByLabel: (on = true) => (named.value = typeof on === 'function' ? on : () => on),
 })
 </script>
 
 <template>
   <div class="weft-form-field" :data-size="size" :data-invalid="invalid ? 'true' : undefined">
     <div v-if="label || $slots.label || hasHint" class="weft-form-field__head">
-      <label v-if="label || $slots.label" :id="labelId" :for="namedByLabel ? undefined : id" class="weft-form-field__label">
+      <FieldLabel v-if="label || $slots.label" :id="labelId" :control="id" :named="isNamed">
         <slot name="label">{{ label }}</slot>
         <span v-if="required" class="weft-form-field__required" aria-hidden="true">*</span>
-      </label>
+      </FieldLabel>
       <span v-if="hasHint" :id="hintId" class="weft-form-field__hint"><slot name="hint">{{ hint }}</slot></span>
     </div>
     <p v-if="hasDescription" :id="descriptionId" class="weft-form-field__description"><slot name="description">{{ description }}</slot></p>

@@ -8,13 +8,14 @@ adapts:
   surface: Nothing changes in behaviour; text follows the surface's type scale.
   width: Nothing changes; it fills the width of its container.
 ---
-The label sits over the control and is `for` it: the control takes the
-field's id (set `id` to choose it). A control that is not a labelable element
-- a RadioGroup, a CheckboxGroup, a Slider - is named through
-`aria-labelledby` instead, and the label then has no `for` (on the server
-the label keeps it until the island hydrates, as the control's setup runs
-after the label is written). A range Slider names each thumb by the label and
-its own end: "Price Minimum".
+The label sits over the control and is a `<label>` `for` it: the control
+takes the field's id (set `id` to choose it), and a press on the label
+focuses it. A control that is not a labelable element - a RadioGroup, a
+CheckboxGroup, a Slider, a Listbox without a filter, a ToggleGroup, an
+InputTime's parts - is named through `aria-labelledby` instead, and the label
+is then a `<span>`, since a `<label>` must label a form control. The server
+draws it so too, on a page that never hydrates. A range Slider names each
+thumb by the label and its own end: "Price Minimum".
 
 `description` is a sentence under the label; `hint` is a short note beside
 it ("Optional", "3 of 10"); `error` sits under the control. All three

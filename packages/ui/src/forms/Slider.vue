@@ -8,7 +8,7 @@
 // never pass each other, and each one's aria-valuemin and aria-valuemax are
 // its neighbours. A thumb is drawn small, and its hit area (and the track's)
 // is at least --weft-hit-min, so on touch it takes a 44 px press.
-import { computed, ref, useAttrs, useTemplateRef } from 'vue'
+import { computed, onScopeDispose, ref, useAttrs, useTemplateRef } from 'vue'
 import { useControllable } from '../headless/useControllable.ts'
 import { isRtl } from '../headless/dom.ts'
 import { useId } from '../headless/useId.ts'
@@ -61,6 +61,7 @@ const emit = defineEmits<{
 const f = useField(props)
 // Its thumbs are not labelable elements: they take the field's label by id.
 f.field?.namedByLabel()
+onScopeDispose(() => f.field?.namedByLabel(false))
 const base = useId('slider')
 // A name given to the Slider (aria-label, aria-labelledby) names its thumb;
 // the rest of the attributes go to the root.

@@ -36,8 +36,11 @@ describe('InputTime', () => {
       await cases({ locale: 'en-US' })
       const g = group()
       expect(g.getAttribute('role')).toBe('group')
-      expect(g.getAttribute('aria-labelledby')).toBe($('label').id)
-      expect($('label').hasAttribute('for')).toBe(false)
+      // A group is no labelable element: the field's label is no <label>, and names it by id.
+      const label = $('.weft-form-field__label')
+      expect(label.tagName).toBe('SPAN')
+      expect(g.getAttribute('aria-labelledby')).toBe(label.id)
+      expect(label.hasAttribute('for')).toBe(false)
       expect(g.getAttribute('aria-describedby')).toBe($('.weft-form-field__description').id)
       expect(segments().map((s) => s.getAttribute('aria-label'))).toEqual(['Hour', 'Minute', 'AM/PM'])
       expect(texts()).toEqual(['1', '05', 'PM'])
@@ -194,7 +197,8 @@ describe('InputTime', () => {
       const e = await cases({ locale: 'en-GB', range: true, initial: { start: '09:00', end: '17:30' } })
       const groups = $$('.weft-input-time [role="group"]')
       expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual(['Start time', 'End time'])
-      expect(group().getAttribute('aria-labelledby')).toBe($('label').id)
+      expect(group().getAttribute('aria-labelledby')).toBe($('.weft-form-field__label').id)
+      expect($('.weft-form-field__label').tagName).toBe('SPAN')
       expect(texts()).toEqual(['09', '00', '17', '30'])
       $$('[role="spinbutton"][aria-label="Hour"]')[1]!.focus()
       await keys('ArrowUp')
@@ -216,6 +220,9 @@ describe('InputTime', () => {
       const natives = $$<HTMLInputElement>('.weft-input-time input[type="time"]')
       expect(natives.map((n) => n.value)).toEqual(['09:00', '17:30'])
       expect(natives.map((n) => n.getAttribute('aria-label'))).toEqual(['Start time', 'End time'])
+      // Two inputs in a group: the group takes the field's id, named by the label's.
+      expect($('.weft-form-field__label').tagName).toBe('SPAN')
+      expect(group().getAttribute('aria-labelledby')).toBe($('.weft-form-field__label').id)
       natives[0]!.value = '08:15'
       natives[0]!.dispatchEvent(new Event('input', { bubbles: true }))
       await settle()
@@ -237,6 +244,8 @@ describe('InputTime', () => {
         expect(n.max).toBe('17:00')
         expect(n.step).toBe('900')
         expect(n.getAttribute('aria-labelledby')).toBe($('label').id)
+        // One native input is labelable: the field's label is a <label> for it.
+        expect($<HTMLLabelElement>('label.weft-form-field__label').htmlFor).toBe(n.id)
         expect(n.getAttribute('aria-describedby')).toBe($('.weft-form-field__description').id)
         expect(px(getComputedStyle(group()).blockSize)).toBe(44)
         n.value = '10:30'
@@ -259,10 +268,14 @@ describe('InputTime', () => {
       await settle()
       expect(native().value).toBe('13:05')
       expect(active()).toBe(native())
+      // The field's label follows: a <label> for the native input, a <span> over the segments.
+      expect($<HTMLLabelElement>('.weft-form-field__label').htmlFor).toBe(native().id)
       m.input = 'pointer'
       await settle()
       expect(texts()).toEqual(['13', '05'])
       expect(active()).toBe(seg('Hour'))
+      expect($('.weft-form-field__label').tagName).toBe('SPAN')
+      expect(group().getAttribute('aria-labelledby')).toBe($('.weft-form-field__label').id)
     })
   })
 })

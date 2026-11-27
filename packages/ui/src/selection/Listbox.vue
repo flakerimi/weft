@@ -120,7 +120,10 @@ const f = useField(props)
 const { own, box, describedBy } = useControlAttrs(f)
 // A list is not a labelable element: it names itself by the field's label.
 // With a filter, the filter field is the labelled control.
-if (!host && !props.filter) f.field?.namedByLabel()
+if (!host && !props.filter) {
+  f.field?.namedByLabel()
+  onScopeDispose(() => f.field?.namedByLabel(false))
+}
 
 const model = useControllable(props, 'modelValue', emit, () => props.defaultValue ?? (props.multiple ? [] : undefined))
 const term = useControllable(props, 'searchTerm', emit, '')

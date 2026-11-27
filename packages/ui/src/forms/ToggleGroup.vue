@@ -8,7 +8,7 @@
 // With a `name` each pressed value posts with a plain form. `attached`
 // joins the buttons into one bar. On touch each button is at least
 // --weft-hit-min tall (Button's rule).
-import { computed, useTemplateRef, watch } from 'vue'
+import { computed, onScopeDispose, useTemplateRef, watch } from 'vue'
 import Button from '../basics/Button.vue'
 import { useControllable } from '../headless/useControllable.ts'
 import { useRovingFocus } from '../headless/useRovingFocus.ts'
@@ -75,6 +75,10 @@ defineSlots<{
 }>()
 
 const f = useField(props)
+// A group of buttons is not a labelable element: in a FormField it takes the
+// field's id and is named by the label's id.
+f.field?.namedByLabel()
+onScopeDispose(() => f.field?.namedByLabel(false))
 const model = useControllable(props, 'modelValue', emit, () => props.defaultValue ?? (props.multiple ? [] : null))
 const pressedSet = computed(() => {
   const v = model.value
@@ -113,6 +117,8 @@ watch([firstPressed, root], ([i]) => i >= 0 && roving.setActive(i), { flush: 'po
     ref="root"
     class="weft-toggle-group"
     role="group"
+    :id="f.id.value"
+    :aria-labelledby="f.field?.labelId"
     :data-orientation="orientation"
     :data-attached="attached ? 'true' : undefined"
   >
