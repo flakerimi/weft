@@ -13,7 +13,8 @@ A width left out falls back to the nearest smaller one given, else to the
 default for it.
 
 On the server, `Grid` (and the landing blocks `Hero`, `FeatureGrid`,
-`Pricing`, `Testimonials`, `Faq` and `Cta`) registers `useWidth`'s pre-paint
+`Pricing`, `Testimonials`, `Faq` and `Cta`, a horizontal `Stepper` or
+`Timeline`, and a vertical `Tabs`) registers `useWidth`'s pre-paint
 observer (`widthPrePaint`), which the page build wraps in `(function(){…})()`
 inside `<script data-weft-prepaint>` in `<head>` (its SHA-256 CSP hash when
 alone is `'sha256-iNtcuTghwj4FD4cClz4HdWeY2ACaeNPFjXtP7CUdMP0='`):
