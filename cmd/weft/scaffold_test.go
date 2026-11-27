@@ -778,11 +778,7 @@ func TestScaffoldedPagesInBrowser(t *testing.T) {
 	script := filepath.Join(repoCmdWeft, "testdata", "scaffold-browser.mjs")
 	cmd := exec.Command("node", script, browser, url, url+"/setup#token="+token, t.TempDir())
 	cmd.Dir = app
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("the scaffolded pages in %s: %v\n%s", browser, err, out)
-	} else {
-		t.Logf("drove the scaffolded pages:\n%s", out)
-	}
+	t.Logf("drove the scaffolded pages:\n%s", driveBrowser(t, cmd, "the scaffolded pages in "+browser))
 }
 
 // repoCmdWeft is cmd/weft, found while the test binary still runs there.

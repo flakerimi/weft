@@ -541,35 +541,57 @@ func TestShopInBrowser(t *testing.T) {
 	}
 	app := shopCopy(t)
 	url, token := startShop(t, app)
-	out := t.TempDir()
-	cmd := exec.Command("node", "test/browser.mjs", browser, url, url+"/setup#token="+token, out)
+	cmd := exec.Command("node", "test/browser.mjs", browser, url, url+"/setup#token="+token, t.TempDir())
 	cmd.Dir = app
-	var got lockedBuffer
-	cmd.Stdout, cmd.Stderr = &got, &got
-	// In a process group of its own, which the browser node starts joins: on
-	// every way out of this test, the time running out included, the group
-	// is stopped, so no browser it started is left running, and no other is
-	// touched.
+	t.Logf("drove the shop in %s:\n%s", browser, driveBrowser(t, cmd, "the shop in "+browser))
+}
+
+// driveBrowser runs cmd, a node script that drives a browser, with
+// runInGroup for the time the test has left (browserWaitFor), and fails the
+// test if it fails or takes too long. It returns what the script printed.
+func driveBrowser(t *testing.T, cmd *exec.Cmd, what string) string {
+	t.Helper()
 	deadline, set := t.Deadline()
 	wait := browserWaitFor(time.Now(), deadline, set)
+	out, err := runInGroup(cmd, wait)
+	if errors.Is(err, errBrowserTimedOut) {
+		t.Fatalf("%s did not finish within %s, so its browser was stopped:\n%s", what, wait, out)
+	}
+	if err != nil {
+		t.Fatalf("%s: %v\n%s", what, err, out)
+	}
+	return out
+}
+
+// errBrowserTimedOut is runInGroup's error when cmd did not finish in time.
+var errBrowserTimedOut = errors.New("did not finish in time")
+
+// runInGroup runs cmd in a process group of its own, which the browser it
+// starts joins, and returns what it printed. However it ends, the group is
+// stopped and gone before runInGroup returns (stopGroup waits for that): a
+// browser still closing its helpers after the script exits writes nothing
+// into the test's folders while go test removes them, and no other browser
+// is touched. After wait it stops the group and returns errBrowserTimedOut.
+func runInGroup(cmd *exec.Cmd, wait time.Duration) (string, error) {
+	var got lockedBuffer
+	cmd.Stdout, cmd.Stderr = &got, &got
+	// Wait returns at most 5 s after the script exits even if something it
+	// started still holds its output open, so the group is still stopped.
+	cmd.WaitDelay = 5 * time.Second
 	if err := startGroup(cmd); err != nil {
-		t.Fatal(err)
+		return "", err
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
-	var err error
 	select {
-	case err = <-done:
+	case err := <-done:
 		stopGroup(cmd) // what is left of it, such as a browser still closing
+		return got.String(), err
 	case <-time.After(wait):
 		stopGroup(cmd)
 		<-done
-		t.Fatalf("the shop in %s did not finish within %s, so its browser was stopped:\n%s", browser, wait, got.String())
+		return got.String(), errBrowserTimedOut
 	}
-	if err != nil {
-		t.Fatalf("the shop in %s: %v\n%s", browser, err, got.String())
-	}
-	t.Logf("drove the shop in %s:\n%s", browser, got.String())
 }
 
 // browserWait is how long the shop's browser test may run, and browserMargin
