@@ -94,7 +94,7 @@ export function indexMd({ docs, skills, components, version, appAgents }: IndexI
     'weft catalog',
     '```',
     '',
-    `- No \`weft\`: \`curl -fsSL ${SITE}/install | sh\` puts it in \`~/.local/bin\`.`,
+    `- No \`weft\`: \`curl -fsSL ${SITE}/install | sh\` puts it in \`~/.local/bin\` (on Windows, in PowerShell: \`irm ${SITE}/install.ps1 | iex\`).`,
     '- If `weft catalog` says `weft: unknown command "catalog"`, this `weft` is older than this page: run `weft update`.',
     '- You also need Go 1.26, Node 22.18 or later and pnpm 10. `weft create` says which is missing.',
     '',

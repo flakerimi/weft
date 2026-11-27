@@ -9,8 +9,9 @@
 # into cmd/weft/bundle for go:embed, and afterwards, failed or not, it is moved
 # out to a temporary folder, so the folder holds only its README.md again.
 # WEFT_TARGETS names the systems to build, space-separated os/arch pairs; it
-# defaults to the four the site serves (darwin/arm64 darwin/amd64 linux/arm64
-# linux/amd64), which scripts/publish-site.sh builds. A darwin or linux
+# defaults to all six systems the site serves (darwin/arm64 darwin/amd64
+# linux/arm64 linux/amd64 windows/arm64 windows/amd64), which
+# scripts/publish-site.sh builds. A darwin or linux
 # target is weft_<os>_<arch>.tar.gz holding weft; a windows one is
 # weft_windows_<arch>.zip holding weft.exe, made with zip. SHA256SUMS lists
 # every archive. .github/workflows/release.yml builds all six on a tag.
@@ -24,13 +25,13 @@ scripts/version.sh "$version" || {
 	echo "release: give a version like 0.0.1 or 0.1.0-alpha.1" >&2
 	exit 2
 }
-targets=${WEFT_TARGETS:-darwin/arm64 darwin/amd64 linux/arm64 linux/amd64}
+targets=${WEFT_TARGETS:-darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/arm64 windows/amd64}
 # $targets is split on spaces but never globbed, so a * is refused as itself;
 # restore and the SHA256SUMS line below glob, and turn it back on for themselves.
 set -f
 # shellcheck disable=SC2086
 [ -n "$(printf '%s' $targets)" ] || {
-	echo "release: WEFT_TARGETS names no target; name os/arch pairs such as \"linux/amd64 windows/arm64\", or unset it for the default four." >&2
+	echo "release: WEFT_TARGETS names no target; name os/arch pairs such as \"linux/amd64 windows/arm64\", or unset it for the default six." >&2
 	exit 2
 }
 for target in $targets; do

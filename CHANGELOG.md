@@ -17,7 +17,18 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
   InputTime on touch is a native time input the label is for; a ToggleGroup
   takes its field's id and label; with no label, no control points
   `aria-labelledby` at one; and what the `label` slot holds is no control of
-  the field's, with ids of its own in an island.
+  the field's, with ids of its own in an island. Mounted in the browser with no server
+  HTML, the label is drawn one update after `mount()`, before anything is
+  painted.
+
+## 0.0.21
+
+- Windows is supported on amd64 and arm64: `irm https://weft.base.al/install.ps1 | iex`
+  installs `weft.exe` into `$HOME\.local\bin` and adds it to the user `PATH`;
+  `scripts/release.sh` builds all six targets (`darwin`, `linux` and `windows`
+  on `amd64` and `arm64`) by default, so published releases and GitHub Releases
+  carry the Windows `.zip` archives alongside the tarballs; `weft update` names
+  the PowerShell installer on Windows; and the docs cover Windows.
 
 ## 0.0.20
 

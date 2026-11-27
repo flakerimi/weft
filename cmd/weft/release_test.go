@@ -53,21 +53,23 @@ func TestReleasedBinaryCreatesAndBuilds(t *testing.T) {
 	}
 
 	bin := ""
-	for _, platform := range []string{"darwin_arm64", "darwin_amd64", "linux_arm64", "linux_amd64"} {
-		archive, err := os.ReadFile(filepath.Join(releases, "0.0.0-test", "weft_"+platform+".tar.gz"))
+	for _, platform := range []string{"darwin_arm64", "darwin_amd64", "linux_arm64", "linux_amd64", "windows_arm64", "windows_amd64"} {
+		goos, goarch, _ := strings.Cut(platform, "_")
+		name := archiveName(goos, goarch)
+		archive, err := os.ReadFile(filepath.Join(releases, "0.0.0-test", name))
 		if err != nil {
 			t.Fatal(err)
 		}
-		binary, err := extractBinary(archive)
+		binary, err := extract(name, archive)
 		if err != nil {
 			t.Fatalf("%s: %v", platform, err)
 		}
 		t.Logf("weft for %s: %d B", platform, len(binary))
-		if platform != runtime.GOOS+"_"+runtime.GOARCH {
-			continue
-		}
 		if len(binary) >= 15<<20 {
 			t.Errorf("weft for %s is %d B, not under 15 MB", platform, len(binary))
+		}
+		if platform != runtime.GOOS+"_"+runtime.GOARCH {
+			continue
 		}
 		bin = filepath.Join(t.TempDir(), "weft")
 		if err := os.WriteFile(bin, binary, 0o755); err != nil {

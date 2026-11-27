@@ -14,7 +14,7 @@ import (
 func TestStageSiteKeepsReleasesDropsTestBuilds(t *testing.T) {
 	skipWindows(t)
 	site := t.TempDir()
-	for _, f := range []string{"index.html", "install"} {
+	for _, f := range []string{"index.html", "install", "install.ps1"} {
 		os.WriteFile(filepath.Join(site, f), []byte(f), 0o644)
 	}
 	for _, v := range []string{"0.0.1", "0.0.2", "0.0.0-test", "0.1.0-alpha.1"} {
@@ -38,7 +38,7 @@ func TestStageSiteKeepsReleasesDropsTestBuilds(t *testing.T) {
 	})
 	sort.Strings(got)
 	want := []string{
-		"index.html", "install",
+		"index.html", "install", "install.ps1",
 		"releases/0.0.1/SHA256SUMS", "releases/0.0.2/SHA256SUMS",
 		"releases/0.1.0-alpha.1/SHA256SUMS", "releases/latest",
 	}
@@ -50,13 +50,14 @@ func TestStageSiteKeepsReleasesDropsTestBuilds(t *testing.T) {
 	}
 }
 
-// fakeSite writes a site/ like the repository's: the installer, the given
+// fakeSite writes a site/ like the repository's: the installers, the given
 // releases (each with a SHA256SUMS), releases.txt listing those that are not
 // test builds, and, unless latest is "", releases/latest.
 func fakeSite(t *testing.T, latest string, versions ...string) string {
 	t.Helper()
 	site := t.TempDir()
 	os.WriteFile(filepath.Join(site, "install"), []byte("#!/bin/sh\n"), 0o644)
+	os.WriteFile(filepath.Join(site, "install.ps1"), []byte("# install.ps1\n"), 0o644)
 	list := ""
 	for _, v := range versions {
 		dir := filepath.Join(site, "releases", v)
@@ -92,7 +93,7 @@ func stageReleases(args ...string) (string, error) {
 	return string(b), err
 }
 
-// The Weft-built site stages the installer and every real release into its
+// The Weft-built site stages the installers and every real release into its
 // public/ beside the files already there, and can do it again.
 func TestStageReleasesIntoSitePublic(t *testing.T) {
 	skipWindows(t)
@@ -104,7 +105,7 @@ func TestStageReleasesIntoSitePublic(t *testing.T) {
 			t.Fatalf("%v: %s", err, out)
 		}
 	}
-	want := "favicon.svg,install,releases/0.0.1/SHA256SUMS,releases/0.0.2/SHA256SUMS,releases/latest"
+	want := "favicon.svg,install,install.ps1,releases/0.0.1/SHA256SUMS,releases/0.0.2/SHA256SUMS,releases/latest"
 	if got := files(t, public); got != want {
 		t.Fatalf("staged %s\nwant   %s", got, want)
 	}
@@ -120,15 +121,15 @@ func TestStageReleasesIntoSitePublic(t *testing.T) {
 	}
 }
 
-// Where site/releases is empty, as in CI, only the installer is staged.
+// Where site/releases is empty, as in CI, only the installers are staged.
 func TestStageReleasesWithoutReleases(t *testing.T) {
 	skipWindows(t)
 	site, public := fakeSite(t, ""), t.TempDir()
 	if out, err := stageReleases(site, public); err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
-	if got := files(t, public); got != "install" {
-		t.Fatalf("staged %s, want install", got)
+	if got := files(t, public); got != "install,install.ps1" {
+		t.Fatalf("staged %s, want install,install.ps1", got)
 	}
 }
 
@@ -169,7 +170,7 @@ func TestStageReleasesStagesOnlyListedReleases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v: %s", err, msg)
 	}
-	if got := files(t, out); got != "install,releases/0.0.1/SHA256SUMS,releases/0.0.2/SHA256SUMS" {
+	if got := files(t, out); got != "install,install.ps1,releases/0.0.1/SHA256SUMS,releases/0.0.2/SHA256SUMS" {
 		t.Fatalf("staged %s, want the listed releases only", got)
 	}
 	if !strings.Contains(msg, "names 0.0.9-leftover, which is not staged; leaving latest out") {
@@ -180,7 +181,7 @@ func TestStageReleasesStagesOnlyListedReleases(t *testing.T) {
 	if msg, err := stageReleases(site, next, "0.0.3"); err != nil {
 		t.Fatalf("%v: %s", err, msg)
 	}
-	if got := files(t, next); got != "install,releases/0.0.1/SHA256SUMS,releases/0.0.2/SHA256SUMS,releases/0.0.3/SHA256SUMS,releases/latest" {
+	if got := files(t, next); got != "install,install.ps1,releases/0.0.1/SHA256SUMS,releases/0.0.2/SHA256SUMS,releases/0.0.3/SHA256SUMS,releases/latest" {
 		t.Fatalf("staged %s", got)
 	}
 	// A staging that holds the leftover is refused, not merged into.
@@ -209,7 +210,7 @@ func TestStageReleasesKeepsTheLiveRelease(t *testing.T) {
 	if msg, err := stageReleases("--live", "0.0.3", site, out, "0.0.4"); err != nil {
 		t.Fatalf("%v: %s", err, msg)
 	}
-	if got := files(t, out); got != "install,releases/0.0.1/SHA256SUMS,releases/0.0.2/SHA256SUMS,releases/0.0.3/SHA256SUMS,releases/0.0.4/SHA256SUMS,releases/latest" {
+	if got := files(t, out); got != "install,install.ps1,releases/0.0.1/SHA256SUMS,releases/0.0.2/SHA256SUMS,releases/0.0.3/SHA256SUMS,releases/0.0.4/SHA256SUMS,releases/latest" {
 		t.Fatalf("staged %s, want the listed, the live and the new release", got)
 	}
 	if b, _ := os.ReadFile(filepath.Join(out, "releases/latest")); string(b) != "0.0.4\n" {
@@ -254,7 +255,7 @@ func TestStageReleasesLinksKeptReleases(t *testing.T) {
 	if msg, err := stageReleases("--link-from", kept, site, out); err != nil {
 		t.Fatalf("%v: %s", err, msg)
 	}
-	if got := files(t, out); got != "install,releases/0.0.1/SHA256SUMS,releases/0.0.2/SHA256SUMS,releases/latest" {
+	if got := files(t, out); got != "install,install.ps1,releases/0.0.1/SHA256SUMS,releases/0.0.2/SHA256SUMS,releases/latest" {
 		t.Fatalf("staged %s", got)
 	}
 	if !sameFile(t, filepath.Join(kept, "0.0.1/SHA256SUMS"), filepath.Join(out, "releases/0.0.1/SHA256SUMS")) {
@@ -519,6 +520,7 @@ func main() { fmt.Println(weft.Version, warp.Name()) }
 `, 0o644)
 	write(r.root, "site/releases.txt", "0.0.1\n0.0.2\n", 0o644)
 	write(r.root, "site/install", "#!/bin/sh\n", 0o644)
+	write(r.root, "site/install.ps1", "# install.ps1\n", 0o644)
 	for _, v := range []string{"0.0.1", "0.0.2"} {
 		write(r.root, "site/releases/"+v+"/SHA256SUMS", "sums of "+v+"\n", 0o644)
 		write(r.root, "site/releases/"+v+"/weft_linux_amd64.tar.gz", "tarball of "+v+"\n", 0o644)
@@ -661,7 +663,7 @@ func TestPublishSiteKeepsOneTreePerVersion(t *testing.T) {
 		}
 	}
 	got := files(t, pushed)
-	for _, want := range []string{"0.0.3/site-src/releases/install", "0.0.3/site-src/releases/releases/0.0.1/SHA256SUMS",
+	for _, want := range []string{"0.0.3/site-src/releases/install", "0.0.3/site-src/releases/install.ps1", "0.0.3/site-src/releases/releases/0.0.1/SHA256SUMS",
 		"0.0.3/site-src/releases/releases/0.0.3/SHA256SUMS", "0.0.4/site-src/releases/releases/0.0.4/SHA256SUMS", "0.0.4/go.mod",
 		"0.0.4/site-src/dist/index.html", "0.0.4/site-src/main.go", "0.0.4/version.go", "0.0.4/warp/warp.go", "0.0.4/warp/data/data.go"} {
 		if !strings.Contains(","+got+",", ","+want+",") {
@@ -1096,7 +1098,7 @@ func TestPublishSiteDryRunPushesNothing(t *testing.T) {
 	if len(trees) != 1 || !strings.Contains(out, "the tree is "+trees[0]) {
 		t.Fatalf("dry run trees %v, output\n%s", trees, out)
 	}
-	if got := files(t, filepath.Join(trees[0], "site-src/releases")); got != "install,releases/0.0.1/SHA256SUMS,releases/0.0.1/weft_linux_amd64.tar.gz,releases/0.0.2/SHA256SUMS,releases/0.0.2/weft_linux_amd64.tar.gz,releases/0.0.3/SHA256SUMS,releases/0.0.3/weft_linux_amd64.tar.gz,releases/latest" {
+	if got := files(t, filepath.Join(trees[0], "site-src/releases")); got != "install,install.ps1,releases/0.0.1/SHA256SUMS,releases/0.0.1/weft_linux_amd64.tar.gz,releases/0.0.2/SHA256SUMS,releases/0.0.2/weft_linux_amd64.tar.gz,releases/0.0.3/SHA256SUMS,releases/0.0.3/weft_linux_amd64.tar.gz,releases/latest" {
 		t.Fatalf("the dry run's tree stages %s", got)
 	}
 	if out, err := r.run("publish-site.sh", "0.0.3"); err != nil {
@@ -1465,7 +1467,7 @@ func TestGithubRelease(t *testing.T) {
 	}
 	log := r.fakeFile("gh.log")
 	files := " " + dir + "/weft_darwin_arm64.tar.gz " + dir + "/weft_linux_amd64.tar.gz " + dir + "/weft_windows_amd64.zip " + dir + "/SHA256SUMS\n"
-	if !strings.Contains(log, " --prerelease"+files) || strings.Contains(log, "stray.txt") {
+	if !strings.Contains(log, "--notes "+releaseNotes("0.1.0-alpha.1", "darwin, linux and windows")+" --prerelease"+files) || strings.Contains(log, "stray.txt") {
 		t.Errorf("gh was run as\n%s", log)
 	}
 	// Made once: a second run finds it and stops.
@@ -1481,9 +1483,14 @@ func TestGithubRelease(t *testing.T) {
 }
 
 // releaseNotes is the GitHub Release's notes for version: every link in it
-// is one weft.base.al serves once the version is pushed.
-func releaseNotes(version string) string {
-	return "weft " + version + " for darwin and linux, on amd64 and arm64: the files weft.base.al serves, with their checksums at https://weft.base.al/releases/" + version + "/SHA256SUMS. Install it as https://weft.base.al/docs/getting-started/install says. An app this release makes requires github.com/flakerimi/weft v" + version + "."
+// is one weft.base.al serves once the version is pushed. systems defaults to
+// "linux", which the fake release.sh builds.
+func releaseNotes(version string, systems ...string) string {
+	sys := "linux"
+	if len(systems) > 0 {
+		sys = systems[0]
+	}
+	return "weft " + version + " for " + sys + ", on amd64 and arm64: the files weft.base.al serves, with their checksums at https://weft.base.al/releases/" + version + "/SHA256SUMS. Install it as https://weft.base.al/docs/getting-started/install says. An app this release makes requires github.com/flakerimi/weft v" + version + "."
 }
 
 // Files git neither tracks nor ignores, in what a release or the site is
