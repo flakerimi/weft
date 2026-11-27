@@ -46,6 +46,8 @@ const ISLANDS = 'virtual:weft/dev-islands'
 const RESOLVED_ISLANDS = '\0' + ISLANDS
 /** How long the files under the root must stay unchanged before the browser is told to reload. */
 const RELOAD_QUIET = 150
+/** The longest a reload waits after the first change it holds, however long files keep changing. */
+const RELOAD_MAX_WAIT = 1000
 
 /**
  * Start the dev server for the site at `root`. It renders a page whose path
@@ -79,6 +81,8 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
   const known = new Set<string>()
   let server: ViteDevServer
   let reload: ReturnType<typeof setTimeout> | undefined
+  /** When the first change the pending reload holds came. */
+  let pendingSince: number | undefined
   const plugin: Plugin = {
     name: 'weft:dev',
     enforce: 'pre',
@@ -105,10 +109,16 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
           // One reload for one save: a file emptied and then written (as an
           // editor saves it, or any write on a busy machine) is two changes
           // to the watcher, so the reload waits until changes stop for
-          // RELOAD_QUIET ms.
+          // RELOAD_QUIET ms, but never more than RELOAD_MAX_WAIT ms after
+          // the first change it holds (a watch build writing into the root).
           const hot = this.environment.hot
+          const now = Date.now()
+          pendingSince ??= now
           clearTimeout(reload)
-          reload = setTimeout(() => hot.send({ type: 'full-reload', path: '*' }), RELOAD_QUIET)
+          reload = setTimeout(() => {
+            pendingSince = undefined
+            hot.send({ type: 'full-reload', path: '*' })
+          }, Math.max(0, Math.min(RELOAD_QUIET, pendingSince + RELOAD_MAX_WAIT - now)))
         }
         return []
       },

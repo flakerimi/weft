@@ -356,6 +356,30 @@ describe('devSite', { timeout: 30_000 }, () => {
     }
   })
 
+  it('reloads at most about a second after the first change, however long files keep changing', async () => {
+    const root = site('dev-site')
+    const dev = await start(root)
+    const client = await get(dev.url + '@vite/client')
+    const token = /const wsToken = "([^"]+)"/.exec(client.body)![1]!
+    const socket = new WebSocket(`${dev.url.replace('http', 'ws')}?token=${token}`, 'vite-hmr')
+    closers.push(() => socket.close())
+    const reloads: number[] = []
+    socket.addEventListener('message', (e) => JSON.parse(String(e.data)).type === 'full-reload' && reloads.push(Date.now()))
+    const opened = await new Promise<boolean>((done) => socket.addEventListener('open', () => done(true)))
+    expect(opened).toBe(true)
+    expect((await get(dev.url + 'counter')).status).toBe(200)
+    // A writer that never pauses for the quiet period: every 60 ms for 2.4 s.
+    const start0 = Date.now()
+    for (let i = 0; i < 40; i++) {
+      writeFileSync(join(root, 'content/posts.json'), `["first", "write ${i}"]\n`)
+      await new Promise((r) => setTimeout(r, 60))
+    }
+    await new Promise((r) => setTimeout(r, 600))
+    expect(reloads.length, 'a reload while the writes go on, and one after').toBeGreaterThanOrEqual(2)
+    // The watcher adds its own latency (up to about 120 ms) to the second.
+    expect(reloads[0]! - start0, 'the first reload').toBeLessThan(1500)
+  })
+
   it('says when the port is taken', async () => {
     const taken = createNetServer()
     await new Promise<void>((done) => taken.listen(0, 'localhost', done))
