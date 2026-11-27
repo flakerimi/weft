@@ -4,27 +4,25 @@ What each release of Weft brought. Every 0.0.x release may change any name;
 from 1.0.0 on, what is removed is deprecated first (see `docs/roadmap.md`).
 A release is published at weft.base.al and as a GitHub Release of the same
 name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
-0.0.12 were published at weft.base.al only; `site/releases.txt` lists them.
+0.0.12 have no GitHub Release: they were published at weft.base.al, and
+`site/releases.txt` lists them (only 0.0.1 and 0.0.2 have a tag).
 
 ## Unreleased
 
 - `weft scaffold <name> <field[:type[:modifier...]]>...` writes a resource:
-  its Go module with a store, routes and a story test, and a `DataTable` page
-  with a record page, or the API alone with `--api`. A field's type is
-  written, never guessed (`string` when none is given), `enum=a,b` among them;
-  the modifiers are `nullable`, `required`, `unique`, `min=` and `max=`; the
-  plural can be given with `--plural`. What it cannot write is refused in one
-  sentence, writing nothing. `date` and `datetime` fields need `--api` until
-  0.2.0.
+  its Go package (model, routes and a story test, added to `app/modules.go`)
+  and a `DataTable` page with a record page, or the API alone with `--api`,
+  then runs `weft gen`. A field's type is written, never guessed (`string`
+  when none is given), `enum=a,b` among them; the modifiers are `nullable`,
+  `required`, `unique`, `min=` and `max=`; the plural can be given with
+  `--plural`. What it cannot write is refused in one sentence, writing
+  nothing. `date` and `datetime` fields need `--api` until 0.2.0.
 - The app `weft create` makes is in the example shop's shape: `data`, `auth`
   and `hello`, the login and setup pages, a fresh `AUTH_SECRET` per app, and
   the SQLite driver.
 - A fresh app's `go test ./...` builds before the first `weft build`, from
   the page build's empty marker in `web/dist`; a binary built before
   `weft build` refuses to start instead of serving nothing.
-- `scripts/publish-site.sh`, `rollback-site.sh` and `github-release.sh` refuse
-  `--dry-run` anywhere but first, an option they do not know, and an argument
-  too many, before anything is built, tagged or pushed.
 
 ## 0.0.17
 
@@ -38,6 +36,10 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
 - `Table` keeps its search debounce with an inline `fetch`, and `refresh()`
   settles when a newer request supersedes it. `Form` focuses the first
   invalid field once it is no longer busy.
+- `scripts/publish-site.sh` and `rollback-site.sh` refuse `--dry-run` anywhere
+  but first, an option they do not know, and a second argument;
+  `github-release.sh` the same past its optional folder; each before anything
+  is built, tagged or pushed.
 
 ## 0.0.16
 
@@ -63,6 +65,8 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
 
 - Landing blocks: `Hero`, `FeatureGrid`, `Pricing`, `Testimonials`, `Faq` and
   `Cta`.
+- `useWidth` measures before the first paint, with one page-wide pre-paint
+  script, so width-adaptive components adapt on static pages.
 
 ## 0.0.12
 
