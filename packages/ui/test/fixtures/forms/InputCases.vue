@@ -9,8 +9,9 @@ const text = ref<string | number | null>(props.initial ?? 'hello')
 const trimmed = ref('')
 const amount = ref<string | number | null>(null)
 const lazy = ref('')
+const dynamicId = ref<string | undefined>('first')
 const field = useTemplateRef<{ focus(): void }>('field')
-defineExpose({ text, trimmed, amount, lazy, focusField: () => field.value?.focus() })
+defineExpose({ text, trimmed, amount, lazy, dynamicId, focusField: () => field.value?.focus() })
 </script>
 
 <template>
@@ -21,6 +22,7 @@ defineExpose({ text, trimmed, amount, lazy, focusField: () => field.value?.focus
     <Input v-model.number="amount" class="number" />
     <Input v-model.lazy="lazy" class="lazy" />
     <Input ref="field" class="exposed" />
+    <Input :id="dynamicId" class="dynamic-id" />
     <span class="echo">{{ text }}</span>
   </div>
   <div v-else-if="$props.case === 'ends'">

@@ -12,13 +12,17 @@ import (
 	"time"
 )
 
-// Every <label> on every built page labels a form control, as Chrome checks
-// in its DevTools Issues ("Incorrect use of <label for=FORM_ELEMENT>", "A
-// <label> isn't associated with a form field"): its `for` names the id of a
-// labelable element on the same page (button, input but a hidden one, meter,
-// output, progress, select, textarea), or it has no `for` and holds one. A
-// FormField around a control that is no labelable element (a radio group's
-// fieldset, a slider's thumb, a listbox) names it by id, with no <label>.
+// Every <label> on every built page labels a form control, and every form
+// field has an id or a name (and autocomplete when its id or name is an
+// autocomplete token), as Chrome checks in its DevTools Issues ("Incorrect use
+// of <label for=FORM_ELEMENT>", "A <label> isn't associated with a form
+// field", "A form field element should have an id or name attribute", "An
+// element doesn't have an autocomplete attribute"): a <label>'s `for` names
+// the id of a labelable element on the same page (button, input but a hidden
+// one, meter, output, progress, select, textarea), or it has no `for` and
+// holds one. A FormField around a control that is no labelable element (a
+// radio group's fieldset, a slider's thumb, a listbox) names it by id, with no
+// <label>.
 
 var (
 	tagPattern    = regexp.MustCompile(`<(/?)([a-zA-Z][a-zA-Z0-9-]*)([^>]*)>`)
@@ -166,8 +170,81 @@ func TestEveryLabelLabelsAFormControl(t *testing.T) {
 	}
 }
 
+// formFieldProblems lists each <input> (not hidden), <select> or <textarea> in
+// the page that has neither id nor name, in a sentence.
+func formFieldProblems(page string) []string {
+	page = rawText.ReplaceAllString(page, "")
+	var problems []string
+	for _, m := range tagPattern.FindAllStringSubmatch(page, -1) {
+		closing, name := m[1] == "/", strings.ToLower(m[2])
+		if closing || (name != "input" && name != "select" && name != "textarea") {
+			continue
+		}
+		attrs, _ := parseAttrs(m[3])
+		if name == "input" && strings.EqualFold(attrs["type"], "hidden") {
+			continue
+		}
+		if strings.TrimSpace(attrs["id"]) == "" && strings.TrimSpace(attrs["name"]) == "" {
+			what := "<" + name
+			for _, k := range []string{"class", "type", "role", "aria-label", "placeholder"} {
+				if v := attrs[k]; v != "" {
+					what += fmt.Sprintf(" %s=%q", k, v)
+				}
+			}
+			problems = append(problems, what+"> has neither id nor name")
+		}
+	}
+	return problems
+}
+
+func TestFormFieldProblems(t *testing.T) {
+	for _, c := range []struct {
+		page string
+		want int
+	}{
+		{`<input id="a"><input name="b"><textarea id="c"></textarea><select name="d"></select><input type="hidden">`, 0},
+		{`<input type="text">`, 1},
+		{`<input id="" name=" ">`, 1},
+		{`<textarea></textarea>`, 1},
+		{`<select></select>`, 1},
+		{`<script>const s = '<input type="text">'</script><input id="a">`, 0},
+	} {
+		if got := formFieldProblems(c.page); len(got) != c.want {
+			t.Errorf("%s: %d problems, want %d: %v", c.page, len(got), c.want, got)
+		}
+	}
+}
+
+// No built page has an <input>, <select> or <textarea> with neither id nor name.
+func TestEveryFormFieldHasIdOrName(t *testing.T) {
+	d := dist(t)
+	var r builtRoutes
+	readJSON(t, d, "routes.json", &r)
+	files := []string{}
+	for _, p := range r.Pages {
+		files = append(files, p.HTML)
+	}
+	if r.NotFound != nil {
+		files = append(files, *r.NotFound)
+	}
+	inputs := 0
+	for _, file := range files {
+		b, err := fs.ReadFile(d, file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inputs += strings.Count(string(b), "<input")
+		for _, p := range formFieldProblems(string(b)) {
+			t.Errorf("%s: %s", file, p)
+		}
+	}
+	if inputs == 0 {
+		t.Fatal("no built page has an <input>; the check would prove nothing")
+	}
+}
+
 // In Chrome, the pages with FormFields over every kind of control raise no
-// label issue in DevTools, each field's control is named by its label's
+// DevTools issue, each field's control is named by its label's
 // text in the accessibility tree, whether through a <label for> or
 // aria-labelledby, and a press on a <label> focuses its input.
 func TestFieldLabelsInChrome(t *testing.T) {
@@ -177,33 +254,40 @@ func TestFieldLabelsInChrome(t *testing.T) {
 	defer srv.Close()
 	b.doing, b.deadline = "emulating 1280 px", time.Now().Add(pageTimeout)
 	b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 1280, "height": 900, "deviceScaleFactor": 1, "mobile": false})
-	// Chrome checks a page's form fields once it has loaded, and reports
-	// what it finds while Audits is on.
+	// Chrome checks a page's form fields and lazy images once it has loaded,
+	// and reports what it finds while Audits is on.
 	b.call(b.session, "Audits.enable", nil)
 	b.call(b.session, "DOM.enable", nil)
 	b.call(b.session, "Accessibility.enable", nil)
-	var checked []string
-	for _, path := range []string{"/", "/components", "/components/form-field", "/components/radio-group", "/components/checkbox-group",
-		"/components/slider", "/components/input-time", "/components/listbox", "/components/toggle-group", "/components/input"} {
-		b.open(srv.URL + path)
-		b.eval(`new Promise((done) => setTimeout(() => done(true), 1500))`, new(bool))
+	// First check the pages without scrolling to the bottom, and then with
+	// b.open (which scrolls to wake visible islands and lets idle ones start).
+	for _, path := range []string{"/", "/components", "/components/command-palette", "/components/date-range-picker",
+		"/components/input", "/components/pin-input", "/docs"} {
+		b.doing, b.deadline = "loading "+srv.URL+path, time.Now().Add(pageTimeout)
+		b.events = nil
+		b.call(b.session, "Page.navigate", map[string]any{"url": srv.URL + path})
+		b.wait("Page.loadEventFired")
+		b.eval(`new Promise((done) => requestAnimationFrame(() => requestIdleCallback(() => setTimeout(() => done(true), 200), { timeout: 500 })))`, new(bool))
 		for _, e := range b.events {
-			if e.Method != "Audits.issueAdded" {
-				continue
+			if e.Method == "Audits.issueAdded" {
+				t.Errorf("%s (plain load): Chrome reports issue %s", path, string(e.Params))
 			}
-			var issue struct {
-				Issue struct {
-					Code    string `json:"code"`
-					Details struct {
-						Generic *struct {
-							ErrorType string `json:"errorType"`
-						} `json:"genericIssueDetails"`
-					} `json:"details"`
-				} `json:"issue"`
+		}
+		b.open(srv.URL + path)
+		for _, e := range b.events {
+			if e.Method == "Audits.issueAdded" {
+				t.Errorf("%s: Chrome reports issue %s", path, string(e.Params))
 			}
-			b.decode(e.Params, &issue)
-			if g := issue.Issue.Details.Generic; g != nil && strings.Contains(g.ErrorType, "Label") {
-				t.Errorf("%s: Chrome reports %s", path, g.ErrorType)
+		}
+	}
+	var checked []string
+	for _, path := range []string{"/", "/components", "/components/form-field", "/components/input", "/components/radio-group",
+		"/components/checkbox-group", "/components/slider", "/components/date-range-picker", "/components/input-time",
+		"/components/listbox", "/components/toggle-group"} {
+		b.open(srv.URL + path)
+		for _, e := range b.events {
+			if e.Method == "Audits.issueAdded" {
+				t.Errorf("%s: Chrome reports issue %s", path, string(e.Params))
 			}
 		}
 		// Each field label's controls, marked for the accessibility tree below;

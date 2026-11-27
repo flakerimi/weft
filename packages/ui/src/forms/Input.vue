@@ -5,9 +5,10 @@
 // Attributes go to the <input> itself (placeholder, autocomplete, aria-*),
 // except class and style, which go to the box. A press anywhere on the box
 // outside the text, or on its touch hit area, focuses the text.
-import { useTemplateRef } from 'vue'
+import { computed, useTemplateRef } from 'vue'
 import Icon from '../basics/Icon.vue'
 import Spinner from '../basics/Spinner.vue'
+import { useId } from '../headless/useId.ts'
 import { useControlAttrs, useField } from './field.ts'
 import { pressFocuses } from './dom.ts'
 import type { Size } from '../types.ts'
@@ -68,6 +69,8 @@ defineSlots<{
 
 const f = useField(props)
 const { own, box, describedBy } = useControlAttrs(f)
+const fallback = useId('input')
+const id = computed(() => f.id.value ?? fallback)
 
 const input = useTemplateRef<HTMLInputElement>('input')
 
@@ -124,7 +127,7 @@ defineExpose({
       ref="input"
       class="weft-input__field"
       v-bind="own"
-      :id="f.id.value"
+      :id="id"
       :name="f.name.value"
       :type="type"
       :value="modelValue ?? ''"

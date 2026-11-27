@@ -172,7 +172,7 @@ defineExpose({
       :key="i"
       :ref="(el) => { if (el) boxes[i] = el as HTMLInputElement }"
       class="weft-pin-input__box"
-      :id="i === 0 ? f.id.value ?? `${base}-0` : undefined"
+      :id="i === 0 ? f.id.value ?? `${base}-0` : `${base}-${i}`"
       :type="mask ? 'password' : 'text'"
       :inputmode="inputmode"
       :autocomplete="otp && i === 0 ? 'one-time-code' : 'off'"

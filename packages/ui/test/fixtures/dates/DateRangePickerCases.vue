@@ -20,6 +20,7 @@ const props = withDefaults(defineProps<{
   readonly?: boolean
   placeholder?: string
   numberOfMonths?: number
+  standalone?: boolean
 }>(), { initial: undefined })
 const input = ref<Input | undefined>(props.input)
 const value = ref(((props.initial ?? null) as DateRange | null))
@@ -37,26 +38,29 @@ defineExpose({ input, value, open, changes, submitted })
 <template>
   <WeftProvider :input="input" :locale="locale">
     <div :dir="dir">
-      <button class="before">before</button>
-      <form @submit="onSubmit">
-        <FormField label="Stay" name="stay" description="Arrival and departure">
-          <DateRangePicker
-            v-model="value"
-            v-model:open="open"
-            :min="min"
-            :max="max"
-            :is-date-disabled="isDateDisabled"
-            :value-format="valueFormat"
-            :disabled="disabled"
-            :readonly="readonly"
-            :placeholder="placeholder"
-            :number-of-months="numberOfMonths"
-            @change="changes.push($event)"
-          />
-        </FormField>
-        <button class="submit" type="submit">Save</button>
-      </form>
-      <button class="after">after</button>
+      <DateRangePicker v-if="standalone" v-model="value" />
+      <template v-else>
+        <button class="before">before</button>
+        <form @submit="onSubmit">
+          <FormField label="Stay" name="stay" description="Arrival and departure">
+            <DateRangePicker
+              v-model="value"
+              v-model:open="open"
+              :min="min"
+              :max="max"
+              :is-date-disabled="isDateDisabled"
+              :value-format="valueFormat"
+              :disabled="disabled"
+              :readonly="readonly"
+              :placeholder="placeholder"
+              :number-of-months="numberOfMonths"
+              @change="changes.push($event)"
+            />
+          </FormField>
+          <button class="submit" type="submit">Save</button>
+        </form>
+        <button class="after">after</button>
+      </template>
     </div>
   </WeftProvider>
 </template>

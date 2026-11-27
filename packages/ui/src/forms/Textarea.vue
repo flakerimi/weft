@@ -4,6 +4,7 @@
 // removed. Inside a FormField it takes the field's id, description and error
 // state. Attributes go to the <textarea>.
 import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
+import { useId } from '../headless/useId.ts'
 import { useControlAttrs, useField } from './field.ts'
 import type { Size } from '../types.ts'
 import '../styles/base.css'
@@ -54,6 +55,8 @@ const emit = defineEmits<{
 
 const f = useField(props)
 const { own, box, describedBy } = useControlAttrs(f)
+const fallback = useId('textarea')
+const id = computed(() => f.id.value ?? fallback)
 // One element takes both: the textarea is its own box.
 const attrs = computed(() => ({ ...own.value, ...box.value }))
 const area = useTemplateRef<HTMLTextAreaElement>('area')
@@ -115,7 +118,7 @@ defineExpose({
     ref="area"
     class="weft-textarea"
     v-bind="attrs"
-    :id="f.id.value"
+    :id="id"
     :name="f.name.value"
     :rows="rows"
     :value="modelValue ?? ''"

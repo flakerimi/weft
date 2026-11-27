@@ -15,4 +15,5 @@ back when text is removed; it cannot be resized by hand then. A template ref
 has `focus()`, `resize()` (to fit after being shown) and `textarea`.
 
 In a FormField it takes the field's id, name, description, error and required
-state, as Input does. Attributes go to the `<textarea>`.
+state, as Input does; outside a FormField, with no `id` prop, it takes a
+generated id. Attributes go to the `<textarea>`.
