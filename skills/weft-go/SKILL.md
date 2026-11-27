@@ -37,14 +37,14 @@ type CreateIn struct {
 }
 
 func (module) Register(app *warp.App) error {
-	warp.Get(app, "/products/{id}", show) // func(ctx, ShowIn) (Product, error)
+	warp.Get(app, "/products/{id}", show) // func(ctx context.Context, in ShowIn) (Product, error)
 	warp.Post(app, "/products", create)   // 201
 	return nil
 }
 ```
 
 - 200, `Post` 201, `warp.Status(200)` to change it; `warp.None` reads nothing, or answers 204.
-- Each exported input field takes exactly one tag: `json` (the body: POST, PUT, PATCH only), `body:"json"` (the whole body, on one struct field), `query` (text, bool, numbers, a pointer to one, `[]string`, `map[string]string` for `filter[k]`) or `path` (a `{name}` wildcard).
+- Each exported input field takes one tag: `json` (the body: POST, PUT, PATCH only), `body:"json"` (the whole body, on one struct field), `query` (text, bool, numbers, a pointer to one, `[]string`, `map[string]string` for `filter[k]`) or `path` (`{name}`).
 - A body is `application/json` (else 415), with no field the input lacks (400).
 - Rules: `required`, `email`, `url`, `min=N`, `max=N`, `enum=a|b`, `unique` (a `data` store checks it), `readonly` (never read). All rules but `required` pass an empty value; a non-nil pointer was sent. On `Patch` rules run only on sent fields (`warp.Sent`). A failure is 422. A `Validate(ctx) error` method checks across fields.
 - `GET /products` and `GET /products/{id}` are both named `products`: give each a `warp.Name`. A mistake is one sentence from `app.Err()`, and `Serve` will not start.
@@ -93,7 +93,7 @@ weft build  # web/dist, then ./<name>
 GOOS=linux GOARCH=arm64 weft build -o myapp-linux-arm64
 ```
 
-The binary is built with `-trimpath -ldflags "-s -w"` and `CGO_ENABLED=0` unless set. It needs nothing beside it and runs on `FROM scratch`:
+Built with `-trimpath -ldflags "-s -w"` and `CGO_ENABLED=0` unless set. It needs nothing beside it and runs on `FROM scratch`:
 
 ```dockerfile
 FROM scratch
@@ -103,7 +103,7 @@ EXPOSE 8080
 ENTRYPOINT ["/myapp"]
 ```
 
-Build it for the image's system, using a `.dockerignore` of `*` and `!myapp`.
+Build it for the image's system, with a `.dockerignore` of `*` and `!myapp`.
 
 ## Do not
 

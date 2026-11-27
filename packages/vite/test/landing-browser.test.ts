@@ -214,6 +214,27 @@ import CyclesIsland from '../components/CyclesIsland.vue'
 </template>
 `
 
+const SNIPPETS_PAGE = `<script setup vapor lang="ts">
+import { reactive } from 'vue'
+import { AppShell, Banner, Button, Card, Form, FormField, Grid, Input } from '@weft/ui'
+
+const state = reactive({ email: '' })
+</script>
+
+<template>
+  <AppShell persist="weft:app-shell:collapsed">
+    <Banner id="news-1" close title="Release announcement" />
+    <Grid id="snip-grid"><Card>One</Card><Card>Two</Card><Card>Three</Card></Grid>
+    <Form id="snip-form" :state="state">
+      <FormField name="email" label="Email">
+        <Input v-model="state.email" />
+      </FormField>
+      <Button type="submit" label="Send" />
+    </Form>
+  </AppShell>
+</template>
+`
+
 describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1–I4)', { timeout: 120_000 }, () => {
   let dir: string
   const servers: Server[] = []
@@ -251,6 +272,7 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1
     writeFileSync(join(root, 'pages/long.vue'), LONG_WORD_PAGE)
     writeFileSync(join(root, 'components/CyclesIsland.vue'), CYCLES_ISLAND)
     writeFileSync(join(root, 'pages/cycles.vue'), CYCLES_PAGE)
+    writeFileSync(join(root, 'pages/snippets.vue'), SNIPPETS_PAGE)
 
     for (const theme of ['neutral', 'lisa', 'weft'] as const) {
       const outDir = join(dir, `dist-${theme}`)
@@ -583,5 +605,60 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1
         expect(pressedBadgeRatio, `${theme} ${scheme} Pricing pressed cycle badge`).toBeGreaterThanOrEqual(4.5)
       }
     }
+  })
+
+  it('N8 & Minor 1: a page with all four pre-paint snippets (AppShell, Banner, Grid, Form) runs every snippet without console or page errors, and hydrating an island at 375 px never briefly writes data-width="wide"', async () => {
+    const snippetsHtml = readFileSync(join(dir, 'dist-neutral/pages/snippets/index.html'), 'utf8')
+    const prepaintMatch = snippetsHtml.match(/<script data-weft-prepaint>([\s\S]*?)<\/script>/)
+    expect(prepaintMatch).not.toBeNull()
+    expect(prepaintMatch![1]!.split(';\n')).toHaveLength(4)
+
+    await openAt(`${urls.neutral}/static`, 375)
+    await evaluate(`(localStorage.setItem('weft:app-shell:collapsed', 'true'), localStorage.setItem('weft-banner:news-1', 'closed'), true)`)
+    await openAt(`${urls.neutral}/snippets`, 375)
+    const allFour = await evaluate<{
+      pageErrors: string[]
+      sidebar: string | null
+      bannerDisplay: string
+      gridWidth: string | null
+      gridCols: number
+      formSubmitPrevented: boolean
+    }>(`(() => {
+      const form = document.querySelector('#snip-form')
+      const ev = new Event('submit', { bubbles: true, cancelable: true })
+      form.dispatchEvent(ev)
+      return {
+        pageErrors: window.__pageErrors,
+        sidebar: document.documentElement.dataset.weftSidebar ?? null,
+        bannerDisplay: getComputedStyle(document.querySelector('.weft-banner[data-id="news-1"]')).display,
+        gridWidth: document.querySelector('#snip-grid').getAttribute('data-width'),
+        gridCols: getComputedStyle(document.querySelector('#snip-grid')).gridTemplateColumns.split(' ').length,
+        formSubmitPrevented: ev.defaultPrevented,
+      }
+    })()`)
+    expect(allFour).toEqual({
+      pageErrors: [],
+      sidebar: 'collapsed',
+      bannerDisplay: 'none',
+      gridWidth: 'narrow',
+      gridCols: 1,
+      formSubmitPrevented: true,
+    })
+
+    // Minor 1: record every distinct data-width attribute mutation on #pr-cycles .weft-grid after widthPrePaint sets it to "narrow" — island hydration at 375 px must never briefly write "wide".
+    await send('Page.addScriptToEvaluateOnNewDocument', {
+      source: `window.__widthHistory = []; new MutationObserver((recs) => { for (const r of recs) { if (r.type === 'attributes' && r.target instanceof Element && r.target.matches('#pr-cycles .weft-grid')) { const w = r.target.getAttribute('data-width'); if (window.__widthHistory[window.__widthHistory.length - 1] !== w) window.__widthHistory.push(w); } } }).observe(document, { subtree: true, attributes: true, attributeFilter: ['data-width'] });`,
+    })
+    await openAt(`${urls.neutral}/cycles`, 375)
+    const hydrationCheck = await evaluate<{ history: string[]; finalWidth: string | null; hydrated: boolean }>(`{
+      history: window.__widthHistory,
+      finalWidth: document.querySelector('#pr-cycles .weft-grid').getAttribute('data-width'),
+      hydrated: document.querySelector('#pr-cycles .weft-grid').hasAttribute('data-weft-width'),
+    }`)
+    expect(hydrationCheck).toEqual({
+      history: ['narrow'],
+      finalWidth: 'narrow',
+      hydrated: true,
+    })
   })
 })

@@ -199,9 +199,9 @@ Notes:
 
 ```text
 $ weft catalog --find week
-  Calendar        A month of dates to choose one, several or a range from, in the locale's names, digits and first day of the week.
-  DatePicker      A date field where a date is typed as the locale writes it…
-  WeftProvider    Sets how the part of the page inside it is used…
+  Calendar        A month of dates to choose one, several or a range from, in the current locale.
+  DatePicker      A date field where a date is typed in the locale or chosen from a calendar.
+  WeftProvider    Sets the input, surface and width context for every Weft component inside it.
 ```
 
 When nothing matches it says `weft catalog: nothing matches "<words>"; run weft catalog to list them.`, with exit status 1. `--find` with no words, or only blank ones, is wrong usage.

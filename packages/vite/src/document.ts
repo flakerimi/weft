@@ -121,7 +121,7 @@ export function prePaintTag(snippets: string[], who = 'buildSite'): string[] {
   for (const code of snippets) {
     if (/<\/script|<!--/i.test(code)) throw new Error(`${who}: a pre-paint snippet holds "</script" or "<!--", which would break the page's <head>: ${code.slice(0, 60)}`)
   }
-  return [`<script data-weft-prepaint>${snippets.map((c) => `(function(){${c}})()`).join('\n')}</script>`]
+  return [`<script data-weft-prepaint>${snippets.map((c) => `(function(){${c}})()`).join(';\n')}</script>`]
 }
 
 export function pageHTML(p: {
