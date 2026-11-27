@@ -71,7 +71,6 @@ export const NOT_YET: { see: string; missing: string; instead: string }[] = [
   { see: 'Scaffolding and app blocks', missing: '`DataTable` and `EntityDialog`', instead: 'use `Table`, and a `Dialog` with a `Form`' },
   { see: 'Attachments and live data', missing: 'Attachments, `useLive` and the charts', instead: 'use `FileUpload` with a handler of your own mounted with `app.Handle`, and `StatCard`' },
   { see: 'App routes', missing: 'A client-side router and `layouts/`', instead: 'each page is a document of its own; share a layout as a component the pages use' },
-  { see: 'Landing blocks', missing: '`Hero`, `Pricing` and the other landing blocks', instead: 'compose them from `Section`, `Grid` and `Card`' },
 ]
 
 /** /index.md: the whole brief for an agent asked to build an app with Weft. */

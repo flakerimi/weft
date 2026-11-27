@@ -36,6 +36,7 @@ const GROUPS: [string, string][] = [
   ['feedback', 'Feedback'],
   ['data', 'Data'],
   ['shell', 'Shell'],
+  ['landing', 'Landing'],
   ['adaptive', 'Adaptive'],
   ['islands', 'Islands'],
 ]
@@ -81,8 +82,9 @@ export const exampleIsland = (component: string, example: string) => `Example_${
  * component added later included, makes its examples hydrate.
  */
 export const STILL = new Set([
-  'AvatarGroup', 'Badge', 'Breadcrumb', 'Button', 'Card', 'Chip', 'Container', 'Divider', 'FieldGroup',
-  'Icon', 'Kbd', 'Page', 'Progress', 'Section', 'Separator', 'Skeleton', 'Spinner', 'Stack',
+  'AvatarGroup', 'Badge', 'Breadcrumb', 'Button', 'Card', 'Chip', 'Container', 'Divider', 'FeatureGrid',
+  'FieldGroup', 'Icon', 'Kbd', 'Page', 'Progress', 'Section', 'Separator', 'Skeleton', 'Spinner', 'Stack',
+  'Testimonials',
 ])
 
 /**

@@ -1,0 +1,89 @@
+/* FeatureGrid: a titled section of capabilities in a responsive Grid, each
+   item with a tinted icon disc, heading, description and optional link, boxed
+   in a card or unboxed (`plain`). */
+.weft-feature-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-6, 24px);
+}
+.weft-feature-grid__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--weft-space-4, 16px);
+}
+.weft-feature-grid[data-align="center"] .weft-feature-grid__header {
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.weft-feature-grid__heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-2, 8px);
+}
+.weft-feature-grid[data-align="center"] .weft-feature-grid__heading { align-items: center; }
+.weft-feature-grid__headline {
+  font-size: 0.875em;
+  font-weight: var(--weft-weight-heading, 600);
+  color: var(--weft-tone-text, var(--weft-color-primary-text, LinkText));
+}
+.weft-feature-grid__title {
+  margin: 0;
+  font-size: 1.5em;
+  font-weight: var(--weft-weight-heading, 600);
+  line-height: 1.2;
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-feature-grid__description {
+  margin: 0;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-feature-grid__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--weft-space-2, 8px);
+}
+.weft-feature-grid__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--weft-space-2, 8px);
+  min-inline-size: 0;
+}
+.weft-feature-grid[data-variant="card"] .weft-feature-grid__item {
+  padding: var(--weft-space-4, 16px);
+  background: var(--weft-color-surface, Canvas);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-card, 12px);
+  box-shadow: var(--weft-shadow-card, none);
+}
+.weft-feature-grid__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--weft-control-md, 36px);
+  block-size: var(--weft-control-md, 36px);
+  border-radius: var(--weft-radius-control, 8px);
+  background: color-mix(in srgb, var(--weft-tone, LinkText) 14%, transparent);
+  color: var(--weft-tone-text, LinkText);
+}
+.weft-feature-grid__item-title {
+  margin: 0;
+  font-size: 1.125em;
+  font-weight: var(--weft-weight-heading, 600);
+  line-height: 1.25;
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-feature-grid__item-description {
+  margin: 0;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-feature-grid__item-link {
+  margin-block-start: auto;
+  padding-block-start: var(--weft-space-1, 4px);
+  font-size: 0.875em;
+  font-weight: var(--weft-weight-heading, 600);
+}

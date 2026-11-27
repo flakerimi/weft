@@ -109,23 +109,23 @@ Every Weft component adapts to touch, pointer, landing and app inside itself, wh
 | PageAnchors | — | planned (phase 6b) | Docs pages from content collections. |
 | PageAside | — | planned (phase 6b) | Docs pages from content collections. |
 | PageBody | — | planned (phase 6b) | Docs pages from content collections. |
-| PageCTA | — | planned (phase 7) | Landing blocks (`Cta`). |
+| PageCTA | `Cta` | partial: no `reverse` | `variant` (`card`, `soft`, `solid`, `plain`), `orientation` (`vertical`, `horizontal`) and `aside` slot are there. |
 | PageCard | — | planned (phase 7) | Landing blocks. |
 | PageColumns | — | planned (phase 7) | Landing blocks. |
-| PageFeature | — | planned (phase 7) | Landing blocks (`FeatureGrid`). |
+| PageFeature | `FeatureGrid` | partial: no `orientation` | A titled section of capabilities in a responsive `Grid`, each with an icon disc, heading, description and link (`card` or `plain`). |
 | PageGrid | `Grid` | done | Columns follow the grid's own width. |
 | PageHeader | — | planned (phase 6b) | Docs pages from content collections. |
-| PageHero | — | planned (phase 7) | Landing blocks (`Hero`). |
+| PageHero | `Hero` | partial: no `reverse` | Defaults to `h1` (or `h2` inside an inset `WeftProvider`); `orientation` (`vertical`, `horizontal`) adapts to its own width. |
 | PageLinks | — | planned (phase 6b) | Docs pages from content collections. |
 | PageList | — | planned (phase 7) | Landing blocks. |
 | PageLogos | — | planned (phase 7) | Landing blocks. |
-| PageSection | `Section` | partial: no `headline`, `icon`, `links`, `features`, `orientation`, `reverse` | The landing variants are phase 7 blocks. |
+| PageSection | `Section` | partial: no `headline`, `icon`, `links`, `features`, `orientation`, `reverse` | The landing sections are `FeatureGrid`, `Testimonials`, `Pricing`, `Faq` and `Cta`. |
 | Pagination | `Pagination` | partial: no icon overrides | `color` and `activeColor` are `tone` and `activeTone`. |
 | PinInput | `PinInput` | partial: no `separator`, `autofocus`, `autofocusDelay` |  |
 | Popover | `Popover` | done | Nuxt's `reference` is `anchor`; `mode="hover"`, delays and `arrow` are there. A bottom sheet on touch. |
-| PricingPlan | — | planned (phase 7) | Landing blocks (`Pricing`). |
-| PricingPlans | — | planned (phase 7) | Landing blocks (`Pricing`). |
-| PricingTable | — | planned (phase 7) | Landing blocks (`Pricing`). |
+| PricingPlan | `Pricing` | partial: no `tagline`, `discount`, `terms` | An entry in `Pricing`'s `plans` array (`PricingPlan`). |
+| PricingPlans | `Pricing` | partial: no `compact`, `scale` | `Pricing` renders the plans in a responsive `Grid` with an optional billing-cycle `ToggleGroup` (`cycles` and `v-model:cycle`). |
+| PricingTable | — | planned (phase 7) | Landing blocks (`Pricing` covers the plan cards; a multi-plan feature comparison matrix is separate). |
 | Progress | `Progress` | partial: no `inverted`, `orientation`, `animation`, steps (an array as max) |  |
 | ProgressGroup | — | planned (phase 5) | A bar of segments (storage used by kind, say) goes with the charts; `Progress` draws one value. |
 | RadioGroup | `RadioGroup` | partial: no `valueKey`, `labelKey`, `descriptionKey`, variant (card, table), `indicator`, `loop` |  |
@@ -233,7 +233,7 @@ Every Weft component adapts to touch, pointer, landing and app inside itself, wh
 
 ## Weft components without a Nuxt UI counterpart
 
-`Stack`, `Divider`, `Island`, `Spinner`, `ConfirmDialog`, `DateRangePicker`, `StatCard`, `CloseButton`, `OverlayPanel`. (`DateRangePicker` is what `InputDate`'s `range` does in Nuxt; `Divider` is the layout rule beside `Separator`; `CloseButton` and `OverlayPanel` are the parts every Weft overlay is built from, public so pages can build their own.)
+`Stack`, `Divider`, `Island`, `Spinner`, `ConfirmDialog`, `DateRangePicker`, `StatCard`, `CloseButton`, `OverlayPanel`, `Testimonials`, `Faq`. (`DateRangePicker` is what `InputDate`'s `range` does in Nuxt; `Divider` is the layout rule beside `Separator`; `CloseButton` and `OverlayPanel` are the parts every Weft overlay is built from, public so pages can build their own; `Testimonials` and `Faq` are dedicated landing blocks for customer quotes and `Accordion`-backed question sections.)
 
 ## Summary
 
@@ -242,6 +242,6 @@ Every Weft component adapts to touch, pointer, landing and app inside itself, wh
 | Status | Count |
 | --- | ---: |
 | done | 13 |
-| partial | 59 |
-| planned | 78 |
+| partial | 64 |
+| planned | 73 |
 | not planned | 36 |

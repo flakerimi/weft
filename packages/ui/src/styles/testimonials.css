@@ -1,0 +1,68 @@
+/* Testimonials: semantic <figure> cards with <blockquote> and <figcaption> in
+   a responsive Grid. */
+.weft-testimonials {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-6, 24px);
+}
+.weft-testimonials__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-2, 8px);
+}
+.weft-testimonials[data-align="center"] .weft-testimonials__header {
+  align-self: center;
+  align-items: center;
+  text-align: center;
+}
+.weft-testimonials__headline {
+  font-size: 0.875em;
+  font-weight: var(--weft-weight-heading, 600);
+  color: var(--weft-color-primary-text, LinkText);
+}
+.weft-testimonials__title {
+  margin: 0;
+  font-size: 1.5em;
+  font-weight: var(--weft-weight-heading, 600);
+  line-height: 1.2;
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-testimonials__description {
+  margin: 0;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-testimonials__item {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--weft-space-4, 16px);
+  margin: 0;
+  padding: var(--weft-space-4, 16px);
+  background: var(--weft-color-surface, Canvas);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-card, 12px);
+  box-shadow: var(--weft-shadow-card, none);
+}
+.weft-testimonials__quote { margin: 0; }
+.weft-testimonials__quote-text {
+  margin: 0;
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-testimonials__author {
+  display: flex;
+  align-items: center;
+  gap: var(--weft-space-3, 12px);
+}
+.weft-testimonials__meta {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.weft-testimonials__name {
+  font-weight: var(--weft-weight-heading, 600);
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-testimonials__role {
+  font-size: 0.875em;
+  color: var(--weft-color-text-muted, GrayText);
+}

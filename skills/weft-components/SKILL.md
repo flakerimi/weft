@@ -5,7 +5,7 @@ description: Use before writing or changing the markup of a Weft page, island or
 
 # Choosing and composing Weft components
 
-Weft has 76 Vapor components in `@weft/ui`. Each one adapts to touch or pointer, to a landing page or an app, and to the width of its own container. Pick the right one and compose it; never rebuild it. The catalogue says what each component is for, when not to use it, and what it does on each axis.
+Weft has 82 Vapor components in `@weft/ui`. Each one adapts to touch or pointer, to a landing page or an app, and to the width of its own container. Pick the right one and compose it; never rebuild it. The catalogue says what each component is for, when not to use it, and what it does on each axis.
 
 ## Read the catalogue first
 
@@ -21,7 +21,7 @@ weft catalog --find date            # the components whose name or text has the 
 
 Names match without regard to case or hyphens (`date-picker`), and an unknown name gets the closest ones. In an app it reads `.weft/catalog/components.json`, the app's version; elsewhere, the catalogue `weft` carries. Start from an example rather than inventing a usage.
 
-Without `weft`, fetch one entry, such as `https://weft.base.al/components/date-picker.json` for `DatePicker`; `https://weft.base.al/catalog.json` has every one, and is as large as the file. In the Weft repository the catalogue is `catalog/components.json`, generated: never edit it. The examples there are files in `packages/ui/examples/<Name>/`, and the prose is `packages/ui/src/<group>/<Name>.docs.md`.
+Without `weft`, fetch one entry, such as `https://weft.base.al/components/date-picker.json` for `DatePicker`; `https://weft.base.al/catalog.json` has all of them. In the Weft repository the catalogue is `catalog/components.json`, generated: never edit it. Examples live in `packages/ui/examples/<Name>/`, and docs in `packages/ui/src/<group>/<Name>.docs.md`.
 
 ## Choose by `use` and `avoid`
 
@@ -44,6 +44,7 @@ Always read `avoid`: it names the component to use instead. The choices most oft
 | Records to sort, choose and page | `Table` | a grid of `Card`s |
 | Nothing to show / loading failed | `EmptyState` / `ErrorState` | an `Alert` |
 | An app frame | `AppShell` | `Header` and `Footer`, which are for sites |
+| A landing section | `Hero`, `FeatureGrid`, `Pricing`, `Testimonials`, `Faq`, `Cta` | a `Grid` of `Card`s |
 
 The main value is always `v-model`, and names mean one thing everywhere:
 
@@ -55,7 +56,7 @@ The main value is always `v-model`, and names mean one thing everywhere:
 
 ## Compose
 
-A page the build renders, and every island and component in it, may use Weft's components without importing them: `@weft/vite` adds `import { … } from '@weft/ui'` for each tag the template uses. It leaves your own names alone: a name the file imports or declares, the component's own file name, lowercase tags and anything inside `v-pre`. Import anything else, such as `useWeft`, `useToast` or a type, yourself. Writing the component imports by hand, as here, works the same. A settings page:
+A page the build renders, and every island and component in it, may use Weft's components without importing them: `@weft/vite` adds `import { … } from '@weft/ui'` for each tag the template uses. It leaves your own names alone: a name the file imports or declares, the component's own file name, lowercase tags and anything inside `v-pre`. Import anything else (`useWeft`, `useToast`, types) yourself. Writing the component imports by hand works the same:
 
 ```vue
 <script setup vapor lang="ts">
@@ -107,6 +108,6 @@ On a page the build renders, a form works only inside an `Island` (see `weft-sit
 
 Planned, not built, so do not look for them (phases at https://weft.base.al/docs/coming-next):
 
-- `DataTable`, `EntityDialog`, the charts, the landing blocks (`Hero`, `FeatureGrid`, `Pricing`, `Testimonials`, `Faq`, `Cta`) and `Image`. Use `Table`, `Dialog` with a `Form`, `StatCard`, and a `Grid` of `Card`s today;
+- `DataTable`, `EntityDialog`, the charts and `Image`. Use `Table`, `Dialog` with a `Form`, and `StatCard` today;
 - `weft mcp`, which will serve the catalogue to agents over MCP; run `weft catalog` instead;
 - `weft check` and `@weft/eslint-plugin`, which will flag raw HTML controls; check your markup against the rules above.

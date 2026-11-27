@@ -150,8 +150,8 @@ func TestCatalogList(t *testing.T) {
 	if got := lines[1:]; !reflect.DeepEqual(got, want) {
 		t.Errorf("the list is\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
-	if n := len(out); n > 8*1024 {
-		t.Errorf("the list is %d B, over 8 KB", n)
+	if n := len(out); n > 9*1024 {
+		t.Errorf("the list is %d B, over 9 KB", n)
 	}
 	t.Logf("the list of %d components: %d B", len(entries), len(out))
 }

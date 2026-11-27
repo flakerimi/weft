@@ -1,0 +1,132 @@
+/* Pricing: plan cards in a responsive Grid with an optional ToggleGroup cycle
+   switch and highlighted tier. */
+.weft-pricing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-6, 24px);
+}
+.weft-pricing__header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--weft-space-3, 12px);
+}
+.weft-pricing[data-align="center"] .weft-pricing__header {
+  align-self: center;
+  align-items: center;
+  text-align: center;
+}
+.weft-pricing__headline {
+  font-size: 0.875em;
+  font-weight: var(--weft-weight-heading, 600);
+  color: var(--weft-tone-text, var(--weft-color-primary-text, LinkText));
+}
+.weft-pricing__title {
+  margin: 0;
+  font-size: 1.5em;
+  font-weight: var(--weft-weight-heading, 600);
+  line-height: 1.2;
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-pricing__description {
+  margin: 0;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-pricing__cycles {
+  margin-block-start: var(--weft-space-1, 4px);
+  padding: var(--weft-space-1, 4px);
+  background: var(--weft-color-surface, Canvas);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-control, 8px);
+}
+.weft-pricing__cycle-badge { margin-inline-start: var(--weft-space-1, 4px); }
+.weft-pricing__plan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-4, 16px);
+  padding: var(--weft-space-6, 24px);
+  background: var(--weft-color-surface, Canvas);
+  border: var(--weft-border-width, 1px) solid var(--weft-color-border, GrayText);
+  border-radius: var(--weft-radius-card, 12px);
+  box-shadow: var(--weft-shadow-card, none);
+}
+.weft-pricing__plan[data-highlight="true"] {
+  border-width: var(--weft-border-width-strong, 2px);
+  border-color: var(--weft-tone, var(--weft-color-primary, Highlight));
+}
+.weft-pricing__plan-top {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-2, 8px);
+}
+.weft-pricing__plan-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--weft-space-2, 8px);
+}
+.weft-pricing__plan-title {
+  margin: 0;
+  font-size: 1.125em;
+  font-weight: var(--weft-weight-heading, 600);
+  line-height: 1.25;
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-pricing__plan-description {
+  margin: 0;
+  font-size: 0.875em;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-pricing__price-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-1, 4px);
+  min-block-size: var(--weft-control-lg, 40px);
+}
+.weft-pricing__price-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--weft-space-1, 4px);
+}
+.weft-pricing__price {
+  font-size: 2em;
+  font-weight: var(--weft-weight-title, 700);
+  line-height: 1.1;
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-pricing__period {
+  font-size: 0.875em;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-pricing__note {
+  font-size: 0.75em;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-pricing__features {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-2, 8px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex: 1;
+}
+.weft-pricing__feature {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--weft-space-2, 8px);
+  font-size: 0.875em;
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-pricing__feature-icon {
+  display: inline-flex;
+  flex: none;
+  margin-block-start: var(--weft-space-1, 4px);
+  color: var(--weft-tone-text, var(--weft-color-primary-text, Highlight));
+}
+.weft-pricing__action { margin-block-start: auto; }
+.weft-pricing__footer {
+  font-size: 0.875em;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-pricing[data-align="center"] .weft-pricing__footer { text-align: center; }

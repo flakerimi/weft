@@ -1,0 +1,43 @@
+/* Faq: a titled section wrapping an Accordion, stacked (`vertical`) or split
+   side-by-side (`horizontal`) when its own width is `wide`. */
+.weft-faq {
+  display: grid;
+  gap: var(--weft-space-6, 24px);
+  align-items: start;
+}
+.weft-faq[data-orientation="horizontal"][data-width="wide"] {
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: var(--weft-space-8, 32px);
+}
+.weft-faq__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--weft-space-2, 8px);
+}
+.weft-faq[data-orientation="vertical"][data-align="center"] .weft-faq__header {
+  justify-self: center;
+  align-items: center;
+  text-align: center;
+}
+.weft-faq__headline {
+  font-size: 0.875em;
+  font-weight: var(--weft-weight-heading, 600);
+  color: var(--weft-color-primary-text, LinkText);
+}
+.weft-faq__title {
+  margin: 0;
+  font-size: 1.5em;
+  font-weight: var(--weft-weight-heading, 600);
+  line-height: 1.2;
+  color: var(--weft-color-text, CanvasText);
+}
+.weft-faq__description {
+  margin: 0;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-faq__aside {
+  margin-block-start: var(--weft-space-2, 8px);
+  font-size: 0.875em;
+  color: var(--weft-color-text-muted, GrayText);
+}
+.weft-faq__accordion { min-inline-size: 0; }

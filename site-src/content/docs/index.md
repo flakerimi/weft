@@ -10,7 +10,7 @@ These docs show you how to build an app with Weft, serve it from one Go binary, 
 
 Weft is one UI system for Go and Vue apps. It has four parts:
 
-- **`@weft/ui`**: 76 Vue components, written once, that adapt to touch or pointer, to a landing page or an app, and to the width they are given. Every component is a Vapor component: no virtual DOM.
+- **`@weft/ui`**: 82 Vue components, written once, that adapt to touch or pointer, to a landing page or an app, and to the width they are given. Every component is a Vapor component: no virtual DOM.
 - **`@weft/vite`**: the page build. It renders your pages to HTML when you build, compresses them, and ships JavaScript only for the parts you mark interactive.
 - **Warp, the Go package** `github.com/flakerimi/weft/warp`: an app made of modules, with typed routes that check their input and answer in one error shape, records in SQLite, a login, and `warp.Serve`, which serves the page build from memory next to that API, in one binary.
 - **The `weft` command**: it makes an app, runs it while you work, writes the TypeScript types and client from its Go, builds it into one binary, and updates itself. It carries the other three parts.

@@ -28,7 +28,7 @@ component uses. Neither is counted in the rows below.
 
 ## Per component
 
-76 components. Median: JS 2.61 KB, CSS 1.30 KB.
+82 components. Median: JS 2.61 KB, CSS 1.30 KB.
 
 | Component | JS | Later | CSS | Total |
 | --- | ---: | ---: | ---: | ---: |
@@ -37,7 +37,7 @@ component uses. Neither is counted in the rows below.
 | AppShell | 18.50 | — | 3.79 | 22.29 |
 | Avatar | 1.33 | — | 0.53 | 1.86 |
 | AvatarGroup | 1.34 | — | 0.41 | 1.75 |
-| Badge | 0.87 | — | 0.80 | 1.67 |
+| Badge | 0.86 | — | 0.80 | 1.66 |
 | Banner | 2.88 | — | 1.56 | 4.44 |
 | Breadcrumb | 1.53 | — | 0.57 | 2.09 |
 | Button | 1.38 | — | 1.39 | 2.77 |
@@ -53,6 +53,7 @@ component uses. Neither is counted in the rows below.
 | ConfirmDialog | 6.55 | — | 1.96 | 8.51 |
 | Container | 0.77 | — | 0.14 | 0.91 |
 | ContextMenu | 14.59 | — | 1.88 | 16.48 |
+| Cta | 2.13 | — | 1.64 | 3.77 |
 | DatePicker | 12.17 | 14.87 | 2.71 | 14.88 |
 | DateRangePicker | 25.45 | — | 2.72 | 28.18 |
 | Dialog | 7.69 | — | 2.27 | 9.97 |
@@ -61,6 +62,8 @@ component uses. Neither is counted in the rows below.
 | DropdownMenu | 14.88 | — | 2.32 | 17.21 |
 | EmptyState | 2.21 | — | 1.59 | 3.80 |
 | ErrorState | 2.18 | — | 1.54 | 3.72 |
+| Faq | 3.60 | — | 0.94 | 4.54 |
+| FeatureGrid | 2.54 | — | 1.08 | 3.62 |
 | FieldGroup | 2.47 | — | 1.63 | 4.09 |
 | FileUpload | 6.32 | — | 2.23 | 8.55 |
 | Footer | 1.29 | — | 0.55 | 1.84 |
@@ -68,6 +71,7 @@ component uses. Neither is counted in the rows below.
 | FormField | 2.64 | — | 1.13 | 3.77 |
 | Grid | 0.86 | — | 0.41 | 1.26 |
 | Header | 16.98 | — | 3.38 | 20.35 |
+| Hero | 2.13 | — | 1.58 | 3.72 |
 | Icon | 0.67 | — | 0.33 | 1.00 |
 | Input | 2.43 | — | 0.97 | 3.40 |
 | InputNumber | 2.83 | — | 1.00 | 3.83 |
@@ -83,6 +87,7 @@ component uses. Neither is counted in the rows below.
 | Pagination | 2.61 | — | 1.36 | 3.97 |
 | PinInput | 2.68 | — | 0.53 | 3.21 |
 | Popover | 13.43 | — | 2.55 | 15.98 |
+| Pricing | 5.24 | — | 1.98 | 7.22 |
 | Progress | 0.78 | — | 0.85 | 1.63 |
 | RadioGroup | 3.06 | — | 0.99 | 4.05 |
 | ScrollArea | 1.02 | — | 0.56 | 1.58 |
@@ -99,6 +104,7 @@ component uses. Neither is counted in the rows below.
 | Switch | 1.96 | — | 1.42 | 3.38 |
 | Table | 11.11 | — | 2.75 | 13.86 |
 | Tabs | 3.74 | — | 1.28 | 5.02 |
+| Testimonials | 2.65 | — | 0.86 | 3.51 |
 | Textarea | 2.12 | — | 0.54 | 2.66 |
 | Timeline | 1.83 | — | 0.90 | 2.73 |
 | Toast | 3.19 | — | 1.94 | 5.13 |
