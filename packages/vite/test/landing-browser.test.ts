@@ -185,7 +185,7 @@ const btn = '${longBtnLabel}'
 
 const CYCLES_ISLAND = `<script setup vapor lang="ts">
 import { ref } from 'vue'
-import { Pricing } from '@weft/ui'
+import { Card, Footer, Grid, Pricing, WeftProvider } from '@weft/ui'
 
 const cycle = ref('yearly')
 const cycles = [
@@ -198,7 +198,16 @@ const plans = [
 </script>
 
 <template>
-  <Pricing id="pr-cycles" v-model:cycle="cycle" title="Cycles" :cycles="cycles" :plans="plans" />
+  <div>
+    <Footer id="cycles-footer"><template #leading>2026</template></Footer>
+    <WeftProvider width="wide">
+      <Grid id="cycles-provider-grid"><Card>A</Card><Card>B</Card></Grid>
+    </WeftProvider>
+    <Pricing id="pr-cycles" v-model:cycle="cycle" title="Cycles" :cycles="cycles" :plans="plans" />
+    <div style="width: 300px;">
+      <Grid id="cycles-boxed-grid"><Card>1</Card><Card>2</Card><Card>3</Card></Grid>
+    </div>
+  </div>
 </template>
 `
 
@@ -645,20 +654,31 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1
       formSubmitPrevented: true,
     })
 
-    // Minor 1: record every distinct data-width attribute mutation on #pr-cycles .weft-grid after widthPrePaint sets it to "narrow" — island hydration at 375 px must never briefly write "wide".
+    // Minor 1: record every distinct data-width attribute mutation on #pr-cycles .weft-grid and #cycles-boxed-grid (both preceded in the same island by a Footer with prepaint: false and a WeftProvider width="wide" Grid) — island hydration at 375 px and 1440 px must never briefly write "wide".
     await send('Page.addScriptToEvaluateOnNewDocument', {
-      source: `window.__widthHistory = []; new MutationObserver((recs) => { for (const r of recs) { if (r.type === 'attributes' && r.target instanceof Element && r.target.matches('#pr-cycles .weft-grid')) { const w = r.target.getAttribute('data-width'); if (window.__widthHistory[window.__widthHistory.length - 1] !== w) window.__widthHistory.push(w); } } }).observe(document, { subtree: true, attributes: true, attributeFilter: ['data-width'] });`,
+      source: `window.__prHistory = []; window.__boxedHistory = []; new MutationObserver((recs) => { for (const r of recs) { if (r.type === 'attributes' && r.target instanceof Element) { if (r.target.matches('#pr-cycles .weft-grid')) { const w = r.target.getAttribute('data-width'); if (window.__prHistory[window.__prHistory.length - 1] !== w) window.__prHistory.push(w); } if (r.target.matches('#cycles-boxed-grid')) { const w = r.target.getAttribute('data-width'); if (window.__boxedHistory[window.__boxedHistory.length - 1] !== w) window.__boxedHistory.push(w); } } } }).observe(document, { subtree: true, attributes: true, attributeFilter: ['data-width'] });`,
     })
     await openAt(`${urls.neutral}/cycles`, 375)
-    const hydrationCheck = await evaluate<{ history: string[]; finalWidth: string | null; hydrated: boolean }>(`{
-      history: window.__widthHistory,
+    const hydration375 = await evaluate<{ prHistory: string[]; boxedHistory: string[]; finalWidth: string | null; hydrated: boolean }>(`{
+      prHistory: window.__prHistory,
+      boxedHistory: window.__boxedHistory,
       finalWidth: document.querySelector('#pr-cycles .weft-grid').getAttribute('data-width'),
       hydrated: document.querySelector('#pr-cycles .weft-grid').hasAttribute('data-weft-width'),
     }`)
-    expect(hydrationCheck).toEqual({
-      history: ['narrow'],
+    expect(hydration375).toEqual({
+      prHistory: ['narrow'],
+      boxedHistory: ['narrow'],
       finalWidth: 'narrow',
       hydrated: true,
+    })
+    await openAt(`${urls.neutral}/cycles`, 1440)
+    const hydration1440 = await evaluate<{ boxedHistory: string[]; boxedFinal: string | null }>(`{
+      boxedHistory: window.__boxedHistory,
+      boxedFinal: document.querySelector('#cycles-boxed-grid').getAttribute('data-width'),
+    }`)
+    expect(hydration1440).toEqual({
+      boxedHistory: ['narrow'],
+      boxedFinal: 'narrow',
     })
   })
 })

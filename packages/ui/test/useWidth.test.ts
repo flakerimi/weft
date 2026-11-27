@@ -82,12 +82,14 @@ it('widthPrePaint sets data-width synchronously on unhydrated elements (includin
   }
 })
 
-it('widthPrePaint batches all getBoundingClientRect reads before any setAttribute writes, and starts useWidth from the pre-hydrated island attribute without writing "wide"', () => {
+it('widthPrePaint batches all getBoundingClientRect reads before any setAttribute writes, and starts useWidth from the pre-hydrated [data-weft-w="<id>"] attribute without writing "wide"', () => {
   const order: string[] = []
   const el1 = document.createElement('div')
   const el2 = document.createElement('div')
   el1.setAttribute('data-width', 'wide')
+  el1.setAttribute('data-weft-w', 'w-i0-0')
   el2.setAttribute('data-width', 'wide')
+  el2.setAttribute('data-weft-w', 'w-i0-1')
   el1.getBoundingClientRect = () => { order.push('read:1'); return { width: 320 } as DOMRect }
   el2.getBoundingClientRect = () => { order.push('read:2'); return { width: 720 } as DOMRect }
   const origSet1 = el1.setAttribute.bind(el1)
@@ -105,7 +107,9 @@ it('widthPrePaint batches all getBoundingClientRect reads before any setAttribut
     const app = createVaporApp(WidthProbe as never)
     app.provide(ID_SCOPE, { prefix: 'i0', next: 0 })
     app.mount(host)
-    expect((host.querySelector('.box') as HTMLElement).dataset.width).toBe('narrow')
+    const box = host.querySelector('.box') as HTMLElement
+    expect(box.dataset.width).toBe('narrow')
+    expect(box.getAttribute('data-weft-w')).toBe('w-i0-0')
     app.unmount()
     host.remove()
   } finally {
