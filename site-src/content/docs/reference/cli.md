@@ -52,7 +52,7 @@ It downloads your platform's archive and `SHA256SUMS`, checks one against the ot
 
 ### weft create
 
-Makes an app in a new folder named after it: `data` (SQLite), `auth` (the owner's login, with `/login` and `/setup`) and `hello`. It writes the app's files from the template `weft` carries, with a fresh `AUTH_SECRET` (48 random bytes, base64url) in `.env`, which only you may read, unpacks Weft's packages into `.weft/`, records the Weft version and theme in `package.json`'s `"weft"` object, and runs `pnpm install`, `go mod download` (Warp's module, from GitHub at the release's tag, and the SQLite driver) and `weft gen`. Then it prints `Set AUTH_OWNER_EMAIL in <name>/.env to the owner's email address; it is owner@example.com until you do.` and `Created <name>. Next: cd <name> && weft dev`. [Create an app](../getting-started/create-an-app.md) walks through it.
+Makes an app in a new folder named after it: `data` (SQLite), `auth` (the owner's login, with `/login` and `/setup`) and `hello`. It writes the app's files from the template `weft` carries, with a fresh `AUTH_SECRET` (48 random bytes, base64url) in `.env`, which only you may read, unpacks Weft's packages into `.weft/`, records the Weft version and theme in `package.json`'s `"weft"` object, and runs `pnpm install`, `go mod download` (Warp's module from GitHub at the release's tag, and the SQLite driver) and `weft gen`. Then it prints `Set AUTH_OWNER_EMAIL in <name>/.env to the owner's email address; it is owner@example.com until you do.` and `Created <name>. Next: cd <name> && weft dev`. [Create an app](../getting-started/create-an-app.md) walks through it.
 
 ```text
 weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install]
@@ -114,11 +114,11 @@ Runs an app while you work. It builds the Go code with the `dev` tag into `.weft
 | --- | --- |
 | `--port n` | The page server's port. Default `5173`; `0` takes a free one |
 
-Every 300 ms it looks for a changed `.go` file outside `.weft/`, `.git/`, `node_modules/` and `web/`, and a changed `.env`; then it builds again and, if that succeeds, replaces the Go server. A failed build prints the compiler's output, and the last build serves `/api` until the fix is saved; a rebuilt server that stops by itself says `weft dev: the Go server stopped after the restart; fix it and save again.` An unreadable folder is skipped and named once. A change under `web/` reloads the browser; one to `web/vite.config` needs a restart. The Go server's output passes through. It runs with a free `PORT`, `HOST=127.0.0.1`, `WEFT_DEV_PARENT=1` and `APP_URL=http://localhost:<the page server's port>` (or a non-empty `APP_URL` from `weft dev`'s environment), which win over `.env`.
+Every 300 ms it looks for a changed `.go` file outside `.weft/`, `.git/`, `node_modules/` and `web/`, and a changed `.env`; then it builds again and, if that succeeds, replaces the Go server. A failed build prints the compiler's output, and the last build serves `/api` until the fix is saved; a rebuilt server that stops by itself says `weft dev: the Go server stopped after the restart; fix it and save again.` An unreadable folder is skipped and named once. A change under `web/` reloads the browser; one to `web/vite.config` needs a restart. The Go server's output passes through. It runs with a free `PORT`, `HOST=127.0.0.1`, `WEFT_DEV_PARENT=1` and `APP_URL=http://localhost:<page port>` (or a non-empty `APP_URL` from `weft dev`'s environment), which win over `.env`.
 
 The Go server must answer on `PORT` within 30 s, as must the page server, or `weft dev` stops both, saying which and what to check, with exit status 1. The app has 5 s to describe itself after each build, else `weft dev` says so and goes on with `web/.weft-types/api.ts` as it was.
 
-Ctrl-C, SIGTERM, SIGHUP or SIGQUIT stops both servers, with exit status 0; killed, `weft dev` leaves neither running, as each exits when its standard input, a pipe `weft dev` holds, ends. If one server stops by itself, `weft dev` stops the other and says `weft dev: the page server stopped; see its output above.` (or `the Go server`), with exit status 1. A port in use is `weft dev: port <n> is in use; stop what is using it or pass --port.`, checked first. Wrong usage exits with status 2.
+Ctrl-C, SIGTERM, SIGHUP or SIGQUIT stops both servers, with exit status 0; killed, `weft dev` leaves neither running, as each exits when its standard input, a pipe `weft dev` holds, ends (on Windows each is in a Job Object that ends its process tree). If one server stops by itself, `weft dev` stops the other and says `weft dev: the page server stopped; see its output above.` (or `the Go server`), with exit status 1. A port in use is `weft dev: port <n> is in use; stop what is using it or pass --port.`, checked first. Wrong usage exits with status 2.
 
 ### weft build
 
@@ -128,7 +128,7 @@ Builds an app: writes the typed client as [weft gen](#weft-gen) does, type-check
 go build -trimpath -ldflags "-s -w" -o <file> .
 ```
 
-It adds `CGO_ENABLED=0`, for a static binary, unless the environment sets it. `GOOS` and `GOARCH` pass through from the environment, so `GOOS=linux GOARCH=arm64 weft build` builds for Linux on arm64. Run it anywhere inside the app; it finds the nearest `package.json` with a `"weft"` object. A `package.json` on the way that is not valid JSON stops the search: the command names it and says to fix it.
+It adds `CGO_ENABLED=0` for a static binary, unless the environment sets it. `GOOS` and `GOARCH` pass through from the environment, so `GOOS=linux GOARCH=arm64 weft build` builds for Linux on arm64. Run it anywhere inside the app; it finds the nearest `package.json` with a `"weft"` object. A `package.json` on the way that is not valid JSON stops the search: the command names it and says to fix it.
 
 | Flag | What it does |
 | --- | --- |

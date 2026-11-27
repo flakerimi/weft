@@ -335,9 +335,25 @@ const warpPackage = "github.com/flakerimi/weft/warp"
 func makesApp(appDir string) bool {
 	cmd := exec.Command("go", "list", "-deps", "-tags", "dev", "-json=Dir,ImportPath,GoFiles,CgoFiles,Imports,Module,Standard,Error,Incomplete", ".")
 	cmd.Dir, cmd.Env = appDir, hostBuildEnv(os.Environ())
-	out, err := cmd.Output()
-	if err != nil {
-		return true
+	var out []byte
+	if runtime.GOOS == "windows" {
+		var buf bytes.Buffer
+		cmd.Stdout = &buf
+		if startGroup(cmd) != nil {
+			return true
+		}
+		err := cmd.Wait()
+		unpin(cmd)
+		if err != nil {
+			return true
+		}
+		out = buf.Bytes()
+	} else {
+		var err error
+		out, err = cmd.Output()
+		if err != nil {
+			return true
+		}
 	}
 	fset := token.NewFileSet()
 	dec := json.NewDecoder(bytes.NewReader(out))
@@ -451,7 +467,16 @@ func describeApp(ctx context.Context, command, appDir, bin string, within time.D
 	out := &cappedBuffer{max: describeMax, over: cancel}
 	cmd.Stdout, cmd.Stderr = out, stderr
 	cmd.WaitDelay = time.Second
-	err = cmd.Run()
+	if runtime.GOOS == "windows" {
+		cmd.Cancel = func() error { stopGroup(cmd); return nil }
+		err = startGroup(cmd)
+		if err == nil {
+			err = cmd.Wait()
+			stopGroup(cmd)
+		}
+	} else {
+		err = cmd.Run()
+	}
 	show := func() {
 		b := out.buf.Bytes()[:min(out.buf.Len(), shownMax)]
 		if len(b) > 0 {

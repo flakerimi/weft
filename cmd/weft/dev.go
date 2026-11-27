@@ -37,6 +37,11 @@ const (
 	pageURLLine = "weft: dev server at "
 )
 
+// errNoJob wraps a Windows Job Object creation, configuration, assignment or
+// thread-resume failure from startGroup, so weft dev can report it directly
+// instead of suggesting pnpm install.
+var errNoJob = errors.New("cannot put process in a Windows Job Object")
+
 // devReadyWithin is how long the Go server and the page server have to
 // answer once started; tests shorten it.
 var devReadyWithin = 30 * time.Second
@@ -115,19 +120,30 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return fail(stderr, "dev", err)
 	}
-	// Each child's standard input is the read end of a pipe whose write end
-	// weft dev holds, and never writes to, for its whole life. When weft dev
-	// dies, however it dies, SIGKILL too, the kernel closes the write end and
-	// each child reads the end of its input and exits: the Go server under
-	// WEFT_DEV_PARENT=1, the page server under --exit-with-parent. An
-	// *os.File as Stdin is handed to the child as it is, with no goroutine
-	// copying into it.
-	parentIn, parentOut, err := os.Pipe()
+	// Each child gets its own standard input pipe whose write end weft dev
+	// holds, and never writes to, for its whole life. Two separate pipes are
+	// used, with only one process reading each, because on Windows an
+	// anonymous pipe does not support overlapped I/O: any synchronous call on
+	// a shared pipe handle — including GetFileType and NtQueryInformationFile
+	// during stdin setup as well as ReadFile — waits behind a pending
+	// ReadFile, so the Go server's blocking read in untilEOF would block the
+	// page server from starting. When weft dev dies, however it dies, SIGKILL
+	// too, the kernel closes both write ends and each child reads the end of
+	// its input and exits: the Go server under WEFT_DEV_PARENT=1, the page
+	// server under --exit-with-parent. An *os.File as Stdin is handed to the
+	// child as it is, with no goroutine copying into it.
+	apiIn, apiOut, err := os.Pipe()
 	if err != nil {
 		return fail(stderr, "dev", fmt.Errorf("cannot make a pipe for the servers (%v); run weft dev again", err))
 	}
-	defer parentIn.Close()
-	defer parentOut.Close()
+	defer apiIn.Close()
+	defer apiOut.Close()
+	pageIn, pageOutPipe, err := os.Pipe()
+	if err != nil {
+		return fail(stderr, "dev", fmt.Errorf("cannot make a pipe for the servers (%v); run weft dev again", err))
+	}
+	defer pageIn.Close()
+	defer pageOutPipe.Close()
 
 	// say prints a sentence about watching once, however often it recurs.
 	said := map[string]bool{}
@@ -187,7 +203,7 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		cmd := exec.Command(bin)
 		cmd.Dir = appDir
 		cmd.Env = goServerEnv(os.Environ(), goPort, *port)
-		cmd.Stdin = parentIn
+		cmd.Stdin = apiIn
 		cmd.Stdout, cmd.Stderr = stdout, stderr
 		return startChild("the Go server", cmd)
 	}
@@ -203,7 +219,7 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	cmd := exec.Command("pnpm", pageArgs...)
 	cmd.Dir = appDir
 	// pnpm exec hands its standard input to node as it is.
-	cmd.Stdin = parentIn
+	cmd.Stdin = pageIn
 	pageOut := &dropLine{w: stdout, prefix: []byte(pageURLLine)}
 	cmd.Stdout = pageOut
 	cmd.Stderr = stderr
@@ -211,6 +227,9 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	pages, err := startChild("the page server", cmd)
 	if err != nil {
 		api.stop()
+		if errors.Is(err, errNoJob) {
+			return fail(stderr, "dev", fmt.Errorf("cannot put the page server in a Windows Job Object (%v); run weft dev from a console that is not in a restricted job", err))
+		}
 		return fail(stderr, "dev", fmt.Errorf("cannot run pnpm exec weft-dev (%v); run pnpm install in %s and run weft dev again", err, appDir))
 	}
 	stopAll := func() {
@@ -237,6 +256,9 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		case <-ctx.Done():
 			return stopAsked()
 		case <-time.After(devGrace):
+		}
+		if c == pages {
+			pageOut.flush(false)
 		}
 		stopAll()
 		fmt.Fprintf(stderr, "weft dev: %s stopped; see its output above.\n", c.name)
@@ -266,6 +288,9 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		case <-pages.done:
 			return exited(pages)
 		case <-deadline:
+			if apiReady {
+				pageOut.flush(true)
+			}
 			pageOut.quiet.Store(true)
 			stopAll()
 			if !apiReady {
@@ -394,11 +419,15 @@ func goBuild(ctx context.Context, command, appDir, bin string, stderr io.Writer)
 	cmd.Dir, cmd.Env = appDir, hostBuildEnv(os.Environ())
 	cmd.Stdout, cmd.Stderr = stderr, stderr
 	// Stopped as a Ctrl-C would, so go stops the compilers it started; on
-	// Windows, which has none to send, go and what it started are killed.
-	// Cancel runs before Wait returns, so always while go is pinned.
+	// Windows, which has none to send, go runs in a Job Object and it and
+	// what it started are killed.
 	cmd.Cancel = func() error { return interrupt(cmd) }
 	cmd.WaitDelay = 3 * time.Second
-	if cmd.Start() != nil {
+	start := cmd.Start
+	if runtime.GOOS == "windows" {
+		start = func() error { return startGroup(cmd) }
+	}
+	if start() != nil {
 		return false
 	}
 	pin(cmd)
@@ -547,30 +576,52 @@ func answers(url string) bool {
 }
 
 // dropLine writes every line to w but those that start with prefix, and
-// nothing once quiet is set.
+// nothing once quiet is set. It keeps the last dropped line and any partial
+// trailing bytes so flush can show them if the page server fails to answer.
 type dropLine struct {
-	w      io.Writer
-	prefix []byte
-	buf    []byte
-	quiet  atomic.Bool
+	mu      sync.Mutex
+	w       io.Writer
+	prefix  []byte
+	buf     []byte
+	dropped []byte
+	quiet   atomic.Bool
 }
 
 func (d *dropLine) Write(p []byte) (int, error) {
 	if d.quiet.Load() {
 		return len(p), nil
 	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	d.buf = append(d.buf, p...)
 	for {
 		i := bytes.IndexByte(d.buf, '\n')
 		if i < 0 {
 			return len(p), nil
 		}
-		if line := d.buf[:i+1]; !bytes.HasPrefix(line, d.prefix) {
-			if _, err := d.w.Write(line); err != nil {
-				return len(p), err
-			}
+		line := d.buf[:i+1]
+		if bytes.HasPrefix(line, d.prefix) {
+			d.dropped = append(d.dropped[:0], line...)
+		} else if _, err := d.w.Write(line); err != nil {
+			return len(p), err
 		}
 		d.buf = d.buf[i+1:]
+	}
+}
+
+func (d *dropLine) flush(includeDropped bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if includeDropped && len(d.dropped) > 0 {
+		_, _ = d.w.Write(d.dropped)
+		d.dropped = nil
+	}
+	if len(d.buf) > 0 {
+		_, _ = d.w.Write(d.buf)
+		if d.buf[len(d.buf)-1] != '\n' {
+			_, _ = d.w.Write([]byte{'\n'})
+		}
+		d.buf = nil
 	}
 }
 
