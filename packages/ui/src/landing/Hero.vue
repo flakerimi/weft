@@ -4,8 +4,9 @@
 // is set), a lead paragraph, primary and secondary action buttons, a quiet
 // caption, and an optional visual (an app preview, picture or code block)
 // below the copy (`vertical`, the default) or beside it (`horizontal` when its
-// own box is wide, stacking above when narrow or regular). On touch its
-// action buttons are at least --weft-hit-min tall (Button's rule).
+// own container is wide, stacking above when narrow or regular, in CSS first
+// through @container). On touch its action buttons are at least --weft-hit-min
+// tall (Button's rule).
 import { computed, useTemplateRef } from 'vue'
 import { useInset } from '../adaptive/context.ts'
 import { useWidth } from '../adaptive/useWidth.ts'
@@ -55,7 +56,6 @@ const inset = useInset()
 const root = useTemplateRef<HTMLElement>('root')
 const width = useWidth(root)
 const headingTag = computed(() => `h${props.level ?? (inset ? 2 : 1)}`)
-const layout = computed(() => (props.orientation === 'horizontal' && width.value === 'wide' ? 'horizontal' : 'vertical'))
 const resolvedAlign = computed(() => props.align ?? (props.orientation === 'horizontal' ? 'start' : 'center'))
 </script>
 
@@ -63,7 +63,7 @@ const resolvedAlign = computed(() => props.align ?? (props.orientation === 'hori
   <section
     ref="root"
     class="weft-hero"
-    :data-orientation="layout"
+    :data-orientation="orientation"
     :data-align="resolvedAlign"
     :data-width="width"
   >
@@ -77,7 +77,7 @@ const resolvedAlign = computed(() => props.align ?? (props.orientation === 'hori
           <slot name="actions">
             <Button
               v-for="(action, i) in actions"
-              :key="action.label"
+              :key="i"
               size="lg"
               :label="action.label"
               :icon="action.icon"

@@ -1,6 +1,6 @@
 ---
 group: basics
-purpose: A person or thing as a small round picture, falling back to initials, then to an icon.
+purpose: A person or thing as a small round picture, falling back to initials or an icon.
 use: Beside a name in a list, a comment or a menu, and in an AvatarGroup for the people on something.
 avoid: For a logo or a photo that is content, use an img; for a status on the avatar, wrap it in a Chip.
 adapts:

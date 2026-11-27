@@ -1,6 +1,6 @@
 ---
 group: adaptive
-purpose: Sets how the part of the page inside it is used, its input and its surface, for every Weft component within.
+purpose: Sets the input, surface and width context for every Weft component inside it.
 use: Around a layout to declare its surface (landing for marketing pages, app for tools), and to force an input for a kiosk, a preview or a test.
 avoid: For choosing a component's look, use its own props; never use it to make a mobile version of something, since components adapt themselves.
 adapts:

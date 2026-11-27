@@ -6,7 +6,7 @@ avoid: For the top of an app page inside an AppShell, use Page; for a closing ca
 adapts:
   input: Action buttons use size lg, at least --weft-hit-min (44 px) tall on pointer and touch alike.
   surface: On a landing surface its container is capped at --weft-page-max (1200 px) with the larger landing type scale; in an app it runs full width.
-  width: Measured from the hero itself; a horizontal hero puts the copy and visual side by side when wide (1024 px and up) and stacks the copy above the visual when regular or narrow.
+  width: Adapts in CSS first from the hero's own container width (@container); a horizontal hero puts the copy and visual side by side when wide (1024 px and up) and stacks the copy above the visual when regular or narrow.
 ---
 `title` renders as the page's `h1` by default, or as an `h2` inside a
 `WeftProvider` marked `inset` (so a preview stage never adds a second `h1` to

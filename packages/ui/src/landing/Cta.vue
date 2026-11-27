@@ -6,7 +6,8 @@
 // in `tone` (`solid`, where default buttons switch to neutral so they contrast
 // with the fill), or unboxed (`plain`). `vertical` (the fixed default) stacks
 // the copy and actions; `horizontal` puts the copy at the start and the
-// actions or `aside` at the end when regular or wide, stacking when narrow.
+// actions or `aside` at the end when regular or wide, stacking when narrow, in
+// CSS first through @container.
 import { computed, useTemplateRef } from 'vue'
 import { useWidth } from '../adaptive/useWidth.ts'
 import Button from '../basics/Button.vue'
@@ -57,7 +58,6 @@ defineSlots<{
 
 const root = useTemplateRef<HTMLElement>('root')
 const width = useWidth(root)
-const layout = computed(() => (props.orientation === 'horizontal' && width.value !== 'narrow' ? 'horizontal' : 'vertical'))
 const resolvedAlign = computed(() => props.align ?? (props.orientation === 'horizontal' ? 'start' : 'center'))
 </script>
 
@@ -67,7 +67,7 @@ const resolvedAlign = computed(() => props.align ?? (props.orientation === 'hori
     class="weft-cta"
     :data-variant="variant"
     :data-tone="tone"
-    :data-orientation="layout"
+    :data-orientation="orientation"
     :data-align="resolvedAlign"
     :data-width="width"
   >
@@ -77,11 +77,11 @@ const resolvedAlign = computed(() => props.align ?? (props.orientation === 'hori
         <component :is="`h${level}`" v-if="title || $slots.title" class="weft-cta__title"><slot name="title">{{ title }}</slot></component>
         <p v-if="description || $slots.description" class="weft-cta__description"><slot name="description">{{ description }}</slot></p>
         <div v-if="$slots.default" class="weft-cta__body"><slot /></div>
-        <div v-if="($slots.actions || actions?.length) && (layout === 'vertical' || !!$slots.aside)" class="weft-cta__actions">
+        <div v-if="($slots.actions || actions?.length) && (orientation === 'vertical' || !!$slots.aside)" class="weft-cta__actions">
           <slot name="actions">
             <Button
               v-for="(action, i) in actions"
-              :key="action.label"
+              :key="i"
               size="lg"
               :label="action.label"
               :icon="action.icon"
@@ -96,11 +96,11 @@ const resolvedAlign = computed(() => props.align ?? (props.orientation === 'hori
         </div>
       </div>
       <div v-if="$slots.aside" class="weft-cta__aside"><slot name="aside" /></div>
-      <div v-else-if="layout === 'horizontal' && ($slots.actions || actions?.length)" class="weft-cta__actions weft-cta__actions--end">
+      <div v-else-if="orientation === 'horizontal' && ($slots.actions || actions?.length)" class="weft-cta__actions weft-cta__actions--end">
         <slot name="actions">
           <Button
             v-for="(action, i) in actions"
-            :key="action.label"
+            :key="i"
             size="lg"
             :label="action.label"
             :icon="action.icon"

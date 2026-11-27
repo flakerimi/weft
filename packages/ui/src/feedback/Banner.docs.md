@@ -1,6 +1,6 @@
 ---
 group: feedback
-purpose: A strip across the top of a page or app for news that concerns everyone, which can be closed for good.
+purpose: A strip across the top of a page or app for site-wide news, closable for good.
 use: For maintenance windows, a new feature, a policy change: above the Header, on every page, until read.
 avoid: For a message about one part of a page, use Alert; for a confirmation of something the person did, use a Toast.
 adapts:

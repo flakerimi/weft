@@ -6,7 +6,7 @@
 // map that lacks the active cycle renders an empty price area for that plan
 // (never showing a wrong cycle's price) and warns once in development naming
 // the plan and the cycle. Plans render in a Grid that sizes its columns to the
-// plan count and its own width.
+// plan count and its own container width in CSS first.
 import { computed } from 'vue'
 import Badge from '../basics/Badge.vue'
 import Button from '../basics/Button.vue'
@@ -24,7 +24,16 @@ import '../styles/pricing.css'
 
 type Cols = number | { narrow?: number; regular?: number; wide?: number }
 
-const warnedMissingCycle = new Set<string>()
+const warnedKey = '__weftPricingWarned__'
+function warnedSet(): Set<string> {
+  const g = globalThis as Record<string, unknown>
+  let s = g[warnedKey] as Set<string> | undefined
+  if (!s) {
+    s = new Set<string>()
+    g[warnedKey] = s
+  }
+  return s
+}
 
 const props = withDefaults(
   defineProps<{
@@ -113,22 +122,39 @@ const resolvedCols = computed<Cols>(() => {
 
 const planHeading = computed(() => `h${Math.min(props.level + 1, 6)}`)
 
-function warnMissing(plan: PricingPlan, field: 'price' | 'period', cycle: string) {
+function warnOnce(key: string, message: string) {
   if (!import.meta.env.DEV) return
+  const seen = warnedSet()
+  if (seen.has(key)) return
+  seen.add(key)
+  console.warn(message)
+}
+
+function warnMissing(plan: PricingPlan, field: 'price' | 'period', cycle: string) {
   const name = plan.id ?? plan.title
-  const key = `${name}:${field}:${cycle}`
-  if (warnedMissingCycle.has(key)) return
-  warnedMissingCycle.add(key)
-  console.warn(
-    `Pricing: plan "${name}" has no ${field} for cycle "${cycle}"; give it an entry in packages/ui/src/landing/Pricing.vue or use a plain string for every cycle.`,
+  warnOnce(
+    `${name}:${field}:${cycle}`,
+    `Pricing: plan "${name}" has no ${field} for cycle "${cycle}"; add a "${cycle}" entry to its ${field} map in your page, or give it one plain string.`,
+  )
+}
+
+function warnNoCycles(plan: PricingPlan, field: 'price' | 'period') {
+  const name = plan.id ?? plan.title
+  warnOnce(
+    `${name}:${field}:no-cycles`,
+    `Pricing: plan "${name}" gives ${field} as a per-cycle map, but cycles is empty; pass cycles to Pricing in your page, or give ${field} one plain string.`,
   )
 }
 
 function priceOf(plan: PricingPlan): string {
   if (typeof plan.price === 'string') return plan.price
   const c = activeCycle.value
-  if (c && Object.prototype.hasOwnProperty.call(plan.price, c)) return plan.price[c]!
-  if (c) warnMissing(plan, 'price', c)
+  if (!c) {
+    warnNoCycles(plan, 'price')
+    return ''
+  }
+  if (Object.prototype.hasOwnProperty.call(plan.price, c)) return plan.price[c]!
+  warnMissing(plan, 'price', c)
   return ''
 }
 
@@ -136,8 +162,12 @@ function periodOf(plan: PricingPlan): string {
   if (!plan.period) return ''
   if (typeof plan.period === 'string') return plan.period
   const c = activeCycle.value
-  if (c && Object.prototype.hasOwnProperty.call(plan.period, c)) return plan.period[c]!
-  if (c) warnMissing(plan, 'period', c)
+  if (!c) {
+    warnNoCycles(plan, 'period')
+    return ''
+  }
+  if (Object.prototype.hasOwnProperty.call(plan.period, c)) return plan.period[c]!
+  warnMissing(plan, 'period', c)
   return ''
 }
 
@@ -159,86 +189,89 @@ function planAction(plan: PricingPlan, action: ActionItem) {
 
 <template>
   <section class="weft-pricing" :data-tone="tone" :data-align="align">
-    <header v-if="headline || title || description || cycles.length || $slots.headline || $slots.header" class="weft-pricing__header">
-      <slot name="header">
-        <div v-if="headline || $slots.headline" class="weft-pricing__headline"><slot name="headline">{{ headline }}</slot></div>
-        <component :is="`h${level}`" v-if="title" class="weft-pricing__title">{{ title }}</component>
-        <p v-if="description" class="weft-pricing__description">{{ description }}</p>
-      </slot>
-      <ToggleGroup
-        v-if="cycles.length"
-        class="weft-pricing__cycles"
-        :aria-label="cycleLabel"
-        :items="cycleItems"
-        :model-value="activeCycle"
-        :active-tone="tone"
-        active-variant="solid"
-        variant="ghost"
-        @update:model-value="onCycleChange"
-      >
-        <template #default="{ item, pressed }">
-          <span class="weft-pricing__cycle-label">{{ item.label }}</span>
-          <Badge
-            v-if="cycleBadgeOf(item.value)"
-            class="weft-pricing__cycle-badge"
-            :label="cycleBadgeOf(item.value)"
-            :tone="pressed ? 'neutral' : tone"
-            variant="soft"
-            size="sm"
-          />
-        </template>
-      </ToggleGroup>
-    </header>
-    <Grid class="weft-pricing__grid" :cols="resolvedCols" :gap="4">
-      <div
-        v-for="(plan, i) in plans"
-        :key="plan.id || plan.title || i"
-        class="weft-pricing__plan"
-        :data-highlight="plan.highlight ? 'true' : undefined"
-      >
-        <slot v-if="plan.slot && $slots[plan.slot]" :name="plan.slot" :plan="plan" :index="i" :cycle="activeCycle || undefined" />
-        <slot v-else name="plan" :plan="plan" :index="i" :cycle="activeCycle || undefined">
-          <div class="weft-pricing__plan-top">
-            <div class="weft-pricing__plan-header">
-              <component :is="planHeading" class="weft-pricing__plan-title">{{ plan.title }}</component>
-              <Badge v-if="plan.badge" class="weft-pricing__plan-badge" :label="plan.badge" :tone="tone" variant="soft" size="sm" />
-            </div>
-            <p v-if="plan.description" class="weft-pricing__plan-description">{{ plan.description }}</p>
-          </div>
-          <div class="weft-pricing__price-block">
-            <div v-if="priceOf(plan)" class="weft-pricing__price-row">
-              <span class="weft-pricing__price">{{ priceOf(plan) }}</span>
-              <span v-if="periodOf(plan)" class="weft-pricing__period">{{ periodOf(plan) }}</span>
-            </div>
-            <div v-if="noteOf(plan)" class="weft-pricing__note">{{ noteOf(plan) }}</div>
-          </div>
-          <ul v-if="plan.features?.length" class="weft-pricing__features">
-            <li v-for="(feat, fi) in plan.features" :key="fi" class="weft-pricing__feature">
-              <span class="weft-pricing__feature-icon" aria-hidden="true">
-                <Icon name="check" />
-              </span>
-              <span class="weft-pricing__feature-text">{{ feat }}</span>
-            </li>
-          </ul>
-          <div v-if="plan.action" class="weft-pricing__action">
-            <Button
-              class="weft-pricing__button"
-              :label="planAction(plan, plan.action).label"
-              :to="planAction(plan, plan.action).to"
-              :icon="planAction(plan, plan.action).icon"
-              :tone="planAction(plan, plan.action).tone"
-              :variant="planAction(plan, plan.action).variant"
-              :disabled="planAction(plan, plan.action).disabled"
-              :loading="planAction(plan, plan.action).loading"
-              block
-              @click="plan.action.onClick?.($event)"
-            />
-          </div>
+    <div class="weft-pricing__inner">
+      <header v-if="headline || title || description || cycles.length || $slots.headline || $slots.header" class="weft-pricing__header">
+        <slot name="header">
+          <div v-if="headline || $slots.headline" class="weft-pricing__headline"><slot name="headline">{{ headline }}</slot></div>
+          <component :is="`h${level}`" v-if="title" class="weft-pricing__title">{{ title }}</component>
+          <p v-if="description" class="weft-pricing__description">{{ description }}</p>
         </slot>
-      </div>
-    </Grid>
-    <footer v-if="$slots.footer" class="weft-pricing__footer">
-      <slot name="footer" />
-    </footer>
+        <ToggleGroup
+          v-if="cycles.length"
+          class="weft-pricing__cycles"
+          :aria-label="cycleLabel"
+          :items="cycleItems"
+          :model-value="activeCycle"
+          :active-tone="tone"
+          active-variant="solid"
+          variant="ghost"
+          @update:model-value="onCycleChange"
+        >
+          <template #default="{ item, pressed }">
+            <span class="weft-pricing__cycle-label">{{ item.label }}</span>
+            <Badge
+              v-if="cycleBadgeOf(item.value)"
+              class="weft-pricing__cycle-badge"
+              :data-pressed="pressed ? 'true' : undefined"
+              :label="cycleBadgeOf(item.value)"
+              :tone="pressed ? 'neutral' : tone"
+              variant="soft"
+              size="sm"
+            />
+          </template>
+        </ToggleGroup>
+      </header>
+      <Grid class="weft-pricing__grid" :cols="resolvedCols" :gap="4">
+        <div
+          v-for="(plan, i) in plans"
+          :key="plan.id || plan.title || i"
+          class="weft-pricing__plan"
+          :data-highlight="plan.highlight ? 'true' : undefined"
+        >
+          <slot v-if="plan.slot && $slots[plan.slot]" :name="plan.slot" :plan="plan" :index="i" :cycle="activeCycle || undefined" />
+          <slot v-else name="plan" :plan="plan" :index="i" :cycle="activeCycle || undefined">
+            <div class="weft-pricing__plan-top">
+              <div class="weft-pricing__plan-header">
+                <component :is="planHeading" class="weft-pricing__plan-title">{{ plan.title }}</component>
+                <Badge v-if="plan.badge" class="weft-pricing__plan-badge" :label="plan.badge" :tone="tone" variant="soft" size="sm" />
+              </div>
+              <p v-if="plan.description" class="weft-pricing__plan-description">{{ plan.description }}</p>
+            </div>
+            <div class="weft-pricing__price-block">
+              <div v-if="priceOf(plan)" class="weft-pricing__price-row">
+                <span class="weft-pricing__price">{{ priceOf(plan) }}</span>
+                <span v-if="periodOf(plan)" class="weft-pricing__period">{{ periodOf(plan) }}</span>
+              </div>
+              <div v-if="noteOf(plan)" class="weft-pricing__note">{{ noteOf(plan) }}</div>
+            </div>
+            <ul v-if="plan.features?.length" class="weft-pricing__features">
+              <li v-for="(feat, fi) in plan.features" :key="fi" class="weft-pricing__feature">
+                <span class="weft-pricing__feature-icon" aria-hidden="true">
+                  <Icon name="check" />
+                </span>
+                <span class="weft-pricing__feature-text">{{ feat }}</span>
+              </li>
+            </ul>
+            <div v-if="plan.action" class="weft-pricing__action">
+              <Button
+                class="weft-pricing__button"
+                :label="planAction(plan, plan.action).label"
+                :to="planAction(plan, plan.action).to"
+                :icon="planAction(plan, plan.action).icon"
+                :tone="planAction(plan, plan.action).tone"
+                :variant="planAction(plan, plan.action).variant"
+                :disabled="planAction(plan, plan.action).disabled"
+                :loading="planAction(plan, plan.action).loading"
+                block
+                @click="plan.action.onClick?.($event)"
+              />
+            </div>
+          </slot>
+        </div>
+      </Grid>
+      <footer v-if="$slots.footer" class="weft-pricing__footer">
+        <slot name="footer" />
+      </footer>
+    </div>
   </section>
 </template>

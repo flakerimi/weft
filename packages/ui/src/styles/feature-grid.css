@@ -2,6 +2,16 @@
    item with a tinted icon disc, heading, description and optional link, boxed
    in a card or unboxed (`plain`). */
 .weft-feature-grid {
+  container-type: inline-size;
+  inline-size: 100%;
+  max-inline-size: var(--weft-page-max, 1200px);
+  margin-inline: auto;
+  padding-block: clamp(var(--weft-space-6, 24px), 5cqi, var(--weft-space-8, 32px));
+  padding-inline: clamp(var(--weft-space-4, 16px), 4%, var(--weft-space-8, 32px));
+  color: var(--weft-color-text, CanvasText);
+  overflow-wrap: anywhere;
+}
+.weft-feature-grid__inner {
   display: flex;
   flex-direction: column;
   gap: var(--weft-space-6, 24px);
@@ -31,13 +41,16 @@
 }
 .weft-feature-grid__title {
   margin: 0;
-  font-size: 1.5em;
-  font-weight: var(--weft-weight-heading, 600);
-  line-height: 1.2;
+  font-size: clamp(1.5rem, 3cqi, 2.25rem);
+  font-weight: var(--weft-weight-title, 700);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
   color: var(--weft-color-text, CanvasText);
 }
 .weft-feature-grid__description {
   margin: 0;
+  max-inline-size: 60ch;
   color: var(--weft-color-text-muted, GrayText);
 }
 .weft-feature-grid__actions {

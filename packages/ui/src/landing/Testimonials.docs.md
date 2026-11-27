@@ -6,12 +6,12 @@ avoid: For a sequence of milestones over time, use Timeline; for capability card
 adapts:
   input: Nothing changes unless an item sets `to`, which renders as a standalone Link reaching --weft-hit-min (44 px) on touch.
   surface: On a landing surface its container is capped at --weft-page-max (1200 px) with the landing type scale; in an app it runs full width.
-  width: The inner Grid measures its own width, reflowing by default from 1 column narrow (under 640 px) to 2 regular (under 1024 px) to 3 wide.
+  width: The inner Grid adapts in CSS first from its own container width (@container), reflowing by default from 1 column narrow (under 640 px) to 2 regular (under 1024 px) to 3 wide.
 ---
 `items` are `{ quote, author, role, avatar, to }`. Each renders as a
-`<figure>` holding a `<blockquote>` and a `<figcaption>` with the author's
-`Avatar` (`avatar` image, or initials from `author`), name (linked through
-`Link` when `to` is given) and `role`.
+`<figure>` holding a `<blockquote>` and a `<figcaption>` with a decorative
+`Avatar` (`avatar` image, or initials from `author`), the author's name
+(linked through `Link` when `to` is given) and `role`.
 
 The section's `title` renders as an `h2` by default (`level` changes it to
 2–6). `cols` takes a fixed column count or `{ narrow, regular, wide }`,

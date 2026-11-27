@@ -28,8 +28,8 @@ const features: FeatureItem[] = [
 ]
 
 const quotes: TestimonialItem[] = [
-  { quote: 'One binary changed our deploys.', author: 'Ada Lovelace', role: 'CTO', to: '/ada' },
-  { quote: 'Zero drift between Go and Vue.', author: 'Grace Hopper', avatar: 'https://example.com/grace.png' },
+  { quote: 'One binary changed our deploys.', author: 'Avery Quinn', role: 'CTO', to: '/avery' },
+  { quote: 'Zero drift between Go and Vue.', author: 'Morgan Patel', avatar: 'https://example.com/morgan.png' },
 ]
 
 const cycles: PricingCycle[] = [
@@ -75,6 +75,13 @@ const missingCycleProdPlans: PricingPlan[] = [
   },
 ]
 
+const noCyclesMapPlans: PricingPlan[] = [
+  {
+    title: 'MapWithoutCycles',
+    price: { monthly: '$15' },
+  },
+]
+
 const faqs: FaqItem[] = [
   { value: 'js', label: 'Does it ship JS?', content: 'Only for islands.' },
   { value: 'db', label: 'Which DB?', content: 'SQLite today.', slot: 'custom-db' },
@@ -114,7 +121,7 @@ defineExpose({ clicks, cycle, openFaq })
   <div v-else-if="$props.case === 'all-blocks-page'" class="full-landing">
     <Hero title="Main page heading" />
     <FeatureGrid title="Capabilities" :items="features" />
-    <Pricing title="Plans" :plans="plans" />
+    <Pricing title="Plans" :cycles="cycles" :plans="plans" />
     <Testimonials title="What people say" :items="quotes" />
     <Faq title="Questions" :items="faqs" />
     <Cta title="Ready to build?" />
@@ -136,7 +143,16 @@ defineExpose({ clicks, cycle, openFaq })
     orientation="horizontal"
     :level="3"
     title="Solid band"
-    :actions="[{ label: 'Act now' }]"
+    description="Important warning action."
+    :actions="[{ label: 'Act now' }, { label: 'Later' }]"
+  />
+  <Cta
+    v-else-if="$props.case === 'cta-soft'"
+    variant="soft"
+    tone="primary"
+    title="Soft band"
+    description="Readable description on a soft surface."
+    :actions="[{ label: 'Start' }]"
   />
   <Cta
     v-else-if="$props.case === 'cta-aside'"
@@ -195,6 +211,11 @@ defineExpose({ clicks, cycle, openFaq })
     title="Missing cycle prod test"
     :cycles="cycles"
     :plans="missingCycleProdPlans"
+  />
+  <Pricing
+    v-else-if="$props.case === 'pricing-no-cycles-map'"
+    title="Map with no cycles"
+    :plans="noCyclesMapPlans"
   />
   <Faq
     v-else-if="$props.case === 'faq-default'"

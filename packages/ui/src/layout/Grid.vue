@@ -22,20 +22,39 @@ const root = useTemplateRef<HTMLElement>('root')
 const width = useWidth(root)
 const order = ['narrow', 'regular', 'wide'] as const
 const defaults = { narrow: 1, regular: 2, wide: 3 }
-// A partial object falls back to the nearest smaller width given, else the defaults.
-const count = computed(() => {
+
+function colsAt(w: (typeof order)[number]): number {
   if (typeof props.cols === 'number') return props.cols
   const c = props.cols
-  for (let i = order.indexOf(width.value); i >= 0; i--) {
+  for (let i = order.indexOf(w); i >= 0; i--) {
     const n = c[order[i]!]
     if (n !== undefined) return n
   }
-  return defaults[width.value]
-})
+  return defaults[w]
+}
+
+const narrowCols = computed(() => colsAt('narrow'))
+const regularCols = computed(() => colsAt('regular'))
+const wideCols = computed(() => colsAt('wide'))
+// A partial object falls back to the nearest smaller width given, else the defaults.
+const count = computed(() => colsAt(width.value))
 </script>
 
 <template>
-  <div ref="root" class="weft-grid" :data-gap="gap" :data-width="width" :style="{ '--weft-grid-cols': count }">
-    <slot />
+  <div
+    ref="root"
+    class="weft-grid"
+    :data-gap="gap"
+    :data-width="width"
+    :style="{
+      '--weft-grid-cols': count,
+      '--weft-grid-cols-narrow': narrowCols,
+      '--weft-grid-cols-regular': regularCols,
+      '--weft-grid-cols-wide': wideCols,
+    }"
+  >
+    <div class="weft-grid__inner" :data-gap="gap">
+      <slot />
+    </div>
   </div>
 </template>

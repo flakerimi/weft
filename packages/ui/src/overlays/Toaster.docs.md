@@ -1,6 +1,6 @@
 ---
 group: overlays
-purpose: Shows the toasts queued with useToast(), in a corner of the viewport, announced to assistive technology.
+purpose: Shows the toasts queued with useToast() in a corner and announces them.
 use: Once, in the app's layout; then call useToast().add from anywhere in the browser.
 avoid: For a message tied to a form or a section, show it there instead.
 adapts:

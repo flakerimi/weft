@@ -1,4 +1,23 @@
+/* Grid: adapts its columns in CSS first from its own container width (narrow
+   under 640 px, regular under 1024 px, wide 1024 px and up), so a static page
+   with no island reflows on every screen and in a narrow column; useWidth
+   also sets data-width and --weft-grid-cols when hydrated. */
 .weft-grid {
+  container-type: inline-size;
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+.weft-grid__inner {
   display: grid;
-  grid-template-columns: repeat(var(--weft-grid-cols, 1), minmax(0, 1fr));
+  grid-template-columns: repeat(var(--weft-grid-cols-narrow, var(--weft-grid-cols, 1)), minmax(0, 1fr));
+}
+@container (min-width: 640px) {
+  .weft-grid__inner {
+    grid-template-columns: repeat(var(--weft-grid-cols-regular, var(--weft-grid-cols, 2)), minmax(0, 1fr));
+  }
+}
+@container (min-width: 1024px) {
+  .weft-grid__inner {
+    grid-template-columns: repeat(var(--weft-grid-cols-wide, var(--weft-grid-cols, 3)), minmax(0, 1fr));
+  }
 }

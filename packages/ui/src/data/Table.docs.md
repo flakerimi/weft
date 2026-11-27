@@ -1,6 +1,6 @@
 ---
 group: data
-purpose: Rows of data under column headers, sorted, chosen, paged and loaded from an array or from a server.
+purpose: Rows under column headers, sorted, chosen, paged and loaded from array or API.
 use: For records a person compares, sorts or acts on in bulk (customers, invoices, devices), from a plain array or a server speaking the wire format.
 avoid: For a few label–value pairs about one thing, use a description list or StatCard; for items a person reads one by one, use a list of Cards; for a hierarchy, use Tree.
 adapts:

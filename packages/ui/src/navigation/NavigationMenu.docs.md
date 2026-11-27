@@ -1,6 +1,6 @@
 ---
 group: navigation
-purpose: A site's or an app's main links, as a bar whose groups open as lists, or as a sidebar column.
+purpose: A site's or app's main links as a horizontal bar with menus or a sidebar column.
 use: For the main navigation in a header (horizontal) or a sidebar (vertical).
 avoid: For actions, use DropdownMenu; for a page's place in the site, Breadcrumb; for a whole app frame, AppShell, which draws one.
 adapts:

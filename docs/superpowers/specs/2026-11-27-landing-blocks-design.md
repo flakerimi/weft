@@ -144,9 +144,9 @@ export interface PricingPlan {
   title: string
   /** Who the plan is for. */
   description?: string
-  /** Price text as shown (`'$29'`, `'Free'`, `'Custom'`), or a map by cycle value (`{ monthly: '$29', yearly: '$24' }`). When a map has no entry for the active cycle, it falls back to the map's first value, else `''`. */
+  /** Price text as shown (`'$29'`, `'Free'`, `'Custom'`), or a map by cycle value (`{ monthly: '$29', yearly: '$24' }`). When a map has no entry for the active cycle, its price area renders empty (never showing another cycle's price) and warns once in development. */
   price: string | Record<string, string>
-  /** Text after the price (`'/ month'`, `'per seat / month'`), or a map by cycle value (missing cycle falls back to the first value, else `''`). */
+  /** Text after the price (`'/ month'`, `'per seat / month'`), or a map by cycle value (missing cycle shows nothing and warns once in development). */
   period?: string | Record<string, string>
   /** Optional note under the price (`'Billed yearly ($288)'`), or a map by cycle value (missing cycle shows no note). */
   billingNote?: string | Record<string, string>

@@ -1,6 +1,6 @@
 ---
 group: forms
-purpose: A box to tick on its own or as one of a CheckboxGroup, which can also be indeterminate.
+purpose: A box to tick on its own or in a CheckboxGroup, with indeterminate support.
 use: For a yes or no that is sent with a form (accept the terms), or a choice among several that are all allowed.
 avoid: For a setting that takes effect at once, use Switch; for one choice among several, use RadioGroup.
 adapts:

@@ -1,6 +1,6 @@
 ---
 group: overlays
-purpose: Content that floats beside a trigger, opened by a press: filters, a short form, details.
+purpose: Content that floats beside a trigger when pressed: filters, a form or details.
 use: For a small panel of controls or information tied to one button, which the user opens, uses and closes.
 avoid: For a list of actions, use DropdownMenu; for a short hint on hover, Tooltip; for a task that needs the user's full attention, Dialog.
 adapts:

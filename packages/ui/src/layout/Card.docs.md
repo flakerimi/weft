@@ -1,6 +1,6 @@
 ---
 group: layout
-purpose: A bordered surface holding related content, with an optional header, actions and footer.
+purpose: A bordered surface holding related content, with header, actions and footer.
 use: To group a few things that belong together, a plan, a summary, a small form, so they read as one unit.
 avoid: For a page region with a heading, use Section; for content that needs a focused task, use a dialog.
 adapts:

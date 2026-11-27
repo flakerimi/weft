@@ -82,9 +82,9 @@ export const exampleIsland = (component: string, example: string) => `Example_${
  * component added later included, makes its examples hydrate.
  */
 export const STILL = new Set([
-  'AvatarGroup', 'Badge', 'Breadcrumb', 'Button', 'Card', 'Chip', 'Container', 'Divider', 'FeatureGrid',
-  'FieldGroup', 'Icon', 'Kbd', 'Page', 'Progress', 'Section', 'Separator', 'Skeleton', 'Spinner', 'Stack',
-  'Testimonials',
+  'AvatarGroup', 'Badge', 'Breadcrumb', 'Button', 'Card', 'Chip', 'Container', 'Cta', 'Divider', 'FeatureGrid',
+  'FieldGroup', 'Grid', 'Hero', 'Icon', 'Kbd', 'Page', 'Progress', 'Section', 'Separator', 'Skeleton', 'Spinner',
+  'Stack', 'Testimonials',
 ])
 
 /**

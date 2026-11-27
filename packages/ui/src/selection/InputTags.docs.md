@@ -1,6 +1,6 @@
 ---
 group: selection
-purpose: A text field that turns what is typed into tags, each with a ×, for a list of short free values.
+purpose: A text field that turns typed entries into removable tags for a list of values.
 use: For keywords, email addresses, labels: values typed rather than chosen from a list, several of them.
 avoid: When the values come from a known list, use Combobox with multiple; for one value, Input.
 adapts:

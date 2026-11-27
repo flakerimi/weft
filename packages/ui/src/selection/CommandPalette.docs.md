@@ -1,6 +1,6 @@
 ---
 group: selection
-purpose: A search field over grouped commands, found by fuzzy matching and run from the keyboard, with recent commands and pages of sub-commands.
+purpose: A search field over grouped commands, with fuzzy matching and recent items.
 use: For a Cmd+K launcher in a Dialog, or a search-first menu of everything an app can do or go to.
 avoid: For a value in a form, use Combobox; for a handful of actions on one thing, DropdownMenu.
 adapts:

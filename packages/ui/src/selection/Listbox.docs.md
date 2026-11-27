@@ -1,6 +1,6 @@
 ---
 group: selection
-purpose: A list of options always shown, to choose one or several from, with an optional filter field above it.
+purpose: A visible list of options to pick one or several from, with an optional filter.
 use: For a choice that deserves the room of a visible list (a few to a few thousand options), in a form or a side panel; with `filter` when the list is long.
 avoid: When the list should open from a field, use Select or Combobox; for two to five options, RadioGroup or CheckboxGroup; for actions, DropdownMenu or CommandPalette.
 adapts:

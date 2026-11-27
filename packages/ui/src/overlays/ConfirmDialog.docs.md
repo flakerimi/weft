@@ -1,6 +1,6 @@
 ---
 group: overlays
-purpose: Asks the user to confirm an action before it goes ahead, with Cancel and a confirm button.
+purpose: Asks the user to confirm an action before proceeding, with Cancel and Confirm.
 use: Before an action that is hard to undo: delete, discard changes, leave without saving.
 avoid: For an action that can be undone, do it and offer Undo in a toast; for a form, use Dialog.
 adapts:

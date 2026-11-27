@@ -57,9 +57,9 @@ export interface PricingPlan {
 export interface TestimonialItem {
   /** The words quoted. */
   quote: string
-  /** Who said it ("Ada Lovelace"): names the author and gives the avatar's fallback initials. */
+  /** Who said it ("Avery Quinn"): names the author and gives the avatar's fallback initials. */
   author: string
-  /** Their role, company or context ("CTO at Analytical Engine"). */
+  /** Their role, company or context ("CTO at Northline"). */
   role?: string
   /** The avatar image's address. */
   avatar?: string

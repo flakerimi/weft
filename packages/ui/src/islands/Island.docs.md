@@ -1,6 +1,6 @@
 ---
 group: islands
-purpose: Renders a component on the server and makes it interactive in the browser, on load, when idle, when visible or when a media query matches.
+purpose: Renders a component on the server and hydrates it in the browser when triggered.
 use: For the few interactive parts of an otherwise static page, a counter, a form, a menu, so only they ship JavaScript.
 avoid: For content that never changes in the browser, render the component directly; a page with no island ships no script at all.
 adapts:

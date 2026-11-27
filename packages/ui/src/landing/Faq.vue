@@ -6,7 +6,8 @@
 // (`{ label, content, value, icon, trailingIcon, disabled, slot }`).
 // `orientation` is `'vertical'` (default: header above the questions) or
 // `'horizontal'` (header and aside in a column beside the questions when the
-// block's own width is `wide`, stacked when `narrow` or `regular`).
+// block's own container width is `wide`, stacked when `narrow` or `regular`,
+// in CSS first through @container).
 import { computed, useTemplateRef } from 'vue'
 import { useWidth } from '../adaptive/useWidth.ts'
 import Accordion from '../disclosure/Accordion.vue'
@@ -101,31 +102,33 @@ const namedItemSlots = computed(() => {
     :data-align="align"
     :data-width="width"
   >
-    <header v-if="headline || title || description || $slots.headline || $slots.header || $slots.aside" class="weft-faq__header">
-      <slot name="header">
-        <div v-if="headline || $slots.headline" class="weft-faq__headline"><slot name="headline">{{ headline }}</slot></div>
-        <component :is="`h${level}`" v-if="title" class="weft-faq__title">{{ title }}</component>
-        <p v-if="description" class="weft-faq__description">{{ description }}</p>
-      </slot>
-      <div v-if="$slots.aside" class="weft-faq__aside"><slot name="aside" /></div>
-    </header>
-    <Accordion
-      v-model="model"
-      class="weft-faq__accordion"
-      :items="items"
-      :type="type"
-      :collapsible="collapsible"
-      :level="questionLevel"
-    >
-      <template v-if="$slots.label" #label="slotProps">
-        <slot name="label" v-bind="slotProps" />
-      </template>
-      <template v-if="$slots.content" #content="slotProps">
-        <slot name="content" v-bind="slotProps" />
-      </template>
-      <template v-for="slotName in namedItemSlots" :key="slotName" #[slotName]="slotProps">
-        <slot :name="slotName" v-bind="slotProps" />
-      </template>
-    </Accordion>
+    <div class="weft-faq__inner">
+      <header v-if="headline || title || description || $slots.headline || $slots.header || $slots.aside" class="weft-faq__header">
+        <slot name="header">
+          <div v-if="headline || $slots.headline" class="weft-faq__headline"><slot name="headline">{{ headline }}</slot></div>
+          <component :is="`h${level}`" v-if="title" class="weft-faq__title">{{ title }}</component>
+          <p v-if="description" class="weft-faq__description">{{ description }}</p>
+        </slot>
+        <div v-if="$slots.aside" class="weft-faq__aside"><slot name="aside" /></div>
+      </header>
+      <Accordion
+        v-model="model"
+        class="weft-faq__accordion"
+        :items="items"
+        :type="type"
+        :collapsible="collapsible"
+        :level="questionLevel"
+      >
+        <template v-if="$slots.label" #label="slotProps">
+          <slot name="label" v-bind="slotProps" />
+        </template>
+        <template v-if="$slots.content" #content="slotProps">
+          <slot name="content" v-bind="slotProps" />
+        </template>
+        <template v-for="slotName in namedItemSlots" :key="slotName" #[slotName]="slotProps">
+          <slot :name="slotName" v-bind="slotProps" />
+        </template>
+      </Accordion>
+    </div>
   </section>
 </template>

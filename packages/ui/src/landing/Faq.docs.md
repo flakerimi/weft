@@ -6,7 +6,7 @@ avoid: When you only need the bare collapsible list without a section heading or
 adapts:
   input: Each question header is a full-width Accordion button, at least --weft-hit-min (44 px) tall on touch.
   surface: On a landing surface its container is capped at --weft-page-max (1200 px) with the landing type scale; in an app it runs full width.
-  width: Measured from the block itself; a horizontal FAQ places the header and aside in a column beside the questions when wide (1024 px and up) and stacks them above when regular or narrow.
+  width: Adapts in CSS first from the block's own container width (@container); a horizontal FAQ places the header and aside in a column beside the questions when wide (1024 px and up) and stacks them above when regular or narrow.
 ---
 `items` uses `Accordion`'s item shape (`FaqItem = AccordionItem`: `{ label,
 content, value, icon, trailingIcon, disabled, slot }`), so the same array

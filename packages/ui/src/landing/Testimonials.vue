@@ -2,8 +2,9 @@
 // Customer or reader quotes in a responsive Grid: each quote is a semantic
 // <figure> with a <blockquote> and a <figcaption> naming the author, their
 // role or company, and their Avatar (which falls back to initials from
-// `author`). An item with `to` links its author through Link. Grid measures
-// its own width and reflows from 1 column (narrow) to 2 (regular) to 3 (wide).
+// `author` and is decorative beside the visible author name). An item with
+// `to` links its author through Link. Grid adapts from its own container width
+// in CSS first, reflowing from 1 column (narrow) to 2 (regular) to 3 (wide).
 import Avatar from '../basics/Avatar.vue'
 import Link from '../basics/Link.vue'
 import Grid from '../layout/Grid.vue'
@@ -48,40 +49,48 @@ defineSlots<{
   /** Additional testimonial figures inside the grid. */
   default?: () => unknown
 }>()
+
+function initialsOf(author: string): string {
+  const words = author.trim().split(/\s+/).filter(Boolean)
+  const first = (w: string | undefined) => (w ? Array.from(w)[0]!.toUpperCase() : '')
+  return words.length > 1 ? first(words[0]) + first(words[words.length - 1]) : first(words[0])
+}
 </script>
 
 <template>
   <section class="weft-testimonials" :data-align="align">
-    <header v-if="headline || title || description || $slots.headline || $slots.header" class="weft-testimonials__header">
-      <slot name="header">
-        <div v-if="headline || $slots.headline" class="weft-testimonials__headline"><slot name="headline">{{ headline }}</slot></div>
-        <component :is="`h${level}`" v-if="title" class="weft-testimonials__title">{{ title }}</component>
-        <p v-if="description" class="weft-testimonials__description">{{ description }}</p>
-      </slot>
-    </header>
-    <Grid class="weft-testimonials__grid" :cols="cols" :gap="4">
-      <figure
-        v-for="(item, i) in items"
-        :key="`${item.author}-${i}`"
-        class="weft-testimonials__item"
-      >
-        <slot name="item" :item="item" :index="i">
-          <blockquote class="weft-testimonials__quote">
-            <p class="weft-testimonials__quote-text">{{ item.quote }}</p>
-          </blockquote>
-          <figcaption class="weft-testimonials__author">
-            <Avatar class="weft-testimonials__avatar" :src="item.avatar" :alt="item.author" size="md" />
-            <div class="weft-testimonials__meta">
-              <div class="weft-testimonials__name">
-                <Link v-if="item.to" :to="item.to" standalone>{{ item.author }}</Link>
-                <template v-else>{{ item.author }}</template>
-              </div>
-              <div v-if="item.role" class="weft-testimonials__role">{{ item.role }}</div>
-            </div>
-          </figcaption>
+    <div class="weft-testimonials__inner">
+      <header v-if="headline || title || description || $slots.headline || $slots.header" class="weft-testimonials__header">
+        <slot name="header">
+          <div v-if="headline || $slots.headline" class="weft-testimonials__headline"><slot name="headline">{{ headline }}</slot></div>
+          <component :is="`h${level}`" v-if="title" class="weft-testimonials__title">{{ title }}</component>
+          <p v-if="description" class="weft-testimonials__description">{{ description }}</p>
         </slot>
-      </figure>
-      <slot />
-    </Grid>
+      </header>
+      <Grid class="weft-testimonials__grid" :cols="cols" :gap="4">
+        <figure
+          v-for="(item, i) in items"
+          :key="`${item.author}-${i}`"
+          class="weft-testimonials__item"
+        >
+          <slot name="item" :item="item" :index="i">
+            <blockquote class="weft-testimonials__quote">
+              <p class="weft-testimonials__quote-text">{{ item.quote }}</p>
+            </blockquote>
+            <figcaption class="weft-testimonials__author">
+              <Avatar class="weft-testimonials__avatar" :src="item.avatar" :text="initialsOf(item.author)" size="md" />
+              <div class="weft-testimonials__meta">
+                <div class="weft-testimonials__name">
+                  <Link v-if="item.to" :to="item.to" standalone>{{ item.author }}</Link>
+                  <template v-else>{{ item.author }}</template>
+                </div>
+                <div v-if="item.role" class="weft-testimonials__role">{{ item.role }}</div>
+              </div>
+            </figcaption>
+          </slot>
+        </figure>
+        <slot />
+      </Grid>
+    </div>
   </section>
 </template>

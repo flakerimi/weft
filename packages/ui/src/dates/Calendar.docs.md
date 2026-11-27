@@ -1,6 +1,6 @@
 ---
 group: dates
-purpose: A month of dates to choose one, several or a range from, in the locale's names, digits and first day of the week.
+purpose: A month of dates to choose one, several or a range from, in the current locale.
 use: For a date chosen in view of the month around it (a booking, a schedule, a range of nights), shown inline on the page or inside a DatePicker.
 avoid: For a date people know and type (a birthday), use DatePicker, whose field takes typing; for a time of day, InputTime.
 adapts:

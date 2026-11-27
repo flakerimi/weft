@@ -1,19 +1,21 @@
 /* Cta: a call-to-action panel in card, soft, solid or plain form. Vertical
    stacks copy and actions; horizontal puts the copy at the inline start and
-   the actions or aside at the inline end when regular or wide, stacking when
-   narrow. */
+   the actions or aside at the inline end when regular or wide (640 px and up),
+   stacking when narrow, in CSS first through @container. */
 .weft-cta {
+  container-type: inline-size;
   inline-size: 100%;
   max-inline-size: var(--weft-page-max, 1200px);
   margin-inline: auto;
   padding-inline: clamp(var(--weft-space-4, 16px), 4%, var(--weft-space-8, 32px));
   color: var(--weft-color-text, CanvasText);
+  overflow-wrap: anywhere;
 }
 .weft-cta__box {
   display: grid;
   gap: var(--weft-space-6, 24px);
   align-items: center;
-  padding: clamp(var(--weft-space-6, 24px), 5vw, 48px);
+  padding: clamp(var(--weft-space-6, 24px), 5cqi, 48px);
   border-radius: var(--weft-radius-panel, 16px);
 }
 .weft-cta[data-variant="card"] .weft-cta__box {
@@ -32,9 +34,14 @@
 .weft-cta[data-variant="plain"] .weft-cta__box {
   padding-inline: 0;
 }
-.weft-cta[data-orientation="horizontal"] .weft-cta__box {
-  grid-template-columns: minmax(0, 1fr) auto;
-  justify-content: space-between;
+@container (min-width: 640px) {
+  .weft-cta[data-orientation="horizontal"] .weft-cta__box {
+    grid-template-columns: minmax(0, 1fr) auto;
+    justify-content: space-between;
+  }
+  .weft-cta[data-orientation="horizontal"] .weft-cta__actions--end {
+    justify-content: flex-end;
+  }
 }
 .weft-cta__copy {
   display: flex;
@@ -55,12 +62,11 @@
 }
 .weft-cta[data-variant="solid"] .weft-cta__headline {
   color: inherit;
-  opacity: 0.85;
 }
 .weft-cta__title {
   margin: 0;
   max-inline-size: 28ch;
-  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  font-size: clamp(1.5rem, 3cqi, 2.25rem);
   font-weight: var(--weft-weight-title, 700);
   line-height: 1.1;
   letter-spacing: -0.025em;
@@ -71,9 +77,11 @@
   max-inline-size: 54ch;
   color: var(--weft-color-text-muted, GrayText);
 }
+.weft-cta[data-variant="soft"] .weft-cta__description {
+  color: var(--weft-color-text, CanvasText);
+}
 .weft-cta[data-variant="solid"] .weft-cta__description {
   color: inherit;
-  opacity: 0.88;
 }
 .weft-cta__actions {
   display: flex;
@@ -87,7 +95,20 @@
 }
 .weft-cta__actions--end {
   margin-block-start: 0;
-  justify-content: flex-end;
+}
+/* On a solid fill, an outlined or ghost button draws in the fill's foreground
+   so it stays readable across every theme and scheme. */
+.weft-cta[data-variant="solid"] .weft-button[data-variant="outline"] {
+  color: var(--weft-tone-fg, Canvas);
+  border-color: color-mix(in srgb, var(--weft-tone-fg, Canvas) 50%, transparent);
+}
+.weft-cta[data-variant="solid"] .weft-button[data-variant="ghost"] {
+  color: var(--weft-tone-fg, Canvas);
+}
+@media (hover: hover) {
+  .weft-cta[data-variant="solid"] .weft-button:not(:disabled, [aria-disabled="true"]):hover:is([data-variant="outline"], [data-variant="ghost"]) {
+    background: color-mix(in srgb, var(--weft-tone-fg, Canvas) 14%, transparent);
+  }
 }
 .weft-cta__aside {
   min-inline-size: 0;

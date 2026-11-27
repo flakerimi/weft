@@ -1,12 +1,16 @@
 /* Hero: the opening band of a landing page. Vertical centres the copy above
    any visual; horizontal puts the copy (5fr) beside the visual (7fr) when the
-   hero's own box is wide, and stacks them when regular or narrow. */
+   hero's own container is wide (1024 px and up), and stacks them when regular
+   or narrow, in CSS first so a static page with no island adapts at every
+   width. */
 .weft-hero {
+  container-type: inline-size;
   position: relative;
   isolation: isolate;
   overflow: clip;
-  padding-block: clamp(var(--weft-space-8, 32px), 7vw, 80px);
+  inline-size: 100%;
   color: var(--weft-color-text, CanvasText);
+  overflow-wrap: anywhere;
 }
 .weft-hero__background {
   position: absolute;
@@ -16,15 +20,18 @@
 }
 .weft-hero__inner {
   display: grid;
-  gap: clamp(var(--weft-space-6, 24px), 5vw, 48px);
+  gap: clamp(var(--weft-space-6, 24px), 5cqi, 48px);
   align-items: center;
   inline-size: 100%;
   max-inline-size: var(--weft-page-max, 1200px);
   margin-inline: auto;
+  padding-block: clamp(var(--weft-space-8, 32px), 7cqi, 80px);
   padding-inline: clamp(var(--weft-space-4, 16px), 4%, var(--weft-space-8, 32px));
 }
-.weft-hero[data-orientation="horizontal"] .weft-hero__inner {
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+@container (min-width: 1024px) {
+  .weft-hero[data-orientation="horizontal"] .weft-hero__inner {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  }
 }
 .weft-hero__copy {
   display: flex;
@@ -46,7 +53,7 @@
 .weft-hero__title {
   margin: 0;
   max-inline-size: 22ch;
-  font-size: clamp(2rem, 4.2vw, 3.5rem);
+  font-size: clamp(2rem, 4.2cqi, 3.5rem);
   font-weight: var(--weft-weight-title, 700);
   line-height: 1.04;
   letter-spacing: -0.035em;

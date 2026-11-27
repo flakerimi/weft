@@ -1,6 +1,6 @@
 ---
 group: dates
-purpose: A date field where a date is typed as the locale writes it or chosen from a calendar that opens beside it.
+purpose: A date field where a date is typed in the locale or chosen from a calendar.
 use: For one date in a form - a due date, a birthday, a start date - bound as an ISO string the server reads.
 avoid: For a range of dates, use DateRangePicker; for a calendar always in view, Calendar; for a time of day, InputTime.
 adapts:

@@ -1,6 +1,6 @@
 ---
 group: data
-purpose: Events in order, each a dot on a line with its date, title and description, the ones up to now marked done.
+purpose: Events in order on a line, each with its date, title, description and status.
 use: For an order's progress, an account's history or a changelog: what happened, and when.
 avoid: For steps a person moves through and can go back to, use Stepper; for a log to search and sort, use Table.
 adapts:

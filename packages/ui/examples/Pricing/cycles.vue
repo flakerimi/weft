@@ -12,11 +12,11 @@ const cycles: PricingCycle[] = [
 const plans: PricingPlan[] = [
   {
     title: 'Hobby',
-    description: 'One project on a single server.',
+    description: 'One project for an individual.',
     price: '$0',
     period: '/month',
-    features: ['Single binary deploy', 'SQLite store', 'All 82 components'],
-    action: { label: 'Install Weft' },
+    features: ['1 workspace', 'Daily snapshots', 'Email support'],
+    action: { label: 'Start free' },
   },
   {
     title: 'Pro',
@@ -26,7 +26,7 @@ const plans: PricingPlan[] = [
     billingNote: { monthly: 'Billed monthly', yearly: 'Billed $288 yearly' },
     badge: 'Recommended',
     highlight: true,
-    features: ['Unlimited projects', 'Team roles and audit log', 'Priority email support'],
+    features: ['Unlimited workspaces', 'Team roles and audit log', 'Priority email support'],
     action: { label: 'Start Pro trial' },
   },
 ]

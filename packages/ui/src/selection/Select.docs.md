@@ -1,6 +1,6 @@
 ---
 group: selection
-purpose: A button showing the chosen value that opens a list to choose one, or several, from.
+purpose: A button showing the chosen value that opens a list to pick one or several.
 use: For a choice from a known list in a form (a country, a status, a size), where the list is too long for radio buttons and nobody needs to type to find an option.
 avoid: When people search the list or type their own value, use Combobox; for two to five options always in view, RadioGroup; for actions, DropdownMenu.
 adapts:

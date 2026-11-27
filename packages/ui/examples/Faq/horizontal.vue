@@ -8,7 +8,7 @@ const items: FaqItem[] = [
   },
   {
     label: 'How do I update an existing app?',
-    content: 'Run weft upgrade inside the project root to unpack the latest bundle and refresh the generated types.',
+    content: 'Run weft upgrade inside the project root to unpack the latest bundle and install its packages; weft gen refreshes the generated API types.',
   },
 ]
 </script>

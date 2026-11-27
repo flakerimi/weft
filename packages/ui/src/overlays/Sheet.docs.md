@@ -1,6 +1,6 @@
 ---
 group: overlays
-purpose: A modal panel that slides in from an edge of the viewport: a slideover from the side, or a bottom sheet.
+purpose: A modal panel that slides in from a side edge or rises as a bottom sheet.
 use: For navigation on small screens, filters, a detail view or a form that should keep the page visible beside it.
 avoid: For a short decision, use Dialog or ConfirmDialog; for content tied to one button on a large screen, Popover.
 adapts:

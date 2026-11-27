@@ -1,18 +1,32 @@
 /* Faq: a titled section wrapping an Accordion, stacked (`vertical`) or split
-   side-by-side (`horizontal`) when its own width is `wide`. */
+   side-by-side (`horizontal`) when its own container width is `wide` (1024 px
+   and up), in CSS first through @container. */
 .weft-faq {
+  container-type: inline-size;
+  inline-size: 100%;
+  max-inline-size: var(--weft-page-max, 1200px);
+  margin-inline: auto;
+  padding-block: clamp(var(--weft-space-6, 24px), 5cqi, var(--weft-space-8, 32px));
+  padding-inline: clamp(var(--weft-space-4, 16px), 4%, var(--weft-space-8, 32px));
+  color: var(--weft-color-text, CanvasText);
+  overflow-wrap: anywhere;
+}
+.weft-faq__inner {
   display: grid;
   gap: var(--weft-space-6, 24px);
   align-items: start;
 }
-.weft-faq[data-orientation="horizontal"][data-width="wide"] {
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: var(--weft-space-8, 32px);
+@container (min-width: 1024px) {
+  .weft-faq[data-orientation="horizontal"] .weft-faq__inner {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: var(--weft-space-8, 32px);
+  }
 }
 .weft-faq__header {
   display: flex;
   flex-direction: column;
   gap: var(--weft-space-2, 8px);
+  min-inline-size: 0;
 }
 .weft-faq[data-orientation="vertical"][data-align="center"] .weft-faq__header {
   justify-self: center;
@@ -26,13 +40,16 @@
 }
 .weft-faq__title {
   margin: 0;
-  font-size: 1.5em;
-  font-weight: var(--weft-weight-heading, 600);
-  line-height: 1.2;
+  font-size: clamp(1.5rem, 3cqi, 2.25rem);
+  font-weight: var(--weft-weight-title, 700);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
   color: var(--weft-color-text, CanvasText);
 }
 .weft-faq__description {
   margin: 0;
+  max-inline-size: 60ch;
   color: var(--weft-color-text-muted, GrayText);
 }
 .weft-faq__aside {

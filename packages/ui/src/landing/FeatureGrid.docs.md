@@ -4,16 +4,16 @@ purpose: A titled grid of capabilities, each with an icon, heading, text and lin
 use: On a landing page to highlight what a product does, each capability in its own card or column.
 avoid: For key numbers on a dashboard, use StatCard in a Grid; for tabular records, use Table.
 adapts:
-  input: An item link with `linkLabel` renders as a standalone Link, reaching --weft-hit-min (44 px) on touch.
+  input: Any item link (`to`, with or without `linkLabel`) renders as a standalone Link, reaching --weft-hit-min (44 px) on touch.
   surface: On a landing surface its container is capped at --weft-page-max (1200 px) with the landing type scale; in an app it runs full width.
-  width: The inner Grid measures its own width, reflowing by default from 1 column narrow (under 640 px) to 2 regular (under 1024 px) to 3 wide.
+  width: The inner Grid adapts in CSS first from its own container width (@container), reflowing by default from 1 column narrow (under 640 px) to 2 regular (under 1024 px) to 3 wide.
 ---
 `items` are `{ title, description, icon, to, linkLabel, slot }`. The section's
 `title` renders as an `h2` by default (`level` changes it to 2–6), and each
 item's title renders one heading level deeper (`h3` under `h2`). `icon` draws
 a Lucide icon in a disc tinted in `tone`. With `to` and `linkLabel`, a
 standalone link sits under the description; with `to` alone, the item's title
-links there.
+links there as a standalone link.
 
 `variant` is `card` (each item in a bordered surface box, the default) or
 `plain` (unboxed items). `cols` takes a fixed column count or `{ narrow,

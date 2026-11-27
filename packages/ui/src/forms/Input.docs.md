@@ -1,6 +1,6 @@
 ---
 group: forms
-purpose: A one-line text field in a box that can hold an icon, a unit or a button before and after the text.
+purpose: A one-line text field that can hold an icon, unit or button beside the text.
 use: For a short answer typed in full - a name, an email address, a search - bound with v-model, usually inside a FormField.
 avoid: For text over several lines, use Textarea; for a number stepped up and down, use InputNumber; for a choice from a known list, use a select or RadioGroup.
 adapts:
