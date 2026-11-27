@@ -46,9 +46,9 @@ type User struct {
 // or answers it; every answer is its User.
 type userRow struct {
 	data.Record
-	Email        string `json:"email" warp:"unique"`
-	Name         string `json:"name"`
-	Role         string `json:"role"`
+	Email        string `json:"email" warp:"unique" data:"sort,search"`
+	Name         string `json:"name" data:"sort,search"`
+	Role         string `json:"role" data:"sort,filter"`
 	PasswordHash string `json:"password_hash"`
 }
 
@@ -180,6 +180,7 @@ func (m *module) Register(app *warp.App) error {
 	app.Wrap(m.carry)
 	m.routes()
 	m.mailRoutes()
+	m.userRoutes()
 	return nil
 }
 
@@ -336,6 +337,13 @@ func RemoveUser(ctx context.Context, app *warp.App, id int64) error {
 	if m == nil {
 		return errors.New("auth: RemoveUser was given an app without the auth module; list auth.Module() in app/modules.go.")
 	}
+	return m.removeUser(ctx, id)
+}
+
+// removeUser removes the user with the id and, in one transaction, every
+// session of theirs and every invitation they sent: what RemoveUser and the
+// route remove_user do.
+func (m *module) removeUser(ctx context.Context, id int64) error {
 	return m.db.Tx(ctx, func(ctx context.Context) error {
 		if _, err := m.sessions.DeleteBy(ctx, "user_id", id); err != nil {
 			return err

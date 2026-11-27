@@ -104,6 +104,8 @@ func TestMePermissionsMatchGuard(t *testing.T) {
 		"things:read":     func(rc *warptest.Client) int { return rc.Get("/api/things").Status },
 		"things:purge":    func(rc *warptest.Client) int { return rc.Post("/api/things/purge", nil).Status },
 		"users:read":      func(rc *warptest.Client) int { return rc.Get("/api/auth/invitations").Status },
+		"users:edit":      func(rc *warptest.Client) int { return rc.Delete("/api/auth/users/999/sessions").Status },
+		"users:delete":    func(rc *warptest.Client) int { return rc.Delete("/api/auth/users/999").Status },
 		"users:invite": func(rc *warptest.Client) int {
 			return rc.Post("/api/auth/invitations", map[string]string{"email": "probe@example.com", "role": "viewer"}).Status
 		},

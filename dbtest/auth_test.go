@@ -635,21 +635,26 @@ func TestDescribeHidesTheHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var me *warp.TypeInfo
-	for i, ty := range d.Types {
-		if ty.Name == "Me" {
-			me = &d.Types[i]
+	for name, want := range map[string]string{
+		"User": "id,created_at,updated_at,email,name,role",
+		"Me":   "id,created_at,updated_at,email,name,role,permissions",
+	} {
+		var ty *warp.TypeInfo
+		for i := range d.Types {
+			if d.Types[i].Name == name {
+				ty = &d.Types[i]
+			}
 		}
-	}
-	if me == nil {
-		t.Fatalf("Describe lists no Me: %+v", d.Types)
-	}
-	var names []string
-	for _, f := range me.Fields {
-		names = append(names, f.Name)
-	}
-	if got := strings.Join(names, ","); got != "id,created_at,updated_at,email,name,role,permissions" {
-		t.Fatalf("Me has the fields %s", got)
+		if ty == nil {
+			t.Fatalf("Describe lists no %s: %+v", name, d.Types)
+		}
+		var names []string
+		for _, f := range ty.Fields {
+			names = append(names, f.Name)
+		}
+		if got := strings.Join(names, ","); got != want {
+			t.Fatalf("%s has the fields %s, want %s", name, got, want)
+		}
 	}
 	all, _ := json.Marshal(d)
 	for _, hidden := range []string{"password_hash", "userRow"} {
@@ -679,6 +684,12 @@ func TestDescribeHidesTheHash(t *testing.T) {
 		"invitations":       "GET /api/auth/invitations 200",
 		"invite":            "POST /api/auth/invitations 201",
 		"remove_invitation": "DELETE /api/auth/invitations/{id} 204",
+		"users":             "GET /api/auth/users 200",
+		"update_user":       "PATCH /api/auth/users/{id} 200",
+		"remove_user":       "DELETE /api/auth/users/{id} 204",
+		"end_user_sessions": "DELETE /api/auth/users/{id}/sessions 204",
+		"update_me":         "PATCH /api/auth/me 200",
+		"change_password":   "POST /api/auth/password/change 204",
 	}
 	if !maps.Equal(routes, want) {
 		t.Fatalf("auth's routes are %v, want %v", routes, want)

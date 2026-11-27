@@ -173,9 +173,6 @@ type appStore struct{ fn func(app *warp.App) }
 func (appStore) Name() string                   { return "notes" }
 func (m appStore) Register(app *warp.App) error { m.fn(app); return nil }
 
-// accounts answers the login's User.
-func accounts(context.Context, warp.None) (User, error) { return User{}, nil }
-
 // The login answers the type User: an app's own type of that name is told
 // which is the login's and to rename its own. (dbtest holds the table's half.)
 func TestTheLoginsNamesAreReserved(t *testing.T) {
@@ -185,7 +182,6 @@ func TestTheLoginsNamesAreReserved(t *testing.T) {
 	app := warp.New(warp.Config{})
 	app.Use(data.Module(), Module(), appStore{func(app *warp.App) {
 		warp.Get(app, "/people", func(context.Context, warp.None) (User, error) { return User{}, nil })
-		warp.Get(app, "/accounts", accounts) // the login's User, as an app's own route may answer it
 	}})
 	_, err := app.Describe()
 	if err == nil || !strings.Contains(err.Error(), "the login's") || !strings.Contains(err.Error(), "rename yours") {
