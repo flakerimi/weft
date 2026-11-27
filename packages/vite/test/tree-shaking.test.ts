@@ -36,6 +36,7 @@ describe('import { Button } from "@weft/ui"', () => {
       'src/forms/form-state.ts',
       // perm: the check, and who is signed in, loaded only once a Button with perm has mounted.
       'src/session/can.ts',
+      'src/session/load.ts',
       'src/session/session.ts',
     ])
     expect(js).toContain('weft-button')

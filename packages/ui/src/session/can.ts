@@ -1,7 +1,8 @@
 // The permission check Button and DataTable draw by, without the session's
-// code: session.ts is loaded, and GET /api/auth/me asked, only once a
-// component with `perm` has mounted and asks, so a page whose buttons have
-// no `perm` fetches neither. Its chunk is the one every island shares.
+// code: session.ts is loaded (through load.ts), and GET /api/auth/me asked,
+// only once a component with `perm` has mounted and asks, so a page whose
+// buttons have no `perm` fetches neither. Its chunk is the one every island
+// shares.
 import { onMounted, ref, type Ref } from 'vue'
 
 type Can = (permission: string) => boolean
@@ -19,6 +20,6 @@ export function useCan(): Ref<Can> {
   // No before mounting; then a stand-in that loads the session when asked, and says no until it has. Not
   // fetched (offline, say), it stays, and asks again the next time.
   const can = ref<Can>(no)
-  onMounted(() => (can.value = () => (import('./session.ts').then((m) => (can.value = m.useSession().can), no), false)))
+  onMounted(() => (can.value = () => (import('./load.ts').then((m) => (can.value = m.sessionCan()), no), false)))
   return can
 }

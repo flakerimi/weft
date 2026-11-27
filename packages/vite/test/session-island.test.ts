@@ -11,6 +11,8 @@ import { startIslands } from '../src/island-runtime.ts'
 import Late from './fixtures/session-island/components/Late.vue'
 import Session from './fixtures/session-island/components/Session.vue'
 import { lateIsland, sessionIsland } from './fixtures/session-island/markup.ts'
+// What perm loads on demand, taken as fetched, so the test need not wait on the module loader.
+import '../../ui/src/session/load.ts'
 
 const settle = () => new Promise((r) => setTimeout(r, 0))
 

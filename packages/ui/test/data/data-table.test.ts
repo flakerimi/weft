@@ -6,6 +6,8 @@ import type { TableQuery, TableResult } from '../../src/data/table.ts'
 import { mount } from '../mount.ts'
 import { installResizeObserver } from '../resize-observer.ts'
 import { $, $$, overlays, reset, settle } from '../overlays/helpers.ts'
+// What perm loads on demand, taken as fetched, as it is once one on the page has asked.
+import '../../src/session/load.ts'
 
 beforeAll(() => {
   for (const name of ['plus', 'pencil', 'trash']) registerIcon(name, '<path d="M0 0"/>')

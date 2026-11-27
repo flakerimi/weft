@@ -7,6 +7,8 @@ import TooltipIconButton from './fixtures/basics/TooltipIconButton.vue'
 import { navigations, press } from './keyboard.ts'
 import { mount } from './mount.ts'
 import { loadStyles, ruleFor } from './styles.ts'
+// What a Button with perm loads on demand, taken as fetched, as it is once one on the page has asked.
+import '../src/session/load.ts'
 
 registerIcon('plus', '<path d="M5 12h14"></path>')
 registerIcon('arrow-right', '<path d="M12 5l7 7"></path>')
