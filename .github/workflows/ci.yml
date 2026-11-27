@@ -44,3 +44,44 @@ jobs:
       # Builds @weft/themes and @weft/ui first: the page build tests read their CSS from dist/.
       - run: pnpm test
       - run: pnpm build
+
+  # macOS and Windows on every push to main, Linux above on every push and
+  # pull request: the CLI's full tests, run as the release workflow's test
+  # job runs them, so a change that breaks one system is seen when it lands,
+  # not at the next tag. Branches are proved locally before they are pushed.
+  go-systems:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    defaults:
+      run:
+        # Git Bash on Windows, for the repository's shell scripts, which the
+        # tests run with sh.
+        shell: bash
+    steps:
+      # The scripts must keep LF line ends, which sh needs.
+      - if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      # The tests stage a bundle with scripts/bundle.sh, which builds the packages.
+      - run: pnpm install --frozen-lockfile
+      - run: go vet ./cmd/weft ./warp/...
+      - run: go test -timeout 30m . ./warp/... ./cmd/weft
