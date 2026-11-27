@@ -51,6 +51,18 @@ type devRun struct {
 
 // freeLocalPort returns a port free on both 127.0.0.1 and ::1, since the page
 // server listens on localhost, which may be either.
+// withoutSetupLink is a log without the line auth writes at its start while
+// no user exists, Set up the owner at …/setup#token=….
+func withoutSetupLink(log string) string {
+	var kept []string
+	for _, l := range strings.SplitAfter(log, "\n") {
+		if !strings.Contains(l, "Set up the owner at ") {
+			kept = append(kept, l)
+		}
+	}
+	return strings.Join(kept, "")
+}
+
 func freeLocalPort(t *testing.T) int {
 	t.Helper()
 	for range 20 {
@@ -320,7 +332,9 @@ func TestDevServesPagesAndAPI(t *testing.T) {
 	time.Sleep(3 * time.Second)
 	check()
 	// The Go server prints no URL of its own, and answers on 127.0.0.1 only.
-	if got := strings.Count(r.stdout.String()+r.stderr.String(), "http://"); got != 1 {
+	// The owner's setup link auth logs is the page server's, and is not
+	// counted.
+	if got := strings.Count(r.stdout.String()+withoutSetupLink(r.stderr.String()), "http://"); got != 1 {
 		t.Errorf("the output has %d URLs: %q", got, r.stdout.String()+r.stderr.String())
 	}
 	goPort := r.goPort(t)
@@ -342,7 +356,8 @@ func TestDevServesPagesAndAPI(t *testing.T) {
 // and leaves restarts working.
 func TestDevRestartsGo(t *testing.T) {
 	app := devApp(t)
-	data := filepath.Join(app, "data")
+	// Not data/, where the app keeps its database.
+	data := filepath.Join(app, "private")
 	unreadableDir(t, data)
 	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
 	eventually(t, r.url+"/api/hello", "Hello from Go", 5*time.Second)
@@ -711,8 +726,9 @@ func TestDevStopsWhileStarting(t *testing.T) {
 	if got := out.String(); got != "" && !regexp.MustCompile(`^weft dev: http://localhost:\d+\n$`).MatchString(got) {
 		t.Errorf("stdout %q", got)
 	}
-	if errb.String() != "" {
-		t.Errorf("stderr %q, want nothing", errb.String())
+	// Nothing but the owner's setup link, which auth logs at its start.
+	if got := withoutSetupLink(errb.String()); got != "" {
+		t.Errorf("stderr %q, want nothing", got)
 	}
 	if left := appGroups(t, app, port); len(left) != 0 {
 		t.Errorf("processes are left: %v", left)
@@ -1136,6 +1152,8 @@ func main() {
 		t.Fatal(err)
 	}
 	file := filepath.Join(app, "web", ".weft-types", "api.ts")
+	// weft create wrote the client of the app it made, which has routes.
+	os.Remove(file)
 	r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
 	src, err := os.ReadFile(file)
 	if err != nil || string(src) != mustGenerate(t, noRoutes) {
@@ -1185,7 +1203,9 @@ func TestDevGoServerGetsAppURL(t *testing.T) {
 	for _, given := range []string{"", "https://shop.example"} {
 		app := devApp(t)
 		t.Setenv("APP_URL", given)
-		os.WriteFile(filepath.Join(app, ".env"), []byte("APP_URL=http://from-dotenv\n"), 0o644)
+		// Beside the settings the app's database and login need.
+		env, _ := os.ReadFile(filepath.Join(app, ".env"))
+		os.WriteFile(filepath.Join(app, ".env"), append(env, "APP_URL=http://from-dotenv\n"...), 0o600)
 		r := startDev(t, app, "--port", strconv.Itoa(freeLocalPort(t)))
 		want := "APP_URL=" + r.url
 		if given != "" {

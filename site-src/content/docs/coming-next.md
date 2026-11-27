@@ -43,7 +43,7 @@ The `auth` module works today, with one role, the owner ([Login](guides/login.md
 - registration, invitations and password reset, with the `mail` module, which sends email through SMTP or prints it to the log;
 - roles other than the owner, and permissions given to them;
 - a session table on the server, for signing out everywhere and ending one session;
-- `useSession()`, a login page, `perm` on `Button` and row actions, and a route guard in Vue. The example shop writes its own in `web/session.ts`.
+- `useSession()` in `@weft/ui`, `perm` on `Button` and row actions, and a route guard in Vue. An app `weft create` makes has its own `web/session.ts`, with its login and setup pages.
 
 ## Scaffolding and app blocks
 
@@ -51,7 +51,6 @@ Phase W5, with the blocks the Weft design had in its phase 5:
 
 - `weft scaffold`, which writes `app/<name>/` (the model, the routes and their tests), adds it to `app/modules.go`, and writes a page for it;
 - `DataTable`, with server-side paging, sorting and filtering over the list shape, and `EntityDialog`, which creates and edits records from a form schema; the shop writes them plainly with `Table`, `Dialog` and `Form`;
-- the app template `weft create` writes taking the shop's shape: `data`, `auth` and a resource. It writes the `hello` app today.
 
 ## The browser's rules and Go's
 

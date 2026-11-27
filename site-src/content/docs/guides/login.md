@@ -8,7 +8,7 @@ On this page you learn how an app signs people in with the `auth` module, `githu
 
 ## Setting it up
 
-`auth.Module()` keeps its users through [Data](data.md), so `app/modules.go` lists it after `data.Module()`; listed before, the app says `warp: module "auth" needs the "data" module; list data.Module() before it in app/modules.go.` It reads three keys from `.env` when the app starts:
+An app `weft create` makes has all of this: `auth.Module()`, a fresh `AUTH_SECRET` in `.env`, and the pages below. `auth.Module()` keeps its users through [Data](data.md), so `app/modules.go` lists it after `data.Module()`; listed before, the app says `warp: module "auth" needs the "data" module; list data.Module() before it in app/modules.go.` It reads three keys from `.env` when the app starts:
 
 | Key | What it is | Default |
 | --- | --- | --- |
@@ -65,7 +65,7 @@ At most as many hashes run at once as Go has processors (`GOMAXPROCS`). A login 
 
 ## The pages
 
-The app writes its own `/setup` and `/login` pages; without them the link in the log opens the 404 page. Pages are built with no session, so each form is an island that calls the [generated client](types-from-go.md) and checks the generated rules before it sends. The smallest that work, cut down from the shop's and checked in a browser, `web/pages/setup.vue`:
+`weft create` writes the `/setup` and `/login` pages; an app without them opens the 404 page from the link in the log. Pages are built with no session, so each form is an island that calls the [generated client](types-from-go.md) and checks the generated rules before it sends. The smallest that work, cut down from the shop's and checked in a browser, `web/pages/setup.vue`:
 
 ```vue
 <script setup vapor lang="ts">

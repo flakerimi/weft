@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -21,10 +24,12 @@ var nameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 
 // templateData is what a .tmpl file of the app template can use. LocalGo
 // says whether go.mod replaces Weft's module with ./.weft/go (a development
-// build) or requires it at the release, from GitHub.
+// build) or requires it at the release, from GitHub. AuthSecret is the
+// app's own AUTH_SECRET, made fresh for each app, which only .env holds.
 type templateData struct {
 	Name, Module, Version, Theme string
 	LocalGo                      bool
+	AuthSecret                   string
 }
 
 // reserved are names an app may not take: its binary, named like the app,
@@ -96,7 +101,12 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "weft create: the bundle in %s was staged for a release, so it has no Go package (weft/go) for the replace a development weft writes; stage it with scripts/bundle.sh without WEFT_VERSION.\n", os.Getenv("WEFT_BUNDLE"))
 		return 1
 	}
-	data := templateData{Name: name, Module: *module, Version: weft.Version, Theme: *theme, LocalGo: localModule(weft.Version)}
+	secret, err := newSecret()
+	if err != nil {
+		fmt.Fprintf(stderr, "weft create: cannot make a random AUTH_SECRET (%v); run the command again.\n", err)
+		return 1
+	}
+	data := templateData{Name: name, Module: *module, Version: weft.Version, Theme: *theme, LocalGo: localModule(weft.Version), AuthSecret: secret}
 	if err := writeTemplate(bundle, name, data); err != nil {
 		fmt.Fprintf(stderr, "weft create: cannot write %s (%v); fix that and run the command again.\n", name, err)
 		return 1
@@ -128,7 +138,19 @@ func createCmd(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "weft create: %v.\n", strings.TrimSuffix(err.Error(), "."))
 			return 1
 		}
+		// The client the login and setup pages call, so they type-check
+		// before the first weft dev or weft build.
+		// Its paths are absolute, as the Go build runs in the app's folder.
+		abs, err := filepath.Abs(name)
+		if err == nil {
+			_, err = genTypes(context.Background(), "create", abs, stderr)
+		}
+		if err != nil {
+			fmt.Fprintf(stderr, "weft create: weft gen did not write %s in %s (see the output above); once that is fixed, run cd %s && weft gen.\n", filepath.ToSlash(apiTypes), name, name)
+			return 1
+		}
 	}
+	fmt.Fprintf(stdout, "Set AUTH_OWNER_EMAIL in %s to the owner's email address; it is owner@example.com until you do.\n", filepath.Join(name, ".env"))
 	fmt.Fprintf(stdout, "Created %s. Next: cd %s && weft dev\n", name, name)
 	return 0
 }
@@ -182,9 +204,23 @@ func writeTemplate(bundle fs.FS, dir string, data templateData) error {
 		if info, err := d.Info(); err == nil && info.Mode()&0o111 != 0 {
 			mode = 0o755
 		}
+		if p == ".env" {
+			mode = 0o600 // it holds the app's AUTH_SECRET
+		}
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
 		}
 		return os.WriteFile(target, content, mode)
 	})
+}
+
+// newSecret is a fresh AUTH_SECRET: 48 bytes from crypto/rand in base64url
+// without padding, 64 characters, which is what the session cookie is signed
+// with.
+func newSecret() (string, error) {
+	b := make([]byte, 48)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }

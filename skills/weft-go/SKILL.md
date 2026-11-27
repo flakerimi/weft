@@ -58,8 +58,8 @@ Errors are `{"error":{"code":"…","message":"…","fields":{…}}}`. Return `wa
 
 ## Data, login and types
 
-- `data.Module()` first in `app/modules.go`, `DB_DRIVER=sqlite` and `DB_URL=file:data/app.db` in `.env`, `_ "modernc.org/sqlite"` in `main.go`, then `go mod tidy` to add the driver to `go.mod`. A model embeds `data.Record`; `data.Resource(app, "/products", data.NewStore[Product](data.For(app), "products"), data.PerAction(auth.Per("products")))` gives five routes. `data:"sort,filter,search"` opens fields to `?sort=-price&q=lamp&filter[status]=live`.
-- `auth.Module()` after data: `AUTH_SECRET` (32+ bytes), `AUTH_OWNER_EMAIL`; the log prints `<APP_URL>/setup#token=…`, a 404 until the app writes `web/pages/setup.vue` and a `/login`: copy both from [the login guide](https://weft.base.al/docs/guides/login#the-pages). `auth.Can("x:edit")` guards a route; `auth.UserOf(ctx)`.
+- `weft create` lists `data.Module()`, `auth.Module()` and `hello.Module()`, with SQLite (`DB_DRIVER`, `DB_URL` in `.env`; the driver in `main.go`). A model embeds `data.Record`; `data.Resource(app, "/products", data.NewStore[Product](data.For(app), "products"), data.PerAction(auth.Per("products")))` gives five routes. `data:"sort,filter,search"` opens fields to `?sort=-price&q=lamp&filter[status]=live`.
+- `auth.Module()` after data: `AUTH_SECRET` (`weft create` writes one), `AUTH_OWNER_EMAIL`; the first start logs `<APP_URL>/setup#token=…`, the app's `/setup` page. `auth.Can("x:edit")` guards a route; `auth.UserOf(ctx)`.
 - `weft dev` and `weft build` run `weft gen`, which writes `web/.weft-types/api.ts`: `api.<module>.<name>()`, `ApiError`, and `schema` for `Form`.
 
 ## Testing a module

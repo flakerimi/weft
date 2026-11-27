@@ -2,8 +2,11 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"encoding/base64"
 	"io/fs"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -97,7 +100,7 @@ func assertCreated(t *testing.T, dir string) {
 		t.Errorf("package.json has the wrong name: %q", read("package.json"))
 	}
 	ignore := strings.Split(read(".gitignore"), "\n")
-	for _, want := range []string{".weft/", ".weft.lock", ".weft-new-*/", ".weft-old-*/", "node_modules/", "web/dist/", "web/.weft-types/", ".env", "/" + filepath.Base(dir), "/" + filepath.Base(dir) + ".exe"} {
+	for _, want := range []string{".weft/", ".weft.lock", ".weft-new-*/", ".weft-old-*/", "node_modules/", "web/dist/", "web/.weft-types/", ".env", "data/", "/" + filepath.Base(dir), "/" + filepath.Base(dir) + ".exe"} {
 		found := false
 		for _, l := range ignore {
 			found = found || l == want
@@ -115,7 +118,11 @@ func assertCreated(t *testing.T, dir string) {
 		}
 		return nil
 	})
-	for _, p := range []string{"web/pages/index.vue", "web/components/Hello.vue", "app/modules.go", "app/hello/routes.go", "app/hello/hello_test.go", ".env", ".env.sample", "dist_dev.go", "CLAUDE.md", "README.md", "AGENTS.md"} {
+	for _, p := range []string{
+		"web/pages/index.vue", "web/components/Hello.vue", "app/modules.go", "app/hello/routes.go", "app/hello/hello_test.go", ".env", ".env.sample", "dist_dev.go", "CLAUDE.md", "README.md", "AGENTS.md",
+		// The shop's frame: the login, the owner's setup page and the session.
+		"go.sum", "web/pages/login.vue", "web/pages/setup.vue", "web/components/LoginForm.vue", "web/components/SetupForm.vue", "web/session.ts", "web/answers.ts",
+	} {
 		if !exists(t, filepath.Join(dir, p)) {
 			t.Errorf("%s is missing", p)
 		}
@@ -123,12 +130,43 @@ func assertCreated(t *testing.T, dir string) {
 	if exists(t, filepath.Join(dir, "api", "api.go")) {
 		t.Error("api/api.go is written: the template's API is in app/")
 	}
-	if got := read(".env"); got != "PORT=8080\n" {
-		t.Errorf(".env = %q", got)
+	// .env holds what the frame needs to start: the database and a secret of
+	// its own, 48 random bytes in base64url; .env.sample only a placeholder.
+	env := envLines(read(".env"))
+	for k, want := range map[string]string{"PORT": "8080", "DB_DRIVER": "sqlite", "DB_URL": "file:data/" + filepath.Base(dir) + ".db", "AUTH_OWNER_EMAIL": "owner@example.com"} {
+		if env[k] != want {
+			t.Errorf(".env has %s=%q, want %q: %q", k, env[k], want, read(".env"))
+		}
 	}
-	wantSample := "# The port the app listens on.\nPORT=8080\n\n# The address to listen on. Empty means every interface.\n# HOST=127.0.0.1\n"
-	if got := read(".env.sample"); got != wantSample {
-		t.Errorf(".env.sample = %q, want %q", got, wantSample)
+	if secret, err := base64.RawURLEncoding.DecodeString(env["AUTH_SECRET"]); err != nil || len(secret) != 48 {
+		t.Errorf(".env has AUTH_SECRET=%q, want 48 random bytes in base64url (%v)", env["AUTH_SECRET"], err)
+	}
+	if len(env) != 5 {
+		t.Errorf(".env = %q, want PORT, DB_DRIVER, DB_URL, AUTH_SECRET and AUTH_OWNER_EMAIL", read(".env"))
+	}
+	if runtime.GOOS != "windows" {
+		if info, err := os.Stat(filepath.Join(dir, ".env")); err != nil || info.Mode().Perm() != 0o600 {
+			t.Errorf(".env is %v, want only its owner to read it, as it holds the secret (%v)", info.Mode().Perm(), err)
+		}
+	}
+	sample := read(".env.sample")
+	if s := envLines(sample); s["AUTH_SECRET"] != "" || s["DB_DRIVER"] != "sqlite" || s["DB_URL"] != "file:data/"+filepath.Base(dir)+".db" || s["AUTH_OWNER_EMAIL"] != "owner@example.com" || s["PORT"] != "8080" {
+		t.Errorf(".env.sample = %q, want the settings with an empty AUTH_SECRET", sample)
+	}
+	for _, want := range []string{"# HOST=127.0.0.1\n", "openssl rand -base64 48"} {
+		if !strings.Contains(sample, want) {
+			t.Errorf(".env.sample lacks %q: %q", want, sample)
+		}
+	}
+	if !strings.Contains(read("go.mod"), "\tmodernc.org/sqlite v1.63.0\n") || !strings.Contains(read("go.sum"), "modernc.org/sqlite v1.63.0 h1:") {
+		t.Errorf("go.mod and go.sum do not require the SQLite driver: %q", read("go.mod"))
+	}
+	if !strings.Contains(read("main.go"), "\t_ \"modernc.org/sqlite\"\n") {
+		t.Errorf("main.go does not import the SQLite driver: %q", read("main.go"))
+	}
+	modules := read("app/modules.go")
+	if i, j, k := strings.Index(modules, "data.Module(),"), strings.Index(modules, "auth.Module(),"), strings.Index(modules, "hello.Module(),"); i < 0 || j < i || k < j {
+		t.Errorf("app/modules.go does not list data, auth and hello in that order: %q", modules)
 	}
 	// An agent starts from /index.md, as the app's AGENTS.md says too.
 	for _, f := range []string{"README.md", "AGENTS.md"} {
@@ -148,10 +186,57 @@ func TestCreateWritesApp(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errs)
 	}
-	if out != "Created myapp. Next: cd myapp && weft dev\n" {
+	if out != ownerLine("myapp")+"Created myapp. Next: cd myapp && weft dev\n" {
 		t.Errorf("stdout %q", out)
 	}
 	assertCreated(t, "myapp")
+}
+
+// ownerLine is what weft create says of the owner's email in the app's .env.
+func ownerLine(app string) string {
+	return "Set AUTH_OWNER_EMAIL in " + filepath.Join(app, ".env") + " to the owner's email address; it is owner@example.com until you do.\n"
+}
+
+// envLines reads the KEY=value lines of a .env, leaving comments out.
+func envLines(text string) map[string]string {
+	out := map[string]string{}
+	for _, l := range strings.Split(text, "\n") {
+		if k, v, ok := strings.Cut(l, "="); ok && !strings.HasPrefix(l, "#") {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// Every app gets a secret of its own: two apps never share one.
+func TestCreateSecretsDiffer(t *testing.T) {
+	inTempDir(t, "work")
+	for _, name := range []string{"one", "two"} {
+		if code, _, errs := create(t, name, "--no-install"); code != 0 {
+			t.Fatalf("%s: exit %d: %s", name, code, errs)
+		}
+	}
+	one, _ := os.ReadFile(filepath.Join("one", ".env"))
+	two, _ := os.ReadFile(filepath.Join("two", ".env"))
+	a, b := envLines(string(one))["AUTH_SECRET"], envLines(string(two))["AUTH_SECRET"]
+	if len(a) != 64 || len(b) != 64 || a == b {
+		t.Errorf("AUTH_SECRET is %q in one and %q in two, want 64 characters each, and different", a, b)
+	}
+}
+
+// newSecret is 48 bytes of crypto/rand in base64url, without padding.
+func TestNewSecret(t *testing.T) {
+	seen := map[string]bool{}
+	for range 20 {
+		s, err := newSecret()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if b, err := base64.RawURLEncoding.DecodeString(s); err != nil || len(b) != 48 || seen[s] {
+			t.Fatalf("newSecret() = %q (%v), want a fresh 48 bytes in base64url", s, err)
+		}
+		seen[s] = true
+	}
 }
 
 // An app named like a folder inside web/ gets an anchored .gitignore line, so
@@ -333,6 +418,8 @@ func TestDevServerReadsStdinOnlyUnderWeftDev(t *testing.T) {
 	for _, parent := range []bool{false, true} {
 		port := strconv.Itoa(freeTestPort(t))
 		cmd := exec.Command(bin)
+		// In the app's folder, where its .env has the settings auth needs.
+		cmd.Dir = "myapp"
 		cmd.Env = append(os.Environ(), "PORT="+port)
 		if parent {
 			cmd.Env = append(cmd.Env, "WEFT_DEV_PARENT=1")
@@ -556,5 +643,101 @@ func TestWriteTemplateWritesNoEmptyFolders(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "api")); err == nil {
 		t.Error("the empty template folder api was written")
+	}
+}
+
+// startApp runs bin in dir, so it reads the .env there and keeps its
+// database in dir/data, and returns its base URL and the setup link's token
+// it logged. The process is stopped when the test ends.
+func startApp(t *testing.T, bin, dir string) (string, string) {
+	t.Helper()
+	port := freeTestPort(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := exec.CommandContext(ctx, bin)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "PORT="+strconv.Itoa(port))
+	logs := &logBuffer{}
+	cmd.Stdout, cmd.Stderr = logs, logs
+	if err := cmd.Start(); err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	exited := make(chan struct{})
+	go func() { cmd.Wait(); close(exited) }()
+	t.Cleanup(func() { cancel(); <-exited })
+	url := "http://127.0.0.1:" + strconv.Itoa(port)
+	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		select {
+		case <-exited:
+			t.Fatalf("%s stopped: %s", bin, logs.String())
+		default:
+		}
+		res, err := http.Get(url + "/api/hello")
+		if err != nil {
+			continue
+		}
+		res.Body.Close()
+		m := setupLink.FindStringSubmatch(logs.String())
+		if m == nil {
+			t.Fatalf("%s answers but logged no setup link: %s", bin, logs.String())
+		}
+		return url, m[1]
+	}
+	t.Fatalf("%s did not answer within 15 s: %s", bin, logs.String())
+	return "", ""
+}
+
+// A created app is the shop's frame, ready to use: weft create wrote its
+// typed client, so the login and setup pages type-check before any build; its
+// Go tests pass over SQLite; and built, it answers /api/hello to anyone,
+// keeps /api/auth/me for the signed in, logs the owner's setup link, and
+// serves /login and /setup with their password forms guarded until their
+// islands are live.
+func TestCreatedAppIsTheFrame(t *testing.T) {
+	inTempDir(t, "work")
+	app := copyApp(t, ".")
+	t.Chdir(app)
+	if src, err := os.ReadFile(filepath.Join(app, "web", ".weft-types", "api.ts")); err != nil || !strings.Contains(string(src), "async login(") || !strings.Contains(string(src), "async hello(") {
+		t.Fatalf("weft create left no client with api.auth.login and api.hello.hello: %v\n%s", err, src)
+	}
+	// The client was written from the app's folder: the Go build left
+	// nothing in a myapp folder inside it, where the binary goes.
+	if exists(t, filepath.Join(app, "myapp")) {
+		t.Error("weft create left a folder myapp inside the app")
+	}
+	if out, err := exec.Command("pnpm", "typecheck").CombinedOutput(); err != nil {
+		t.Errorf("pnpm typecheck in a created app: %v\n%s", err, out)
+	}
+	if out, err := exec.Command("go", "test", "-count=1", "-tags", "dev", "./...").CombinedOutput(); err != nil || !strings.Contains(string(out), "ok  \tmyapp/app/hello") {
+		t.Errorf("go test -tags dev ./... in a created app: %v\n%s", err, out)
+	}
+	if code, out, errs := build(t); code != 0 {
+		t.Fatalf("weft build: exit %d: %s%s", code, out, errs)
+	}
+	url, token := startApp(t, filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS)), app)
+	if token == "" {
+		t.Error("no setup token was logged")
+	}
+	if code, body := get(t, url+"/api/hello"); code != 200 || strings.TrimSpace(body) != `{"message":"Hello from Go"}` {
+		t.Errorf("GET /api/hello without a session = %d %q", code, body)
+	}
+	if code, body := get(t, url+"/api/auth/me"); code != 401 || !strings.Contains(body, `"code":"unauthorized"`) {
+		t.Errorf("GET /api/auth/me without a session = %d %q", code, body)
+	}
+	for path, want := range map[string]string{
+		"/":      `href="/login"`,
+		"/login": `<weft-island data-id="LoginForm"`,
+		"/setup": `<weft-island data-id="SetupForm"`,
+	} {
+		code, body := get(t, url+path)
+		if code != 200 || !strings.Contains(body, want) {
+			t.Errorf("GET %s = %d, want 200 with %q: %s", path, code, want, body)
+		}
+		if (path == "/login" || path == "/setup") && (!postForm.MatchString(body) || !guardsSubmit(t, body)) {
+			t.Errorf("GET %s: the password form is not a POST form behind the inline submit guard: %s", path, body)
+		}
+	}
+	if !exists(t, filepath.Join(app, "data", "myapp.db")) {
+		t.Error("the app kept no database in data/myapp.db, which DB_URL in .env names")
 	}
 }

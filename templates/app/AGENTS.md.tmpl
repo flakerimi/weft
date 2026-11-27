@@ -8,6 +8,8 @@
 ```sh
 weft dev        # run the app, rebuilding pages and Go as you save
 weft build      # build the pages, then the binary
+weft gen        # write web/.weft-types/api.ts, the typed client, from the Go
+weft routes     # every route, with its module, name and permission
 weft upgrade    # move the app to the Weft version of the weft you run
 weft catalog    # the components; weft catalog <Name> for one, --find <word> to search
 go test -tags dev ./...   # the Go tests
@@ -16,6 +18,8 @@ pnpm typecheck  # check the Vue files
 
 To add a route, add it in a module's `Register` with `warp.Get(app, "/path", fn)`; to add a module, make `app/<name>/` with a `Module()` and list it in `app/modules.go`. `weft dev` restarts the Go server when a `.go` file or `.env` changes.
 
+The app keeps its records in SQLite (`data.Module()`, the file `DB_URL` names in `.env`) and signs its owner in (`auth.Module()`). At its first start, while no user exists, it logs a one-time link, `/setup#token=…`, that sets the owner's password; the owner's email is `AUTH_OWNER_EMAIL` in `.env`. `GET /api/hello` answers anyone.
+
 Go commands need `-tags dev` until the first `weft build`: without it `dist.go` embeds `web/dist`, which does not exist yet.
 
 ## Layout
@@ -23,14 +27,19 @@ Go commands need `-tags dev` until the first `weft build`: without it `dist.go` 
 | Path | What it is |
 | --- | --- |
 | `main.go`, `dist.go`, `dist_dev.go` | The server. `main.go` makes the `warp.App` and serves it; `dist.go` embeds `web/dist`; with `-tags dev`, as `weft dev` builds it, `dist_dev.go` embeds nothing |
-| `app/modules.go` | The one list of the app's modules |
+| `app/modules.go` | The one list of the app's modules: `data`, `auth`, `hello` |
 | `app/<name>/routes.go` | One module: its routes, under `/api` |
-| `.env`, `.env.sample` | `PORT` and `HOST` for the server; `.env` is not committed, `.env.sample` is |
-| `web/pages/` | One page per `.vue` file; its path is the route |
+| `.env`, `.env.sample` | The settings: the port, the database, `AUTH_SECRET` and `AUTH_OWNER_EMAIL`; `.env` is not committed, `.env.sample` is and says what each one is |
+| `data/` | The SQLite database, not committed |
+| `web/pages/` | One page per `.vue` file; its path is the route. `login.vue` signs the owner in, `setup.vue` sets the owner's password |
 | `web/components/` | Your components; an island is one used with `Island` |
+| `web/session.ts` | `useSession()`: who is signed in, asked once per page; `requireUser()`; `signInAgain()` |
+| `web/answers.ts` | Plain rules with no Vue: `nextPath`, `formProblem`, `sessionFrom` |
+| `web/.weft-types/api.ts` | The typed client `weft gen` writes; every call to the server goes through it |
 
 ## Rules
 
+- Call the server only through `api` from `web/.weft-types/api.ts`; never write `fetch` or a URL under `/api`.
 - Use a Weft component wherever one exists: never write a raw `<button>`, `<input>`, `<select>` or `<dialog>`, and never hand-roll a menu, a popover or a date field.
 - Before you write markup, run `weft catalog` for the list of components, then `weft catalog <Name>` for each one you use: its props, events, slots and an example; `weft catalog --find <word>` when you do not know the name. Never read `.weft/catalog/components.json` whole: it is too large.
 - Lay pages out with `Page`, `Section`, `Stack` and `Grid`, not with custom CSS.
@@ -39,6 +48,6 @@ Go commands need `-tags dev` until the first `weft build`: without it `dist.go` 
 - Styles use only `--weft-*` tokens, each with a fallback.
 - Components adapt from inside; do not write a mobile variant of a component.
 - Go: use the standard library and `github.com/flakerimi/weft/warp`; add a dependency only for what the standard library cannot do, such as a database driver.
-- Do not edit `.weft/`: `weft` writes it.
+- Do not edit `.weft/` or `web/.weft-types/`: `weft` writes them.
 
 More for agents: https://weft.base.al/index.md and https://weft.base.al/llms.txt

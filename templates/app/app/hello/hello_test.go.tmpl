@@ -1,26 +1,34 @@
-package hello
+package hello_test
 
 import (
 	"net/http"
-	"net/http/httptest"
-	"strings"
+	"path/filepath"
 	"testing"
 
-	"github.com/flakerimi/weft/warp"
+	"github.com/flakerimi/weft/warp/warptest"
+
+	"[[.Module]]/app"
+	"[[.Module]]/app/hello"
+
+	_ "modernc.org/sqlite"
 )
 
+// The app's modules start over a database file of the test's own, and
+// GET /api/hello answers anyone, signed in or not; the login's own routes
+// answer only the signed in.
 func TestHello(t *testing.T) {
-	app := warp.New(warp.Config{})
-	app.Use(Module())
-	if err := app.Err(); err != nil {
-		t.Fatal(err)
+	c := warptest.New(t, map[string]string{
+		"DB_DRIVER":        "sqlite",
+		"DB_URL":           "file:" + filepath.Join(t.TempDir(), "data", "test.db"),
+		"AUTH_SECRET":      "a secret for tests that is long enough to sign",
+		"AUTH_OWNER_EMAIL": "owner@example.com",
+	}, app.Modules()...)
+	var got hello.Message
+	c.Get("/api/hello").Want(http.StatusOK).JSON(&got)
+	if got.Message != "Hello from Go" {
+		t.Errorf("GET /api/hello = %+v", got)
 	}
-	rec := httptest.NewRecorder()
-	app.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/api/hello", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status %d", rec.Code)
-	}
-	if got := strings.TrimSpace(rec.Body.String()); got != `{"message":"Hello from Go"}` {
-		t.Fatalf("body %q", got)
+	if e := c.Get("/api/auth/me").Want(http.StatusUnauthorized).Error(); e.Code != "unauthorized" {
+		t.Errorf("GET /api/auth/me without a session: %+v", e)
 	}
 }

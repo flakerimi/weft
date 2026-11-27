@@ -57,7 +57,7 @@ It says `weft X is up to date.` when there is nothing to do, and `Updated weft X
 
 ### weft create
 
-Makes an app in a new folder named after it. It writes the app's files from the template `weft` carries, unpacks Weft's packages into the app's `.weft/`, records the Weft version and theme in `package.json`'s `"weft"` object, and runs `pnpm install` and `go mod download`, which fetches Warp's module from GitHub at the release's tag. Then it prints `Created <name>. Next: cd <name> && weft dev`. [Create an app](../getting-started/create-an-app.md) walks through what it writes.
+Makes an app in a new folder named after it: `data` (SQLite), `auth` (the owner's login, with `/login` and `/setup`) and `hello`. It writes the app's files from the template `weft` carries, with a fresh `AUTH_SECRET` (48 random bytes, base64url) in `.env`, which only you may read, unpacks Weft's packages into `.weft/`, records the Weft version and theme in `package.json`'s `"weft"` object, and runs `pnpm install`, `go mod download` (Warp's module, from GitHub at the release's tag) and `weft gen`. Then it prints `Set AUTH_OWNER_EMAIL in <name>/.env to the owner's email address; it is owner@example.com until you do.` and `Created <name>. Next: cd <name> && weft dev`. [Create an app](../getting-started/create-an-app.md) walks through it.
 
 ```text
 weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install]
@@ -67,7 +67,7 @@ weft create <name> [--module <path>] [--theme neutral|lisa|weft] [--no-install]
 | --- | --- |
 | `--module <path>` | The Go module path in `go.mod`. Default: the name |
 | `--theme` | `neutral` (the default), `lisa` or `weft`. See [Themes](../guides/themes.md) |
-| `--no-install` | Skip `pnpm install` and `go mod download`, which `weft dev` or `weft build` runs later |
+| `--no-install` | Skip `pnpm install`, `go mod download` and `weft gen`, which `weft dev` or `weft build` runs later |
 
 The name is a lowercase letter, then lowercase letters, digits and hyphens, at most 64. It is also the binary's name, so `web`, `api`, `app` and `dist` are refused: the binary would land in a folder of the app. Wrong usage, such as a bad name, theme or flag, is one sentence with exit status 2.
 
@@ -124,8 +124,9 @@ A compile error ends `weft gen: go build failed; fix what its output above says 
 Builds and describes the app as `weft gen` does, and prints its routes in the order registered; an app with no `warp.App` gets a sentence saying so. A route that takes every method is `ANY`; no module or no permission is `-`.
 
 ```text
-METHOD  PATH        MODULE  NAME   PERMISSION
-GET     /api/hello  hello   hello  -
+METHOD  PATH              MODULE  NAME    PERMISSION
+GET     /api/auth/me      auth    me      -
+GET     /api/hello        hello   hello   -
 ```
 
 ### weft upgrade
@@ -167,27 +168,7 @@ disclosure
   Collapsible     Content shown and hidden by one trigger.
 ```
 
-With names it prints each component as Markdown: its purpose, `Use:` and `Avoid:`, `Adapts:` on each axis, `Props:` as `name: type = default`, with `required` where it is, then what it does, `Emits:` with each payload, `Slots:` with each slot's props, `Notes:`, and its first example. A section it has nothing for is left out. Names match without regard to case or hyphens, so `date-picker` finds `DatePicker`. Kbd here is shortened:
-
-````text
-# Kbd
-
-A key on the keyboard, for showing shortcuts.
-
-Use: In help text, menus and tooltips, one Kbd per key of a shortcut.
-Avoid: For code or a value to copy, use a code element.
-
-Adapts:
-- …
-
-Props:
-- value: string — The key: a character (`K`) or a name with a symbol (`command`, `shift`…). …
-
-Slots: default
-
-Notes:
-…
-````
+With names it prints each component as Markdown (`# Kbd`, then its purpose): `Use:` and `Avoid:`, `Adapts:` on each axis, `Props:` as `name: type = default`, with `required` where it is, then what it does, `Emits:` with each payload, `Slots:` with each slot's props, `Notes:`, and its first example; a section it has nothing for is left out. Names match without regard to case or hyphens, so `date-picker` finds `DatePicker`.
 
 | Flag | What it does |
 | --- | --- |

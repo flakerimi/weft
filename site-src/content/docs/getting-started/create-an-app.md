@@ -12,11 +12,14 @@ On this page you make an app, run it while you change a page and the API, and bu
 weft create myapp
 ```
 
-It writes the app into a new folder, `myapp`, puts Weft's packages in `myapp/.weft/`, and runs `pnpm install`, which fetches Vue, Vite and the other public packages from the npm registry, and `go mod download`, which fetches Warp from GitHub. Then it prints:
+It writes the app into a new folder, `myapp`, puts Weft's packages in `myapp/.weft/`, and runs `pnpm install`, which fetches Vue, Vite and the other public packages from the npm registry, `go mod download`, which fetches Warp from GitHub, and `weft gen`, which writes the typed client. Then it prints:
 
 ```text
+Set AUTH_OWNER_EMAIL in myapp/.env to the owner's email address; it is owner@example.com until you do.
 Created myapp. Next: cd myapp && weft dev
 ```
+
+The app keeps its records in SQLite and has one user, its owner, whose email is `AUTH_OWNER_EMAIL` in `.env`: set it to yours. `.env` also holds `AUTH_SECRET`, 48 random bytes made for this app, which sign the session cookie.
 
 If Go cannot fetch Warp (offline, or behind a proxy that refuses it), `weft create` says so and leaves the app; once Go can reach the module proxy, `cd myapp && weft dev` (or `weft build`) fetches it and finishes.
 
@@ -24,12 +27,13 @@ The app has:
 
 | Path | What it is |
 | --- | --- |
-| `web/pages/` | The pages. `index.vue` is `/`, and `404.vue` is the page for an unknown path. |
-| `web/components/` | The app's own components. `Hello.vue` is an island that asks the API for a message. |
-| `app/modules.go` | The one list of the app's Go modules. |
-| `app/hello/` | The first module: `routes.go` has the route `GET /api/hello`, and `hello_test.go` its test. |
-| `main.go`, `dist.go`, `dist_dev.go` | The Go server, a `warp.App` from `github.com/flakerimi/weft/warp`. `dist.go` embeds the built pages. |
-| `.env`, `.env.sample` | The server's settings, such as `PORT`. Git ignores `.env`; `.env.sample` is committed. |
+| `web/pages/` | The pages. `index.vue` is `/`, `login.vue` signs the owner in, `setup.vue` sets the owner's password, and `404.vue` is the page for an unknown path. |
+| `web/components/` | The app's own components: `Hello.vue`, an island that asks the API for a message, and the login and setup forms. |
+| `web/session.ts`, `web/answers.ts` | Who is signed in, asked once per page, and the rules for what the server answers. |
+| `app/modules.go` | The one list of the app's Go modules: `data`, `auth` and `hello`. |
+| `app/hello/` | The first module: `routes.go` has the route `GET /api/hello`, which answers anyone, and `hello_test.go` its test. |
+| `main.go`, `dist.go`, `dist_dev.go` | The Go server, a `warp.App` from `github.com/flakerimi/weft/warp`, with the SQLite driver. `dist.go` embeds the built pages. |
+| `.env`, `.env.sample` | The settings: the port, the database, `AUTH_SECRET` and `AUTH_OWNER_EMAIL`. Git ignores `.env` and `data/`, where the database is; `.env.sample` is committed and says what each one is. |
 | `package.json` | Its `"weft"` object records the Weft version and the theme. |
 | `go.mod`, `go.sum` | `go.mod` requires Warp, the module `github.com/flakerimi/weft`, at the release's tag, `v<version>`; `go.sum` holds its checksums. Commit both. `weft upgrade` moves the version. |
 | `.weft/` | Weft's packages, at the app's version. Git ignores it, and every `weft` command puts it back when it is missing. |
@@ -48,9 +52,10 @@ It builds the Go server, starts it beside the page server, and prints the addres
 
 ```text
 weft dev: http://localhost:5173
+2026/11/27 09:00:00 Set up the owner at http://localhost:5173/setup#token=…
 ```
 
-The page shows three cards and a badge that says `Hello from Go`, which the `Hello` island fetched from `/api/hello`. The page server sends `/api` on to the Go server.
+Open the setup link to choose the owner's password; it works once, while no user exists. The front page shows three cards and a badge that says `Hello from Go`, which the `Hello` island fetched from `/api/hello`. The page server sends `/api` on to the Go server.
 
 `web/pages/index.vue` imports only `useHead` and `Hello`: Weft's components, such as `Page`, `Section` and `Card`, need no import in a `.vue` file.
 
@@ -73,7 +78,7 @@ weft build
 It builds the pages into `web/dist`, then the Go binary, which embeds them:
 
 ```text
-weft: built 2 pages into web/dist
+weft: built 4 pages into web/dist
 Built myapp
 ```
 

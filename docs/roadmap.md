@@ -68,7 +68,8 @@ What a newcomer meets first works, on every platform.
   struct field includes `''` or `0`), `useParams()` typed from the routes.
 - **W5, scaffolding and app blocks:** `weft scaffold`, `DataTable` (server
   paging, sorting, filtering over the list shape) and `EntityDialog`; the app
-  template becomes the shop's shape (data, the login, one resource).
+  template takes the shop's frame (done: data, the login and its pages, and
+  `hello`, with no starter resource).
 - **Landing blocks** (Weft phase 7): `Hero`, `FeatureGrid`, `Pricing`,
   `Testimonials`, `Faq`, `Cta`.
 - **The benchmark** run on a quiet machine with every series interleaved, and
@@ -84,8 +85,8 @@ What a newcomer meets first works, on every platform.
   and SMTP drivers).
 - Roles and permissions beyond the owner; a session table on the server, so a
   user can sign out everywhere and one session can be ended.
-- `useSession()`, a login page in the template, `perm` on `Button` and row
-  actions, and a route guard in Vue.
+- `useSession()` in `@weft/ui` (the template has its own `web/session.ts` and
+  login page), `perm` on `Button` and row actions, and a route guard in Vue.
 - From W7, brought forward because accounts need them: the `middleware` module's
   security headers, request logging, a rate limit and API keys; body-read and
   idle timeouts on the server.

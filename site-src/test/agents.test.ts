@@ -185,7 +185,8 @@ describe('index.md', () => {
     const listed = commandsNotYet(comingNext)
     const step = section('6. What is not built yet')
     expect(step).toContain(`${SITE}/docs/coming-next`)
-    expect(step).toContain('- The app template has no database or login: add `data.Module()` and `auth.Module()` yourself.')
+    // The template has the database and the login since W5.
+    expect(step).not.toContain('The app template has no database')
     expect(step).toContain(`- The commands ${listed.slice(0, -1).join(', ')} and ${listed.at(-1)}.`)
     for (const c of listed) expect(commands, c).not.toContain(c.replace(/`/g, '').split(' ')[1])
     const names = new Set(catalog.components.map((c) => c.name))

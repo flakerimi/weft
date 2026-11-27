@@ -7,7 +7,7 @@ useHead({ title: 'Welcome', description: 'A Weft app: Go and Vue in one binary.'
 const notes = [
   { title: 'Pages', text: 'Each file in web/pages is a page, built ahead of time.' },
   { title: 'Islands', text: 'Only the parts you mark run in the browser.' },
-  { title: 'Go', text: 'app/hello/routes.go answers /api; the binary serves both.' },
+  { title: 'Go', text: 'app/hello answers /api/hello; data and auth keep the records and the login.' },
 ]
 </script>
 
@@ -24,6 +24,9 @@ const notes = [
       </Section>
       <Section title="From the API">
         <Island when="load" :component="Hello" />
+      </Section>
+      <Section title="The owner">
+        <Link to="/login">Sign in</Link>
       </Section>
     </Page>
   </div>

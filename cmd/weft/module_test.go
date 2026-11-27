@@ -33,6 +33,22 @@ func templateBundle(t *testing.T, withGo bool) string {
 	return dir
 }
 
+// templateGoMod is the go.mod weft create writes for myapp: Warp's module at
+// version, beside the SQLite driver and the modules it needs, and with the
+// replace into .weft/go when replaced. Since the template took the shop's
+// frame, the driver is required too, and with it go 1.26.0, which its
+// modules need.
+func templateGoMod(version string, replaced bool) string {
+	mod := "module myapp\n\ngo 1.26.0\n\nrequire (\n\tgithub.com/flakerimi/weft " + version + "\n\tmodernc.org/sqlite v1.63.0\n)\n\nrequire (\n" +
+		"\tgithub.com/dustin/go-humanize v1.1.0 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/mattn/go-isatty v0.0.24 // indirect\n" +
+		"\tgithub.com/ncruces/go-strftime v1.1.0 // indirect\n\tgithub.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect\n" +
+		"\tgolang.org/x/sys v0.49.0 // indirect\n\tmodernc.org/libc v1.80.1 // indirect\n\tmodernc.org/mathutil v1.7.1 // indirect\n\tmodernc.org/memory v1.12.1 // indirect\n)\n"
+	if replaced {
+		mod += "\nreplace github.com/flakerimi/weft => ./.weft/go\n"
+	}
+	return mod
+}
+
 func readFile(t *testing.T, name string) string {
 	t.Helper()
 	b, err := os.ReadFile(name)
@@ -51,7 +67,7 @@ func TestCreateRequiresTheReleaseModule(t *testing.T) {
 	if code, out, errs := runCmd("create", "myapp", "--no-install"); code != 0 {
 		t.Fatalf("exit %d: %s%s", code, out, errs)
 	}
-	want := "module myapp\n\ngo 1.26\n\nrequire github.com/flakerimi/weft v0.0.12\n"
+	want := templateGoMod("v0.0.12", false)
 	if got := readFile(t, "myapp/go.mod"); got != want {
 		t.Errorf("go.mod = %q, want %q", got, want)
 	}
@@ -72,7 +88,7 @@ func TestCreateDevReplacesTheModule(t *testing.T) {
 	if code, out, errs := runCmd("create", "myapp", "--no-install"); code != 0 {
 		t.Fatalf("exit %d: %s%s", code, out, errs)
 	}
-	want := "module myapp\n\ngo 1.26\n\nrequire github.com/flakerimi/weft v0.0.0\n\nreplace github.com/flakerimi/weft => ./.weft/go\n"
+	want := templateGoMod("v0.0.0", true)
 	if got := readFile(t, "myapp/go.mod"); got != want {
 		t.Errorf("go.mod = %q, want %q", got, want)
 	}
@@ -183,7 +199,7 @@ func TestUpgradeRequiresTheReleaseModule(t *testing.T) {
 	if code != 0 || out != "Moved myapp from Weft 0.0.11 to 0.0.12\n" || errs != "" {
 		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errs)
 	}
-	want := "module myapp\n\ngo 1.26\n\nrequire github.com/flakerimi/weft v0.0.12\n"
+	want := templateGoMod("v0.0.12", false)
 	if got := readFile(t, "go.mod"); got != want {
 		t.Errorf("go.mod = %q, want %q", got, want)
 	}

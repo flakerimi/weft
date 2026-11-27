@@ -271,7 +271,8 @@ func TestBuildMakesBinary(t *testing.T) {
 		t.Errorf("stdout ends %q", out[max(0, len(out)-80):])
 	}
 	// The folder as weft build names it to the page build: web\dist on Windows.
-	if !strings.Contains(out, "weft: built 2 pages into "+filepath.Join("web", "dist")) {
+	// The frame has four pages: the front page, 404, login and setup.
+	if !strings.Contains(out, "weft: built 4 pages into "+filepath.Join("web", "dist")) {
 		t.Errorf("the page build's output was not passed through: %q", out)
 	}
 	assertServes(t, filepath.Join(app, "myapp"+exeSuffix(runtime.GOOS)))

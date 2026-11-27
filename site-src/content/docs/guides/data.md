@@ -8,7 +8,7 @@ On this page you learn how an app keeps its records: the `data` module opens the
 
 ## Setting it up
 
-The driver is the app's dependency, not Warp's: `main.go` imports it, as `database/sql` intends.
+An app `weft create` makes is set up already, as below, with its database at `data/<name>.db`. The driver is the app's dependency, not Warp's: `main.go` imports it, as `database/sql` intends.
 
 ```go
 	// The SQLite driver, which warp/data opens by the name DB_DRIVER gives.
