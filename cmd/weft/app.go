@@ -231,8 +231,9 @@ func checkedApp(appDir string) (appConfig, error) {
 }
 
 // unpackCmd makes sure .weft/ is there and current, as ensure does before it
-// installs, so that go and an editor can resolve the Weft Go module in a fresh
-// clone before any weft dev or weft build has run pnpm install.
+// installs, so that in a fresh clone of an app a development build made, whose
+// go.mod replaces the Weft module with ./.weft/go, go and an editor can
+// resolve it before any weft dev or weft build has run pnpm install.
 func unpackCmd(args []string, stdout, stderr io.Writer) int {
 	_, code, ok := appCommandWith("unpack", args, stdout, stderr, func(appDir string) error {
 		cfg, err := checkedApp(appDir)
@@ -261,8 +262,10 @@ func unpackCmd(args []string, stdout, stderr io.Writer) int {
 // checks the prerequisites, unpacks the bundle into .weft/ when that holds
 // another version or nothing (a fresh clone), or, for a development weft,
 // another bundle (refreshWeft), runs pnpm install when it
-// unpacked or node_modules/ is missing, and writes the components'
-// declaration file when it installed or the file is missing.
+// unpacked or node_modules/ is missing, runs go mod download when go.sum
+// lacks the checksums of the Weft module go.mod requires from GitHub
+// (fetchModule), and writes the components' declaration file when it
+// installed or the file is missing.
 // Its errors carry no "weft <command>: " prefix; the command adds it.
 func ensure(appDir string, stdout, stderr io.Writer) (appConfig, error) {
 	cfg, err := checkedApp(appDir)
@@ -283,6 +286,9 @@ func ensure(appDir string, stdout, stderr io.Writer) (appConfig, error) {
 		if err := pnpmInstall(appDir, stdout, stderr); err != nil {
 			return cfg, err
 		}
+	}
+	if err := fetchModule(appDir, stdout, stderr); err != nil {
+		return cfg, err
 	}
 	if _, err := os.Stat(filepath.Join(appDir, componentTypes)); install || err != nil {
 		if err := writeTypes(appDir, stdout, stderr); err != nil {

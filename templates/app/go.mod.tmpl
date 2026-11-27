@@ -2,6 +2,10 @@ module [[.Module]]
 
 go 1.26
 
+[[if .LocalGo -]]
 require github.com/flakerimi/weft v0.0.0
 
 replace github.com/flakerimi/weft => ./.weft/go
+[[else -]]
+require github.com/flakerimi/weft v[[.Version]]
+[[end -]]

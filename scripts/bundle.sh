@@ -1,11 +1,15 @@
 #!/bin/sh
-# Stage the bundle `weft` carries: the runtime files of the JS packages, the Go
-# package, the catalogue and the app template. A release stages it into
-# cmd/weft/bundle before building weft; WEFT_BUNDLE can name any such folder.
-# OUT must be missing, empty, hold only a README.md, or be a bundle this script
-# wrote (it has .weft-bundle); anything else is refused. Builds @weft/themes and
-# @weft/ui first. WEFT_VERSION, when set, becomes the Go package's Version.
-# Usage: scripts/bundle.sh OUT
+# Stage the bundle `weft` carries: the runtime files of the JS packages, the
+# catalogue, the app template and, for a development build, the Go package. A
+# release stages it into cmd/weft/bundle before building weft; WEFT_BUNDLE can
+# name any such folder. OUT must be missing, empty, hold only a README.md, or
+# be a bundle this script wrote (it has .weft-bundle); anything else is
+# refused. Builds @weft/themes and @weft/ui first. WEFT_VERSION names the
+# release; unset (or 0.0.0-dev) the bundle is a development build's, which
+# carries the Go package in weft/go, since its apps replace the module with
+# ./.weft/go. A release's apps require github.com/flakerimi/weft at the
+# release's tag, which Go fetches from GitHub, so its bundle carries no Go.
+# Usage: [WEFT_VERSION=<version>] scripts/bundle.sh OUT
 set -eu
 
 if [ $# -ne 1 ]; then
@@ -19,7 +23,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 # are (it reads a backslash in -C as an escape, \001 as a control character).
 case "$1" in
 /*) out="$1" ;;
-[A-Za-z]:[/\\]*) out=$(printf '%s\n' "$1" | tr '\\' /) ;;
+[A-Za-z]:[/\\]*) out=$(printf '%s\n' "$1" | tr "\\\\" /) ;;
 *) out="$PWD/$1" ;;
 esac
 
@@ -52,7 +56,7 @@ for d in weft template; do
 		echo "scripts/bundle.sh: the earlier $d is in $old." >&2
 	fi
 done
-mkdir -p "$out/weft/packages" "$out/weft/go" "$out/weft/catalog"
+mkdir -p "$out/weft/packages" "$out/weft/catalog"
 
 # copy_tree FROM TO copies a folder without what a bundle never needs.
 copy_tree() {
@@ -91,18 +95,16 @@ for p in ui themes vite; do
 	keep_fields "$pkg/$p/package.json" $fields
 done
 
-# warp and every package under it, without tests.
-tar -cf - --exclude '*_test.go' --exclude .DS_Store warp | tar -C "$out/weft/go" -xf -
-# go:embed leaves out a folder that holds a go.mod (it is another module), so
-# the bundle keeps it as go.mod.bundle and weft unpacks it as go.mod.
-cp go.mod "$out/weft/go/go.mod.bundle"
-cat > "$out/weft/go/version.go" <<GO
-// Package weft carries the Weft release a build belongs to; an app's Go code imports github.com/flakerimi/weft/warp.
-package weft
-
-// Version is the Weft release this build belongs to.
-var Version = "${WEFT_VERSION:-0.0.0-dev}"
-GO
+# A development build's Go package: warp and every package under it, without
+# tests, and the root package, for the app's replace of the module.
+if [ "${WEFT_VERSION:-0.0.0-dev}" = 0.0.0-dev ]; then
+	mkdir -p "$out/weft/go"
+	tar -cf - --exclude '*_test.go' --exclude .DS_Store warp | tar -C "$out/weft/go" -xf -
+	# go:embed leaves out a folder that holds a go.mod (it is another module), so
+	# the bundle keeps it as go.mod.bundle and weft unpacks it as go.mod.
+	cp go.mod "$out/weft/go/go.mod.bundle"
+	cp version.go "$out/weft/go/version.go"
+fi
 
 cp catalog/components.json "$out/weft/catalog/"
 
