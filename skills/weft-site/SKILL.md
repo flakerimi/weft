@@ -11,7 +11,7 @@ A Weft site is a folder of Vue pages. `weft-build-pages` renders each page to HT
 
 An app is made with `weft create <name>`: the `weft` command carries Weft's packages, which are not on npm, and unpacks them into the app's `.weft/`, which you never edit. You need Go 1.26, Node 22.18 or later and pnpm 10. The site is `web/`, its Go API `app/`:
 
-- `weft dev` runs the page dev server beside the Go API, rendering each page when asked for and reloading the browser when a file changes;
+- `weft dev` runs the page dev server beside the Go API, rendering each page when asked for and reloading on a change;
 - `weft build` runs `weft-build-pages --root web --out web/dist` with the app's theme, then builds the binary. It prints `weft: built N pages into web/dist`.
 
 ## The layout of a site
@@ -88,7 +88,7 @@ Wrap only what must run in the browser, such as a form, a menu or a dialog:
 <Island when="visible" :component="Counter" :props="{ start: 0 }" />
 ```
 
-- `when` is `load`, `idle`, `visible` or `media`. With `media`, also give `media="(min-width: 1024px)"`.
+- `when` is `load`, `idle`, `visible` or `media` (then also `media="(min-width: 1024px)"`).
 - The island's file name is its id: two islands may not share one.
 - Props must survive JSON: strings, finite numbers, booleans, `null`, arrays and plain objects; anything else fails the build, naming the prop.
 - The server renders the island too, so it shows before any script runs. Read input and width through `useWeft()` and `useWidth()`, which answer `pointer` and `wide` on the server.
@@ -140,13 +140,13 @@ The build stops with one sentence naming the file, and often the line, when:
 
 - two files make the same route, or a dynamic page has neither `getPaths()` nor `runtime`, or both;
 - an island's prop is not JSON, or an island is not a `.vue` file the page imports;
-- an island imports `virtual:weft/content` or `virtual:weft/files`, which exist only on the server;
+- an island imports `virtual:weft/content`, `virtual:weft/files` or a stylesheet's `?url`, which only the server has;
 - Markdown frontmatter is not valid YAML, misses a field, or has one of the wrong type or one the schema lacks;
 - a link to a `.md` file, a heading or a route in a collection leads nowhere, or an image is missing;
 - a code block's language is unknown to the highlighter;
 - a CSS `url()` names no file;
 - `--out` holds files an earlier build did not write;
-- `--theme` is not `neutral`, `lisa` or `weft`.
+- `--theme` names no theme of `@weft/themes`.
 
 Fix the cause; never weaken the check.
 

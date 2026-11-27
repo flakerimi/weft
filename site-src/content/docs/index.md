@@ -29,7 +29,8 @@ Then read the guides as you need them:
 - [Pages and islands](guides/pages-and-islands.md): routes, the head, and the interactive parts.
 - [Markdown content](guides/markdown.md): docs like these, checked at build time.
 - [Warp, the Go side](guides/warp.md): the app, its modules, `.env`, a proxy, cross-site requests and tests.
-- [Typed routes](guides/routes.md): routes, their input, validation and errors.
+- [Typed routes](guides/routes.md): routes, their names and permissions, and their input.
+- [Validation and errors](guides/validation.md): the rules an input is checked by, and the one error shape.
 - [Data](guides/data.md): records in SQLite, and the five routes of a resource.
 - [Login](guides/login.md): the owner, sessions and permissions.
 - [Types from Go](guides/types-from-go.md): the typed client and form rules `weft gen` writes.
@@ -38,7 +39,7 @@ Then read the guides as you need them:
 - [The adaptive model](guides/adaptive.md): input, surface and width.
 - [Publishing](guides/publishing.md): one binary on a server.
 
-The [CLI](reference/cli.md) and [Go package](reference/go.md) references list every command, flag and function.
+The [CLI](reference/cli.md), [weft scaffold](reference/scaffold.md), [Go package](reference/go.md) and [Page tools](reference/page-tools.md) references list every command, flag and function.
 
 ## An example app
 
@@ -46,6 +47,6 @@ The repository's `examples/shop` is a small back office built the way these docs
 
 ## This site
 
-This site is built with Weft. Its pages, these docs included, are rendered when it is built and served by a Go binary that uses `warp.Serve`. A docs page loads no JavaScript, except a copy button beside a command to copy. Its source is `site-src/` in the repository.
+This site is built with Weft. Its pages, these docs included, are rendered when it is built and served by a Go binary that uses `warp.Serve`. A docs page loads no JavaScript file, except for a copy button beside a command to copy, and for the Theme menu once it is used. Its source is `site-src/` in the repository.
 
 For agents, the site has [`/llms.txt`](/llms.txt), an index of every doc, component and skill, and Claude Code skills such as [weft-site](/skills/weft-site), which teach an agent to build with Weft. [The skills page](/skills) shows how to install them.

@@ -60,7 +60,7 @@ Errors are `{"error":{"code":"…","message":"…","fields":{…}}}`. Return `wa
 
 - `weft create` lists `data.Module()`, `auth.Module()` and `hello.Module()`, with SQLite (`DB_DRIVER`, `DB_URL` in `.env`; the driver in `main.go`). A model embeds `data.Record`; `data.Resource(app, "/products", data.NewStore[Product](data.For(app), "products"), data.PerAction(auth.Per("products")))` gives five routes. `data:"sort,filter,search"` opens fields to `?sort=-price&q=lamp&filter[status]=live`.
 - `auth.Module()` after data: `AUTH_SECRET` (`weft create` writes one), `AUTH_OWNER_EMAIL`; the first start logs `<APP_URL>/setup#token=…`, the app's `/setup` page. `auth.Can("x:edit")` guards a route; `auth.UserOf(ctx)`.
-- `weft scaffold item title done:bool` writes `app/items/` (model, routes, story test), its line in `app/modules.go` and the pages; `--api` for Go only. [Types](https://weft.base.al/docs/reference/cli#weft-scaffold).
+- `weft scaffold item title done:bool` writes `app/items/` (model, routes, story test), its line in `app/modules.go` and the pages; `--api` for Go only. [Types](https://weft.base.al/docs/reference/scaffold).
 - `weft dev` and `weft build` run `weft gen`, which writes `web/.weft-types/api.ts`: `api.<module>.<name>()`, `ApiError`, and `schema` for `Form`.
 
 ## Testing a module

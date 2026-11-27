@@ -1,11 +1,13 @@
 // The preview stage's view, as the URL query keeps it, so a link reproduces
 // it: ?input=touch&surface=landing&theme=lisa&scheme=dark&width=390. A value
 // left out is the default: input and scheme follow the device and the page,
-// the surface is app, the theme neutral, and the stage fills its column.
+// the surface is app, the theme is the site's (the one the header's Theme
+// menu picked), and the stage fills its column.
 
 export const INPUTS = ['pointer', 'touch'] as const
 export const SURFACES = ['app', 'landing'] as const
-export const THEMES = ['neutral', 'lisa'] as const
+/** `site`: the page's own theme; neutral and lisa are forced on the canvas. */
+export const THEMES = ['site', 'neutral', 'lisa'] as const
 export const SCHEMES = ['light', 'dark'] as const
 /** Phone, tablet and desktop widths, in CSS pixels. */
 export const WIDTHS = [390, 820, 1280] as const
@@ -21,7 +23,7 @@ export interface StageView {
   width?: (typeof WIDTHS)[number]
 }
 
-export const DEFAULT_VIEW: StageView = { surface: 'app', theme: 'neutral' }
+export const DEFAULT_VIEW: StageView = { surface: 'app', theme: 'site' }
 
 const pick = <T extends string | number>(list: readonly T[], value: string | null): T | undefined =>
   list.find((v) => String(v) === value)

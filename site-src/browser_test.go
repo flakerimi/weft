@@ -570,3 +570,40 @@ func TestLandingDatePickerOpensOnDemand(t *testing.T) {
 		t.Error("the popover or its calendar is drawn without its styles")
 	}
 }
+
+// The /components filter hides, as you type, every card whose name and
+// purpose (the card's heading and text) do not hold each word, and every
+// group left with none, and says how many are shown.
+func TestGalleryFilterMatchesNameAndPurpose(t *testing.T) {
+	dist(t)
+	b := startBrowser(t)
+	srv := httptest.NewServer(siteHandler(t, stagedReleases(t)))
+	defer srv.Close()
+	b.doing, b.deadline = "emulating 1280 px", time.Now().Add(pageTimeout)
+	b.call(b.session, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 1280, "height": 900, "deviceScaleFactor": 1, "mobile": false})
+	b.open(srv.URL + "/components")
+	b.doing, b.deadline = "filtering /components", time.Now().Add(pageTimeout)
+	b.until(`document.querySelector('.gallery-filter[data-ready]')`)
+	b.eval(`(document.querySelector('.gallery-filter input').focus(), true)`, new(bool))
+	b.call(b.session, "Input.insertText", map[string]any{"text": "date range"})
+	b.until(`document.querySelector('.gallery-filter__count').textContent.trim() !== ''`)
+	var got struct {
+		Shown, Wrong []string
+		Count        string
+		Groups       int
+	}
+	b.eval(`(() => {
+		const cards = [...document.querySelectorAll('.gallery-card')]
+		const words = (c) => (c.querySelector('h3').textContent + ' ' + c.querySelector('p').textContent).toLowerCase()
+		const fits = (c) => ['date', 'range'].every((w) => words(c).includes(w))
+		return {
+			shown: cards.filter((c) => !c.hidden).map((c) => c.querySelector('h3').textContent),
+			wrong: cards.filter((c) => c.hidden === fits(c)).map((c) => c.querySelector('h3').textContent),
+			count: document.querySelector('.gallery-filter__count').textContent.trim(),
+			groups: [...document.querySelectorAll('[data-gallery-group]')].filter((g) => !g.hidden).length,
+		}
+	})()`, &got)
+	if len(got.Shown) == 0 || len(got.Wrong) != 0 || got.Count != fmt.Sprintf("%d shown.", len(got.Shown)) || got.Groups == 0 {
+		t.Errorf("filtering for \"date range\" shows %v (%q, %d groups); wrongly shown or hidden: %v", got.Shown, got.Count, got.Groups, got.Wrong)
+	}
+}

@@ -36,7 +36,7 @@ it('sets every variable the code theme can draw with', () => {
   for (const v of drawn) expect(Object.keys(vars), v).toContain(v)
 })
 
-describe.each(['neutral', 'lisa', 'weft'])('code.css on the %s theme', (theme) => {
+describe.each(['neutral', 'lisa', 'weft', 'synthwave', 'editor', 'sandstorm'])('code.css on the %s theme', (theme) => {
   const css = read(`../../themes/dist/${theme}.css`)
   const light = block(css, ':where(:root, [data-weft-scheme="light"])')
   const schemes = { light, dark: { ...light, ...block(css, ':where([data-weft-scheme="dark"])') } }

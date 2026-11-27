@@ -7,9 +7,10 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import type { PageHead } from './render.ts'
 
-export type Theme = 'neutral' | 'lisa' | 'weft'
+export type Theme = 'neutral' | 'lisa' | 'weft' | 'synthwave' | 'editor' | 'sandstorm'
 
-export const THEMES: Theme[] = ['neutral', 'lisa', 'weft']
+/** The themes @weft/themes builds, each a stylesheet `@weft/themes/<name>.css`. */
+export const THEMES: Theme[] = ['neutral', 'lisa', 'weft', 'synthwave', 'editor', 'sandstorm']
 
 /** Cross-document view transitions, the last rule of every page's CSS. */
 export const VIEW_TRANSITION = '@view-transition { navigation: auto; }'

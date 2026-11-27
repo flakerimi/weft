@@ -1,6 +1,6 @@
 ---
 name: weft-theme
-description: Use when changing how a Weft site or app looks - picking the neutral, lisa or weft theme with --theme, following or forcing light and dark with data-weft-scheme, overriding --weft-* tokens for a brand, self-hosting fonts, mapping Tailwind to the tokens, or adding a new theme to @weft/themes with its contrast checks.
+description: Use when changing how a Weft site or app looks - picking the neutral, lisa, weft, synthwave, editor or sandstorm theme with --theme, following or forcing light and dark with data-weft-scheme, overriding --weft-* tokens for a brand, self-hosting fonts, mapping Tailwind to the tokens, or adding a new theme to @weft/themes with its contrast checks.
 ---
 
 # Theming Weft
@@ -14,6 +14,11 @@ A theme is one stylesheet of `--weft-*` custom properties, with a light set and 
 | `neutral` | The default: greys, a blue primary, Inter |
 | `lisa` | Generated from the LisaOS token contract: olive, Rubik |
 | `weft` | weft.base.al's: indigo on a cool ground, saffron, Bricolage Grotesque |
+| `synthwave` | neon pink and cyan on deep violet, pale lilac in light, Space Grotesk |
+| `editor` | a warm charcoal code editor with candy accents, paper in light, JetBrains Mono for everything |
+| `sandstorm` | sand, dune ochre and dusty terracotta, deep umber at dusk, rounder corners, Quicksand |
+
+weft.base.al's header has a Theme menu that switches the whole site to any of the six, to see them before you pick.
 
 ```sh
 weft-build-pages --root . --out dist --theme weft
@@ -90,9 +95,9 @@ Weft has no Tailwind inside. If your own components use Tailwind, import `@weft/
    - `light` and `dark` sets of every colour key, each as `#RRGGBB`;
    - `font`, `radius`, `control`, `shadow`, `border`, `space`, `motion` and `ease`. `shadow` holds CSS `box-shadow` values; `border` holds px widths (`width`, `strong`, `focus`).
    Copy `weft.ts` as a start.
-2. Export it from `src/index.ts`, write it in `scripts/build.ts`, and add `"./<name>.css"` to the package's `exports`.
-3. In `packages/vite/src/build.ts`, add it to the `Theme` type (`export type Theme = 'neutral' | 'lisa' | 'weft'`) and to `THEMES`. Add it to the usage line in `packages/vite/bin/weft-build-pages.mjs`, and to the docs' Themes and CLI pages.
-4. Test it in `packages/themes/test/<name>.test.ts`, as `weft.test.ts` does: every colour key in both schemes, and focus at 3:1 on the page.
+2. Export it from `src/index.ts`, add it to the list `scripts/build.ts` writes, and add `"./<name>.css"` to the package's `exports`.
+3. In `packages/vite/src/document.ts`, add it to the `Theme` type and to `THEMES`; add it to the usage lines in `packages/vite/bin/weft-build-pages.mjs` and `weft-dev.mjs`, to `weft create`'s `--theme` in `cmd/weft/create.go`, and to the docs' Themes and CLI pages.
+4. Test it as `test/showcase.test.ts` does the showcase themes: every colour key in both schemes, and focus at 3:1 on the page; and add it to the contrast suite, `test/contrast.test.ts`.
 5. Run `pnpm --filter @weft/themes build`. It refuses a theme whose text, `-fg` or hover and active fills cannot reach 4.5:1, and names the colour to change.
 
 Never edit `dist/*.css`: it is generated. Change the `lisa` theme only through Lisa's token contract: `pnpm --filter @weft/themes sync:lisa <path to tokens.json>` copies it into `src/lisa/tokens.json`. Its `shadow` and `border` are not read from the contract yet: `src/lisa.ts` gives them Weft's defaults.

@@ -1,20 +1,21 @@
 ---
 title: Themes
 description: Pick a theme, follow light and dark, and change colours, type and spacing with tokens.
-order: 28
+order: 29
 ---
 
 On this page you pick a theme for your site, switch between light and dark, and change the look with tokens. A theme is one stylesheet of CSS custom properties. Weft's components read nothing else.
 
 ## The themes
 
-`@weft/themes` has three:
+`@weft/themes` has six. Try each on this site from the Theme menu in the header: every page switches, and the choice is kept.
 
-| Theme | What it is |
-| --- | --- |
-| `neutral` | The default: greys and a blue primary, Inter for text |
-| `lisa` | Generated from the LisaOS token contract: olive, Rubik |
-| `weft` | This site's: indigo on a cool ground, saffron, Bricolage Grotesque |
+- `neutral`, the default: greys and a blue primary, Inter for text.
+- `lisa`, generated from the LisaOS token contract: olive, Rubik.
+- `weft`, this site's: indigo on a cool ground, saffron, Bricolage Grotesque.
+- `synthwave`: neon pink and cyan on deep violet, pale lilac in light, Space Grotesk.
+- `editor`: a warm charcoal code editor with candy accents, paper in light, JetBrains Mono for everything.
+- `sandstorm`: sand, dune ochre and dusty terracotta, deep umber at dusk, rounder corners, Quicksand.
 
 Pick one with the page build's `--theme` flag:
 

@@ -20,6 +20,25 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
   the field's, with ids of its own in an island. Mounted in the browser with no server
   HTML, the label is drawn one update after `mount()`, before anything is
   painted.
+- Three new themes in `@weft/themes`: `synthwave` (neon on deep violet,
+  Space Grotesk), `editor` (a warm charcoal code editor with candy accents,
+  JetBrains Mono for everything) and `sandstorm` (sand, dune ochre and dusty
+  terracotta, rounder corners, Quicksand), each passing the contrast checks
+  in light and dark. `weft create --theme`, `weft-build-pages --theme` and
+  `weft-dev --theme` take them.
+- The page build builds a stylesheet a page imports by its URL
+  (`import href from './x.css?url'`) as a file of its own under `/assets/`,
+  minified, named by its bytes and cached for good, with the fonts it names;
+  it is never inlined and its fonts are not preloaded. An island that imports
+  one is refused; `weft dev` serves it.
+- weft.base.al's header has a Theme menu that switches the whole site to any
+  of the six themes, kept across pages and visits and applied before the
+  first paint; each theme but `weft` and its fonts (Inter for Neutral, Rubik
+  for Lisa, Space Grotesk for Synthwave, Quicksand for Sandstorm) load only
+  when picked.
+  The gallery's stage shows the picked theme too, unless its toolbar forces
+  Neutral or Lisa. The docs have pages of their own for `weft scaffold` and
+  for validation and errors.
 
 ## 0.0.21
 
