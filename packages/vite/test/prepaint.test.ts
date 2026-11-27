@@ -85,6 +85,44 @@ describe('pre-paint snippets', () => {
     expect(html).not.toContain('<script')
   })
 
+  it('come from a horizontal Stepper and Timeline and a vertical Tabs, which say their width in data-width for CSS to lay them out before hydration', async () => {
+    const { html, prePaint } = await renderPage({ root, page: 'pages/adapts.vue' })
+    expect(prePaint).toHaveLength(1)
+    expect(prePaint[0]).toContain('data-width')
+    const tag = (id: string) => new RegExp(`<\\w+ [^>]*id="${id}"[^>]*>`).exec(html)?.[0]
+    expect(tag('st')).toMatch(/class="weft-stepper" data-orientation="horizontal" data-width="wide"/)
+    expect(tag('tl')).toMatch(/class="weft-timeline" data-orientation="horizontal" data-width="wide"/)
+    expect(tag('tb')).toMatch(/class="weft-tabs" data-orientation="vertical" data-width="wide"/)
+    expect(page('adapts')).toContain('data-weft-prepaint')
+  })
+
+  it('come from none of the width-adaptive components whose layout does not follow their own box: a vertical Stepper, a vertical Timeline, a horizontal Tabs, Pagination, Table, Footer', async () => {
+    const { html, prePaint } = await renderPage({ root, page: 'pages/fixed.vue' })
+    expect(prePaint).toEqual([])
+    expect(html).not.toMatch(/class="weft-(stepper|timeline|tabs)"[^>]*data-width/)
+    expect(page('fixed')).not.toContain('data-weft-prepaint')
+  })
+
+  it('are not needed by Pagination, which draws both its forms before mounting for the viewport to choose, or the one a WeftProvider gives', async () => {
+    const { html, prePaint } = await renderPage({ root, page: 'pages/pages.vue' })
+    expect(prePaint).toEqual([])
+    const nav = (id: string) => {
+      const start = html.search(new RegExp(`<nav [^>]*id="${id}"`))
+      return html.slice(start, html.indexOf('</nav>', start))
+    }
+    // Each entry's form, by its page number, its name or the ellipsis.
+    const entries = (id: string) =>
+      [...nav(id).matchAll(/<li( data-only="(\w+)")?>([\s\S]*?)<\/li>/g)].map(([, , only, body]) => {
+        const name = /aria-label="([^"]+)"/.exec(body!)?.[1] ?? (body!.includes('…') ? '…' : '?')
+        return only ? `${name} (${only})` : name
+      })
+    expect(entries('both')).toEqual([
+      'First page (wide)', 'Previous page', 'Page 1', '… (wide)', 'Page 8 (wide)', '… (narrow)', 'Page 9', 'Page 10', 'Page 11', 'Page 12 (wide)', '…', 'Page 20', 'Next page', 'Last page (wide)',
+    ])
+    expect(entries('narrow')).toEqual(['Previous page', 'Page 1', '…', 'Page 9', 'Page 10', 'Page 11', '…', 'Page 20', 'Next page'])
+    expect(entries('wide')).toEqual(['First page', 'Previous page', 'Page 1', '…', 'Page 8', 'Page 9', 'Page 10', 'Page 11', 'Page 12', '…', 'Page 20', 'Next page', 'Last page'])
+  })
+
   it('N8: separates multiple wrapped snippets with ";\\n" so every snippet runs in order without throwing', () => {
     const tag = prePaintTag(['var x=1;ran.push("a",x)', 'var x=2;ran.push("b",x)', 'var x=3;ran.push("c",x)'])[0]!
     const code = tag.replace(/^<script data-weft-prepaint>|<\/script>$/g, '')
