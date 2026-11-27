@@ -44,6 +44,8 @@ const RUNTIME = normalizePath(fileURLToPath(new URL('./island-runtime.ts', impor
 /** The module script of a page with islands: `?i=` names them, as base64url JSON of name → file. */
 const ISLANDS = 'virtual:weft/dev-islands'
 const RESOLVED_ISLANDS = '\0' + ISLANDS
+/** How long the files under the root must stay unchanged before the browser is told to reload. */
+const RELOAD_QUIET = 150
 
 /**
  * Start the dev server for the site at `root`. It renders a page whose path
@@ -76,6 +78,7 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
   const roots = [...new Set([root, realpathSync(root)])]
   const known = new Set<string>()
   let server: ViteDevServer
+  let reload: ReturnType<typeof setTimeout> | undefined
   const plugin: Plugin = {
     name: 'weft:dev',
     enforce: 'pre',
@@ -98,7 +101,15 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
         // A declaration file, such as the one weftAutoImport() writes when it starts, changes no page.
         if (this.environment.name !== 'client' || file.endsWith('.d.ts')) return []
         const used = (name: 'client' | 'ssr') => (server.environments[name].moduleGraph.getModulesByFile(file)?.size ?? 0) > 0
-        if (roots.some((r) => inside(r, file)) || used('client') || used('ssr')) this.environment.hot.send({ type: 'full-reload', path: '*' })
+        if (roots.some((r) => inside(r, file)) || used('client') || used('ssr')) {
+          // One reload for one save: a file emptied and then written (as an
+          // editor saves it, or any write on a busy machine) is two changes
+          // to the watcher, so the reload waits until changes stop for
+          // RELOAD_QUIET ms.
+          const hot = this.environment.hot
+          clearTimeout(reload)
+          reload = setTimeout(() => hot.send({ type: 'full-reload', path: '*' }), RELOAD_QUIET)
+        }
         return []
       },
     },
@@ -271,7 +282,13 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
     throw e
   }
   const url = server.resolvedUrls?.local[0] ?? `http://${opts.host ?? 'localhost'}:${server.config.server.port}/`
-  return { url, close: () => server.close() }
+  return {
+    url,
+    close: () => {
+      clearTimeout(reload)
+      return server.close()
+    },
+  }
 }
 
 /**
