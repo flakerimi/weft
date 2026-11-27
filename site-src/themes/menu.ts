@@ -8,8 +8,8 @@
 
 /** The themes besides weft, in the menu's order, each with the stylesheet of the fonts it names that no page has already. */
 export const SITE_THEMES = [
-  { name: 'neutral', label: 'Neutral' },
-  { name: 'lisa', label: 'Lisa' },
+  { name: 'neutral', label: 'Neutral', fonts: 'neutral.css' },
+  { name: 'lisa', label: 'Lisa', fonts: 'lisa.css' },
   { name: 'synthwave', label: 'Synthwave', fonts: 'synthwave.css' },
   { name: 'editor', label: 'Editor' },
   { name: 'sandstorm', label: 'Sandstorm', fonts: 'sandstorm.css' },
@@ -34,35 +34,42 @@ export const THEME_MODULE = '/theme-menu.js'
  * rendering as a stylesheet in the markup does, and a page never shows weft
  * first. Only a URL of this site's own (/<folder>/<file>.css) is linked. A
  * press on the menu's button or a theme's (data-site-theme-pick) fetches the
- * menu's module and hands it the press; so does a kept stylesheet that fails
- * to load (a later build renamed it), and the module links the build's. A
+ * menu's module and hands it the press; so does a theme's stylesheet that
+ * fails to load (a later build renamed it), and the module links the
+ * build's. It writes no inline handler, which a hash-based
+ * Content-Security-Policy would block, and sets no handler property of the
+ * page's: its listeners are added. A
  * page the back-forward cache brings back reloads when the choice changed
  * meanwhile. Without storage (blocked) the menu does nothing.
  */
 export function themeSnippet(): string {
   // d: the document; s: storage; v: the kept choice; k: its name and URL, if it is one;
-  // m: fetch the module and hand it a press (none: mend the stylesheet).
+  // m: fetch the module and hand it a press (none: mend the stylesheet); the error
+  // listener captures a theme stylesheet's failed load, which does not bubble.
   return `try{let d=document,s=localStorage,K=${JSON.stringify(THEME_KEY)},v=s.getItem(K),k=/^([a-z]+) (\\/[\\w.-]+\\/[\\w.-]+\\.css)$/.exec(v),
 m=b=>import(${JSON.stringify(THEME_MODULE)}).then(x=>x.default(b));
-weftTheme=m;
-k&&(d.documentElement.dataset.siteTheme=k[1],d.write("<link rel=stylesheet href="+k[2]+" data-site-theme="+k[1]+" onerror=weftTheme()>"));
-d.onclick=e=>{let b=e.target.closest(".site-theme,[data-site-theme-pick]");b&&m(b)};
-onpageshow=e=>e.persisted&&s.getItem(K)!=v&&location.reload()}catch(e){}`.replace(/\n/g, '')
+k&&(d.documentElement.dataset.siteTheme=k[1],d.write("<link rel=stylesheet href="+k[2]+" data-site-theme="+k[1]+">"));
+d.addEventListener("error",e=>e.target.matches?.("link[data-site-theme]")&&m(),true);
+d.addEventListener("click",e=>{let b=e.target.closest(".site-theme,[data-site-theme-pick]");b&&m(b)});
+addEventListener("pageshow",e=>e.persisted&&s.getItem(K)!=v&&location.reload())}catch(e){}`.replace(/\n/g, '')
 }
 
 /**
  * The menu's module, given each theme's stylesheet URL, as the page build
  * named them, and the menu's CSS. Handed the menu's button the first time,
- * it fills the menu: the CSS, and a button per theme, each a copy of the
- * menu's own button (Weft's Button, as the server drew it) with the theme's
- * name, the one that is on pressed (aria-pressed); the server draws the
- * menu empty and hidden, which keeps it out of every first view. Handed a
- * theme's button, it keeps the choice, closes the
- * menu and switches once the theme's stylesheet is in, linking it once, and
- * Weft takes the attribute, the stylesheets and the kept choice off; handed
- * nothing, it links the build's stylesheet for the theme that is on and
- * keeps that. `sheet(name)` links a theme's stylesheet without putting it on
- * the page, for the gallery's stage.
+ * it fills the menu (the CSS, and a button per theme, each a copy of the
+ * menu's own button, Weft's Button as the server drew it, with the theme's
+ * name), makes the button open it (popovertarget) and opens it; the server
+ * draws the menu empty and hidden and the button claiming none, which keeps
+ * them out of every first view. Each time, it marks the theme that is on:
+ * its button pressed (aria-pressed), the menu's button named for it
+ * ("Theme: Sandstorm"). Handed a theme's button, it keeps the choice, closes
+ * the menu and switches once the theme's stylesheet is in, linking it once;
+ * Weft takes the attribute, the stylesheets and the kept choice off. Handed
+ * nothing (a theme's stylesheet failed to load), it links, once, the build's
+ * stylesheet for the theme that is on and keeps that. `sheet(name)` links a
+ * theme's stylesheet without putting it on the page, for the gallery's
+ * stage.
  */
 export function themeModule(urls: Record<string, string>, css: string): string {
   for (const [name, url] of Object.entries(urls)) {
@@ -76,7 +83,13 @@ const THEMES = ${JSON.stringify([{ name: 'weft', label: 'Weft' }, ...SITE_THEMES
 const CSS = ${JSON.stringify(css)}
 const has = (t) => Object.hasOwn(U, t)
 const links = () => d.querySelectorAll('link[data-site-theme]')
-const mark = () => d.querySelectorAll('[data-site-theme-pick]').forEach((b) => (b.ariaPressed = String(b.dataset.siteThemePick === (r.dataset.siteTheme || 'weft'))))
+/** Mark the theme that is on: its button pressed, and the menu's button named for it. */
+const mark = () => {
+  d.querySelectorAll('[data-site-theme-pick]').forEach((b) => (b.ariaPressed = String(b.dataset.siteThemePick === (r.dataset.siteTheme || 'weft'))))
+  d.querySelector('.site-theme')?.setAttribute('aria-label', 'Theme: ' + label(r.dataset.siteTheme))
+}
+const label = (t) => (THEMES.find((x) => x.name === (t || 'weft')) || THEMES[0]).label
+let mended = false
 const keep = (t) => {
   try {
     has(t) ? localStorage.setItem(K, t + ' ' + U[t]) : localStorage.removeItem(K)
@@ -117,26 +130,33 @@ export const sheet = (t) => {
 }
 /** Fill the menu the first time it is opened, from its own button; mark the theme that is on. */
 const fill = (button) => {
-  const menu = d.getElementById(button.getAttribute('popovertarget'))
+  const menu = d.getElementById('site-themes')
   if (menu && !menu.children.length) {
     const style = d.createElement('style')
     style.textContent = CSS
     d.head.append(style)
     menu.hidden = false
-    for (const { name, label } of THEMES) {
+    for (const { name, label: text } of THEMES) {
       const b = button.cloneNode(true)
       b.classList.remove('site-theme')
       b.removeAttribute('popovertarget')
-      b.removeAttribute('aria-expanded')
+      b.removeAttribute('aria-label')
       b.dataset.siteThemePick = name
-      b.querySelector('.weft-button__content').textContent = label
+      b.querySelector('.weft-button__content').textContent = text
       menu.append(b)
     }
+    // From now on the button opens the menu itself; the server gave it no
+    // popover, as without JavaScript it would open nothing.
+    button.setAttribute('popovertarget', menu.id)
+    menu.showPopover()
   }
   mark()
 }
 export default (b) => {
   if (!b) {
+    // Once: a stylesheet the build no longer has is mended with the build's.
+    if (mended) return
+    mended = true
     const t = r.dataset.siteTheme
     keep(t)
     return go(t)

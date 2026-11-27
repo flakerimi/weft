@@ -22,7 +22,9 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
   one is refused; `weft dev` serves it.
 - weft.base.al's header has a Theme menu that switches the whole site to any
   of the six themes, kept across pages and visits and applied before the
-  first paint; each theme but `weft` and its fonts load only when picked.
+  first paint; each theme but `weft` and its fonts (Inter for Neutral, Rubik
+  for Lisa, Space Grotesk for Synthwave, Quicksand for Sandstorm) load only
+  when picked.
   The gallery's stage shows the picked theme too, unless its toolbar forces
   Neutral or Lisa. The docs have pages of their own for `weft scaffold` and
   for validation and errors.

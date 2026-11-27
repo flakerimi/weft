@@ -46,9 +46,9 @@ genre's name).
 - **No flash:** a kept choice is applied before the first paint, with a
   pre-paint snippet (`usePrePaint`), as the width measure and stored
   preferences are.
-- Vapor only, `--weft-*` tokens with fallbacks, Weft components (a `Select` or
-  `DropdownMenu` from `@weft/ui`, labelled "Theme"), standard library only in
-  Go. Docs describe the code as it is.
+- Vapor only, `--weft-*` tokens with fallbacks, Weft components (Weft's
+  `Button`s in an HTML popover, labelled "Theme"; see "Decisions after the
+  build"), standard library only in Go. Docs describe the code as it is.
 
 ## How
 
@@ -63,7 +63,8 @@ genre's name).
    dark following `data-weft-scheme` and the system as the theme CSS does,
    with its `@font-face` rules. The files and their fonts are hashed and
    cached like the site's other assets.
-3. **The menu:** an island in `SiteHeader.vue`. On change it sets
+3. **The menu:** in `SiteHeader.vue`, Weft's `Button` and an HTML popover,
+   not an island (see "Decisions after the build"). On change it sets
    `document.documentElement.dataset.siteTheme`, adds the theme's stylesheet
    once, and keeps the choice in `localStorage` (`weft:site-theme`); "Weft"
    removes both. Without JavaScript the pages are Weft and the menu does
@@ -81,3 +82,25 @@ genre's name).
   at build time. The site's switch is the site's own code.
 - The Quicksand-only trial on `quicksand`: superseded by `sandstorm`; the branch is
   kept, not merged.
+
+## Decisions after the build (2026-11-28)
+
+- **The menu is Weft's Button and a popover, not a `Select` or `DropdownMenu`
+  island** (the coordinator's call, on the measurements). A Select island
+  costs a page about 6 KB brotli and a DropdownMenu about 8 to 10 KB; even
+  the smallest island adds the loader (553 B) and its chunk to docs pages
+  that load no script. The pages it had to fit had 5 to 400 B of room. So
+  the server draws Weft's Button and an empty, hidden popover (about 330 B a
+  page with the pre-paint snippet); `/theme-menu.js`, fetched when the menu
+  is first used, fills the popover with copies of that Button, one per
+  theme, gives the Button its popover and does the switching. It works by
+  keyboard, touch and screen reader, and never flashes. Without JavaScript
+  the Button does nothing and claims no popover.
+- **The landing's first view is raised** from 23,552 B to 24,800 B by the
+  owner, for the menu, keeping the approved hero (five devices) and its copy.
+  No other budget is raised.
+- **Neutral and Lisa ship their fonts**, Inter and Rubik, self-hosted from
+  `@fontsource-variable`, Latin subset, linked only when the theme is picked,
+  as Space Grotesk and Quicksand are.
+- **The gallery's stage shows the site's theme by default**; its toolbar can
+  still force Neutral or Lisa, from the site's own files for them.

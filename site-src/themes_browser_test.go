@@ -106,8 +106,9 @@ func TestThemeMenuSwitchesTheSite(t *testing.T) {
 		b.until(`document.querySelector('#site-themes').matches(':popover-open') && document.querySelectorAll('#site-themes [data-site-theme-pick]').length === 6`)
 		var got struct {
 			Labels, Picks []string
-			Pressed       string
+			Pressed, Name string
 			Weft          bool
+			Marks         []string
 		}
 		b.eval(`(() => {
 			const bs = [...document.querySelectorAll('#site-themes [data-site-theme-pick]')]
@@ -116,8 +117,19 @@ func TestThemeMenuSwitchesTheSite(t *testing.T) {
 				picks: bs.map((e) => e.dataset.siteThemePick),
 				pressed: bs.filter((e) => e.getAttribute('aria-pressed') === 'true').map((e) => e.dataset.siteThemePick).join(),
 				weft: bs.every((e) => e.matches('button.weft-button[type="button"][data-variant="ghost"]') && !e.hasAttribute('popovertarget')),
+				// What marks each besides its colour: the picked one's check.
+				marks: bs.map((e) => getComputedStyle(e, '::after').content),
+				name: document.querySelector('.site-theme').getAttribute('aria-label'),
 			}
 		})()`, &got)
+		for i, m := range got.Marks {
+			if picked := i < len(got.Picks) && got.Picks[i] == got.Pressed; picked != strings.Contains(m, "✓") {
+				t.Errorf("the menu's %s is marked %s; only the picked theme has a check", got.Picks[i], m)
+			}
+		}
+		if want := "Theme: " + map[string]string{"weft": "Weft", "neutral": "Neutral", "lisa": "Lisa", "synthwave": "Synthwave", "editor": "Editor", "sandstorm": "Sandstorm"}[got.Pressed]; got.Name != want {
+			t.Errorf("the Theme button is named %q, want %q", got.Name, want)
+		}
 		for i, want := range menuThemes {
 			if i >= len(got.Labels) || got.Labels[i] != want.label || got.Picks[i] != want.name {
 				t.Errorf("the menu is %v (%v), want %v", got.Labels, got.Picks, menuThemes)
@@ -206,13 +218,13 @@ func TestThemeMenuSwitchesTheSite(t *testing.T) {
 		}
 	}
 
-	// Each theme's type: Synthwave's Space Grotesk and Sandstorm's Quicksand load with it, from the site.
+	// Each theme's type loads with it, from the site: Space Grotesk, Quicksand, Inter, Rubik.
 	scheme("light")
-	for theme, face := range map[string]string{"synthwave": "Space Grotesk Variable", "sandstorm": "Quicksand Variable", "editor": "JetBrains Mono Variable"} {
+	for theme, face := range map[string]string{"synthwave": "Space Grotesk Variable", "sandstorm": "Quicksand Variable", "editor": "JetBrains Mono Variable", "neutral": "Inter", "lisa": "Rubik"} {
 		open(srv.URL + "/docs")
 		b.pick(theme)
 		var loaded bool
-		b.eval(`document.fonts.ready.then(() => document.fonts.check('16px "`+face+`"') && getComputedStyle(document.body).fontFamily.startsWith('"`+face+`"'))`, &loaded)
+		b.eval(`document.fonts.ready.then(() => document.fonts.check('16px "`+face+`"') && getComputedStyle(document.body).fontFamily.replace(/"/g, '').startsWith('`+face+`,'))`, &loaded)
 		if !loaded {
 			t.Errorf("%s: the page is not set in %s", theme, face)
 		}
@@ -225,6 +237,23 @@ func TestThemeMenuSwitchesTheSite(t *testing.T) {
 	if band != themeGrounds["sandstorm"][1] {
 		t.Errorf("sandstorm: the landing page's night band is %s, want its dark ground %s", band, themeGrounds["sandstorm"][1])
 	}
+	// On touch the themes' 44 px hit areas do not overlap: their centres are 44 px apart or more.
+	b.call(b.session, "Emulation.setTouchEmulationEnabled", map[string]any{"enabled": true})
+	open(srv.URL + "/docs")
+	b.doing, b.deadline = "the menu on touch", time.Now().Add(pageTimeout)
+	b.eval(`(document.querySelector('.site-theme').click(), true)`, new(bool))
+	b.until(`matchMedia('(pointer: coarse)').matches && document.querySelectorAll('#site-themes [data-site-theme-pick]').length === 6 && document.querySelector('#site-themes').matches(':popover-open')`)
+	var step float64
+	b.eval(`(() => {
+		const ys = [...document.querySelectorAll('#site-themes [data-site-theme-pick]')].map((e) => { const r = e.getBoundingClientRect(); return r.top + r.height / 2 })
+		return Math.min(...ys.slice(1).map((y, i) => y - ys[i]))
+	})()`, &step)
+	if step < 44 {
+		t.Errorf("on touch the menu's themes are %.0f px apart, centre to centre; their 44 px hit areas overlap", step)
+	}
+	b.eval(`(document.querySelector('#site-themes').hidePopover(), true)`, new(bool))
+	b.call(b.session, "Emulation.setTouchEmulationEnabled", map[string]any{"enabled": false})
+
 	// The gallery's stage shows the site's theme, unless its toolbar forces lisa (here by its link), whose stylesheet it links then.
 	open(srv.URL + "/components/button")
 	b.doing, b.deadline = "the stage in sandstorm", time.Now().Add(pageTimeout)

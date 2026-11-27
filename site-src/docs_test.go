@@ -170,3 +170,38 @@ func TestDocsCoverWindows(t *testing.T) {
 		t.Error("content/docs/coming-next.md still says Windows is not yet a supported platform")
 	}
 }
+
+// The docs' front page sends a reader to every doc, a guide or a reference
+// moved or added included.
+func TestDocsIndexListsEveryDoc(t *testing.T) {
+	index, err := os.ReadFile("content/docs/index.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for path := range filesUnder(t, "content/docs") {
+		rel := strings.TrimPrefix(path, "content/docs/")
+		if rel == "index.md" || !strings.HasSuffix(rel, ".md") {
+			continue
+		}
+		if !strings.Contains(string(index), "("+rel+")") && !strings.Contains(string(index), "("+rel+"#") {
+			t.Errorf("content/docs/index.md does not link %s", rel)
+		}
+	}
+	if strings.Contains(string(index), "their input, validation and errors") {
+		t.Error("content/docs/index.md says Typed routes covers validation and errors, which have a guide of their own")
+	}
+}
+
+// Agents and apps are sent to the page that has weft scaffold's types, not
+// to the CLI page's short section.
+func TestScaffoldLinksGoToItsPage(t *testing.T) {
+	for _, f := range []string{"../skills/weft-go/SKILL.md", "agents/index-md.ts", "../templates/app/AGENTS.md.tmpl", "../cmd/weft/scaffold.go"} {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(b), "reference/cli#weft-scaffold") || !strings.Contains(string(b), "docs/reference/scaffold") {
+			t.Errorf("%s does not send its reader to /docs/reference/scaffold", f)
+		}
+	}
+}

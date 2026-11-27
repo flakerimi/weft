@@ -20,7 +20,7 @@ var menuThemes = []struct{ label, name string }{
 }
 
 var (
-	themeTrigger  = regexp.MustCompile(`<button class="weft-button site-theme"[^>]*popovertarget="site-themes"[^>]*><span class="weft-button__content">Theme</span></button>`)
+	themeTrigger  = regexp.MustCompile(`<button class="weft-button site-theme"[^>]*><span class="weft-button__content">Theme</span></button>`)
 	prePaint      = regexp.MustCompile(`<script data-weft-prepaint>([\s\S]*?)</script>`)
 	themeSheetURL = regexp.MustCompile(`/assets/([a-z]+)-[0-9a-f]{8}\.css`)
 )
@@ -70,8 +70,13 @@ func TestThemeMenu(t *testing.T) {
 			continue
 		}
 		header := element(html, `<header class="weft-header`)
-		if !themeTrigger.MatchString(header) {
-			t.Errorf("%s: the header has no Theme button opening the popover site-themes", path)
+		trigger := themeTrigger.FindString(header)
+		if trigger == "" {
+			t.Errorf("%s: the header has no Theme button", path)
+		}
+		// Without JavaScript it opens nothing, so it claims no popover: the module gives it one.
+		if strings.Contains(trigger, "popovertarget") || strings.Contains(trigger, "aria-expanded") || strings.Contains(trigger, "aria-controls") {
+			t.Errorf("%s: the Theme button claims a popover before the script runs: %s", path, trigger)
 		}
 		// Empty and hidden: the menu's module fills it when it is first opened.
 		if !strings.Contains(header, `<div id="site-themes" class="site-themes" popover hidden role="group" aria-label="Theme"></div>`) {
@@ -80,6 +85,16 @@ func TestThemeMenu(t *testing.T) {
 		script := prePaint.FindStringSubmatch(html)
 		if script == nil || !strings.Contains(script[1], `"weft:site-theme"`) || !strings.Contains(script[1], `import("/theme-menu.js")`) {
 			t.Errorf("%s has no pre-paint script that applies the kept theme and fetches the menu's module", path)
+		}
+		// Nothing a hash-based Content-Security-Policy would block (an inline
+		// handler), and no handler of the page's set by property, which
+		// another script would overwrite or be overwritten by.
+		if script != nil {
+			for _, bad := range []string{"onerror=", "onclick=", "onpageshow=", "weftTheme"} {
+				if strings.Contains(script[1], bad) {
+					t.Errorf("%s: the pre-paint script has %q", path, bad)
+				}
+			}
 		}
 	}
 }
@@ -116,8 +131,8 @@ func TestThemeStylesheets(t *testing.T) {
 	if f := m.Files["/theme-menu.js"]; f.Type != "text/javascript; charset=utf-8" || f.Immutable || !f.Br {
 		t.Errorf("/theme-menu.js is served as %+v; want JavaScript, compressed and revalidated", f)
 	}
-	faces := map[string]string{"synthwave": "Space Grotesk Variable", "sandstorm": "Quicksand Variable"}
-	fontFiles := map[string]string{"synthwave": "space-grotesk-latin-wght-normal", "sandstorm": "quicksand-latin-wght-normal"}
+	faces := map[string]string{"synthwave": "Space Grotesk Variable", "sandstorm": "Quicksand Variable", "neutral": "Inter", "lisa": "Rubik"}
+	fontFiles := map[string]string{"synthwave": "space-grotesk-latin-wght-normal", "sandstorm": "quicksand-latin-wght-normal", "neutral": "inter-latin-wght-normal", "lisa": "rubik-latin-wght-normal"}
 	selector := regexp.MustCompile(`(?:^|[}{])([^{}@]+)\{`)
 	fontURL := regexp.MustCompile(`url\(([^)]+)\)`)
 	for _, theme := range menuThemes[1:] {
@@ -147,7 +162,7 @@ func TestThemeStylesheets(t *testing.T) {
 		face, hasFace := faces[theme.name]
 		if !hasFace {
 			if len(urls) != 0 || strings.Contains(css, "@font-face") {
-				t.Errorf("%s: %s brings fonts %v; its fonts are every page's already, or the system's", theme.name, url, urls)
+				t.Errorf("%s: %s brings fonts %v; its fonts are every page's already", theme.name, url, urls)
 			}
 			continue
 		}
@@ -184,7 +199,7 @@ func TestThemeStylesheets(t *testing.T) {
 			}
 			css += string(linked)
 		}
-		for _, leak := range []string{"data-site-theme", "Space Grotesk", "Quicksand", "space-grotesk", "quicksand"} {
+		for _, leak := range []string{"data-site-theme", "Space Grotesk", "Quicksand", "space-grotesk", "quicksand", "inter-latin", "rubik-latin"} {
 			if strings.Contains(css, leak) {
 				t.Errorf("%s: its CSS has %s; a theme's CSS and fonts load only when it is picked", p.Path, leak)
 			}

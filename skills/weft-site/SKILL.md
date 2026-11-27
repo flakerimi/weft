@@ -12,7 +12,7 @@ A Weft site is a folder of Vue pages. `weft-build-pages` renders each page to HT
 An app is made with `weft create <name>`: the `weft` command carries Weft's packages, which are not on npm, and unpacks them into the app's `.weft/`, which you never edit. You need Go 1.26, Node 22.18 or later and pnpm 10. The site is `web/`, its Go API `app/`:
 
 - `weft dev` runs the page dev server beside the Go API, rendering each page when asked for and reloading on a change;
-- `weft build` runs `weft-build-pages --root web --out web/dist` with the app's theme, then builds the binary.
+- `weft build` runs `weft-build-pages --root web --out web/dist` with the app's theme, then builds the binary. It prints `weft: built N pages into web/dist`.
 
 ## The layout of a site
 
@@ -88,7 +88,7 @@ Wrap only what must run in the browser, such as a form, a menu or a dialog:
 <Island when="visible" :component="Counter" :props="{ start: 0 }" />
 ```
 
-- `when` is `load`, `idle`, `visible` or `media`. With `media`, also give `media="(min-width: 1024px)"`.
+- `when` is `load`, `idle`, `visible` or `media` (then also `media="(min-width: 1024px)"`).
 - The island's file name is its id: two islands may not share one.
 - Props must survive JSON: strings, finite numbers, booleans, `null`, arrays and plain objects; anything else fails the build, naming the prop.
 - The server renders the island too, so it shows before any script runs. Read input and width through `useWeft()` and `useWidth()`, which answer `pointer` and `wide` on the server.

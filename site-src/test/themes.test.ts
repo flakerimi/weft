@@ -79,8 +79,17 @@ describe('the site themes', () => {
     expect(sandstorm).toHaveLength(1)
     expect(sandstorm[0]).toContain("font-family: 'Quicksand Variable'")
     expect(sandstorm[0]).toContain("url('@fontsource-variable/quicksand/files/quicksand-latin-wght-normal.woff2')")
-    // JetBrains Mono is every page's already; Lisa and neutral name system fonts.
-    for (const name of ['editor', 'neutral', 'lisa']) expect(faces(name), name).toEqual([])
+    // Neutral's and Lisa's own type, as an app built in them draws it.
+    const neutral = faces('neutral')
+    expect(neutral).toHaveLength(1)
+    expect(neutral[0]).toContain("font-family: 'Inter'")
+    expect(neutral[0]).toContain("url('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2')")
+    const lisa = faces('lisa')
+    expect(lisa).toHaveLength(1)
+    expect(lisa[0]).toContain("font-family: 'Rubik'")
+    expect(lisa[0]).toContain("url('@fontsource-variable/rubik/files/rubik-latin-wght-normal.woff2')")
+    // JetBrains Mono is every page's already.
+    expect(faces('editor')).toEqual([])
   })
 
   it('refuses a theme it does not know, in a sentence', () => {

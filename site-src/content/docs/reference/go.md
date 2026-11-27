@@ -245,10 +245,17 @@ It panics at start, not on a request, in one sentence that starts `warp.Serve:` 
 
 ```go
 type ServeOption func(*options)
+```
+
+Changes what Serve serves. `WithFiles` is the one option today.
+
+## WithFiles
+
+```go
 func WithFiles(prefix string, dir fs.FS) ServeOption
 ```
 
-Changes what Serve serves; `WithFiles` is the one option today. It serves the files of `dir`, a folder that does not change while the server runs, under `prefix`, which starts and ends with `/`: `WithFiles("/releases/", d)` serves `d`'s `0.0.1/SHA256SUMS` at `/releases/0.0.1/SHA256SUMS`. Each file's ETag and type are read once at start, its bytes on each request; one changed since the start gets a 500, one added since is not served. [Files from disk](../guides/go-serving.md#files-from-disk) has the rest.
+Serves the files of `dir`, a folder that does not change while the server runs, under `prefix`, which starts and ends with `/`: `WithFiles("/releases/", d)` serves `d`'s `0.0.1/SHA256SUMS` at `/releases/0.0.1/SHA256SUMS`. Each file is read once at start for its ETag, the first 16 hex digits of its SHA-256, and its type; its bytes are read on each request. One changed since the start gets a 500, one added since is not served. [Files from disk](../guides/go-serving.md#files-from-disk) has the rest.
 
 ## Version
 

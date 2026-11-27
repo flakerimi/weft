@@ -22,4 +22,11 @@
 }
 .site-themes:popover-open { display: flex; }
 .site-themes .weft-button { justify-content: flex-start; }
-.site-themes [aria-pressed="true"] { color: var(--weft-color-primary-text); font-weight: var(--weft-weight-heading, 700); }
+/* The picked theme: its colour and a check, which is not read out (its
+   aria-pressed is). */
+.site-themes [aria-pressed="true"] { color: var(--weft-color-primary-text); }
+.site-themes [aria-pressed="true"]::after { content: "✓" / ""; margin-inline-start: auto; padding-inline-start: 12px; }
+/* On touch each theme's 44 px hit area clears the next's: 28 px drawn and 16 px between. */
+@media (pointer: coarse) {
+  .site-themes { gap: 16px; }
+}

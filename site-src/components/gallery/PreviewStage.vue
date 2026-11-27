@@ -8,7 +8,10 @@
 // and the width, its label saying which are set. The theme is the site's
 // (the header's Theme menu) unless neutral or lisa is forced on the canvas;
 // a forced theme's stylesheet is the site's own for it, which the stage
-// links when it is picked (the menu's module, /theme-menu.js).
+// links when it is picked (the menu's module, /theme-menu.js). As every
+// other axis, a link's forced theme (?theme=lisa) shows once the island has
+// started, and its stylesheet once that is in: the server draws the default
+// view, which knows no query.
 //
 // The server draws the default view: the example as an app shows it, filling
 // the column, in the page's scheme. Without JavaScript that stays, and the

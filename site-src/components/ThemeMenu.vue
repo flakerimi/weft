@@ -1,15 +1,16 @@
 <script setup vapor lang="ts">
 // The header's Theme menu: Weft's Button opens a popover (the HTML popover
 // attribute, as the narrow Menu button opens the sidebar) of the site's six
-// themes, each a Button. The server draws the button and the popover, empty
-// and hidden. Its pre-paint snippet (themes/menu.ts) applies the kept choice
-// before the first paint; the menu's module, which the page fetches when the
-// menu is first used, written beside the pages with useFile, fills the
-// popover with a copy of the button per theme, its CSS with them, and does
-// what a press asks. So the menu costs every page's first view little: page
-// budgets are never raised. Each theme but weft is a stylesheet of its own,
-// imported by its URL, which the page build writes under a hashed name.
-// Without JavaScript the pages are Weft and an open menu shows nothing.
+// themes, each a Button. The server draws the button, claiming no popover,
+// and the popover, empty and hidden. Its pre-paint snippet (themes/menu.ts)
+// applies the kept choice before the first paint; the menu's module, which
+// the page fetches when the menu is first used, written beside the pages
+// with useFile, fills the popover with a copy of the button per theme, its
+// CSS with them, gives the button its popover, and does what a press asks.
+// So the menu costs every page's first view little: page budgets were not
+// raised for it. Each theme but weft is a stylesheet of its own, imported by
+// its URL, which the page build writes under a hashed name. Without
+// JavaScript the pages are Weft and the button does nothing.
 import { Button, usePrePaint } from '@weft/ui'
 import { useFile } from 'virtual:weft/files'
 import neutral from '/.site-themes/neutral.css?url'
@@ -26,6 +27,6 @@ useFile(THEME_MODULE, themeModule(urls, menuCSS))
 </script>
 
 <template>
-  <Button class="site-theme" variant="ghost" tone="neutral" size="sm" popovertarget="site-themes">Theme</Button>
+  <Button class="site-theme" variant="ghost" tone="neutral" size="sm">Theme</Button>
   <div id="site-themes" class="site-themes" popover hidden role="group" aria-label="Theme" />
 </template>

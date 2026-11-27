@@ -113,8 +113,8 @@ for (const s of scenes) {
             <Still class="hero-frame hero-frame--desk" scope="hd" input="pointer" width="wide"><NorthlineDesk /></Still>
             <Still class="hero-frame hero-frame--phone" scope="hp" input="touch" width="narrow"><NorthlinePhone /></Still>
             <figcaption class="landing-frames-note weft-visually-hidden">
-              Northline, a made-up fibre provider’s device list, drawn by Weft’s components: a table with a row’s menu open
-              on a desktop, cards and a bottom sheet on a phone.
+              One app drawn twice by Weft’s components: Northline, a made-up fibre provider’s device list. On a desktop it is a
+              table, a row’s menu open beside it; on a phone the same table is a list of cards and the same menu a bottom sheet.
             </figcaption>
           </figure>
         </div>
@@ -124,7 +124,7 @@ for (const s of scenes) {
       <section id="screens" class="landing-wrap landing-band" aria-labelledby="screens-title">
         <div class="landing-intro">
           <h2 id="screens-title">Screens you’d ship, made from the parts on this site.</h2>
-          <p>Each tile is the components themselves, drawn by the server; each name opens its page.</p>
+          <p>Every tile is drawn by the components themselves, not a picture of them. Each name opens its page, with the props, the code and how it adapts.</p>
         </div>
         <div class="landing-bento">
           <figure v-for="(s, i) in scenes" :key="s.id" class="landing-tile" :class="`landing-tile--${s.id}`">
@@ -141,8 +141,8 @@ for (const s of scenes) {
         <div class="landing-intro">
           <h2 id="adapts-title">Write a component once. It adapts.</h2>
           <p>
-            You write <code>&lt;DatePicker&gt;</code>. With a mouse it opens a calendar beside the field; under a thumb, a
-            sheet with targets big enough to hit. No mobile variant.
+            You write <code>&lt;DatePicker&gt;</code>. On a trackpad it opens a calendar beside the field; under a thumb it
+            rises as a sheet with targets big enough to hit. No mobile variant to remember.
           </p>
         </div>
         <div class="landing-adapt">
@@ -184,6 +184,7 @@ for (const s of scenes) {
         <div class="landing-intro">
           <h2 id="speed-title">One binary, nothing left to do per request.</h2>
           <p>
+            Pages are rendered and compressed when you build. The Go binary keeps every byte in memory and only sends it.
             The benchmark’s landing page, each framework behind the server it ships with, requests per second:
           </p>
         </div>
@@ -197,14 +198,16 @@ for (const s of scenes) {
           </div>
         </div>
         <p class="landing-bench-note">
-          The median of {{ facts.runs }} runs on an {{ facts.machine }} ({{ facts.date }}), Weft's
-          server on one core, the others' Node on any. The gap is the server, not the pages:
+          Requests per second, the median of {{ facts.runs }} runs on an {{ facts.machine }} ({{ facts.date }}). Weft's
+          server runs on one core; the others are Node and are not held to one. The gap is the server, not the pages.
           <template v-if="facts.packed">
-            behind a plain Go server holding build-time brotli in memory, the others' static builds answer
-            {{ formatCount(facts.packed.min) }} to {{ formatCount(facts.packed.max) }}, and Weft puts that server in your binary.
+            Behind a plain Go server that also keeps brotli made at build in memory, the other sites' static builds
+            answer {{ formatCount(facts.packed.min) }} to {{ formatCount(facts.packed.max) }}. Weft puts that server in
+            your binary.
           </template>
-          Astro's page with no island ships less JavaScript than ours ({{ formatBytes(facts.plainJS) }} against
-          {{ formatBytes(facts.weftJS) }}), as the benchmark says,
+          Astro's page with no framework
+          island still ships less JavaScript than ours ({{ formatBytes(facts.plainJS) }} against
+          {{ formatBytes(facts.weftJS) }}), and the benchmark says where,
           <template v-if="repoPublic">in <a href="https://github.com/flakerimi/weft/tree/main/bench">its README</a>.</template>
           <template v-else>in <code>bench/README.md</code>.</template>
         </p>
@@ -219,7 +222,8 @@ for (const s of scenes) {
         <div class="landing-intro">
           <h2 id="agents-title">Made to be built with an agent.</h2>
           <p>
-            Agents do best with big pieces and one right way. Weft gives them both.
+            Agents do best with big pieces and one right way. Weft gives them both, and tells them when they’re wrong
+            before you see it.
           </p>
         </div>
         <div class="landing-agents">
@@ -227,15 +231,15 @@ for (const s of scenes) {
             <li>
               <strong>A catalogue they can read</strong>
               <span>
-                Every component’s purpose, props, slots, events and how it adapts, as JSON: all at
-                <Link to="/catalog.json">/catalog.json</Link>, one at <Link :to="entryPath">{{ entryPath }}</Link>.
+                Each of the {{ components.length }} components' purpose, props, slots, events and how it adapts, as JSON:
+                all of them at <Link to="/catalog.json">/catalog.json</Link>, one at <Link :to="entryPath">{{ entryPath }}</Link>.
               </span>
             </li>
             <li>
               <strong>Mistakes fail the build</strong>
               <span>
-                A broken schema, a dead link or an island prop JSON cannot carry stops the build, in one sentence that
-                names the file.
+                Frontmatter that breaks its schema, a link that leads nowhere or an island prop JSON cannot carry stops the
+                build with one sentence that names the file.
               </span>
             </li>
             <li>
