@@ -7,6 +7,20 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
 0.0.12 have no GitHub Release: they were published at weft.base.al, and
 `site/releases.txt` lists them (only 0.0.1 and 0.0.2 have a tag).
 
+## Unreleased
+
+- A FormField's label is a `<label for>` only over a labelable control. Over a
+  RadioGroup, CheckboxGroup, Slider, Listbox without a filter, ToggleGroup or
+  InputTime's parts it is a `<span>` the control is `aria-labelledby`, drawn so
+  by the server too, so a static page has no `<label for>` naming a fieldset, a
+  thumb or a list (Chrome's "Incorrect use of <label for=FORM_ELEMENT>"). An
+  InputTime on touch is a native time input the label is for; a ToggleGroup
+  takes its field's id and label; with no label, no control points
+  `aria-labelledby` at one; and what the `label` slot holds is no control of
+  the field's, with ids of its own in an island. Mounted in the browser with no server
+  HTML, the label is drawn one update after `mount()`, before anything is
+  painted.
+
 ## 0.0.21
 
 - Windows is supported on amd64 and arm64: `irm https://weft.base.al/install.ps1 | iex`

@@ -93,6 +93,18 @@ describe('ToggleGroup', () => {
   const group = () => $('.align')
   const item = (label: string) => $$<HTMLButtonElement>('button', group()).find((b) => b.textContent!.trim() === label)!
 
+  it('in a FormField takes the field\'s id and is named by its label, which is no <label>', async () => {
+    await cases()
+    const field = $('.size-field')
+    const sizes = $('.sizes', field)
+    const label = $('.weft-form-field__label', field)
+    expect(sizes.id).not.toBe('')
+    // A group of buttons is not a labelable element.
+    expect(label.tagName).toBe('SPAN')
+    expect(label.hasAttribute('for')).toBe(false)
+    expect(sizes.getAttribute('aria-labelledby')).toBe(label.id)
+  })
+
   it('is a named group of pressed buttons, one tab stop, choosing one or none', async () => {
     const m = await cases()
     expect(group().getAttribute('role')).toBe('group')

@@ -20,9 +20,11 @@ const sheets = all.filter((f) => !isGroup(f))
 const flatten = (name: string): string[] => importsIn(name).flatMap((f) => (isGroup(f) ? flatten(f) : [f]))
 const weft = flatten('weft.css')
 
+// A `.vue` file in a parts/ folder is a part a component draws, not a component (scripts/catalog.ts).
 const components = readdirSync(src, { recursive: true, encoding: 'utf8' })
   .filter((f) => f.endsWith('.vue'))
   .map((f) => f.split('\\').join('/'))
+  .filter((f) => !f.split('/').includes('parts'))
   .sort()
 /** The stylesheets a component imports, by file name, in its order. */
 const importsOf = (file: string) =>

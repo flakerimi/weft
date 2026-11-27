@@ -46,8 +46,9 @@ describe('Form', () => {
     expect(f.q('.email input').disabled).toBe(false)
   })
 
-  it('marks fields the schema requires', () => {
+  it('marks fields the schema requires', async () => {
     const f = render()
+    await settle()
     expect(f.q('.email .weft-form-field__required')).not.toBeNull()
     expect(f.q('.age .weft-form-field__required')).toBeNull()
     expect(f.q('.email input').getAttribute('aria-required')).toBe('true')

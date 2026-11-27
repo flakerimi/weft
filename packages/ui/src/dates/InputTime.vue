@@ -12,7 +12,7 @@
 // start and an end (each a named group, or a platform field, on touch),
 // bound as { start, end }. Inside a FormField the label names the group
 // (aria-labelledby).
-import { computed, nextTick, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onScopeDispose, useTemplateRef, watch } from 'vue'
 import Icon from '../basics/Icon.vue'
 import { useWeft } from '../adaptive/context.ts'
 import { focus } from '../headless/dom.ts'
@@ -89,12 +89,15 @@ defineSlots<{
 }>()
 
 const f = useField(props)
-// A group is not a labelable element: the label names it with aria-labelledby.
-f.field?.namedByLabel()
 const { own, box, describedBy } = useControlAttrs(f)
 const model = useControllable(props, 'modelValue', emit, () => props.defaultValue)
 const weft = useWeft()
 const touch = computed(() => weft.input.value === 'touch')
+// The segments' group is not a labelable element: the label names it with
+// aria-labelledby. One native time input (on touch, not a range) takes the
+// field's id, and the label is for it.
+f.field?.namedByLabel(() => !touch.value || !!props.range)
+onScopeDispose(() => f.field?.namedByLabel(false))
 const locale = useLocale(() => props.locale)
 const cycle = computed(() => hourCycleOf(locale.value, props.hourCycle))
 const t = computed(() => ({ hour: 'Hour', minute: 'Minute', second: 'Second', dayPeriod: 'AM/PM', empty: 'Empty', start: 'Start time', end: 'End time', ...props.labels }))
@@ -191,7 +194,7 @@ const hidden = (which: 'start' | 'end') => iso(bound(which)) ?? ''
     v-bind="{ ...box, ...(touch ? {} : own) }"
     :id="touch && !range ? undefined : f.id.value"
     :role="touch && !range ? undefined : 'group'"
-    :aria-labelledby="touch && !range ? undefined : f.field?.labelId"
+    :aria-labelledby="touch && !range ? undefined : f.labelId.value"
     :aria-describedby="touch && !range ? undefined : describedBy()"
     :data-form="touch ? 'native' : 'segments'"
     :data-size="f.size.value"
@@ -219,7 +222,7 @@ const hidden = (which: 'start' | 'end') => iso(bound(which)) ?? ''
           :readonly="readonly || undefined"
           :required="required || undefined"
           :aria-label="fd.label"
-          :aria-labelledby="fd.label ? undefined : f.field?.labelId"
+          :aria-labelledby="fd.label ? undefined : f.labelId.value"
           :aria-describedby="range ? undefined : describedBy()"
           :aria-invalid="invalid ? 'true' : undefined"
           @input="fd.parts.input($event)"

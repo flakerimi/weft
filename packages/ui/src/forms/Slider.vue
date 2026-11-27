@@ -8,7 +8,7 @@
 // never pass each other, and each one's aria-valuemin and aria-valuemax are
 // its neighbours. A thumb is drawn small, and its hit area (and the track's)
 // is at least --weft-hit-min, so on touch it takes a 44 px press.
-import { computed, ref, useAttrs, useTemplateRef } from 'vue'
+import { computed, onScopeDispose, ref, useAttrs, useTemplateRef } from 'vue'
 import { useControllable } from '../headless/useControllable.ts'
 import { isRtl } from '../headless/dom.ts'
 import { useId } from '../headless/useId.ts'
@@ -61,6 +61,7 @@ const emit = defineEmits<{
 const f = useField(props)
 // Its thumbs are not labelable elements: they take the field's label by id.
 f.field?.namedByLabel()
+onScopeDispose(() => f.field?.namedByLabel(false))
 const base = useId('slider')
 // A name given to the Slider (aria-label, aria-labelledby) names its thumb;
 // the rest of the attributes go to the root.
@@ -99,9 +100,10 @@ const thumbId = (i: number) => (i === 0 && f.id.value ? f.id.value : `${base}-${
  */
 function labelledBy(i: number): string | undefined {
   const own = attrs['aria-labelledby'] as string | undefined
-  if (range.value) return f.field ? `${own ?? f.field.labelId} ${thumbId(i)}` : own && `${own} ${thumbId(i)}`
+  const field = f.labelId.value
+  if (range.value) return (own ?? field) && `${own ?? field} ${thumbId(i)}`
   if (label(i)) return undefined
-  return own ?? f.field?.labelId
+  return own ?? field
 }
 
 /** Move thumb `i` toward `to`, kept on a step and between its neighbours; true when it moved. */

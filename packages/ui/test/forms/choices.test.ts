@@ -122,13 +122,16 @@ describe('CheckboxGroup', () => {
     await nextTick()
     const field = el.querySelector('.in-field')!
     const group = field.querySelector('fieldset')!
-    expect(group.getAttribute('aria-labelledby')).toBe(field.querySelector('label.weft-form-field__label')!.id)
+    const label = field.querySelector('.weft-form-field__label')!
+    expect(group.getAttribute('aria-labelledby')).toBe(label.id)
     expect(group.getAttribute('aria-describedby')).toBe(
       `${field.querySelector('.weft-form-field__hint')!.id} ${field.querySelector('.weft-form-field__error')!.id}`,
     )
     expect(group.getAttribute('aria-invalid')).toBe('true')
-    // The group names itself through the label's id; the label points at no control.
-    expect(field.querySelector('label.weft-form-field__label')!.hasAttribute('for')).toBe(false)
+    // The group names itself through the label's id; a fieldset is no
+    // labelable element, so the label is no <label>.
+    expect(label.tagName).toBe('SPAN')
+    expect(label.hasAttribute('for')).toBe(false)
     // The boxes keep ids of their own, not the field's.
     const ids = [...el.querySelectorAll('input')].map((i) => i.id)
     expect(new Set(ids).size).toBe(ids.length)
@@ -217,6 +220,7 @@ describe('RadioGroup', () => {
     const group = field.querySelector('[role="radiogroup"]')!
     expect(group.getAttribute('aria-labelledby')).toBe(field.querySelector('.weft-form-field__label')!.id)
     expect(field.querySelector('.weft-form-field__label')!.hasAttribute('for')).toBe(false)
+    expect(field.querySelector('.weft-form-field__label')!.tagName).toBe('SPAN')
     expect(group.getAttribute('aria-invalid')).toBe('true')
     expect(group.getAttribute('aria-required')).toBe('true')
     expect(group.getAttribute('aria-describedby')).toBe(field.querySelector('.weft-form-field__error')!.id)
@@ -262,8 +266,9 @@ describe('Switch', () => {
     expect(m.el.querySelector('.busy .weft-switch__thumb .weft-spinner')).not.toBeNull()
   })
 
-  it('takes its FormField\'s id, so the field label names it', () => {
+  it('takes its FormField\'s id, so the field label names it', async () => {
     const field = cases({ case: 'switch' }).el.querySelector('.in-field')!
+    await nextTick()
     expect(field.querySelector<HTMLLabelElement>('.weft-form-field__label')!.htmlFor).toBe(field.querySelector('input')!.id)
   })
 

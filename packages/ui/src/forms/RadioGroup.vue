@@ -56,7 +56,8 @@ defineSlots<{
 }>()
 
 const f = useField(props)
-f.field?.namedByLabel(true)
+// A fieldset is not a labelable element: the label names it with aria-labelledby.
+f.field?.namedByLabel()
 onScopeDispose(() => f.field?.namedByLabel(false))
 hideField()
 const model = useControllable(props, 'modelValue', emit, () => props.defaultValue)
@@ -132,7 +133,7 @@ onScopeDispose(() => listening?.removeEventListener('keydown', onKeydownCapture,
     :data-tone="tone"
     :disabled="f.disabled.value || undefined"
     :id="f.id.value"
-    :aria-labelledby="f.field && !legend && !$slots.legend ? f.field.labelId : undefined"
+    :aria-labelledby="!legend && !$slots.legend ? f.labelId.value : undefined"
     :aria-describedby="f.aria.value['aria-describedby']"
     :aria-invalid="f.aria.value['aria-invalid']"
     :aria-required="f.aria.value['aria-required'] ?? (required ? 'true' : undefined)"

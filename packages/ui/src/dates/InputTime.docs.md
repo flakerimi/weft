@@ -18,8 +18,9 @@ On pointer the parts follow the locale (`1:05 PM` in en-US, `13:05` in en-GB,
 part is a `spinbutton` with `aria-valuenow`, `aria-valuemin`,
 `aria-valuemax` and `aria-valuetext`, named "Hour", "Minute", "Second" and
 "AM/PM" (`labels` translates them); the group has `role="group"`, named by
-its FormField's label (`aria-labelledby`, the label losing `for`, since a
-group is no form control) and described by its hint and error.
+its FormField's label (`aria-labelledby`, the label a `<span>` rather than a
+`<label>`, since a group is no form control) and described by its hint and
+error.
 
 **Keyboard.** Up and Down step the part (by `step`, wrapping round), Home and
 End go to its ends, digits type into it (in the locale's digits too; the
