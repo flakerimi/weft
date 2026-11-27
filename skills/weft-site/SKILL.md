@@ -33,7 +33,7 @@ myapp/
 
 The build writes icon tags in every page's `<head>` itself, one for each of `favicon.ico`, `favicon.svg` and `apple-touch-icon.png` in `web/public/`, with no setting: leave them out of `useHead`.
 
-Inside the Weft repository, a site is a workspace package whose `build` script runs `weft-build-pages --root . --out dist` (like `site-src/`); `weft-dev --root <site>`, from `@weft/vite`, is its page dev server.
+In the Weft repository a site is a workspace package (like `site-src/`) whose `build` runs `weft-build-pages --root . --out dist`; its page dev server is `weft-dev --root <site>`, from `@weft/vite`.
 
 ## Pages and routes
 
