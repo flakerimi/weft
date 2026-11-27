@@ -238,7 +238,7 @@ defineExpose({
       type="text"
       autocomplete="off"
       v-bind="own"
-      :id="f.id.value"
+      :id="f.id.value ?? valueId"
       :value="typed.text.value"
       :placeholder="placeholderText"
       :disabled="f.disabled.value || undefined"

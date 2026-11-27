@@ -227,11 +227,18 @@ describe('InputTime', () => {
       natives[0]!.dispatchEvent(new Event('input', { bubbles: true }))
       await settle()
       expect(t.value).toEqual({ start: '08:15', end: '17:30' })
+      expect(natives.every((n) => n.id !== '')).toBe(true)
+      expect(natives[0]!.id).not.toBe(natives[1]!.id)
     })
   })
 
   describe('on touch', () => {
     const native = () => $<HTMLInputElement>('.weft-input-time input[type="time"]')
+
+    it('gives its native time input an id when standalone without a FormField or name', async () => {
+      await cases({ input: 'touch', standalone: true })
+      expect(native().id).toMatch(/^input-time-/)
+    })
 
     it('is the platform’s time field, 44 px tall, with min, max and step, labelled by its field', async () => {
       const unstyle = loadStyles()

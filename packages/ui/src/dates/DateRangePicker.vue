@@ -126,7 +126,7 @@ const endDate = computed(() => toDate(model.value?.end))
 const min = computed(() => toDate(props.min))
 const max = computed(() => toDate(props.max))
 const uid = useId('date-range')
-const ids = { value: `${uid}-value`, start: `${uid}-start`, end: `${uid}-end` }
+const ids = { value: `${uid}-value`, start: `${uid}-start`, end: `${uid}-end`, endLabel: `${uid}-end-label` }
 const boxEl = useTemplateRef<HTMLElement>('boxEl')
 const startInput = useTemplateRef<HTMLInputElement>('startInput')
 const endInput = useTemplateRef<HTMLInputElement>('endInput')
@@ -253,7 +253,7 @@ defineExpose({
       <slot name="leading"><Icon v-if="icon" :name="icon" /></slot>
     </span>
     <span :id="ids.start" class="weft-visually-hidden">{{ t.start }}</span>
-    <span :id="ids.end" class="weft-visually-hidden">{{ t.end }}</span>
+    <span :id="ids.endLabel" class="weft-visually-hidden">{{ t.end }}</span>
     <template v-if="!touch">
       <input
         ref="startInput"
@@ -261,7 +261,7 @@ defineExpose({
         type="text"
         autocomplete="off"
         v-bind="own"
-        :id="f.id.value"
+        :id="f.id.value ?? ids.start"
         :value="startText.text.value"
         :placeholder="placeholderText"
         :disabled="f.disabled.value || undefined"
@@ -278,6 +278,7 @@ defineExpose({
       />
       <span class="weft-date-picker__range-separator" aria-hidden="true">–</span>
       <input
+        :id="ids.end"
         ref="endInput"
         class="weft-input__field"
         type="text"
@@ -288,7 +289,7 @@ defineExpose({
         :readonly="readonly || undefined"
         :required="required || undefined"
         :aria-label="f.field ? undefined : t.end"
-        :aria-labelledby="nameFor(ids.end)"
+        :aria-labelledby="nameFor(ids.endLabel)"
         :aria-describedby="describedBy()"
         :aria-invalid="endText.invalid.value || f.invalid.value ? 'true' : undefined"
         :aria-required="f.aria.value['aria-required']"

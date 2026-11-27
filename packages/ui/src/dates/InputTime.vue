@@ -17,6 +17,7 @@ import Icon from '../basics/Icon.vue'
 import { useWeft } from '../adaptive/context.ts'
 import { focus } from '../headless/dom.ts'
 import { useControllable } from '../headless/useControllable.ts'
+import { useId } from '../headless/useId.ts'
 import { useControlAttrs, useField } from '../forms/field.ts'
 import { leavesGroup } from '../forms/dom.ts'
 import { useLocale } from '../adaptive/locale.ts'
@@ -90,6 +91,7 @@ defineSlots<{
 
 const f = useField(props)
 const { own, box, describedBy } = useControlAttrs(f)
+const ownId = f.id.value && !props.range ? f.id.value : useId('input-time')
 const model = useControllable(props, 'modelValue', emit, () => props.defaultValue)
 const weft = useWeft()
 const touch = computed(() => weft.input.value === 'touch')
@@ -213,7 +215,7 @@ const hidden = (which: 'start' | 'end') => iso(bound(which)) ?? ''
           class="weft-input__field"
           type="time"
           v-bind="range ? {} : own"
-          :id="range ? undefined : f.id.value"
+          :id="range ? `${ownId}-${fd.key}` : ownId"
           :value="fd.parts.native.value"
           :min="min ? fromTime(min, nativeGranularity, 'iso') as string : undefined"
           :max="max ? fromTime(max, nativeGranularity, 'iso') as string : undefined"

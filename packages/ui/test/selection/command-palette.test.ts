@@ -47,6 +47,7 @@ describe('CommandPalette', () => {
     expect(field.getAttribute('aria-expanded')).toBe('true')
     expect(field.getAttribute('aria-autocomplete')).toBe('list')
     expect(field.getAttribute('aria-controls')).toBe(list().id)
+    expect(field.id).toBe(`${list().id}-input`)
     expect(field.getAttribute('placeholder')).toBe('Type a command or search…')
     expect(headings()).toEqual(['Actions', 'People', 'Pinned'])
     expect(current()).toBe(named('New file'))

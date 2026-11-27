@@ -25,6 +25,7 @@ describe('Textarea', () => {
     expect(area.getAttribute('rows')).toBe('3')
     expect(area.value).toBe('first')
     expect(area.getAttribute('placeholder')).toBe('Notes')
+    expect(area.id).toMatch(/^textarea-/)
     type(area, 'second\nline')
     expect(m.exposed.note).toBe('second\nline')
     m.exposed.note = 'from parent'
@@ -95,6 +96,7 @@ describe('InputNumber', () => {
     expect(input.getAttribute('aria-valuenow')).toBe('2')
     expect(input.getAttribute('aria-valuemin')).toBe('0')
     expect(input.getAttribute('aria-valuemax')).toBe('10')
+    expect(input.id).toMatch(/^input-number-/)
     const steps = [...el.querySelectorAll<HTMLButtonElement>('.qty button')]
     expect(steps.map((b) => [b.getAttribute('aria-label'), b.getAttribute('tabindex'), b.type])).toEqual([
       ['Decrease', '-1', 'button'],
@@ -409,6 +411,8 @@ describe('PinInput', () => {
     expect(all[0]!.getAttribute('inputmode')).toBe('numeric')
     expect(all[0]!.getAttribute('autocomplete')).toBe('one-time-code')
     expect(all[1]!.getAttribute('autocomplete')).toBe('off')
+    expect(all.every((b) => b.id !== '')).toBe(true)
+    expect(new Set(all.map((b) => b.id)).size).toBe(4)
     expect(boxes(el, '.masked')[0]!.type).toBe('password')
   })
 
@@ -474,8 +478,9 @@ describe('PinInput', () => {
     const f = cases({ case: 'pin' }).el.querySelector('.in-field')!
     await nextTick()
     expect(f.querySelector('[role="group"]')!.getAttribute('aria-labelledby')).toBe(f.querySelector('label')!.id)
-    const [first] = boxes(f as HTMLElement, '.weft-pin-input')
+    const [first, second] = boxes(f as HTMLElement, '.weft-pin-input')
     expect(first!.id).toBe(f.querySelector('label')!.htmlFor)
+    expect(second!.id).toMatch(/^pin-.*-1$/)
     type(first!, '5')
     await nextTick()
     const hidden = f.querySelector<HTMLInputElement>('input[type="hidden"]')!

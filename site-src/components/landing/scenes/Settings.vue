@@ -17,7 +17,7 @@ const plans = [
 
 <template>
   <Form :state="state" class="scene-settings">
-    <FormField label="Workspace name" name="name"><Input v-model="state.name" /></FormField>
+    <FormField label="Workspace name" name="name"><Input v-model="state.name" autocomplete="organization" /></FormField>
     <FormField label="Region" name="region"><Select v-model="state.region" :items="regions" /></FormField>
     <FormField label="Plan" name="plan"><RadioGroup v-model="state.plan" :items="plans" orientation="horizontal" /></FormField>
     <Switch v-model="state.alerts" label="Email me when a device goes offline" />

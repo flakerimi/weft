@@ -10,6 +10,7 @@
 // and keep focus where it is; on touch they are --weft-hit-min (44 px) wide.
 import { computed, ref, useTemplateRef, watch } from 'vue'
 import { useControllable } from '../headless/useControllable.ts'
+import { useId } from '../headless/useId.ts'
 import { useControlAttrs, useField } from './field.ts'
 import { pressFocuses } from './dom.ts'
 import { clamp, tidy } from './numbers.ts'
@@ -67,6 +68,7 @@ const emit = defineEmits<{
 
 const f = useField(props)
 const { own, box, describedBy } = useControlAttrs(f)
+const id = f.id.value ?? (f.name.value ? undefined : useId('input-number'))
 const model = useControllable(props, 'modelValue', emit, () => props.defaultValue)
 const input = useTemplateRef<HTMLInputElement>('input')
 
@@ -170,7 +172,7 @@ defineExpose({
       role="spinbutton"
       autocomplete="off"
       v-bind="own"
-      :id="f.id.value"
+      :id="id"
       :name="f.name.value"
       :value="text"
       :placeholder="placeholder"

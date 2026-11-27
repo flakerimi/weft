@@ -20,6 +20,7 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
   readonly?: boolean
   range?: boolean
+  standalone?: boolean
 }>(), { initial: undefined })
 const input = ref<Input | undefined>(props.input)
 const value = ref(((props.initial ?? null) as TimeInput | TimeRange | null))
@@ -35,7 +36,8 @@ defineExpose({ input, value, submitted })
 <template>
   <WeftProvider :input="input" :locale="locale">
     <div :dir="dir">
-      <form @submit="onSubmit">
+      <InputTime v-if="standalone" v-model="value as never" :range="range" />
+      <form v-else @submit="onSubmit">
         <FormField label="Start time" name="at" description="Local time">
           <InputTime
             v-model="value as never"

@@ -61,6 +61,14 @@ describe('DatePicker', () => {
       expect(button().getAttribute('aria-label')).toBe('Choose date')
     })
 
+    it('gives its input an id when neither a FormField nor a name is set', async () => {
+      const DatePicker = (await import('../../src/dates/DatePicker.vue')).default
+      const m = mount(DatePicker)
+      unmount = m.unmount
+      await settle()
+      expect(field().id).toMatch(/^date-picker-/)
+    })
+
     it('reads a typed date in the locale on change, writing it back as the locale writes it', async () => {
       const e = await cases({ locale: 'en-GB' })
       await typeIn('3/12/2026')

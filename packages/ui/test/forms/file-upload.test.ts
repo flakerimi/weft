@@ -101,6 +101,7 @@ describe('FileUpload', () => {
       expect(n.tabIndex).toBe(-1)
       expect(n.getAttribute('aria-hidden')).toBe('true')
       expect(n.name).toBe('files')
+      expect(n.id).toMatch(/^file-upload-.*-input$/)
       expect(n.accept).toBe('image/*')
       expect(n.multiple).toBe(true)
       expect(items()).toHaveLength(0)

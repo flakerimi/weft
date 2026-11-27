@@ -45,6 +45,8 @@ describe('DateRangePicker', () => {
       expect(start!.value).toBe('21/11/2026')
       expect(end!.value).toBe('25/11/2026')
       expect($('label').getAttribute('for')).toBe(start!.id)
+      expect(end!.id).toMatch(/^date-range-.*-end$/)
+      expect(end!.id).not.toBe(start!.id)
       expect(nameOf(start!)).toBe('Stay Start date')
       expect(nameOf(end!)).toBe('Stay End date')
       expect(start!.getAttribute('aria-describedby')).toBe($('.weft-form-field__description').id)

@@ -83,6 +83,7 @@ export function searchField(
     })
   const input = (event: Event) => opts.onInput((event.target as HTMLInputElement).value)
   return computed(() => ({
+    id: `${list.id}-search`,
     class: 'weft-input__field',
     type: 'text',
     role: 'combobox',
