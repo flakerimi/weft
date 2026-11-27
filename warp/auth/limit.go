@@ -13,8 +13,9 @@ import (
 // address, maxAccountTries in accountWindow, so that guesses spread over many
 // addresses still stop. A try is counted when it begins, before any hashing,
 // so tries sent at once cannot pass together. A success clears its email and
-// address; an address's and an account's count only end with their window
-// (or, for an account, a completed reset). A try that finds no hashing slot in
+// address, and gives back its own try on the account's, so only failures
+// count there; an address's count, and an account's failures, only end with
+// their window (or, for an account, a completed reset). A try that finds no hashing slot in
 // time is given back on every count. The address is the app's ClientKey: an
 // IPv6 client is counted by its /64. Every email is counted, with an account
 // or without, so the answer says nothing of who has one.

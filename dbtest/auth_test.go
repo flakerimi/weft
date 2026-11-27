@@ -304,7 +304,7 @@ func TestLoginIsLimited(t *testing.T) {
 	try(ownerEmail, authtest.Password, b).Want(200)
 
 	// A success clears the email and address's count (another account,
-	// since the owner's has spent six of its ten).
+	// since the owner's has spent five of its ten).
 	const clerk = "clerk@example.com"
 	if _, err := auth.AddUser(ctx, c.App, clerk, "clerk password", auth.RoleMember); err != nil {
 		t.Fatal(err)
@@ -827,4 +827,24 @@ func TestAccountCountForAnEmailWithNoUser(t *testing.T) {
 	if none.Status != owner.Status || !bytes.Equal(none.Body, owner.Body) {
 		t.Fatalf("an email with no user answered %d %s, one with a user %d %s", none.Status, none.Body, owner.Status, owner.Body)
 	}
+}
+
+// Review I4: only failures count against an account. Twenty correct
+// sign-ins in a row all succeed; failures mixed among successes still
+// count, and the tenth refuses the next.
+func TestOnlyFailuresCountAgainstAnAccount(t *testing.T) {
+	at := &clock{now: time.Date(2026, 11, 28, 9, 0, 0, 0, time.UTC)}
+	c := startClocked(t, authEnv(t), at)
+	try := func(password string, i int) *warptest.Response {
+		return c.Fork().Do(request(http.MethodPost, "/api/auth/login", map[string]string{"email": ownerEmail, "password": password}, fmt.Sprintf("192.0.2.%d:1000", i+1)))
+	}
+	for i := range 20 {
+		try(authtest.Password, i).Want(200)
+	}
+	for i := range 9 {
+		try("wrong", 20+i).Want(401)
+		try(authtest.Password, 40+i).Want(200)
+	}
+	try("wrong", 60).Want(401) // the tenth failure
+	wantError(t, try(authtest.Password, 61), 429, "rate_limited", tooManyForAccount)
 }

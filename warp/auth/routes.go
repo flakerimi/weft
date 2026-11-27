@@ -60,9 +60,11 @@ func (m *module) login(ctx context.Context, in LoginInput) (Me, error) {
 // gives back the address's try, and a spent email and address the
 // account's, so that only a try that is tried counts against an account; a
 // spent email and address keeps the address's try taken, as it always was. A
-// success clears the email and address's count, never the account's, which
-// only its window or a completed reset ends: otherwise someone who knows the
-// password could clear the count for a guesser elsewhere. A try that learned
+// success clears the email and address's count and gives back its own try
+// on the account's, so only failures count there; it never clears the
+// failures before it, which only their window or a completed reset ends:
+// otherwise someone who knows the password could clear the count for a
+// guesser elsewhere. A try that learned
 // nothing, since its user could not be looked up or it found no hashing slot
 // in time, gives all three back, to the counts it took them from.
 func (m *module) attempt(ctx context.Context, email, password, ip string) (userRow, error) {
@@ -107,6 +109,7 @@ func (m *module) attempt(ctx context.Context, email, password, ip string) (userR
 		return userRow{}, warp.Unauthorized(errNoMatch)
 	}
 	m.perKey.clear(key)
+	m.perAccount.give(byAccount) // only failures count against an account
 	return row, nil
 }
 

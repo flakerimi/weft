@@ -387,13 +387,17 @@ func TestAccountCountOrder(t *testing.T) {
 	if _, err := m.attempt(context.Background(), "other@example.com", "right", fresh); err != nil {
 		t.Fatalf("another email: %v", err)
 	}
-	// A success does not clear the account's count; its window ends it.
+	// Its window ends it. A success gives back its own try, and clears
+	// none of the failures before it.
 	clock.set(testNow.Add(accountWindow))
+	for range 3 {
+		m.attempt(context.Background(), email, "wrong", fresh)
+	}
 	if _, err := m.attempt(context.Background(), email, "right", fresh); err != nil {
 		t.Fatalf("after ten minutes: %v", err)
 	}
-	if n := triesOf(m.perAccount, accountKey(email)); n != 1 {
-		t.Fatalf("a success left the account's count at %d, want 1", n)
+	if n := triesOf(m.perAccount, accountKey(email)); n != 3 {
+		t.Fatalf("after 3 failures and a success the account's count is %d, want 3", n)
 	}
 
 	// A spent email and address gives back the account's try.
