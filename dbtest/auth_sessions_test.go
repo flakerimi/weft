@@ -368,3 +368,17 @@ func TestTokenIsComparedToTheRow(t *testing.T) {
 	wantError(t, with(c, forged, http.MethodGet, "/api/auth/me"), 401, "unauthorized", signIn)
 	c.Get("/api/auth/me").Want(200)
 }
+
+// One clock: the login reads the database's, so setting data's clock alone
+// moves sessions, limits and mailed links with the stores.
+func TestLoginReadsTheDatabaseClock(t *testing.T) {
+	c, _ := startAuth(t, authEnv(t))
+	authtest.Owner(t, c)
+	c.Get("/api/auth/me").Want(200)
+	later := time.Now().Add(31 * 24 * time.Hour)
+	data.For(c.App).SetClock(func() time.Time { return later })
+	wantError(t, c.Get("/api/auth/me"), 401, "unauthorized", signIn)
+	if got := data.For(c.App).Now(); !got.Equal(later) || got.Location() != time.UTC {
+		t.Fatalf("Now = %v, want %v in UTC", got, later)
+	}
+}

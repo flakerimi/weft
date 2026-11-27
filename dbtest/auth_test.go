@@ -770,13 +770,12 @@ func TestTheLoginsTableIsReserved(t *testing.T) {
 	}
 }
 
-// startClocked starts an app as startAuth does, with its owner, the login
-// and the stores reading the time from clock.
+// startClocked starts an app as startAuth does, with its owner, the
+// database's clock, which the login reads too, set to clock.
 func startClocked(t *testing.T, vars map[string]string, clock *clock) *warptest.Client {
 	t.Helper()
 	c, _ := startAuth(t, vars)
 	data.For(c.App).SetClock(clock.Now)
-	auth.SetClock(c.App, clock.Now)
 	authtest.Owner(t, c)
 	return c
 }

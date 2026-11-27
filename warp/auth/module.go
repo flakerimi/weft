@@ -61,7 +61,7 @@ func (r userRow) user() User {
 // reads nothing; its Start reads the AUTH_ settings and, while no user exists,
 // logs the link that sets up the owner. Grant adds permissions to a role.
 func Module(opts ...Option) warp.Module {
-	m := newModule(time.Now)
+	m := newModule(nil)
 	for _, opt := range opts {
 		if opt != nil {
 			opt(&m.opts)
@@ -114,7 +114,7 @@ type module struct {
 }
 
 // newModule is a module whose limiters, sessions and tokens read the clock
-// now.
+// now, or the database's when now is nil.
 func newModule(now func() time.Time) *module {
 	m := &module{
 		slots:    make(chan struct{}, runtime.GOMAXPROCS(0)),
@@ -131,29 +131,21 @@ func newModule(now func() time.Time) *module {
 	return m
 }
 
-// now is the time by the module's clock, in UTC, as the stores keep it.
+// now is the time by the database's clock, which the stores write by and a
+// test sets with data.DB's SetClock, so the login and the stores never
+// disagree. A module made by newModule with a clock of its own, as the
+// package's tests make one, reads that instead.
 func (m *module) now() time.Time {
 	m.mu.Lock()
 	clock := m.clock
 	m.mu.Unlock()
-	return clock().UTC()
-}
-
-// SetClock replaces the clock the login reads the time from, for its limits,
-// sessions and mailed links, for a test; nil is the real one. It does nothing
-// to an app without the auth module. The stores keep their own clock, which
-// data.DB's SetClock sets.
-func SetClock(app *warp.App, now func() time.Time) {
-	m := of(app)
-	if m == nil {
-		return
+	switch {
+	case clock != nil:
+		return clock().UTC()
+	case m.db != nil:
+		return m.db.Now()
 	}
-	if now == nil {
-		now = time.Now
-	}
-	m.mu.Lock()
-	m.clock = now
-	m.mu.Unlock()
+	return time.Now().UTC()
 }
 
 func (m *module) Name() string { return "auth" }

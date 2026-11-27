@@ -176,7 +176,7 @@ func TestExpiredKey(t *testing.T) {
 	at := &clock{now: start}
 	c, _ := startAuth(t, keysOn(t))
 	authtest.Owner(t, c)
-	auth.SetClock(c.App, at.Now)
+	data.For(c.App).SetClock(at.Now)
 	k := makeKey(t, c, "Short", auth.RoleOwner, 1)
 	at.now = start.Add(24*time.Hour - time.Second)
 	bearer(c, k.Secret, http.MethodGet, "/api/things", nil).Want(200)
