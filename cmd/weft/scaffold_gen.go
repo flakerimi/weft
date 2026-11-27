@@ -284,9 +284,9 @@ func (r *resource) tableVue() string {
 			for _, c := range f.Choices {
 				opts = append(opts, "{ label: "+ts(capital(human(c)))+", value: "+ts(c)+" }")
 			}
-			filters = append(filters, "{ key: "+name+", label: "+lbl+", options: ["+strings.Join(opts, ", ")+"] },")
+			filters = append(filters, "{ key: "+name+", label: "+lbl+", items: ["+strings.Join(opts, ", ")+"] },")
 		case "bool":
-			filters = append(filters, "{ key: "+name+", label: "+lbl+", options: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },")
+			filters = append(filters, "{ key: "+name+", label: "+lbl+", items: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },")
 		}
 	}
 
