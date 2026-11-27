@@ -12,7 +12,7 @@ On this page you make an app, run it while you change a page and the API, and bu
 weft create myapp
 ```
 
-It writes the app into a new folder, `myapp`, puts Weft's packages in `myapp/.weft/`, and runs `pnpm install`, which fetches Vue, Vite and the other public packages from the npm registry. After pnpm's output it prints:
+It writes the app into a new folder, `myapp`, puts Weft's packages in `myapp/.weft/`, and runs `pnpm install`, which fetches Vue, Vite and the other public packages from the npm registry, and `go mod download`, which fetches Warp from GitHub. Then it prints:
 
 ```text
 Created myapp. Next: cd myapp && weft dev
@@ -29,7 +29,8 @@ The app has:
 | `main.go`, `dist.go`, `dist_dev.go` | The Go server, a `warp.App` from `github.com/flakerimi/weft/warp`. `dist.go` embeds the built pages. |
 | `.env`, `.env.sample` | The server's settings, such as `PORT`. Git ignores `.env`; `.env.sample` is committed. |
 | `package.json` | Its `"weft"` object records the Weft version and the theme. |
-| `.weft/` | Weft's packages and Go package, at the app's version. Git ignores it, and every `weft` command puts it back when it is missing. |
+| `go.mod`, `go.sum` | `go.mod` requires Warp, the module `github.com/flakerimi/weft`, at the release's tag, `v<version>`; `go.sum` holds its checksums. Commit both. `weft upgrade` moves the version. |
+| `.weft/` | Weft's packages, at the app's version. Git ignores it, and every `weft` command puts it back when it is missing. |
 | `AGENTS.md`, `CLAUDE.md` | What an agent working on the app needs to know. |
 
 `--theme lisa` or `--theme weft` picks another theme, and `--module` sets the Go module path, which is the app's name otherwise. See [weft create](../reference/cli.md#weft-create) for every flag and refusal.
