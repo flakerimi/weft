@@ -804,3 +804,75 @@ func TestRemoveInvitationByRank(t *testing.T) {
 	admin.Delete(fmt.Sprintf("/api/auth/invitations/%d", peer.ID)).Want(204)
 	c.Delete(fmt.Sprintf("/api/auth/invitations/%d", boss.ID)).Want(204)
 }
+
+// blockMail is a mail module whose Send waits until the test lets it go, or
+// until the mailing's context ends.
+type blockMail struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (*blockMail) Name() string { return "mail" }
+
+func (b *blockMail) Register(app *warp.App) error {
+	warp.Provide[postman](app, b)
+	return nil
+}
+
+func (b *blockMail) Send(ctx context.Context, _ letter) error {
+	b.started <- struct{}{}
+	select {
+	case <-b.release:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// Review N4: Stop waits for a mailing under way, and when its time runs
+// out first it says so and ends the mailing.
+func TestStopWaitsForMailing(t *testing.T) {
+	start := func(t *testing.T) (*warptest.Client, *blockMail) {
+		b := &blockMail{started: make(chan struct{}, 1), release: make(chan struct{})}
+		c := warptest.New(t, authEnv(t), data.Module(), b, auth.Module(), things{})
+		authtest.Owner(t, c)
+		c.Fork().Post("/api/auth/forgot", map[string]string{"email": ownerEmail}).Want(204)
+		select {
+		case <-b.started:
+		case <-time.After(mailWait):
+			t.Fatal("the mailing did not begin")
+		}
+		return c, b
+	}
+
+	t.Run("waits", func(t *testing.T) {
+		c, b := start(t)
+		done := make(chan error, 1)
+		go func() { done <- c.App.Stop(context.Background()) }()
+		select {
+		case err := <-done:
+			t.Fatalf("Stop returned (%v) while a mailing was under way", err)
+		case <-time.After(100 * time.Millisecond):
+		}
+		close(b.release)
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("Stop = %v once the mailing was done", err)
+			}
+		case <-time.After(mailWait):
+			t.Fatal("Stop did not return once the mailing was done")
+		}
+	})
+
+	t.Run("gives up", func(t *testing.T) {
+		c, _ := start(t)
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		err := c.App.Stop(ctx)
+		want := `warp: module "auth" could not stop: the mail register or forgot asked for was still being made when the app stopped, so it was not sent; ask for it again.`
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("Stop = %v\nwant it to have %s", err, want)
+		}
+	})
+}
