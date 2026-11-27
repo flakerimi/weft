@@ -34,12 +34,17 @@ let port
 for (let i = 0; i < 200 && !port; i++) {
   try { port = readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0] } catch { await sleep(50) }
 }
+// A slow machine (a CI runner) may not have opened its first tab by the time
+// the debugging port answers, or open none: after two seconds ask for one.
 let page
-for (let i = 0; i < 100 && !page; i++) {
+for (let i = 0; i < 300 && !page; i++) {
   try { page = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((t) => t.type === 'page') } catch {}
+  if (!page && i === 20) {
+    try { await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' }) } catch {}
+  }
   if (!page) await sleep(100)
 }
-if (!page) throw new Error(`the browser at ${browserPath} gave no page to drive`)
+if (!page) throw new Error(`the browser at ${browserPath} gave no page to drive within 30 s; check that it starts headless on this machine`)
 const ws = new WebSocket(page.webSocketDebuggerUrl)
 await new Promise((resolve, reject) => { ws.addEventListener('open', resolve); ws.addEventListener('error', reject) })
 
