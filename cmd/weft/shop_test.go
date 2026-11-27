@@ -575,6 +575,9 @@ var errBrowserTimedOut = errors.New("did not finish in time")
 func runInGroup(cmd *exec.Cmd, wait time.Duration) (string, error) {
 	var got lockedBuffer
 	cmd.Stdout, cmd.Stderr = &got, &got
+	// Wait returns at most 5 s after the script exits even if something it
+	// started still holds its output open, so the group is still stopped.
+	cmd.WaitDelay = 5 * time.Second
 	if err := startGroup(cmd); err != nil {
 		return "", err
 	}
