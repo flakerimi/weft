@@ -1,3 +1,9 @@
+<script lang="ts">
+// The chunk of date and time controls, fetched once for every dialog.
+type TimeFields = typeof import('./parts/time-fields.ts')
+let timeModule: Promise<TimeFields> | undefined
+</script>
+
 <script setup vapor lang="ts" generic="T extends object, TInput extends object = any">
 // A modal dialog that creates or edits a record from a Weft field schema
 // (such as `schema.<Name>Input` from `weft gen`). Each field in `schema`
@@ -6,7 +12,11 @@
 // only the fields that changed are sent to `update(id, changed)`, and
 // submitting with no changes closes the dialog without a request. Server
 // errors matching Warp's `ApiError` shape show beside their fields or in an
-// Alert at the top of the form.
+// Alert at the top of the form. A field the schema says is a time is a
+// DatePicker (`format: 'date'`), or a DatePicker and an InputTime side by
+// side (`format: 'datetime'`); the draft holds what the wire holds, and the
+// controls convert (see when.ts). Those controls are loaded on demand, the
+// first time a dialog has such a field.
 import { computed, onMounted, reactive, ref, shallowRef, useSlots, useTemplateRef, watch } from 'vue'
 import { useWidth } from '../adaptive/useWidth.ts'
 import Button from '../basics/Button.vue'
@@ -22,6 +32,7 @@ import type { FieldRule, FieldSchema } from '../forms/schema.ts'
 import Switch from '../forms/Switch.vue'
 import Textarea from '../forms/Textarea.vue'
 import { useControllable } from '../headless/useControllable.ts'
+import { useId } from '../headless/useId.ts'
 import Stack from '../layout/Stack.vue'
 import Dialog from '../overlays/Dialog.vue'
 import Select from '../selection/Select.vue'
@@ -41,6 +52,7 @@ import {
   type EntityFieldRule,
   type EntitySchema,
 } from './entity.ts'
+import { dateToWire, localToWire, wireToDate, wireToLocal } from './when.ts'
 import '../styles/base.css'
 
 const props = withDefaults(
@@ -113,7 +125,14 @@ const viewport = shallowRef<HTMLElement | null>(null)
 onMounted(() => (viewport.value = document.documentElement))
 const width = useWidth(viewport, { prepaint: false })
 
+// The date and time controls, once loaded.
+const timeFields = shallowRef<TimeFields>()
+
 const draft = reactive<Record<string, unknown>>({})
+// A datetime's date and time while only one of them is set, which the draft,
+// an instant or null, cannot hold.
+const halves = reactive<Record<string, { date: string | null; time: string | null }>>({})
+const uid = useId('entity')
 const getDraft = (): TInput => draft as TInput
 const problem = ref('')
 const formKey = ref(0)
@@ -125,6 +144,7 @@ function resetDraft() {
     if (!(k in next)) delete draft[k]
   }
   Object.assign(draft, next)
+  for (const k of Object.keys(halves)) delete halves[k]
   problem.value = ''
   formKey.value++
 }
@@ -178,6 +198,20 @@ const entries = computed<FieldEntry[]>(() => {
   }
   return out
 })
+
+// Load the date and time controls once a field needs them, in the browser.
+watch(
+  () => entries.value.some((e) => e.control === 'date' || e.control === 'datetime'),
+  (needed) => {
+    if (!needed || timeFields.value || typeof document === 'undefined') return
+    timeModule ??= import('./parts/time-fields.ts')
+    timeModule.then(
+      (m) => (timeFields.value = m),
+      () => (timeModule = undefined), // not fetched (offline): the next dialog that needs them tries again
+    )
+  },
+  { immediate: true },
+)
 
 const renderedKeys = computed(() => new Set<string>(entries.value.map((e) => e.key)))
 
@@ -233,6 +267,38 @@ function getChoice(key: string): string | number | null {
 }
 function setChoice(key: string, v: unknown) {
   draft[key] = v
+}
+
+// A date: the draft holds 2026-03-29T00:00:00Z, the DatePicker 2026-03-29.
+function getDate(key: string): string | null {
+  return wireToDate(draft[key] as string | null)
+}
+function setDate(key: string, v: unknown) {
+  const date = typeof v === 'string' && v !== '' ? v : null
+  if (date === getDate(key)) return // the same date: the value as it came stays
+  draft[key] = dateToWire(date)
+}
+// A datetime: the draft holds the instant in UTC, the controls the date and
+// the time of day where the browser is.
+function getLocal(key: string): { date: string | null; time: string | null } {
+  return halves[key] ?? wireToLocal(draft[key] as string | null) ?? { date: null, time: null }
+}
+function setLocal(key: string, which: 'date' | 'time', v: unknown) {
+  const next = { ...getLocal(key), [which]: typeof v === 'string' && v !== '' ? v : null }
+  // A date chosen before a time is at midnight.
+  if (which === 'date' && next.date && !next.time) next.time = '00:00'
+  const was = wireToLocal(draft[key] as string | null)
+  if (was && next.date === was.date && next.time === was.time) {
+    delete halves[key]
+    return // the same minute: the instant as it came, seconds and all, stays
+  }
+  if (next.date && next.time) {
+    delete halves[key]
+    draft[key] = localToWire(next.date, next.time)
+  } else {
+    halves[key] = next
+    draft[key] = null
+  }
 }
 
 async function onSubmit(values: Record<string, unknown>) {
@@ -321,6 +387,29 @@ defineExpose({
                 :label="entry.label"
                 @update:model-value="setBool(entry.key, $event)"
               />
+              <template v-else-if="entry.control === 'date' || entry.control === 'datetime'">
+                <template v-if="timeFields">
+                  <component
+                    :is="timeFields.DatePicker"
+                    v-if="entry.control === 'date'"
+                    :model-value="getDate(entry.key)"
+                    :placeholder="entry.field.placeholder"
+                    @update:model-value="setDate(entry.key, $event)"
+                  />
+                  <template v-else>
+                    <component :is="timeFields.FieldGroup">
+                      <component :is="timeFields.DatePicker" :model-value="getLocal(entry.key).date" @update:model-value="setLocal(entry.key, 'date', $event)" />
+                      <component
+                        :is="timeFields.FieldTime"
+                        :label-id="`${uid}-${entry.key}-time`"
+                        :model-value="getLocal(entry.key).time"
+                        @update:model-value="setLocal(entry.key, 'time', $event)"
+                      />
+                    </component>
+                    <span :id="`${uid}-${entry.key}-time`" class="weft-visually-hidden">{{ t.timeOf(entry.label) }}</span>
+                  </template>
+                </template>
+              </template>
               <InputNumber
                 v-else-if="entry.control === 'number'"
                 :model-value="getNum(entry.key)"
