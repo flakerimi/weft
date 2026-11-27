@@ -75,6 +75,27 @@ if [ -n "$changed" ]; then
 		fail "tracked files differ from $commit, which the tag $tag would name, so the module at the tag would not be what this release is built from; commit them, or set them aside, and publish again."
 	echo "publish: tracked files differ from $commit, which a publish refuses (the tag $tag would not name what is built); not refused in a dry run" >&2
 fi
+# Nor may a file git neither tracks nor ignores be in what is built, which
+# would be pushed but not be in the tag. What is built is what these read:
+# release.sh (go test and go build of the root package, warp and cmd/weft:
+# go.mod, go.sum, the root's .go files, warp/, cmd/), bundle.sh (packages/,
+# built with the workspace's package.json, pnpm-lock.yaml,
+# pnpm-workspace.yaml and tsconfig.base.json; warp/ and version.go for a
+# development bundle; catalog/, templates/), the site build (site-src/,
+# packages/, catalog/, skills/, and docs/ for the gallery's parity and sizes
+# pages), this push tree (site/, the installer), and the scripts/ that do it.
+# Elsewhere, such as the owner's notes at the root, an untracked file is no
+# matter.
+stray=$(git ls-files --others --exclude-standard -- go.mod go.sum ':(glob)*.go' package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json \
+	warp cmd templates packages catalog site-src skills docs site scripts) ||
+	fail "git ls-files cannot list the files git does not track, so whether $commit is what is built is unknown; fix the checkout and publish again."
+if [ -n "$stray" ]; then
+	first=$(printf '%s\n' "$stray" | head -n 3 | paste -sd, - | sed 's/,/, /g')
+	[ "$(printf '%s\n' "$stray" | wc -l)" -le 3 ] || first="$first, …"
+	[ -n "$dry" ] ||
+		fail "files git does not track are in what the release and the site are built from ($first), so the tag $tag would not name what is built; commit them, or move them out, and publish again."
+	echo "publish: files git does not track are in what the release and the site are built from ($first), which a publish refuses (the tag $tag would not name them); not refused in a dry run" >&2
+fi
 # A tag of this name: the same commit's is used, another's stops the publish.
 tag_here=
 tag_there=
@@ -99,13 +120,26 @@ else
 fi
 # A GitHub Release of this name stops the publish; gh missing or signed out
 # is said after the site push, which does not need it.
+# gh is asked of github.com alone: an account elsewhere with a problem would
+# make a bare gh auth status fail.
 gh_ready=
-if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+gh_missing=
+gh_todo=
+if ! command -v gh >/dev/null 2>&1; then
+	gh_missing="gh is not installed"
+	gh_todo="install gh (https://cli.github.com), run gh auth login, then scripts/github-release.sh $version"
+elif ! gh auth status --hostname github.com >/dev/null 2>&1; then
+	gh_missing="gh is not signed in to github.com"
+	gh_todo="run gh auth login, then scripts/github-release.sh $version"
+else
 	gh_ready=1
+	# gh release view finds a draft of that name too (gh's FetchRelease looks
+	# for a published release by tag and for a draft by tagName).
 	! gh release view "$tag" --repo "${WEFT_GITHUB_REPO:-flakerimi/weft}" >/dev/null 2>&1 ||
 		fail "the GitHub Release $tag already exists, and a publish never replaces one; publish a new version."
-elif [ -n "$dry" ]; then
-	echo "publish: gh is missing or not signed in, so whether the GitHub Release $tag exists is not checked; a publish would say so after the site push" >&2
+fi
+if [ -z "$gh_ready" ] && [ -n "$dry" ]; then
+	echo "publish: $gh_missing, so whether the GitHub Release $tag exists is not checked; a publish would say so after the site push" >&2
 fi
 
 # A push replaces the whole site: every release it has published must be staged again.
@@ -198,6 +232,8 @@ echo "push tree:"
 if [ -n "$dry" ]; then
 	if [ -n "$tag_here" ]; then
 		echo "dry run: the tag $tag names $commit already; a publish would not make it again"
+	elif [ -n "$tag_there" ]; then
+		echo "dry run: would run, before the site push: git fetch origin refs/tags/$tag:refs/tags/$tag"
 	else
 		echo "dry run: would run, before the site push: git tag -a $tag -m 'Weft $version' $commit"
 	fi
@@ -216,7 +252,13 @@ fi
 # The tag first, so the module is at it before any app this release makes
 # requires it; a site push that fails leaves it, for the next publish of this
 # version from the same commit to use.
-if [ -z "$tag_here" ]; then
+# A tag origin has already is fetched, not made here again: a tag object of
+# this checkout's own would differ from origin's, and a later git fetch
+# --tags would refuse to clobber it.
+if [ -z "$tag_here" ] && [ -n "$tag_there" ]; then
+	git fetch origin "refs/tags/$tag:refs/tags/$tag" ||
+		fail "cannot fetch the tag $tag from origin (see above); fix that and publish again."
+elif [ -z "$tag_here" ]; then
 	git tag -a "$tag" -m "Weft $version" "$commit" ||
 		fail "cannot make the tag $tag on $commit (see above); fix that and publish again."
 fi
@@ -249,7 +291,7 @@ fi
 # it; a release that could not be made is said now and again at the end.
 released=
 if [ -z "$gh_ready" ]; then
-	echo "publish: $version is pushed and tagged $tag, but gh is missing or not signed in, so its GitHub Release is not made; run gh auth login, then scripts/github-release.sh $version." >&2
+	echo "publish: $version is pushed and tagged $tag, but $gh_missing, so its GitHub Release is not made; $gh_todo." >&2
 elif scripts/github-release.sh "$version"; then
 	released=1
 fi
@@ -283,6 +325,8 @@ keep_releases() {
 keep_releases ||
 	echo "publish: $kept holds every release it served, but not all could be kept once in $store; the next publish copies those again." >&2
 echo "published weft $version at $url, tagged $tag; listed in site/releases.txt (commit it); its tree is $kept; its release build in $releases can be trashed"
+[ -n "$released" ] || [ -z "$gh_ready" ] ||
+	fail "$version is live and tagged $tag, but its GitHub Release is not made (see above); fix that and run scripts/github-release.sh $version."
 [ -n "$released" ] ||
-	fail "$version is live and tagged $tag, but its GitHub Release is not made (see above); run gh auth login if gh is not signed in, then scripts/github-release.sh $version."
+	fail "$version is live and tagged $tag, but its GitHub Release is not made, since $gh_missing; $gh_todo."
 echo "published the GitHub Release $tag"

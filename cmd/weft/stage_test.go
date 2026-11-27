@@ -1238,10 +1238,13 @@ func TestPublishSiteTagsAndReleases(t *testing.T) {
 		t.Errorf("the order was %q, want the tag on origin before the push, and the release after it", got)
 	}
 	dir := "site/releases/0.0.3" // github-release.sh runs at the repository's root
-	want := "release create v0.0.3 --repo example.invalid/no-such-repo --verify-tag --title v0.0.3 --notes weft 0.0.3 for darwin and linux, on amd64 and arm64: the same files, with the same SHA256SUMS, as https://weft.base.al/releases/0.0.3/. Install with: curl -fsSL https://weft.base.al/install | sh. An app this release makes requires github.com/flakerimi/weft v0.0.3. " +
+	want := "release create v0.0.3 --repo example.invalid/no-such-repo --verify-tag --title v0.0.3 --notes " + releaseNotes("0.0.3") + " " +
 		dir + "/weft_linux_amd64.tar.gz " + dir + "/SHA256SUMS"
 	if log := r.fakeFile("gh.log"); !strings.Contains(log, "\n"+want+"\n") {
 		t.Errorf("gh was run as\n%s\nwant a line\n%s", log, want)
+	}
+	if log := r.fakeFile("gh.log"); !strings.HasPrefix(log, "auth status --hostname github.com\n") || strings.Contains(log, "auth status\n") {
+		t.Errorf("gh auth status is not asked of github.com alone:\n%s", log)
 	}
 	if got := lastLine(out); got != "published the GitHub Release v0.0.3" {
 		t.Errorf("last line %q", got)
@@ -1330,8 +1333,8 @@ func TestPublishSiteWithoutGh(t *testing.T) {
 	r := newFakeRepo(t)
 	r.env = append(r.env, "GH_SIGNED_OUT=1")
 	out, err := r.run("publish-site.sh", "0.0.3")
-	say := "publish: 0.0.3 is pushed and tagged v0.0.3, but gh is missing or not signed in, so its GitHub Release is not made; run gh auth login, then scripts/github-release.sh 0.0.3."
-	end := "publish: 0.0.3 is live and tagged v0.0.3, but its GitHub Release is not made (see above); run gh auth login if gh is not signed in, then scripts/github-release.sh 0.0.3."
+	say := "publish: 0.0.3 is pushed and tagged v0.0.3, but gh is not signed in to github.com, so its GitHub Release is not made; run gh auth login, then scripts/github-release.sh 0.0.3."
+	end := "publish: 0.0.3 is live and tagged v0.0.3, but its GitHub Release is not made, since gh is not signed in to github.com; run gh auth login, then scripts/github-release.sh 0.0.3."
 	if err == nil || !strings.Contains(out, say) || lastLine(out) != end {
 		t.Fatalf("err %v, output\n%s", err, out)
 	}
@@ -1389,7 +1392,7 @@ func TestPublishSiteDryRunPrintsTheCommands(t *testing.T) {
 	for _, want := range []string{
 		"dry run: would run, before the site push: git tag -a v0.0.3 -m 'Weft 0.0.3' " + commit + "\n",
 		"dry run: would run, before the site push: git push origin refs/tags/v0.0.3\n",
-		"dry run: would run: gh release create v0.0.3 --repo example.invalid/no-such-repo --verify-tag --title v0.0.3 --notes 'weft 0.0.3 for darwin and linux, on amd64 and arm64: the same files, with the same SHA256SUMS, as https://weft.base.al/releases/0.0.3/. Install with: curl -fsSL https://weft.base.al/install | sh. An app this release makes requires github.com/flakerimi/weft v0.0.3.' site/releases/0.0.3/weft_linux_amd64.tar.gz site/releases/0.0.3/SHA256SUMS\n",
+		"dry run: would run: gh release create v0.0.3 --repo example.invalid/no-such-repo --verify-tag --title v0.0.3 --notes '" + releaseNotes("0.0.3") + "' site/releases/0.0.3/weft_linux_amd64.tar.gz site/releases/0.0.3/SHA256SUMS\n",
 	} {
 		if !strings.Contains(out+"\n", want) {
 			t.Errorf("the dry run does not print\n%s\nin\n%s", want, out)
@@ -1433,5 +1436,94 @@ func TestGithubRelease(t *testing.T) {
 	out, err = r.run("github-release.sh", "0.1.0-alpha.1")
 	if err == nil || out != "github-release: "+dir+"/SHA256SUMS lists weft_gone.tar.gz, which is not in "+dir+"; copy the release weft.base.al serves for 0.1.0-alpha.1 there." {
 		t.Errorf("a missing file: err %v, output %q", err, out)
+	}
+}
+
+// releaseNotes is the GitHub Release's notes for version: every link in it
+// is one weft.base.al serves once the version is pushed.
+func releaseNotes(version string) string {
+	return "weft " + version + " for darwin and linux, on amd64 and arm64: the files weft.base.al serves, with their checksums at https://weft.base.al/releases/" + version + "/SHA256SUMS. Install it as https://weft.base.al/docs/getting-started/install says. An app this release makes requires github.com/flakerimi/weft v" + version + "."
+}
+
+// Files git neither tracks nor ignores, in what a release or the site is
+// built from, stop a publish: they would be built and pushed, but not be in
+// the tag. Elsewhere, such as the owner's notes at the root, they are no
+// matter; a dry run says so and goes on.
+func TestPublishSiteRefusesUntrackedFiles(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	os.WriteFile(filepath.Join(r.root, "coord.md"), []byte("notes\n"), 0o644)
+	for _, f := range []string{"warp/new.go", "warp/data/more.go", "templates/app/extra.tmpl", "packages/ui/x.ts"} {
+		os.MkdirAll(filepath.Dir(filepath.Join(r.root, f)), 0o755)
+		os.WriteFile(filepath.Join(r.root, f), []byte("x\n"), 0o644)
+	}
+	out, err := r.run("publish-site.sh", "0.0.3")
+	want := "publish: files git does not track are in what the release and the site are built from (packages/ui/x.ts, templates/app/extra.tmpl, warp/data/more.go, …), so the tag v0.0.3 would not name what is built; commit them, or move them out, and publish again."
+	if err == nil || out != want {
+		t.Fatalf("err %v, output %q, want %q", err, out, want)
+	}
+	if r.fakeFile("built") != "" || r.lisa() != "" || r.git(t, "tag", "-l") != "" {
+		t.Fatal("the refused publish built, pushed or tagged")
+	}
+	out, err = r.run("publish-site.sh", "--dry-run", "0.0.3")
+	if err != nil || !strings.Contains(out, "publish: files git does not track are in what the release and the site are built from (packages/ui/x.ts, templates/app/extra.tmpl, warp/data/more.go, …), which a publish refuses") {
+		t.Fatalf("dry run: err %v, output\n%s", err, out)
+	}
+	// Moved out, only the owner's notes are left untracked, and that is no matter.
+	for _, d := range []string{"warp/new.go", "warp/data/more.go", "templates", "packages"} {
+		os.Rename(filepath.Join(r.root, d), filepath.Join(t.TempDir(), "moved"))
+	}
+	if out, err := r.run("publish-site.sh", "0.0.3"); err != nil {
+		t.Fatalf("with only coord.md untracked: %v\n%s", err, out)
+	}
+}
+
+// A tag origin has and the checkout does not (a fresh clone) is fetched,
+// not made again: the checkout's tag is origin's object, so a later fetch
+// of the tags does not refuse to clobber it.
+func TestPublishSiteFetchesOriginsTag(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	r.git(t, "tag", "-a", "v0.0.3", "-m", "made elsewhere")
+	r.git(t, "push", "-q", "origin", "refs/tags/v0.0.3")
+	theirs := r.git(t, "rev-parse", "v0.0.3")
+	r.git(t, "tag", "-d", "v0.0.3") // the test's own repository: this checkout never had it
+	out, err := r.run("publish-site.sh", "--dry-run", "0.0.3")
+	if err != nil || !strings.Contains(out, "dry run: would run, before the site push: git fetch origin refs/tags/v0.0.3:refs/tags/v0.0.3\n") {
+		t.Fatalf("dry run: err %v, output\n%s", err, out)
+	}
+	if out, err := r.run("publish-site.sh", "0.0.3"); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if mine := r.git(t, "rev-parse", "v0.0.3"); mine != theirs {
+		t.Errorf("the checkout's v0.0.3 is %s, origin's %s", mine, theirs)
+	}
+	r.git(t, "fetch", "-q", "--tags", "origin")
+}
+
+// gh not installed: the publish says to install it, not to sign in.
+func TestPublishSiteWithoutGhInstalled(t *testing.T) {
+	skipWindows(t)
+	r := newFakeRepo(t)
+	// The fakes but gh, and the system's own tools; no gh of the machine's.
+	bin := t.TempDir()
+	for _, f := range []string{"curl", "lisa"} {
+		os.Symlink(filepath.Join(r.fake, "bin", f), filepath.Join(bin, f))
+	}
+	git, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("no git")
+	}
+	os.Symlink(git, filepath.Join(bin, "git"))
+	for i, kv := range r.env {
+		if strings.HasPrefix(kv, "PATH=") {
+			r.env[i] = "PATH=" + bin + ":/usr/bin:/bin:/usr/sbin:/sbin"
+		}
+	}
+	out, err := r.run("publish-site.sh", "0.0.3")
+	say := "publish: 0.0.3 is pushed and tagged v0.0.3, but gh is not installed, so its GitHub Release is not made; install gh (https://cli.github.com), run gh auth login, then scripts/github-release.sh 0.0.3."
+	end := "publish: 0.0.3 is live and tagged v0.0.3, but its GitHub Release is not made, since gh is not installed; install gh (https://cli.github.com), run gh auth login, then scripts/github-release.sh 0.0.3."
+	if err == nil || !strings.Contains(out, say) || lastLine(out) != end {
+		t.Fatalf("err %v, output\n%s", err, out)
 	}
 }

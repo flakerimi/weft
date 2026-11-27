@@ -47,7 +47,9 @@ set -- "$@" "$dir/SHA256SUMS"
 
 pre=
 case "$version" in *-*) pre=--prerelease ;; esac
-notes="weft $version for darwin and linux, on amd64 and arm64: the same files, with the same SHA256SUMS, as https://weft.base.al/releases/$version/. Install with: curl -fsSL https://weft.base.al/install | sh. An app this release makes requires github.com/flakerimi/weft $tag."
+# Every link is one weft.base.al serves once the version is pushed (the
+# release's folder itself is not a page; its SHA256SUMS is).
+notes="weft $version for darwin and linux, on amd64 and arm64: the files weft.base.al serves, with their checksums at https://weft.base.al/releases/$version/SHA256SUMS. Install it as https://weft.base.al/docs/getting-started/install says. An app this release makes requires github.com/flakerimi/weft $tag."
 
 if [ -n "$dry" ]; then
 	printf 'dry run: would run: gh release create %s --repo %s --verify-tag --title %s --notes '"'"'%s'"'"'%s' "$tag" "$repo" "$tag" "$notes" "${pre:+ $pre}"
@@ -58,8 +60,8 @@ fi
 
 command -v gh >/dev/null 2>&1 ||
 	fail "gh is not installed, so the GitHub Release $tag is not made; install it from https://cli.github.com, run gh auth login, and run scripts/github-release.sh $version again."
-gh auth status >/dev/null 2>&1 ||
-	fail "gh is not signed in, so the GitHub Release $tag is not made; run gh auth login, then scripts/github-release.sh $version again."
+gh auth status --hostname github.com >/dev/null 2>&1 ||
+	fail "gh is not signed in to github.com, so the GitHub Release $tag is not made; run gh auth login, then scripts/github-release.sh $version again."
 ! gh release view "$tag" --repo "$repo" >/dev/null 2>&1 ||
 	fail "the GitHub Release $tag already exists in $repo, and this script never replaces one; leave it, or remove it by hand and run scripts/github-release.sh $version again."
 gh release create "$tag" --repo "$repo" --verify-tag --title "$tag" --notes "$notes" ${pre:+"$pre"} "$@" ||
