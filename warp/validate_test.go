@@ -262,8 +262,19 @@ func TestCheckRules(t *testing.T) {
 		Tier   int     `json:"tier" warp:"enum=1|two"`
 		Half   int     `json:"half" warp:"enum=1|1.5"`
 		Small  uint8   `json:"small" warp:"enum=1|300"`
+		Neg8   uint8   `json:"neg8" warp:"enum=1|-3"`
 		Neg    uint    `json:"neg" warp:"enum=0|-3"`
+		BigU64 uint64  `json:"bigu64" warp:"enum=1|18446744073709551616"`
+		Neg0I  int     `json:"neg0i" warp:"enum=-0|1"`
+		PlusI  int     `json:"plusi" warp:"enum=+5|1"`
+		Lead0I int     `json:"lead0i" warp:"enum=05|1"`
+		NegL0I int     `json:"negl0i" warp:"enum=-05|1"`
+		Neg0U  uint8   `json:"neg0u" warp:"enum=-0|1"`
+		PlusU  uint8   `json:"plusu" warp:"enum=+5|1"`
+		Lead0U uint8   `json:"lead0u" warp:"enum=05|1"`
+		NegL0U uint8   `json:"negl0u" warp:"enum=-05|1"`
 		Hex    float64 `json:"hex" warp:"enum=0x1p4|2"`
+		Inex32 float32 `json:"inex32" warp:"enum=1|16777217"`
 		Score  int     `json:"score" warp:"enum=1_0|2"`
 		Twice  string  `json:"twice" warp:"enum=a|b,enum=b|c"`
 		Tags   []int   `json:"tags" warp:"unique"`
@@ -284,8 +295,19 @@ func TestCheckRules(t *testing.T) {
 		`Product.Tier has "enum=1|two"; write whole numbers separated by | after enum=.`,
 		`Product.Half has "enum=1|1.5"; write whole numbers separated by | after enum=.`,
 		`Product.Small has "enum=1|300"; write whole numbers from 0 to 255 separated by | after enum=.`,
-		`Product.Neg has "enum=0|-3"; write whole numbers separated by | after enum=.`,
+		`Product.Neg8 has "enum=1|-3"; write whole numbers from 0 to 255 separated by | after enum=.`,
+		`Product.Neg has "enum=0|-3"; write whole numbers from 0 to 18446744073709551615 separated by | after enum=.`,
+		`Product.BigU64 has "enum=1|18446744073709551616"; write whole numbers from 0 to 18446744073709551615 separated by | after enum=.`,
+		`Product.Neg0I has "enum=-0|1"; write whole numbers separated by | after enum=.`,
+		`Product.PlusI has "enum=+5|1"; write whole numbers separated by | after enum=.`,
+		`Product.Lead0I has "enum=05|1"; write whole numbers separated by | after enum=.`,
+		`Product.NegL0I has "enum=-05|1"; write whole numbers separated by | after enum=.`,
+		`Product.Neg0U has "enum=-0|1"; write whole numbers separated by | after enum=.`,
+		`Product.PlusU has "enum=+5|1"; write whole numbers separated by | after enum=.`,
+		`Product.Lead0U has "enum=05|1"; write whole numbers separated by | after enum=.`,
+		`Product.NegL0U has "enum=-05|1"; write whole numbers separated by | after enum=.`,
 		`Product.Hex has "enum=0x1p4|2"; write numbers separated by | after enum=.`,
+		`Product.Inex32 has "enum=1|16777217"; write numbers that a float32 can hold exactly separated by | after enum=.`,
 		`Product.Score has "enum=1_0|2"; write whole numbers separated by | after enum=.`,
 		`Product.Twice has the rule "enum" more than once; list every value in one enum=a|b.`,
 		`Product.Tags has the rule "unique", which is for text and numbers; remove it.`,

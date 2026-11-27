@@ -30,6 +30,11 @@ async function walk(dir: string, prefix: string, out: string[]): Promise<void> {
   const entries = await readdir(dir, { withFileTypes: true })
   for (const e of entries) {
     if (e.name.startsWith('_') || e.name.startsWith('.')) continue
+    if (e.name.includes('\\') && (e.isDirectory() || (e.isFile() && e.name.endsWith('.vue')))) {
+      throw new Error(
+        `pages/${prefix}${e.name} has a backslash in its name, which URL paths and Vite module ids cannot carry; rename it without "\\".`,
+      )
+    }
     if (e.isSymbolicLink()) {
       // A linked page or folder would be built from somewhere else, or twice; say so rather than skip it.
       const isDir = await stat(join(dir, e.name)).then((s) => s.isDirectory(), () => false)
@@ -93,7 +98,7 @@ export function listPageFilesSync(pagesDir: string): string[] {
       return
     }
     for (const e of entries) {
-      if (e.name.startsWith('_') || e.name.startsWith('.') || e.isSymbolicLink()) continue
+      if (e.name.startsWith('_') || e.name.startsWith('.') || e.isSymbolicLink() || e.name.includes('\\')) continue
       if (e.isDirectory()) walkSync(join(dir, e.name), `${prefix}${e.name}/`)
       else if (e.isFile() && e.name.endsWith('.vue')) files.push(`${prefix}${e.name}`)
     }

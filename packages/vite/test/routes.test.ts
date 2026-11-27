@@ -79,6 +79,15 @@ describe('discoverRoutes', () => {
       ),
     )
   })
+
+  it('refuses a page or folder whose name has a backslash, in one sentence', async () => {
+    await expect(discoverRoutes(pagesWith('back\\slash/[id].vue'))).rejects.toThrow(
+      new Error('pages/back\\slash has a backslash in its name, which URL paths and Vite module ids cannot carry; rename it without "\\".'),
+    )
+    await expect(discoverRoutes(pagesWith('docs/a\\b.vue'))).rejects.toThrow(
+      new Error('pages/docs/a\\b.vue has a backslash in its name, which URL paths and Vite module ids cannot carry; rename it without "\\".'),
+    )
+  })
 })
 
 describe('expandRoutes', () => {

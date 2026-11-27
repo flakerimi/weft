@@ -133,7 +133,7 @@ ${DATA}
 `
 
 const ISLAND = `<script setup vapor lang="ts">
-import { Pagination, Stepper, Table, Tabs, Timeline } from '@weft/ui'
+import { Footer, Pagination, Stepper, Table, Tabs, Timeline } from '@weft/ui'
 ${DATA}
 </script>
 
@@ -145,6 +145,11 @@ ${DATA}
     <Pagination id="pg5" :total="200" :default-page="5" show-edges :to="href" />
     <Table id="tbl" caption="People" :columns="columns" :rows="rows" />
   </div>
+  <Footer id="ft">
+    <template #leading>© 2026 Example Co</template>
+    <a href="/about">About</a><a href="/blog">Blog</a><a href="/jobs">Jobs</a>
+    <template #trailing>Follow us</template>
+  </Footer>
 </template>
 `
 
@@ -173,6 +178,7 @@ const sigs = {
   tb: (el) => fd(el) + '/' + fd(el.querySelector('.weft-tabs__list')),
   pg5: (el) => [...el.querySelectorAll('li')].filter(shown).map((li) => li.textContent.trim() || li.querySelector('[aria-label]')?.getAttribute('aria-label')).join(' '),
   tbl: (el) => shown(el.querySelector('table')) ? 'table' : shown(el.querySelector('.weft-table__cards')) ? 'cards' : '-',
+  ft: (el) => fd(el.querySelector('.weft-footer__row')),
 };
 const tick = () => {
   for (const id in sigs) {
@@ -484,22 +490,22 @@ describe.skipIf(!browserPath)('width-adaptive components on a static page, in a 
 
   it('inside an island, nothing painted flips while hydrating, at 375 and 1440 px (Table aside, which turns into cards once hydrated)', async () => {
     for (const [width, want] of [
-      [375, { st: ['column'], tl: ['column'], tb: ['column/row'], pg5: ['Previous page 1 … 4 5 6 … 20 Next page'], tbl: ['table', 'cards'] }],
-      [1440, { st: ['row'], tl: ['row'], tb: ['row/column'], pg5: ['First page Previous page 1 2 3 4 5 6 7 … 20 Next page Last page'], tbl: ['table'] }],
+      [375, { st: ['column'], tl: ['column'], tb: ['column/row'], pg5: ['Previous page 1 … 4 5 6 … 20 Next page'], tbl: ['table', 'cards'], ft: ['column'] }],
+      [1440, { st: ['row'], tl: ['row'], tb: ['row/column'], pg5: ['First page Previous page 1 2 3 4 5 6 7 … 20 Next page Last page'], tbl: ['table'], ft: ['row'] }],
     ] as const) {
       await openAt('/island', width, 400)
       const res = await evaluate<{ painted: Record<string, string[]>; widths: Record<string, (string | null)[]>; hydrated: boolean; cls: number; pageErrors: string[] }>(`({
         painted: window.__painted,
         widths: window.__widths,
-        hydrated: document.querySelector('#st').hasAttribute('data-weft-width'),
+        hydrated: document.querySelector('#st').hasAttribute('data-weft-width') && document.querySelector('#ft').hasAttribute('data-weft-width'),
         cls: window.__cls,
         pageErrors: window.__pageErrors,
       })`)
       expect(res.hydrated, `hydrated at ${width}`).toBe(true)
       expect(res.painted, `painted at ${width}`).toEqual(want)
-      // data-width changes once, by the pre-paint script, and never back to "wide" while hydrating.
+      // data-width changes once, by the pre-paint script, and never back to "wide" while hydrating (Footer included).
       const w = width === 375 ? ['wide>narrow'] : []
-      expect({ st: res.widths.st ?? [], tl: res.widths.tl ?? [], tb: res.widths.tb ?? [] }, `data-width at ${width}`).toEqual({ st: w, tl: w, tb: w })
+      expect({ st: res.widths.st ?? [], tl: res.widths.tl ?? [], tb: res.widths.tb ?? [], ft: res.widths.ft ?? [] }, `data-width at ${width}`).toEqual({ st: w, tl: w, tb: w, ft: w })
       expect(res.cls, `cls at ${width}`).toBeLessThan(width === 375 ? 0.1 : 0.001)
       expect(res.pageErrors).toEqual([])
     }

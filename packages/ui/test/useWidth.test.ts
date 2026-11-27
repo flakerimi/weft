@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createVaporApp, nextTick } from 'vue'
 import { NARROW_QUERY, REGULAR_QUERY, widthPrePaint } from '../src/adaptive/useWidth.ts'
 import { ID_SCOPE } from '../src/headless/useId.ts'
@@ -114,6 +114,41 @@ it('widthPrePaint batches all getBoundingClientRect reads before any setAttribut
     host.remove()
   } finally {
     island.remove()
+  }
+})
+
+it('starts useWidth from the pre-hydrated [data-weft-w="<id>"] only inside an island scope (with CSS.escape)', () => {
+  const pageGrid = document.createElement('div')
+  pageGrid.setAttribute('data-width', 'narrow')
+  pageGrid.setAttribute('data-weft-w', 'w-v-0')
+  const oddEl = document.createElement('div')
+  oddEl.setAttribute('data-width', 'regular')
+  oddEl.setAttribute('data-weft-w', 'w-i:0.1-0')
+  document.body.append(pageGrid, oddEl)
+  try {
+    // Client-mounted app outside an island scope must NOT match the page's static w-v-0 element.
+    const { el, unmount } = mount(WidthProbe)
+    expect((el.querySelector('.box') as HTMLElement).dataset.width).toBe('wide')
+    unmount()
+
+    // Inside an island scope, CSS.escape is called on the id and finds the right element.
+    const qsSpy = vi.spyOn(document, 'querySelector')
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    try {
+      const app = createVaporApp(WidthProbe as never)
+      app.provide(ID_SCOPE, { prefix: 'i:0.1', next: 0 })
+      app.mount(host)
+      expect(qsSpy).toHaveBeenCalledWith(`[data-weft-w="${CSS.escape('w-i:0.1-0')}"]`)
+      expect((host.querySelector('.box') as HTMLElement).dataset.width).toBe('regular')
+      app.unmount()
+    } finally {
+      qsSpy.mockRestore()
+      host.remove()
+    }
+  } finally {
+    pageGrid.remove()
+    oddEl.remove()
   }
 })
 
