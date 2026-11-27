@@ -415,6 +415,24 @@ describe('Form', () => {
     expect(document.activeElement).toBe(nick)
   })
 
+  it('does not queue a stale invalid-field focus when setErrors is called on a disabled (non-busy) form', async () => {
+    const disabled = ref(true)
+    const loading = ref(false)
+    const f = render({ disabled: () => disabled.value, loading: () => loading.value })
+    const nick = f.q('.nick input')
+    ;(f.exposed.setErrors as (e: Record<string, string>) => void)({ email: 'That address is taken.' })
+    await settle()
+    disabled.value = false
+    await settle()
+    nick.focus()
+    loading.value = true
+    await settle()
+    loading.value = false
+    await settle()
+    // Focus returns to nick (where it was when loading started), not stolen by email from the earlier disabled setErrors.
+    expect(document.activeElement).toBe(nick)
+  })
+
   it('gives focus back to the field Enter was pressed in even when the handler moves it at once', async () => {
     const f = render({ slow: true, blurs: true })
     type(f.q('.email input'), 'ada@example.com')

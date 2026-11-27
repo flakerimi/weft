@@ -47,10 +47,9 @@ The `auth` module works today, with one role, the owner ([Login](guides/login.md
 
 ## Scaffolding and app blocks
 
-Phase W5, with the blocks the Weft design had in its phase 5:
+`DataTable`, with server-side paging, sorting, debounced search and filtering over the list shape, and `EntityDialog`, which creates and edits records from a form schema, work today ([Components](/components)). Not yet, phase W5:
 
 - `weft scaffold`, which writes `app/<name>/` (the model, the routes and their tests), adds it to `app/modules.go`, and writes a page for it;
-- `DataTable`, with server-side paging, sorting and filtering over the list shape, and `EntityDialog`, which creates and edits records from a form schema; the shop writes them plainly with `Table`, `Dialog` and `Form`;
 - the app template `weft create` writes taking the shop's shape: `data`, `auth` and a resource. It writes the `hello` app today.
 
 ## The browser's rules and Go's

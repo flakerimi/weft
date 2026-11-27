@@ -86,7 +86,7 @@ provideField({
   size: () => props.size,
   blur: () => props.name && form?.blur(props.name),
   input: () => props.name && form?.input(props.name),
-  namedByLabel: () => (namedByLabel.value = true),
+  namedByLabel: (on = true) => (namedByLabel.value = on),
 })
 </script>
 

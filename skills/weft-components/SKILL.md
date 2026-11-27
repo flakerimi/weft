@@ -5,7 +5,7 @@ description: Use before writing or changing the markup of a Weft page, island or
 
 # Choosing and composing Weft components
 
-Weft has 82 Vapor components in `@weft/ui`. Each one adapts to touch or pointer, to a landing page or an app, and to the width of its own container. Pick the right one and compose it; never rebuild it. The catalogue says what each component is for, when not to use it, and what it does on each axis.
+Weft has 84 Vapor components in `@weft/ui`. Each one adapts to touch or pointer, to a landing page or an app, and to the width of its own container. Pick the right one and compose it; never rebuild it. The catalogue says what each component is for, when not to use it, and what it does on each axis.
 
 ## Read the catalogue first
 
@@ -41,7 +41,7 @@ Always read `avoid`: it names the component to use instead. The choices most oft
 | A panel at an edge | `Sheet`; `Drawer` for a touch panel a finger drags away | `Dialog` |
 | A message in place / site-wide / passing | `Alert` / `Banner` / `useToast().add` with one `Toaster` | the others |
 | Views of one thing / sections opened one at a time | `Tabs` / `Accordion` | the other one |
-| Records to sort, choose and page | `Table` | a grid of `Card`s |
+| Records to sort, choose and page | `Table`; `DataTable` for a CRUD resource table with search, filters and dialogs | a grid of `Card`s |
 | Nothing to show / loading failed | `EmptyState` / `ErrorState` | an `Alert` |
 | An app frame | `AppShell` | `Header` and `Footer`, which are for sites |
 | A landing section | `Hero`, `FeatureGrid`, `Pricing`, `Testimonials`, `Faq`, `Cta` | a `Grid` of `Card`s |
@@ -108,6 +108,6 @@ On a page the build renders, a form works only inside an `Island` (see `weft-sit
 
 Planned, not built, so do not look for them (phases at https://weft.base.al/docs/coming-next):
 
-- `DataTable`, `EntityDialog`, the charts and `Image`. Use `Table`, `Dialog` with a `Form`, and `StatCard` today;
+- The charts and `Image`. Use `StatCard` today;
 - `weft mcp`, which will serve the catalogue to agents over MCP; run `weft catalog` instead;
 - `weft check` and `@weft/eslint-plugin`, which will flag raw HTML controls; check your markup against the rules above.

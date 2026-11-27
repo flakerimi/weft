@@ -20,6 +20,7 @@ const props = withDefaults(
     selectable?: boolean
     perPage?: number
     search?: string
+    searchDebounce?: number
     filters?: Record<string, string>
     loading?: boolean
     keyboard?: boolean
@@ -67,6 +68,7 @@ defineExpose({ searchText, filterValues, sort, selected, page, errors, table })
         :selectable="selectable"
         :per-page="perPage"
         :search="searchText"
+        :search-debounce="searchDebounce"
         :filters="filterValues"
         :loading="loading"
         :keyboard="keyboard"

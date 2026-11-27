@@ -24,7 +24,7 @@ and answers the wire format's whole list, `{ items, total, page, per_page }`
 (`page` and `per_page` are optional), so paging, sorting, searching and
 filtering happen on the server. A list function from the generated client
 fits as it is: `:fetch="api.products.list"`. Give the search text as
-`search` (sent as `q`) and the filters as `filters` (`{ plan: 'pro' }`,
+`search` (sent as `q`, debounced by `search-debounce`, default 250 ms; clearing `search` asks at once) and the filters as `filters` (`{ plan: 'pro' }`,
 sent as `filter`); a change asks again. Clearing a filter is setting it to
 an empty string or leaving it out: a filter with no value is not sent, and
 `{ status: '' }` is the same query as `{}`. With `rows` and no `fetch`,
