@@ -37,6 +37,11 @@ const (
 	pageURLLine = "weft: dev server at "
 )
 
+// errNoJob wraps a Windows Job Object creation, configuration, assignment or
+// thread-resume failure from startGroup, so weft dev can report it directly
+// instead of suggesting pnpm install.
+var errNoJob = errors.New("cannot put process in a Windows Job Object")
+
 // devReadyWithin is how long the Go server and the page server have to
 // answer once started; tests shorten it.
 var devReadyWithin = 30 * time.Second
@@ -211,6 +216,9 @@ func dev(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	pages, err := startChild("the page server", cmd)
 	if err != nil {
 		api.stop()
+		if errors.Is(err, errNoJob) {
+			return fail(stderr, "dev", fmt.Errorf("cannot put the page server in a Windows Job Object (%v); run weft dev from a console that is not in a restricted job", err))
+		}
 		return fail(stderr, "dev", fmt.Errorf("cannot run pnpm exec weft-dev (%v); run pnpm install in %s and run weft dev again", err, appDir))
 	}
 	stopAll := func() {

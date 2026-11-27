@@ -37,16 +37,16 @@ const (
 )
 
 var (
-	kernel32                    = syscall.NewLazyDLL("kernel32.dll")
-	procCreateJobObjectW        = kernel32.NewProc("CreateJobObjectW")
-	procSetInformationJobObj    = kernel32.NewProc("SetInformationJobObject")
-	procQueryInformationJobObj  = kernel32.NewProc("QueryInformationJobObject")
-	procAssignProcessToJob      = kernel32.NewProc("AssignProcessToJobObject")
-	procTerminateJobObject      = kernel32.NewProc("TerminateJobObject")
-	procThread32First           = kernel32.NewProc("Thread32First")
-	procThread32Next            = kernel32.NewProc("Thread32Next")
-	procOpenThread              = kernel32.NewProc("OpenThread")
-	procResumeThread            = kernel32.NewProc("ResumeThread")
+	kernel32                   = syscall.NewLazyDLL("kernel32.dll")
+	procCreateJobObjectW       = kernel32.NewProc("CreateJobObjectW")
+	procSetInformationJobObj   = kernel32.NewProc("SetInformationJobObject")
+	procQueryInformationJobObj = kernel32.NewProc("QueryInformationJobObject")
+	procAssignProcessToJob     = kernel32.NewProc("AssignProcessToJobObject")
+	procTerminateJobObject     = kernel32.NewProc("TerminateJobObject")
+	procThread32First          = kernel32.NewProc("Thread32First")
+	procThread32Next           = kernel32.NewProc("Thread32Next")
+	procOpenThread             = kernel32.NewProc("OpenThread")
+	procResumeThread           = kernel32.NewProc("ResumeThread")
 )
 
 // jobObjectBasicLimitInformation is Windows' JOBOBJECT_BASIC_LIMIT_INFORMATION.
@@ -138,7 +138,9 @@ func callErr(err error) error {
 // children). Setting JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE also ensures that when
 // the job handle is closed — including when weft dev exits, is killed hard or
 // has its console closed — Windows terminates every remaining process in the
-// job. mu is held across each TerminateJobObject and unpin.
+// job. mu guards the jobs map and each TerminateJobObject call; killTree polls
+// jobGone outside mu before unpin closes the handle, which is safe because no
+// two callers stop or unpin the same cmd concurrently.
 var (
 	mu   sync.Mutex
 	jobs = map[*exec.Cmd]syscall.Handle{}
@@ -227,7 +229,7 @@ func resumeProcessThreads(pid uint32) error {
 func startGroup(cmd *exec.Cmd) error {
 	job, err := newKillOnCloseJob()
 	if err != nil {
-		return fmt.Errorf("cannot put it in a Job Object (%w)", err)
+		return fmt.Errorf("%w: %v", errNoJob, err)
 	}
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
@@ -244,15 +246,22 @@ func startGroup(cmd *exec.Cmd) error {
 		cmd.Process.Kill()
 		cmd.Wait()
 		syscall.CloseHandle(job)
-		return fmt.Errorf("cannot put it in a Job Object (%w)", err)
+		return fmt.Errorf("%w: %v", errNoJob, err)
 	}
 	mu.Lock()
 	jobs[cmd] = job
 	mu.Unlock()
 	if err := resumeProcessThreads(uint32(cmd.Process.Pid)); err != nil {
-		stopGroup(cmd)
+		// Kill cmd directly before unpin closes the job handle: if the
+		// caller's own process is also in this job (unexpected), TerminateJobObject
+		// would terminate the caller itself.
+		cmd.Process.Kill()
 		cmd.Wait()
-		return fmt.Errorf("cannot put it in a Job Object (%w)", err)
+		mu.Lock()
+		delete(jobs, cmd)
+		mu.Unlock()
+		syscall.CloseHandle(job)
+		return fmt.Errorf("%w: %v", errNoJob, err)
 	}
 	return nil
 }

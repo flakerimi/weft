@@ -166,9 +166,7 @@ func TestJobObjectStopsOrphanedGrandchild(t *testing.T) {
 	// Stopping the exited child unpins and closes its Job Object (with
 	// JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) and waits for the job to empty.
 	c.stop()
-	if handleAlive(grandH) {
-		t.Fatalf("grandchild %d is still alive after child.stop() returned", grandPID)
-	}
+	waitHandlesGone(t, []syscall.Handle{grandH}, time.Second)
 }
 
 // Also test stopGroup while the child is still running after spawning a
@@ -207,9 +205,7 @@ func TestJobObjectStopGroupEndsTree(t *testing.T) {
 		t.Fatalf("grandchild %d is not running before stop()", grandPID)
 	}
 	c.stop()
-	if handleAlive(grandH) {
-		t.Fatalf("grandchild %d is still alive after child.stop() returned", grandPID)
-	}
+	waitHandlesGone(t, []syscall.Handle{grandH}, time.Second)
 }
 
 // When the parent process holding the Job Objects is killed hard via
@@ -220,6 +216,9 @@ func TestJobObjectKillsTreeWhenHolderTerminatedHard(t *testing.T) {
 	treeFile := filepath.Join(t.TempDir(), "tree.pids")
 	holder := exec.Command(os.Args[0], "-test.short", "-test.run=^TestHelperJobHolder$")
 	holder.Env = append(os.Environ(), "WEFT_TEST_HELPER=job-holder", "WEFT_TEST_PID_FILE="+treeFile)
+	var holderOut syncBuffer
+	holder.Stdout, holder.Stderr = &holderOut, &holderOut
+	holder.WaitDelay = time.Second
 	if err := holder.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +230,11 @@ func TestJobObjectKillsTreeWhenHolderTerminatedHard(t *testing.T) {
 		case <-holderDone:
 		default:
 			holder.Process.Kill()
-			<-holderDone
+			select {
+			case <-holderDone:
+			case <-time.After(5 * time.Second):
+				t.Errorf("holder (pid %d) did not exit within 5 s of Kill in cleanup", holder.Process.Pid)
+			}
 		}
 	})
 
@@ -248,8 +251,13 @@ func TestJobObjectKillsTreeWhenHolderTerminatedHard(t *testing.T) {
 				}
 			}
 		}
+		select {
+		case err := <-holderDone:
+			t.Fatalf("holder exited early (%v) before writing pids: %s", err, holderOut.String())
+		default:
+		}
 		if time.Now().After(deadline) {
-			t.Fatal("holder did not write child and grandchild pids within 10 s")
+			t.Fatalf("holder did not write child and grandchild pids within 10 s (alive=%v): %s", handleAlive(holderH), holderOut.String())
 		}
 	}
 	childH := openTrackedProcess(t, childPID)
@@ -279,10 +287,12 @@ func TestHelperSpawnGrandchildAndExit(t *testing.T) {
 	grand := exec.Command(os.Args[0], "-test.short", "-test.run=^TestHelperSleepForever$")
 	grand.Env = append(os.Environ(), "WEFT_TEST_HELPER=sleep-forever")
 	if err := grand.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "grand.Start: %v\n", err)
 		os.Exit(2)
 	}
 	if err := os.WriteFile(os.Getenv("WEFT_TEST_PID_FILE"), []byte(strconv.Itoa(grand.Process.Pid)+"\n"), 0o644); err != nil {
 		grand.Process.Kill()
+		fmt.Fprintf(os.Stderr, "WriteFile: %v\n", err)
 		os.Exit(3)
 	}
 	os.Exit(0)
@@ -295,10 +305,12 @@ func TestHelperSpawnGrandchildAndWait(t *testing.T) {
 	grand := exec.Command(os.Args[0], "-test.short", "-test.run=^TestHelperSleepForever$")
 	grand.Env = append(os.Environ(), "WEFT_TEST_HELPER=sleep-forever")
 	if err := grand.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "grand.Start: %v\n", err)
 		os.Exit(2)
 	}
 	if err := os.WriteFile(os.Getenv("WEFT_TEST_PID_FILE"), []byte(strconv.Itoa(grand.Process.Pid)+"\n"), 0o644); err != nil {
 		grand.Process.Kill()
+		fmt.Fprintf(os.Stderr, "WriteFile: %v\n", err)
 		os.Exit(3)
 	}
 	time.Sleep(time.Minute)
@@ -311,7 +323,9 @@ func TestHelperJobHolder(t *testing.T) {
 	subFile := os.Getenv("WEFT_TEST_PID_FILE") + ".grand"
 	cmd := exec.Command(os.Args[0], "-test.short", "-test.run=^TestHelperSpawnGrandchildAndWait$")
 	cmd.Env = append(os.Environ(), "WEFT_TEST_HELPER=spawn-grandchild-wait", "WEFT_TEST_PID_FILE="+subFile)
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	if err := startGroup(cmd); err != nil {
+		fmt.Fprintf(os.Stderr, "startGroup: %v\n", err)
 		os.Exit(2)
 	}
 	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
@@ -323,6 +337,7 @@ func TestHelperJobHolder(t *testing.T) {
 			}
 		}
 	}
+	fmt.Fprintf(os.Stderr, "timed out waiting for %s\n", subFile)
 	os.Exit(3)
 }
 
@@ -506,7 +521,11 @@ func TestDevStopsWhenKilled(t *testing.T) {
 		case <-done:
 		default:
 			cmd.Process.Kill()
-			<-done
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Errorf("weft.exe (pid %d) did not exit within 5 s of Kill in cleanup", cmd.Process.Pid)
+			}
 		}
 	})
 	for deadline := time.Now().Add(60 * time.Second); !strings.Contains(out.String(), "weft dev: http://localhost:"); time.Sleep(50 * time.Millisecond) {
