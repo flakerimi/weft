@@ -1532,10 +1532,24 @@ func TestPublishSiteWithoutGhInstalled(t *testing.T) {
 		t.Skip("no git")
 	}
 	os.Symlink(git, filepath.Join(bin, "git"))
+	// The system's tools, but never a gh of its own: a CI runner has one in
+	// /usr/bin, so the system folders are linked in tool by tool, gh left out.
+	for _, dir := range []string{"/usr/bin", "/bin", "/usr/sbin", "/sbin"} {
+		entries, _ := os.ReadDir(dir)
+		for _, e := range entries {
+			if e.Name() == "gh" {
+				continue
+			}
+			os.Symlink(filepath.Join(dir, e.Name()), filepath.Join(bin, e.Name())) // the first folder's wins, as on PATH
+		}
+	}
 	for i, kv := range r.env {
 		if strings.HasPrefix(kv, "PATH=") {
-			r.env[i] = "PATH=" + bin + ":/usr/bin:/bin:/usr/sbin:/sbin"
+			r.env[i] = "PATH=" + bin
 		}
+	}
+	if _, err := os.Stat(filepath.Join(bin, "gh")); err == nil {
+		t.Fatal("the test's PATH has a gh")
 	}
 	out, err := r.run("publish-site.sh", "0.0.3")
 	say := "publish: 0.0.3 is pushed and tagged v0.0.3, but gh is not installed, so its GitHub Release is not made; install gh (https://cli.github.com), run gh auth login, then scripts/github-release.sh 0.0.3."
