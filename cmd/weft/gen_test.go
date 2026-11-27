@@ -825,10 +825,33 @@ func TestGenInApp(t *testing.T) {
 	}
 
 	code, out, errs = runCmd("routes")
-	// The frame's routes: auth's four and hello.
-	want := "METHOD  PATH              MODULE  NAME    PERMISSION\n" +
-		"POST    /api/auth/login   auth    login   -\nPOST    /api/auth/logout  auth    logout  -\nGET     /api/auth/me      auth    me      -\n" +
-		"POST    /api/auth/setup   auth    setup   -\nGET     /api/hello        hello   hello   -\n"
+	// The frame's routes: auth's and hello.
+	want := "METHOD  PATH                           MODULE  NAME               PERMISSION\n" +
+		"POST    /api/auth/login                auth    login              -\n" +
+		"POST    /api/auth/logout               auth    logout             -\n" +
+		"POST    /api/auth/logout/everywhere    auth    logout_everywhere  -\n" +
+		"GET     /api/auth/me                   auth    me                 -\n" +
+		"POST    /api/auth/setup                auth    setup              -\n" +
+		"GET     /api/auth/sessions             auth    sessions           -\n" +
+		"DELETE  /api/auth/sessions/{id}        auth    end_session        -\n" +
+		"GET     /api/auth/settings             auth    settings           -\n" +
+		"POST    /api/auth/register             auth    register           -\n" +
+		"POST    /api/auth/forgot               auth    forgot             -\n" +
+		"POST    /api/auth/token                auth    token              -\n" +
+		"POST    /api/auth/password             auth    password           -\n" +
+		"GET     /api/auth/invitations          auth    invitations        users:read\n" +
+		"POST    /api/auth/invitations          auth    invite             users:invite\n" +
+		"DELETE  /api/auth/invitations/{id}     auth    remove_invitation  users:invite\n" +
+		"GET     /api/auth/users                auth    users              users:read\n" +
+		"PATCH   /api/auth/users/{id}           auth    update_user        users:edit\n" +
+		"DELETE  /api/auth/users/{id}           auth    remove_user        users:delete\n" +
+		"DELETE  /api/auth/users/{id}/sessions  auth    end_user_sessions  users:edit\n" +
+		"PATCH   /api/auth/me                   auth    update_me          -\n" +
+		"POST    /api/auth/password/change      auth    change_password    -\n" +
+		"GET     /api/auth/keys                 auth    keys               -\n" +
+		"POST    /api/auth/keys                 auth    create_key         -\n" +
+		"DELETE  /api/auth/keys/{id}            auth    remove_key         -\n" +
+		"GET     /api/hello                     hello   hello              -\n"
 	if code != 0 || out != want {
 		t.Errorf("weft routes: exit %d, stdout %q, stderr %q, want %q", code, out, errs, want)
 	}
