@@ -22,6 +22,15 @@ fail() {
 	exit 1
 }
 
+# --dry-run counts only before the version: one anywhere else, an option this
+# script does not know, or a second argument is refused before anything is
+# done, so a dry run asked for in the wrong place never pushes.
+for arg in "$@"; do
+	case "$arg" in -*) fail "$arg is not taken there (--dry-run goes first, before the version, and nothing else is an option); usage: scripts/rollback-site.sh [--dry-run] <version>." ;; esac
+done
+[ $# -le 1 ] ||
+	fail "takes one version and nothing after it; usage: scripts/rollback-site.sh [--dry-run] <version>."
+
 scripts/version.sh "$version" ||
 	fail "give a version like 0.0.1 or 0.1.0-alpha.1; usage: scripts/rollback-site.sh [--dry-run] <version>."
 tree="$root/site/pushed/$version"
