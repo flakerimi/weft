@@ -187,10 +187,13 @@ func (a *App) Run(ctx context.Context, ln net.Listener, dist fs.FS, opts ...Serv
 
 // serve is Run once the app has started.
 func (a *App) serve(ctx context.Context, ln net.Listener, dist fs.FS, opts ...ServeOption) error {
-	h := a.Handler()
+	// Each request passes every WrapAll once: around the pages and the API
+	// together, the API inside them without its own.
+	h := a.api()
 	if dist != nil {
 		h = serveBuild(dist, h, opts...)
 	}
+	h = a.aroundAll(h)
 
 	srv := newServer(h)
 	served := make(chan error, 1)

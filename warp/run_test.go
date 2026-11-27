@@ -292,6 +292,91 @@ func TestRunServesPagesAndAPI(t *testing.T) {
 	}
 }
 
+// noRedirects is a client that answers a redirect as it is.
+var noRedirects = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+
+// headerOn fetches url and returns its status and the header key.
+func headerOn(t *testing.T, url, key string) (int, string) {
+	t.Helper()
+	resp, err := noRedirects.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	return resp.StatusCode, resp.Header.Get(key)
+}
+
+// pagesAndFile is a page build of a single-page app: index.html and a file.
+var pagesAndFile = fstest.MapFS{"index.html": {Data: []byte("<p>page</p>")}, "robots.txt": {Data: []byte("User-agent: *\n")}}
+
+func TestWrapAllCoversPagesFilesAndAPI(t *testing.T) {
+	app := New(Config{})
+	app.WrapAll(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-All", "on")
+			next.ServeHTTP(w, r)
+		})
+	})
+	app.Handle("GET /x", text("x"))
+	app.Handle("GET /files/{rest...}", text("files"))
+	r := startApp(t, app, pagesAndFile)
+	for path, status := range map[string]int{"/": 200, "/robots.txt": 200, "/somewhere": 200, "/api/x": 200, "/api/nothing": 404, "/api/a//x": 307, "/api/files": 307} {
+		if got, h := headerOn(t, r.url+path, "X-All"); got != status || h != "on" {
+			t.Errorf("%s answers %d with X-All %q, want %d with on", path, got, h, status)
+		}
+	}
+	r.stop(t)
+}
+
+func TestWrapAllOnce(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	app := New(Config{})
+	app.WrapAll(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			calls++
+			mu.Unlock()
+			next.ServeHTTP(w, r)
+		})
+	})
+	app.Handle("GET /x", text("x"))
+	r := startApp(t, app, pagesAndFile)
+	for _, path := range []string{"/", "/api/x"} {
+		mu.Lock()
+		calls = 0
+		mu.Unlock()
+		fetch(t, r.url+path)
+		mu.Lock()
+		if calls != 1 {
+			t.Errorf("one request to %s ran WrapAll %d times, want once", path, calls)
+		}
+		mu.Unlock()
+	}
+	r.stop(t)
+}
+
+func TestWrapStillAPIOnly(t *testing.T) {
+	app := New(Config{})
+	app.Wrap(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Api", "on")
+			next.ServeHTTP(w, r)
+		})
+	})
+	app.Handle("GET /x", text("x"))
+	r := startApp(t, app, pagesAndFile)
+	if _, h := headerOn(t, r.url+"/api/x", "X-Api"); h != "on" {
+		t.Errorf("Wrap is not on the API")
+	}
+	for _, path := range []string{"/", "/robots.txt"} {
+		if _, h := headerOn(t, r.url+path, "X-Api"); h != "" {
+			t.Errorf("Wrap is on %s, a page", path)
+		}
+	}
+	r.stop(t)
+}
+
 func TestRunWithoutDist(t *testing.T) {
 	app := New(Config{})
 	app.Handle("GET /ping", text("pong"))
