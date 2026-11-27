@@ -1,6 +1,6 @@
 <script setup vapor lang="ts">
 import { ref } from 'vue'
-import { Button, EntityDialog, type EntitySchema } from '@weft/ui'
+import { Button, EntityDialog, useDateFields, type EntitySchema } from '@weft/ui'
 
 interface Event {
   id: number
@@ -8,6 +8,9 @@ interface Event {
   due: string | null
   starts: string
 }
+
+// The DatePicker and InputTime for the dialog's dates; without this it draws the browser's own inputs.
+useDateFields()
 
 const open = ref(false)
 const schema: EntitySchema = {

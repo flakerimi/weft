@@ -175,6 +175,7 @@ export {
   type EntitySchema,
 } from './data/entity.ts'
 export { dateToWire, localToWire, wireTimeText, wireToDate, wireToLocal, type WireTimeFormat } from './data/when.ts'
+export { useDateFields } from './data/dateFields.ts'
 export { default as StatCard } from './data/StatCard.vue'
 export type { StatLabels } from './data/stat.ts'
 export { default as Timeline } from './data/Timeline.vue'

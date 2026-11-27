@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import WeftProvider from '../../../src/adaptive/WeftProvider.vue'
 import EntityDialog from '../../../src/data/EntityDialog.vue'
+import { useDateFields } from '../../../src/data/dateFields.ts'
 import Input from '../../../src/forms/Input.vue'
 import type { EntityDialogLabels, EntityFieldConfig, EntityFieldRule, EntitySchema } from '../../../src/data/entity.ts'
 
@@ -41,6 +42,8 @@ const props = withDefaults(
     labels?: Partial<EntityDialogLabels>
     customBody?: boolean
     customNameSlot?: boolean
+    /** Give the dialog the DatePicker and InputTime, as useDateFields does. */
+    dateFields?: boolean
   }>(),
   {
     open: false,
@@ -57,8 +60,10 @@ const props = withDefaults(
     labels: undefined,
     customBody: false,
     customNameSlot: false,
+    dateFields: false,
   },
 )
+if (props.dateFields) useDateFields()
 
 const isOpen = ref(props.open)
 const currentRecord = ref<Item | null>(props.record ?? null)

@@ -2,6 +2,7 @@
 // diffing an edited record against the original for PATCH, and mapping Warp's
 // ApiError shape ({ status, code, message, fields }) onto form field errors
 // and a top-level alert sentence.
+import type { Component, InjectionKey } from 'vue'
 import type { Width } from '../adaptive/detect.ts'
 import type { ChoiceItem } from '../forms/choice.ts'
 import type { FieldRule } from '../forms/schema.ts'
@@ -328,5 +329,14 @@ export function entityProblem(
   }
   return { fields: {}, message: e.message }
 }
+
+/** The date and time controls useDateFields gives the EntityDialogs below it. */
+export interface DateFields {
+  DatePicker: Component
+  FieldGroup: Component
+  FieldTime: Component
+}
+
+export const dateFieldsKey: InjectionKey<DateFields> = Symbol('weft-date-fields')
 
 export type { ChoiceItem, SelectOption }

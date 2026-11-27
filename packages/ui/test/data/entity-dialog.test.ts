@@ -295,7 +295,7 @@ describe('EntityDialog', () => {
     const button = (text: string) => $$('button', $('[role="dialog"]', overlays()!)).find((b) => b.textContent!.trim() === text)!
 
     it('draws a DatePicker for a date, and a DatePicker and an InputTime side by side for a datetime, the time labelled', async () => {
-      await cases({ schema: TIMES, name: 'event' })
+      await cases({ schema: TIMES, name: 'event', dateFields: true })
       expect($$('.weft-date-picker', field('Due'))).toHaveLength(1)
       expect(field('Due').querySelector('.weft-input-time')).toBeNull()
       const group = $('.weft-field-group', field('Starts'))
@@ -314,7 +314,7 @@ describe('EntityDialog', () => {
 
     it('saves a date as midnight UTC and a datetime as its instant in UTC', async () => {
       const create = vi.fn(async (body: ItemInput) => ({ id: 1, ...body }))
-      await cases({ schema: TIMES, name: 'event', create: fn(create) })
+      await cases({ schema: TIMES, name: 'event', dateFields: true, create: fn(create) })
       const nameInput = $<HTMLInputElement>('input[name="name"]', $('[role="dialog"]', overlays()!))
       typeInto(nameInput, 'Launch')
       await typeDate('Due', '3/29/2026')
@@ -333,7 +333,7 @@ describe('EntityDialog', () => {
     it('keeps an untouched date and datetime out of the PATCH, and sends null for an emptied nullable date', async () => {
       const record = { id: 4, name: 'Launch', due: '2026-03-29T00:00:00Z', starts: '2026-03-29T10:00:30Z' } as unknown as Item
       const update = vi.fn(async (id: number, body: Partial<ItemInput>) => ({ ...record, id, ...body }))
-      await cases({ schema: TIMES, record, update: fn(update) })
+      await cases({ schema: TIMES, record, dateFields: true, update: fn(update) })
       expect(dateIn('Due').value).toBe('03/29/2026')
       const [y, mo, d] = wireToLocal('2026-03-29T10:00:30Z')!.date.split('-')
       expect(dateIn('Starts').value).toBe(`${mo}/${d}/${y}`)
@@ -346,8 +346,41 @@ describe('EntityDialog', () => {
       update.mockClear()
       unmount!()
       reset()
-      await cases({ schema: TIMES, record, update: fn(update) })
+      await cases({ schema: TIMES, record, dateFields: true, update: fn(update) })
       await typeDate('Due', '')
+      button('Save').click()
+      await settle()
+      expect(update).toHaveBeenLastCalledWith(4, { due: null })
+    })
+
+    it('draws the browser’s own date and datetime inputs without useDateFields, and saves the same values', async () => {
+      const create = vi.fn(async (body: ItemInput) => ({ id: 1, ...body }))
+      await cases({ schema: TIMES, name: 'event', create: fn(create) })
+      const dialog = $('[role="dialog"]', overlays()!)
+      expect(dialog.querySelector('.weft-date-picker')).toBeNull()
+      expect(dialog.querySelector('.weft-input-time')).toBeNull()
+      const due = $<HTMLInputElement>('input[type="date"]', field('Due'))
+      const starts = $<HTMLInputElement>('input[type="datetime-local"]', field('Starts'))
+      // The field's label is for each, as for any Input.
+      expect($('.weft-form-field__label', field('Starts')).getAttribute('for')).toBe(starts.id)
+      typeInto($<HTMLInputElement>('input[name="name"]', dialog), 'Launch')
+      typeInto(due, '2026-03-29')
+      typeInto(starts, '2026-03-29T09:15')
+      await settle()
+      button('Create').click()
+      await settle()
+      expect(create).toHaveBeenCalledWith({ name: 'Launch', due: '2026-03-29T00:00:00Z', starts: localToWire('2026-03-29', '09:15') })
+
+      const record = { id: 4, name: 'Launch', due: '2026-03-29T00:00:00Z', starts: '2026-03-29T10:00:30Z' } as unknown as Item
+      const update = vi.fn(async (id: number, body: Partial<ItemInput>) => ({ ...record, id, ...body }))
+      unmount!()
+      reset()
+      await cases({ schema: TIMES, record, update: fn(update) })
+      const local = wireToLocal('2026-03-29T10:00:30Z')!
+      expect($<HTMLInputElement>('input[type="date"]', field('Due')).value).toBe('2026-03-29')
+      expect($<HTMLInputElement>('input[type="datetime-local"]', field('Starts')).value).toBe(`${local.date}T${local.time}`)
+      typeInto($<HTMLInputElement>('input[type="date"]', field('Due')), '')
+      await settle()
       button('Save').click()
       await settle()
       expect(update).toHaveBeenLastCalledWith(4, { due: null })
@@ -356,7 +389,7 @@ describe('EntityDialog', () => {
     it('moves a datetime by the time typed into it, in the browser’s zone', async () => {
       const record = { id: 4, name: 'Launch', due: null, starts: '2026-03-29T10:00:00Z' } as unknown as Item
       const update = vi.fn(async (id: number, body: Partial<ItemInput>) => ({ ...record, id, ...body }))
-      await cases({ schema: TIMES, record, update: fn(update) })
+      await cases({ schema: TIMES, record, dateFields: true, update: fn(update) })
       const local = wireToLocal('2026-03-29T10:00:00Z')!
       const minute = $$('[role="spinbutton"]', field('Starts'))[1]!
       minute.focus()
