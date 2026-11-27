@@ -79,7 +79,7 @@ test("formProblem: a bug in the page's own code is logged, and is not a server o
   assert.equal(logged.mock.callCount(), 1)
 })
 
-const owner: User = { id: 1, created_at: '', updated_at: '', email: 'owner@example.com', role: 'owner' }
+const owner: User = { id: 1, created_at: '', updated_at: '', email: 'owner@example.com', name: '', role: 'owner' }
 
 test('sessionFrom: a user, no session, or a server that cannot be reached', async () => {
   assert.deepEqual(await sessionFrom(async () => owner), { user: owner, problem: '' })

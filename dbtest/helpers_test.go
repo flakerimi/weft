@@ -5,6 +5,7 @@ package dbtest
 
 import (
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -55,7 +56,22 @@ func shop[T any](t *testing.T, file string) (*warptest.Client, *data.Store[T]) {
 	return c, s
 }
 
-// clock is a clock a test moves by hand.
-type clock struct{ now time.Time }
+// clock is a clock a test moves by hand. The login does work after it
+// answers, which reads the clock, so it is read and moved under a lock.
+type clock struct {
+	mu  sync.Mutex
+	now time.Time
+}
 
-func (c *clock) Now() time.Time { return c.now }
+func (c *clock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+// set moves the clock to t.
+func (c *clock) set(t time.Time) {
+	c.mu.Lock()
+	c.now = t
+	c.mu.Unlock()
+}

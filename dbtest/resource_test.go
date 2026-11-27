@@ -160,7 +160,7 @@ func TestResourceRoutes(t *testing.T) {
 // Review Focus 2: an update that sends one field.
 func TestResourcePatchWritesSentFields(t *testing.T) {
 	c, s := withResource[Product](t)
-	clk := &clock{time.Date(2026, 11, 25, 9, 0, 0, 0, time.UTC)}
+	clk := &clock{now: time.Date(2026, 11, 25, 9, 0, 0, 0, time.UTC)}
 	data.For(c.App).SetClock(clk.Now)
 	var lamp, desk Product
 	c.Post("/api/products", map[string]any{"name": "Lamp", "price": 12.5, "status": "live"}).Want(201).JSON(&lamp)
@@ -173,11 +173,11 @@ func TestResourcePatchWritesSentFields(t *testing.T) {
 	}
 
 	// 1. One field sent: that field changes, and updated_at, and nothing else.
-	clk.now = clk.now.Add(time.Hour)
+	clk.set(clk.Now().Add(time.Hour))
 	var got Product
 	c.Patch("/api/products/1", map[string]any{"price": 5}).Want(200).JSON(&got)
 	want := lamp
-	want.Price, want.UpdatedAt = 5, clk.now
+	want.Price, want.UpdatedAt = 5, clk.Now()
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("PATCH price answered\n%+v\nwant\n%+v", got, want)
 	}
@@ -229,7 +229,7 @@ func TestResourcePatchWritesSentFields(t *testing.T) {
 	unchanged(desk)
 
 	// Nothing sent: the record as it is, updated_at untouched.
-	clk.now = clk.now.Add(time.Hour)
+	clk.set(clk.Now().Add(time.Hour))
 	c.Patch("/api/products/1", map[string]any{}).Want(200).JSON(&got)
 	if !reflect.DeepEqual(got, lamp) {
 		t.Fatalf("PATCH {} answered %+v, want %+v", got, lamp)
@@ -237,7 +237,7 @@ func TestResourcePatchWritesSentFields(t *testing.T) {
 	unchanged(lamp)
 	// Its own name again is no violation; two fields write two.
 	c.Patch("/api/products/1", map[string]any{"name": "Lamp", "status": "draft"}).Want(200).JSON(&got)
-	if got.Name != "Lamp" || got.Status != "draft" || got.Price != 5 || got.UpdatedAt != clk.now {
+	if got.Name != "Lamp" || got.Status != "draft" || got.Price != 5 || got.UpdatedAt != clk.Now() {
 		t.Fatalf("PATCH two fields answered %+v", got)
 	}
 }

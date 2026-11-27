@@ -112,6 +112,11 @@ func (db *DB) SetClock(now func() time.Time) {
 	db.clock = now
 }
 
+// Now is the time by the database's clock, in UTC: the one the stores write
+// created_at and updated_at by, and the one SetClock sets. A module that
+// keeps times of its own reads it, so a test moves every clock at once.
+func (db *DB) Now() time.Time { return db.now() }
+
 // now is the time by the clock, in UTC.
 func (db *DB) now() time.Time {
 	db.mu.Lock()

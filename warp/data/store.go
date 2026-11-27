@@ -216,3 +216,53 @@ func (s *Store[T]) Delete(ctx context.Context, id int64) error {
 	}
 	return nil
 }
+
+// DeleteBy removes every record whose field, named as in JSON, equals value,
+// and returns how many it removed: none is 0, not an error. value is compared
+// as First compares it.
+func (s *Store[T]) DeleteBy(ctx context.Context, field string, value any) (int, error) {
+	q, d, err := s.ready(ctx)
+	if err != nil {
+		return 0, err
+	}
+	c := s.t.col(field)
+	if c == nil {
+		return 0, fmt.Errorf("data: %s has no field %q to delete by", s.name, field)
+	}
+	arg, err := s.t.lookupValue(d, c, value)
+	if err != nil {
+		return 0, err
+	}
+	return s.deleted(ctx, d, q, s.t.deleteBySQL(d, c), arg)
+}
+
+// DeleteBefore removes every record whose time field, named as in JSON, is
+// before t (a record at t itself stays), and returns how many it removed. A
+// NULL time is before nothing.
+func (s *Store[T]) DeleteBefore(ctx context.Context, field string, t time.Time) (int, error) {
+	q, d, err := s.ready(ctx)
+	if err != nil {
+		return 0, err
+	}
+	c := s.t.col(field)
+	switch {
+	case c == nil:
+		return 0, fmt.Errorf("data: %s has no field %q to delete by", s.name, field)
+	case c.kind != kindTime:
+		return 0, fmt.Errorf("data: %s cannot delete by %q before a time, since it is not a time; name a time field.", s.name, field)
+	}
+	return s.deleted(ctx, d, q, s.t.deleteBeforeSQL(d, c), d.timeValue(t))
+}
+
+// deleted runs a DELETE and returns how many rows it removed.
+func (s *Store[T]) deleted(ctx context.Context, d dialect, q querier, query string, args ...any) (int, error) {
+	res, err := q.ExecContext(ctx, query, args...)
+	if err != nil {
+		return 0, unavailable(ctx, d, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(n), nil
+}

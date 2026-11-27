@@ -39,7 +39,7 @@ It begins with `APP_URL` (see [Configuration](warp.md#configuration)); under `we
 
 The user is `{"id":1,"created_at":…,"updated_at":…,"email":"owner@example.com","role":"owner"}`. The password's hash is kept beside it in the `users` table, and never answered. The table `users` and the type name `User` are the login's: an app's own store on `users` is told to take another table, and an app's own type named `User` to take another name.
 
-Passwords are hashed with PBKDF2-HMAC-SHA256 from Go's standard library, 600,000 iterations and a random salt; an unknown email is checked against a stand-in hash, so both wrong answers take as long. The cookie holds the user's id, the moment the user was made and an expiry, signed with HMAC-SHA256: over plain HTTP it is `session=…; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax`, and over HTTPS it is named `__Host-session` and is `Secure`. Behind a proxy that ends TLS, set `TRUST_PROXY=on` ([Behind a proxy](warp.md#behind-a-proxy)), or the cookie is the plain one. Set it only behind a proxy that writes `X-Forwarded-For` and `X-Forwarded-Proto`: with none in front, a client writes its own address, and so escapes the limit on tries below. A key shorter than 32 bytes reads no cookie at all, so an app served without `Start` signs nobody in.
+Passwords are hashed with PBKDF2-HMAC-SHA256 from Go's standard library, 600,000 iterations and a random salt; an unknown email is checked against a stand-in hash, so both wrong answers take as long. The cookie holds a session's id and a random token, signed with HMAC-SHA256 over both; the `sessions` table keeps the token's hash: over plain HTTP it is `session=…; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax`, and over HTTPS it is named `__Host-session` and is `Secure`. Behind a proxy that ends TLS, set `TRUST_PROXY=on` ([Behind a proxy](warp.md#behind-a-proxy)), or the cookie is the plain one. Set it only behind a proxy that writes `X-Forwarded-For` and `X-Forwarded-Proto`: with none in front, a client writes its own address, and so escapes the limit on tries below. A key shorter than 32 bytes reads no cookie at all, so an app served without `Start` signs nobody in.
 
 ## Guarding routes
 
@@ -56,6 +56,10 @@ data.Resource(app, "/products", store, data.PerAction(auth.Per("products")))
 ```
 
 For tools and tests, `auth.AddUser(ctx, app, email, password, role)` makes a user and `auth.RemoveUser(ctx, app, id)` removes one, whose sessions end at once; both work once the app has started.
+
+## Passwords, sessions and keys
+
+Sessions are kept in the table `sessions`, so `logout` ends its own, `logout_everywhere` ends every one of the user's, and `end_session` ends one. A password change, `change_password` with the current password and a new one, ends the user's other sessions and keeps this one; it keeps their API keys too, since a key is for a program and each can be removed on its own. A password reset, through the link `forgot` mails, is the way back from a stolen password: it ends every session of the user and deletes every API key of theirs, in the same transaction that sets the password.
 
 ## Limits
 
@@ -213,10 +217,10 @@ func Owner(t testing.TB, c *warptest.Client) auth.User
 
 ## What it does not protect against
 
-- **Stolen cookies.** Signing out only clears the cookie in that browser. A copied cookie stays good until it expires (up to `AUTH_SESSION_DAYS`), because nothing is kept on the server: there is no sign-out everywhere and no revoking one session.
-- **Whoever holds `AUTH_SECRET`.** They can sign in as any user, if they also know the user's id and the nanosecond the user was made (both are in any cookie of that user). The secret has no rotation: changing it ends every session at once.
-- **Replacing the database is safe for old cookies.** A cookie names its user's `created_at`, so a fresh database whose user 1 is someone else refuses an old cookie.
-- **Role changes apply at once; password changes would not.** The row is read on each request, so a removed user or a changed role applies to the next request. A signed-in user whose password is changed (once that exists) stays signed in.
+- **Stolen cookies, until the session ends.** A copied cookie works until its session is ended (signing out, `logout_everywhere`, `end_session`, a password change or reset) or expires, up to `AUTH_SESSION_DAYS` after sign-in.
+- **Whoever holds `AUTH_SECRET`, together with a session's token.** The secret signs cookies, so a cookie it did not sign costs the app no database read; but a cookie also carries a session's token, which the `sessions` table keeps only as its hash, so the secret alone signs no one in. With the secret and a copied cookie, a session can be used until it ends, as with any copied cookie. The secret has no rotation: changing it ends every session at once.
+- **Replacing the database is safe for old cookies.** A cookie names a session of its database by its token, kept there as a hash, so a fresh database refuses an old cookie.
+- **Role and password changes apply at once.** The row is read on each request, so a removed user or a changed role applies to the next request; a password change ends the user's other sessions, and a reset all of them and their API keys.
 - **Limits are per process and per address.** The counts (5 per email and address a minute, 30 per address a minute) are in memory: several app processes each keep their own counts, and a restart forgets them; past 10,000 keys per limiter the oldest are dropped; many addresses (a botnet) are not limited together; a client holding a /48 holds many /64 keys.
 - **Anyone sharing the owner's address can lock the owner out**, with 5 wrong tries a minute on the owner's email or 30 tries a minute on any emails. That includes every client when the app is behind a proxy and `TRUST_PROXY` is off, since every request then has the proxy's address.
 - **Spending the CPU.** At most `GOMAXPROCS` hashes run at once, so a flood cannot take every core, but it can still fill the hashing slots. Logins then wait, the owner's included, and get the 503 after 3 seconds.
@@ -225,4 +229,4 @@ func Owner(t testing.TB, c *warptest.Client) auth.User
 - **Same-site requests.** The core refuses a cross-origin state-changing request, same-site ones included. What same-site still allowed was cookie planting, and that is closed under HTTPS only.
 - **`TRUSTED_ORIGINS`.** Every origin listed there is fully trusted for login, setup and every other API request.
 - **A leaked setup link.** Until the owner is set up, anyone with the logged link can become the owner. The token is in the fragment, so it reaches no proxy access log or `Referer`, but the app's own log holds it and must be private.
-- **Missing account features.** There is no second factor, no lockout notice, no password reset, no email verification and no breached-password check. Any 8-character password is accepted.
+- **Missing account features.** There is no second factor, no lockout notice and no breached-password check. Any 8-character password is accepted.
