@@ -31,9 +31,9 @@ myapp/
   main.go               the server (see weft-go)
 ```
 
-The build writes the icon tags in every page's `<head>` itself, one for each of `favicon.ico`, `favicon.svg` and `apple-touch-icon.png` in `web/public/`, with no setting: leave them out of `useHead`.
+The build writes icon tags in every page's `<head>` itself, one for each of `favicon.ico`, `favicon.svg` and `apple-touch-icon.png` in `web/public/`, with no setting: leave them out of `useHead`.
 
-Inside the Weft repository, a site is a workspace package whose `build` script runs `weft-build-pages --root . --out dist`, as `site-src/` does; `weft-dev --root <site>`, from `@weft/vite`, is its page dev server.
+Inside the Weft repository, a site is a workspace package whose `build` script runs `weft-build-pages --root . --out dist` (like `site-src/`); `weft-dev --root <site>`, from `@weft/vite`, is its page dev server.
 
 ## Pages and routes
 
@@ -76,9 +76,9 @@ const props = defineProps<{ slug: string }>()
 </script>
 ```
 
-A page for records made after the build exports `runtime = true` instead: it is built once, as a shell served for every path its pattern matches that no other page has. An island on it reads the params in the browser with `useParams()`, in `onMounted`.
+A page for records made after the build exports `runtime = true` instead: built once, it is served as a shell for every matching path no other page has. An island on it reads the params in the browser with `useParams()`, in `onMounted`.
 
-`useHead({ title, description, image })` writes the `<title>`, the description and the Open Graph tags. Every page also gets speculation rules and view transitions.
+`useHead({ title, description, image })` writes `<title>`, description and Open Graph tags. Every page also gets speculation rules and view transitions.
 
 ## Islands: the only JavaScript
 
@@ -90,9 +90,9 @@ Wrap only what must run in the browser, such as a form, a menu or a dialog:
 
 - `when` is `load`, `idle`, `visible` or `media`. With `media`, also give `media="(min-width: 1024px)"`.
 - The island's file name is its id: two islands may not share one.
-- Props must survive JSON: strings, finite numbers, booleans, `null`, arrays and plain objects. Anything else fails the build, naming the prop.
+- Props must survive JSON: strings, finite numbers, booleans, `null`, arrays and plain objects; anything else fails the build, naming the prop.
 - The server renders the island too, so it shows before any script runs. Read input and width through `useWeft()` and `useWidth()`, which answer `pointer` and `wide` on the server.
-- `usePrePaint(id, code)` runs before the first paint: to copy a stored preference onto `<html>`, or, as `Form` does, to stop a submit before the island is live. So a `Form` belongs in an island.
+- `usePrePaint(id, code)` runs before the first paint: to copy a stored preference onto `<html>`, or, as `Form` does, to stop a submit before the island is live (so `Form` belongs in an island).
 
 To list the pages that load JavaScript:
 
@@ -112,7 +112,7 @@ export default { docs: { schema: { section: 'string?' } } } satisfies ContentCon
 
 - Every page needs `title` and `description`. `order` is optional, and the `schema` adds fields of its own.
 - A collection takes `base`, the route it is served at (default `/<name>`); `dir`, a folder outside `content/` such as `../skills`; `index`, the file that is its folder's page, such as `SKILL.md`; and `titleField`, which reads the title from another field, such as `name`.
-- A collection's folder holds only pages and their images; any other file fails the build, so a skill kept as a collection (`skills/<name>/SKILL.md`) cannot yet carry supporting files such as scripts or templates.
+- A collection's folder holds only pages and their images; any other file fails the build, so a skill kept as a collection (`skills/<name>/SKILL.md`) cannot yet carry supporting files like scripts or templates.
 
 Pages read content on the server only, from `virtual:weft/content`:
 
@@ -132,7 +132,7 @@ import { useFile } from 'virtual:weft/files'
 useFile('/catalog.json', text)
 ```
 
-The path starts with `/` and may not be under `/pages/` or `/assets/`. Two pages may write one file only with the same bytes.
+The path starts with `/` and is not under `/pages/` or `/assets/`. Two pages may write one file only with identical bytes.
 
 ## Checks that fail the build
 

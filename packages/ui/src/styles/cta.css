@@ -1,9 +1,8 @@
 /* Cta: a call-to-action panel in card, soft, solid or plain form. Vertical
    stacks copy and actions; horizontal puts the copy at the inline start and
-   the actions or aside at the inline end when regular or wide (640 px and up),
-   stacking when narrow, in CSS first through @container. */
+   the actions or aside at the inline end when regular or wide (640 px and up,
+   data-width="regular" or "wide"), stacking when narrow. */
 .weft-cta {
-  container-type: inline-size;
   inline-size: 100%;
   max-inline-size: var(--weft-page-max, 1200px);
   margin-inline: auto;
@@ -15,8 +14,11 @@
   display: grid;
   gap: var(--weft-space-6, 24px);
   align-items: center;
-  padding: clamp(var(--weft-space-6, 24px), 5cqi, 48px);
+  padding: clamp(var(--weft-space-6, 24px), 5vw, 48px);
   border-radius: var(--weft-radius-panel, 16px);
+}
+.weft-cta[data-width="narrow"] .weft-cta__box {
+  padding: var(--weft-space-6, 24px);
 }
 .weft-cta[data-variant="card"] .weft-cta__box {
   background: var(--weft-color-surface-raised, Canvas);
@@ -34,14 +36,12 @@
 .weft-cta[data-variant="plain"] .weft-cta__box {
   padding-inline: 0;
 }
-@container (min-width: 640px) {
-  .weft-cta[data-orientation="horizontal"] .weft-cta__box {
-    grid-template-columns: minmax(0, 1fr) auto;
-    justify-content: space-between;
-  }
-  .weft-cta[data-orientation="horizontal"] .weft-cta__actions--end {
-    justify-content: flex-end;
-  }
+.weft-cta[data-orientation="horizontal"]:is([data-width="regular"], [data-width="wide"]) .weft-cta__box {
+  grid-template-columns: minmax(0, 1fr) auto;
+  justify-content: space-between;
+}
+.weft-cta[data-orientation="horizontal"]:is([data-width="regular"], [data-width="wide"]) .weft-cta__actions--end {
+  justify-content: flex-end;
 }
 .weft-cta__copy {
   display: flex;
@@ -66,11 +66,14 @@
 .weft-cta__title {
   margin: 0;
   max-inline-size: 28ch;
-  font-size: clamp(1.5rem, 3cqi, 2.25rem);
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
   font-weight: var(--weft-weight-title, 700);
   line-height: 1.1;
   letter-spacing: -0.025em;
   text-wrap: balance;
+}
+.weft-cta[data-width="narrow"] .weft-cta__title {
+  font-size: 1.5rem;
 }
 .weft-cta__description {
   margin: 0;
@@ -89,6 +92,15 @@
   align-items: center;
   gap: var(--weft-space-3, 12px);
   margin-block-start: var(--weft-space-1, 4px);
+  max-inline-size: 100%;
+}
+.weft-cta__actions .weft-button {
+  white-space: normal;
+  block-size: auto;
+  min-block-size: max(var(--weft-control-lg, 44px), var(--weft-hit-min, 24px));
+  padding-block: var(--weft-space-2, 8px);
+  text-align: center;
+  max-inline-size: 100%;
 }
 .weft-cta[data-align="center"] .weft-cta__actions {
   justify-content: center;
@@ -97,17 +109,22 @@
   margin-block-start: 0;
 }
 /* On a solid fill, an outlined or ghost button draws in the fill's foreground
-   so it stays readable across every theme and scheme. */
+   so it stays readable across every theme and scheme, at rest and on hover,
+   and the focus ring uses the foreground colour so it contrasts with the fill. */
+.weft-cta[data-variant="solid"] :focus-visible {
+  outline-color: var(--weft-tone-fg, Canvas);
+}
 .weft-cta[data-variant="solid"] .weft-button[data-variant="outline"] {
   color: var(--weft-tone-fg, Canvas);
-  border-color: color-mix(in srgb, var(--weft-tone-fg, Canvas) 50%, transparent);
+  border-color: color-mix(in srgb, var(--weft-tone-fg, Canvas) 55%, transparent);
 }
 .weft-cta[data-variant="solid"] .weft-button[data-variant="ghost"] {
   color: var(--weft-tone-fg, Canvas);
 }
 @media (hover: hover) {
   .weft-cta[data-variant="solid"] .weft-button:not(:disabled, [aria-disabled="true"]):hover:is([data-variant="outline"], [data-variant="ghost"]) {
-    background: color-mix(in srgb, var(--weft-tone-fg, Canvas) 14%, transparent);
+    background: var(--weft-tone-hover, var(--weft-tone, LinkText));
+    border-color: var(--weft-tone-fg, Canvas);
   }
 }
 .weft-cta__aside {

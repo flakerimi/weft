@@ -61,7 +61,7 @@ onMounted(() => {
   viewport.value = document.documentElement
   mounted.value = true
 })
-const width = useWidth(viewport)
+const width = useWidth(viewport, { prepaint: false })
 const compact = computed(() => width.value === 'narrow' && !!slots.menu)
 const open = useControllable(props, 'open', emit, false)
 const id = useId('header')

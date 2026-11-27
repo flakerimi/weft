@@ -114,7 +114,7 @@ onMounted(() => {
   }
 })
 watch(collapsed, (on) => persist && mounted.value && writeCollapsed(persist, on))
-const width = useWidth(viewport)
+const width = useWidth(viewport, { prepaint: false })
 /** Unset until mounted: CSS picks from the viewport. */
 const layout = computed(() => {
   if (!mounted.value) return undefined

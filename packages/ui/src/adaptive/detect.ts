@@ -47,9 +47,13 @@ export function sharedInput(): Readonly<Ref<Input>> {
   return shared
 }
 
+/** Breakpoints (in px) where a container's width class moves from narrow to regular and from regular to wide. */
+export const NARROW_MAX = 640
+export const REGULAR_MAX = 1024
+
 /** Width class of a container: under 640 px narrow, under 1024 px regular, else wide. */
 export function widthOf(px: number): Width {
-  if (px < 640) return 'narrow'
-  if (px < 1024) return 'regular'
+  if (px < NARROW_MAX) return 'narrow'
+  if (px < REGULAR_MAX) return 'regular'
   return 'wide'
 }

@@ -28,12 +28,13 @@ describe('Grid', () => {
   beforeEach(() => { ro = installResizeObserver() })
   afterEach(() => ro.restore())
 
-  it('picks columns for its own width and emits container-query column variables', async () => {
+  it('picks columns for its own width and emits per-width column variables on its single grid root', async () => {
     const g = first('grid-default', '.weft-grid')
     expect(g.style.getPropertyValue('--weft-grid-cols-narrow')).toBe('1')
     expect(g.style.getPropertyValue('--weft-grid-cols-regular')).toBe('2')
     expect(g.style.getPropertyValue('--weft-grid-cols-wide')).toBe('3')
-    expect(g.querySelector('.weft-grid__inner')?.getAttribute('data-gap')).toBe('4')
+    expect(g.getAttribute('data-gap')).toBe('4')
+    expect(g.querySelector('.weft-grid__inner')).toBeNull()
     ro.report(g, 500)
     await nextTick()
     expect(g.dataset.width).toBe('narrow')

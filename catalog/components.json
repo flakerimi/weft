@@ -2578,7 +2578,7 @@
       "adapts": {
         "input": "Action buttons use size lg, at least --weft-hit-min (44 px) tall on pointer and touch alike.",
         "surface": "On a landing surface its container is capped at --weft-page-max (1200 px) with the landing type scale; in an app it runs full width.",
-        "width": "Adapts in CSS first from the block's own container width (@container); a horizontal CTA puts its copy and actions (or aside) side by side when regular or wide (640 px and up), and stacks them when narrow."
+        "width": "Measured from the block's own box (useWidth, before paint and on resize); a horizontal CTA puts its copy and actions (or aside) side by side when regular or wide (640 px and up), and stacks them when narrow."
       },
       "props": [
         {
@@ -3821,8 +3821,8 @@
       "avoid": "When you only need the bare collapsible list without a section heading or side-by-side layout, use Accordion directly.",
       "adapts": {
         "input": "Each question header is a full-width Accordion button, at least --weft-hit-min (44 px) tall on touch.",
-        "surface": "On a landing surface its container is capped at --weft-page-max (1200 px) with the landing type scale; in an app it runs full width.",
-        "width": "Adapts in CSS first from the block's own container width (@container); a horizontal FAQ places the header and aside in a column beside the questions when wide (1024 px and up) and stacks them above when regular or narrow."
+        "surface": "On a landing surface its container is capped at --weft-page-max (1200 px) with its own block and inline padding (omitted inside a Page, Section or Container); in an app it runs full width.",
+        "width": "Measured from the block's own box (useWidth, before paint and on resize); a horizontal FAQ places the header and aside in a column beside the questions when wide (1024 px and up) and stacks them above when regular or narrow."
       },
       "props": [
         {
@@ -3979,8 +3979,8 @@
       "avoid": "For key numbers on a dashboard, use StatCard in a Grid; for tabular records, use Table.",
       "adapts": {
         "input": "Any item link (`to`, with or without `linkLabel`) renders as a standalone Link, reaching --weft-hit-min (44 px) on touch.",
-        "surface": "On a landing surface its container is capped at --weft-page-max (1200 px) with the landing type scale; in an app it runs full width.",
-        "width": "The inner Grid adapts in CSS first from its own container width (@container), reflowing by default from 1 column narrow (under 640 px) to 2 regular (under 1024 px) to 3 wide."
+        "surface": "On a landing surface its container is capped at --weft-page-max (1200 px) with its own block and inline padding (omitted inside a Page, Section or Container); in an app it runs full width.",
+        "width": "The inner Grid measures its own box (useWidth, before paint and on resize), reflowing by default from 1 column narrow (under 640 px) to 2 regular (under 1024 px) to 3 wide."
       },
       "props": [
         {
@@ -4678,7 +4678,7 @@
       "adapts": {
         "input": "Nothing changes.",
         "surface": "Nothing changes.",
-        "width": "Adapts in CSS first from the grid's own container width (@container), not the window, so a grid in a side panel or static page stays narrow on a large screen; by default 1 column narrow (under 640 px), 2 regular (under 1024 px) and 3 wide."
+        "width": "Measured from the grid's own box (useWidth, before paint through its pre-paint observer and on resize), not the window, so a grid in a side panel or static page stays narrow on a large screen; by default 1 column narrow (under 640 px), 2 regular (under 1024 px) and 3 wide."
       },
       "props": [
         {
@@ -4820,7 +4820,7 @@
       "adapts": {
         "input": "Action buttons use size lg, at least --weft-hit-min (44 px) tall on pointer and touch alike.",
         "surface": "On a landing surface its container is capped at --weft-page-max (1200 px) with the larger landing type scale; in an app it runs full width.",
-        "width": "Adapts in CSS first from the hero's own container width (@container); a horizontal hero puts the copy and visual side by side when wide (1024 px and up) and stacks the copy above the visual when regular or narrow."
+        "width": "Measured from the hero's own box (useWidth, before paint and on resize); a horizontal hero puts the copy and visual side by side when wide (1024 px and up) and stacks the copy above the visual when regular or narrow."
       },
       "props": [
         {
@@ -6831,8 +6831,8 @@
       "avoid": "For a full matrix of dozens of rows across plans, pair Pricing with a Table below it; for a single product card, use Card.",
       "adapts": {
         "input": "The ToggleGroup cycle buttons and each plan's call-to-action Button are at least --weft-hit-min (44 px) tall on touch.",
-        "surface": "On a landing surface its container is capped at --weft-page-max (1200 px) with the landing type scale; in an app it runs full width.",
-        "width": "The inner Grid adapts in CSS first from its own container width (@container), stacking plans in 1 column when narrow, up to 2 when regular, and up to the plan count (at most 4) when wide."
+        "surface": "On a landing surface its container is capped at --weft-page-max (1200 px) with its own block and inline padding (omitted inside a Page, Section or Container); in an app it runs full width.",
+        "width": "The inner Grid measures its own box (useWidth, before paint and on resize), stacking plans in 1 column when narrow, up to 2 when regular, and up to the plan count (at most 4) when wide."
       },
       "props": [
         {
@@ -6962,7 +6962,7 @@
           "dynamic": true
         }
       ],
-      "notes": "`plans` are `{ id, title, description, price, period, billingNote, badge,\nhighlight, features, action, slot }`. The section's `title` renders as an\n`h2` by default (`level` changes it to 2–6), and each plan's `title` renders\none heading level deeper (`h3` under `h2`). A plan with `highlight: true`\ndraws an accent border in `tone` and defaults its `action` button to `solid`\n(non-highlighted plans default to `outline`).\n\n**Billing cycles.** When `cycles` (`{ label, value, badge }[]`) is passed,\n`Pricing` renders a single `ToggleGroup` above the plans, bound with\n`v-model:cycle` (or `defaultCycle`, defaulting to the first cycle's `value`),\nkeeping the active cycle selected if pressed again. Switching cycles runs in\nthe browser, so a `Pricing` with `cycles` needs an `<Island>` around it; a\nstatic `Pricing` with no `cycles` needs no JavaScript. Each plan's `price`,\n`period` and `billingNote` can be a plain string (the same for every cycle,\nsuch as `price: '$0'`) or a map keyed by cycle `value` (`price: { monthly:\n'$29', yearly: '$24' }`). A `price` or `period` map that lacks the selected\ncycle leaves that plan's price area empty (never showing another cycle's\nprice) and warns once in development naming the plan and the cycle; a\n`billingNote` map that lacks the selected cycle shows no billing note for\nthat cycle.",
+      "notes": "`plans` are `{ id, title, description, price, period, billingNote, badge,\nhighlight, features, action, slot }`. The section's `title` renders as an\n`h2` by default (`level` changes it to 2–6), and each plan's `title` renders\none heading level deeper (`h3` under `h2`). A plan with `highlight: true`\ndraws an accent border in `tone` and defaults its `action` button to `solid`\n(non-highlighted plans default to `outline`).\n\n**Billing cycles.** When `cycles` (`{ label, value, badge }[]`) is passed,\n`Pricing` renders a single `ToggleGroup` above the plans, bound with\n`v-model:cycle` (or `defaultCycle`, defaulting to the first cycle's `value`),\nkeeping the active cycle selected if pressed again. Switching cycles runs in\nthe browser, so a `Pricing` with `cycles` needs an `<Island>` around it; a\nstatic `Pricing` with no `cycles` needs no island. Each plan's `price`,\n`period` and `billingNote` can be a plain string (the same for every cycle,\nsuch as `price: '$0'`) or a map keyed by cycle `value` (`price: { monthly:\n'$29', yearly: '$24' }`). A `price` or `period` map that lacks the selected\ncycle leaves that plan's price area empty (never showing another cycle's\nprice) and warns once in development naming the plan and the cycle; a\n`billingNote` map that lacks the selected cycle shows no billing note for\nthat cycle.",
       "examples": [
         {
           "name": "basic",
@@ -8864,8 +8864,8 @@
       "avoid": "For a sequence of milestones over time, use Timeline; for capability cards with icons, use FeatureGrid.",
       "adapts": {
         "input": "Nothing changes unless an item sets `to`, which renders as a standalone Link reaching --weft-hit-min (44 px) on touch.",
-        "surface": "On a landing surface its container is capped at --weft-page-max (1200 px) with the landing type scale; in an app it runs full width.",
-        "width": "The inner Grid adapts in CSS first from its own container width (@container), reflowing by default from 1 column narrow (under 640 px) to 2 regular (under 1024 px) to 3 wide."
+        "surface": "On a landing surface its container is capped at --weft-page-max (1200 px) with its own block and inline padding (omitted inside a Page, Section or Container); in an app it runs full width.",
+        "width": "The inner Grid measures its own box (useWidth, before paint and on resize), reflowing by default from 1 column narrow (under 640 px) to 2 regular (under 1024 px) to 3 wide."
       },
       "props": [
         {

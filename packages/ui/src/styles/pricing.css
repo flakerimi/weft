@@ -1,14 +1,16 @@
 /* Pricing: plan cards in a responsive Grid with an optional ToggleGroup cycle
    switch and highlighted tier. */
 .weft-pricing {
-  container-type: inline-size;
   inline-size: 100%;
   max-inline-size: var(--weft-page-max, 1200px);
   margin-inline: auto;
-  padding-block: clamp(var(--weft-space-6, 24px), 5cqi, var(--weft-space-8, 32px));
+  padding-block: clamp(var(--weft-space-6, 24px), 5vw, var(--weft-space-8, 32px));
   padding-inline: clamp(var(--weft-space-4, 16px), 4%, var(--weft-space-8, 32px));
   color: var(--weft-color-text, CanvasText);
   overflow-wrap: anywhere;
+}
+:is(.weft-page, .weft-section, .weft-container) .weft-pricing {
+  padding: 0;
 }
 .weft-pricing__inner {
   display: flex;
@@ -33,7 +35,7 @@
 }
 .weft-pricing__title {
   margin: 0;
-  font-size: clamp(1.5rem, 3cqi, 2.25rem);
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
   font-weight: var(--weft-weight-title, 700);
   line-height: 1.1;
   letter-spacing: -0.025em;
@@ -53,11 +55,12 @@
   border-radius: var(--weft-radius-control, 8px);
 }
 .weft-pricing__cycle-badge { margin-inline-start: var(--weft-space-1, 4px); }
-/* When the cycle button is pressed (solid fill), draw its badge in the
-   button's own foreground so it keeps full contrast over the active fill. */
+/* When the cycle button is pressed (solid fill), draw its badge as an opaque
+   pill in the button's foreground with the tone text on it, so it reaches
+   WCAG AA across every theme and scheme. */
 .weft-pricing__cycle-badge[data-pressed="true"] {
-  color: inherit;
-  background: color-mix(in srgb, currentColor 18%, transparent);
+  background: var(--weft-tone-fg, Canvas);
+  color: var(--weft-tone-text, CanvasText);
 }
 .weft-pricing__plan {
   display: flex;

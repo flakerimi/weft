@@ -15,7 +15,7 @@ Warp (`github.com/flakerimi/weft/warp`, standard library only) is an app's Go ha
 func main() {
 	server := warp.New(warp.FromEnv())
 	server.Use(app.Modules()...)
-	// Serve returns nil once it was asked to stop: that is a clean exit.
+	// nil once asked to stop: clean exit.
 	if err := server.Serve(dist); err != nil {
 		log.Fatal(err)
 	}

@@ -54,6 +54,7 @@ The server cannot know the input or the width. So:
 
 - the theme's CSS follows `(pointer: coarse)` from the first paint, and a page that never loads a script still has 44 px targets on a phone;
 - components read the input as `pointer` until they have mounted, then switch, so a phone hydrates the markup the server drew;
+- components that measure their own box with `useWidth` register one small inline pre-paint script (`<script data-weft-prepaint>`) that sets `data-width` from each element's width before the first paint and on resize without hydration (components that can sit in any box keep this pre-paint measuring; page-spanning chrome uses `{ prepaint: false }` and a viewport `@media` fallback before mounting); with scripts off, they fall back to their `wide` default (or the `width` their `WeftProvider` set);
 - components whose layout changes with the viewport pick it with CSS media queries until they mount.
 
 ## Read the axes yourself

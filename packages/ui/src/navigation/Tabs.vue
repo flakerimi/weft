@@ -100,7 +100,7 @@ const selectedIndex = computed(() => props.items.findIndex((t, i) => valueOf(t, 
 const id = useId('tabs')
 const root = useTemplateRef<HTMLElement>('root')
 const list = useTemplateRef<HTMLElement>('list')
-const width = useWidth(root)
+const width = useWidth(root, { prepaint: false })
 const orientation = computed(() => (props.orientation === 'vertical' && width.value !== 'narrow' ? 'vertical' : 'horizontal'))
 const roving = useRovingFocus(list, {
   get orientation() {

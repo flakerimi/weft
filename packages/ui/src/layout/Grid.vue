@@ -53,8 +53,6 @@ const count = computed(() => colsAt(width.value))
       '--weft-grid-cols-wide': wideCols,
     }"
   >
-    <div class="weft-grid__inner" :data-gap="gap">
-      <slot />
-    </div>
+    <slot />
   </div>
 </template>

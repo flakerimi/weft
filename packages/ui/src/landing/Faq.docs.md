@@ -5,8 +5,8 @@ use: On a landing or pricing page to answer common questions without leaving eve
 avoid: When you only need the bare collapsible list without a section heading or side-by-side layout, use Accordion directly.
 adapts:
   input: Each question header is a full-width Accordion button, at least --weft-hit-min (44 px) tall on touch.
-  surface: On a landing surface its container is capped at --weft-page-max (1200 px) with the landing type scale; in an app it runs full width.
-  width: Adapts in CSS first from the block's own container width (@container); a horizontal FAQ places the header and aside in a column beside the questions when wide (1024 px and up) and stacks them above when regular or narrow.
+  surface: On a landing surface its container is capped at --weft-page-max (1200 px) with its own block and inline padding (omitted inside a Page, Section or Container); in an app it runs full width.
+  width: Measured from the block's own box (useWidth, before paint and on resize); a horizontal FAQ places the header and aside in a column beside the questions when wide (1024 px and up) and stacks them above when regular or narrow.
 ---
 `items` uses `Accordion`'s item shape (`FaqItem = AccordionItem`: `{ label,
 content, value, icon, trailingIcon, disabled, slot }`), so the same array

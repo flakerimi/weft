@@ -6,7 +6,7 @@ avoid: For a single column or row, use Stack; for tabular data, use a table.
 adapts:
   input: Nothing changes.
   surface: Nothing changes.
-  width: Adapts in CSS first from the grid's own container width (@container), not the window, so a grid in a side panel or static page stays narrow on a large screen; by default 1 column narrow (under 640 px), 2 regular (under 1024 px) and 3 wide.
+  width: Measured from the grid's own box (useWidth, before paint through its pre-paint observer and on resize), not the window, so a grid in a side panel or static page stays narrow on a large screen; by default 1 column narrow (under 640 px), 2 regular (under 1024 px) and 3 wide.
 ---
 `cols` is a fixed number or one per width class, `{ narrow, regular, wide }`.
 A width left out falls back to the nearest smaller one given, else to the

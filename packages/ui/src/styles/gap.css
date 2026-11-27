@@ -1,8 +1,8 @@
 /* Gap scale shared by Stack and Grid. */
-:is(.weft-stack, .weft-grid, .weft-grid__inner)[data-gap="0"] { gap: 0; }
-:is(.weft-stack, .weft-grid, .weft-grid__inner)[data-gap="1"] { gap: var(--weft-space-1, 4px); }
-:is(.weft-stack, .weft-grid, .weft-grid__inner)[data-gap="2"] { gap: var(--weft-space-2, 8px); }
-:is(.weft-stack, .weft-grid, .weft-grid__inner)[data-gap="3"] { gap: var(--weft-space-3, 12px); }
-:is(.weft-stack, .weft-grid, .weft-grid__inner)[data-gap="4"] { gap: var(--weft-space-4, 16px); }
-:is(.weft-stack, .weft-grid, .weft-grid__inner)[data-gap="6"] { gap: var(--weft-space-6, 24px); }
-:is(.weft-stack, .weft-grid, .weft-grid__inner)[data-gap="8"] { gap: var(--weft-space-8, 32px); }
+:is(.weft-stack, .weft-grid)[data-gap="0"] { gap: 0; }
+:is(.weft-stack, .weft-grid)[data-gap="1"] { gap: var(--weft-space-1, 4px); }
+:is(.weft-stack, .weft-grid)[data-gap="2"] { gap: var(--weft-space-2, 8px); }
+:is(.weft-stack, .weft-grid)[data-gap="3"] { gap: var(--weft-space-3, 12px); }
+:is(.weft-stack, .weft-grid)[data-gap="4"] { gap: var(--weft-space-4, 16px); }
+:is(.weft-stack, .weft-grid)[data-gap="6"] { gap: var(--weft-space-6, 24px); }
+:is(.weft-stack, .weft-grid)[data-gap="8"] { gap: var(--weft-space-8, 32px); }

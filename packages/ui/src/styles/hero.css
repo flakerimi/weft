@@ -1,10 +1,8 @@
 /* Hero: the opening band of a landing page. Vertical centres the copy above
    any visual; horizontal puts the copy (5fr) beside the visual (7fr) when the
-   hero's own container is wide (1024 px and up), and stacks them when regular
-   or narrow, in CSS first so a static page with no island adapts at every
-   width. */
+   hero's own box is wide (1024 px and up, data-width="wide"), and stacks them
+   when regular or narrow. */
 .weft-hero {
-  container-type: inline-size;
   position: relative;
   isolation: isolate;
   overflow: clip;
@@ -20,18 +18,16 @@
 }
 .weft-hero__inner {
   display: grid;
-  gap: clamp(var(--weft-space-6, 24px), 5cqi, 48px);
+  gap: clamp(var(--weft-space-6, 24px), 5vw, 48px);
   align-items: center;
   inline-size: 100%;
   max-inline-size: var(--weft-page-max, 1200px);
   margin-inline: auto;
-  padding-block: clamp(var(--weft-space-8, 32px), 7cqi, 80px);
+  padding-block: clamp(var(--weft-space-8, 32px), 7vw, 80px);
   padding-inline: clamp(var(--weft-space-4, 16px), 4%, var(--weft-space-8, 32px));
 }
-@container (min-width: 1024px) {
-  .weft-hero[data-orientation="horizontal"] .weft-hero__inner {
-    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  }
+.weft-hero[data-orientation="horizontal"][data-width="wide"] .weft-hero__inner {
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
 }
 .weft-hero__copy {
   display: flex;
@@ -53,11 +49,18 @@
 .weft-hero__title {
   margin: 0;
   max-inline-size: 22ch;
-  font-size: clamp(2rem, 4.2cqi, 3.5rem);
+  font-size: clamp(2rem, 4.2vw, 3.5rem);
   font-weight: var(--weft-weight-title, 700);
   line-height: 1.04;
   letter-spacing: -0.035em;
   text-wrap: balance;
+}
+.weft-hero[data-width="narrow"] .weft-hero__title {
+  font-size: 2rem;
+}
+.weft-hero[data-width="narrow"] .weft-hero__inner {
+  padding-block: var(--weft-space-8, 32px);
+  gap: var(--weft-space-6, 24px);
 }
 .weft-hero__description {
   margin: 0;
@@ -71,6 +74,15 @@
   align-items: center;
   gap: var(--weft-space-3, 12px);
   margin-block-start: var(--weft-space-2, 8px);
+  max-inline-size: 100%;
+}
+.weft-hero__actions .weft-button {
+  white-space: normal;
+  block-size: auto;
+  min-block-size: max(var(--weft-control-lg, 44px), var(--weft-hit-min, 24px));
+  padding-block: var(--weft-space-2, 8px);
+  text-align: center;
+  max-inline-size: 100%;
 }
 .weft-hero[data-align="center"] .weft-hero__actions {
   justify-content: center;

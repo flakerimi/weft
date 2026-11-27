@@ -113,7 +113,7 @@ Every page the build writes has:
 - speculation rules, so the browser fetches a same-site link when the pointer rests on it. Links under `/api` are left out, and so is any link inside an element marked `data-weft-no-prefetch` (or marked so itself), such as a demo whose links name pages that do not exist. A dialog, sheet or menu opened from inside such an element carries the mark with it, so its links are left out too.
 - `@view-transition { navigation: auto; }`, so going from page to page cross-fades in browsers that support it.
 
-A page with no island has no script that loads JavaScript.
+A page with no island has no script that loads hydration JavaScript (a page that renders a width-adaptive component, an `AppShell` with `persist`, a closable `Banner` with an `id`, or a `Form` carries one small inline `<script data-weft-prepaint>` in `<head>`).
 
 Files in `public/` are copied to the root of the build as they are: `public/robots.txt` is `/robots.txt`.
 
@@ -218,7 +218,7 @@ For your editor and `vue-tsc`, the build writes `.weft-types/components.d.ts` in
 
 ## Before the first paint
 
-`usePrePaint(id, code)` adds a few lines of script to the top of the `<head>`, on the pages that render the calling component. It is for two things: copying a stored preference onto `<html>` for CSS to read, as `AppShell` does for its collapsed sidebar, and stopping what the server's markup would do before an island is live, as `Form` does: it cancels every submit of a Weft form until its island takes over. The server's markup must not depend on it. A site with a Content-Security-Policy allows this inline script by its hash, or with `'unsafe-inline'`; [`Form`'s page](/components/form) has its exact text.
+`usePrePaint(id, code)` adds a few lines of script to the top of the `<head>`, on the pages that render the calling component. It is for three things: measuring width-adaptive components (`useWidth`) before the first paint and on resize without hydration, copying a stored preference onto `<html>` for CSS to read, as `AppShell` does for its collapsed sidebar, and stopping what the server's markup would do before an island is live, as `Form` does: it cancels every submit of a Weft form until its island takes over. The server's markup must not depend on it. A site with a Content-Security-Policy allows this inline script by its hash, or with `'unsafe-inline'`; [`Form`'s page](/components/form) has its exact text.
 
 A `Form` sends only through its `@submit` handler, so it belongs in an island: one the page draws with no island around it never sends anything. What a person types, or a password manager fills, before the island is live is kept when it hydrates.
 

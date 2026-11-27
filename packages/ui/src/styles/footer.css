@@ -18,3 +18,8 @@
 .weft-footer__trailing { margin-inline-start: auto; }
 .weft-footer[data-width="narrow"] .weft-footer__row { flex-direction: column; text-align: center; }
 .weft-footer[data-width="narrow"] .weft-footer__trailing { margin-inline-start: 0; }
+/* Before mounting, a narrow viewport stacks the footer's row, as Header does. */
+@media (max-width: 639.98px) {
+  .weft-footer:not([data-weft-width]) .weft-footer__row { flex-direction: column; text-align: center; }
+  .weft-footer:not([data-weft-width]) .weft-footer__trailing { margin-inline-start: 0; }
+}

@@ -6,7 +6,7 @@ avoid: For the top of a landing page, use Hero; for a short notice across the to
 adapts:
   input: Action buttons use size lg, at least --weft-hit-min (44 px) tall on pointer and touch alike.
   surface: On a landing surface its container is capped at --weft-page-max (1200 px) with the landing type scale; in an app it runs full width.
-  width: Adapts in CSS first from the block's own container width (@container); a horizontal CTA puts its copy and actions (or aside) side by side when regular or wide (640 px and up), and stacks them when narrow.
+  width: Measured from the block's own box (useWidth, before paint and on resize); a horizontal CTA puts its copy and actions (or aside) side by side when regular or wide (640 px and up), and stacks them when narrow.
 ---
 `title` renders as an `h2` by default (`level` changes it to 2–6 to fit the
 page's outline), with `headline` above and `description` below. `actions`

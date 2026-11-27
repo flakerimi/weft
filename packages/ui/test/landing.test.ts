@@ -385,31 +385,33 @@ describe('Faq', () => {
   })
 })
 
-describe('Landing CSS rules (container queries, overflow-wrap and contrast)', () => {
+describe('Landing CSS rules (no container-type collapse, overflow-wrap and contrast)', () => {
   let unload: () => void
   beforeEach(() => {
     unload = loadStyles()
   })
   afterEach(() => unload())
 
-  it('sets container-type: inline-size and overflow-wrap: anywhere on the landing blocks and Grid', () => {
+  it('sets overflow-wrap: anywhere without container-type: inline-size on the landing blocks and Grid', () => {
     const m = mount(LandingCases, { case: 'all-blocks-page' })
     for (const sel of ['.weft-hero', '.weft-feature-grid', '.weft-pricing', '.weft-testimonials', '.weft-faq', '.weft-cta']) {
       const el = m.el.querySelector<HTMLElement>(sel)!
       const style = getComputedStyle(el)
-      expect(style.containerType, sel).toBe('inline-size')
+      expect(style.containerType, sel).not.toBe('inline-size')
       expect(style.overflowWrap, sel).toBe('anywhere')
     }
     const grid = m.el.querySelector<HTMLElement>('.weft-grid')!
-    expect(getComputedStyle(grid).containerType).toBe('inline-size')
+    expect(getComputedStyle(grid).containerType).not.toBe('inline-size')
+    expect(getComputedStyle(grid).display).toBe('grid')
     m.unmount()
   })
 
   it('gives Cta solid outline buttons, Cta soft/solid descriptions and Pricing pressed cycle badges high-contrast foreground colours', () => {
     const mSolid = mount(LandingCases, { case: 'cta-solid-horizontal' })
     const outlineBtn = mSolid.el.querySelectorAll<HTMLElement>('.weft-button')[1]!
-    // Draws in --weft-tone-fg rather than neutral text on a solid fill.
+    // Draws in --weft-tone-fg rather than neutral text on a solid fill, with wrap enabled for long labels.
     expect(getComputedStyle(outlineBtn).color).toBe(getComputedStyle(mSolid.el.querySelector('.weft-cta__box')!).color)
+    expect(getComputedStyle(outlineBtn).whiteSpace).toBe('normal')
     expect(getComputedStyle(mSolid.el.querySelector('.weft-cta__description')!).opacity).not.toBe('0.88')
     mSolid.unmount()
 

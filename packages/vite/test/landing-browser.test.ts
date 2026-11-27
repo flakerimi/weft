@@ -1,7 +1,10 @@
-// Browser tests for the landing blocks and Grid on a built static page (zero
-// JavaScript, no <Island>), in narrow 360 px side-by-side boxes on a wide
-// 1440 px page, with long unbroken words at 375 px, and across all three
-// themes and both schemes for WCAG AA contrast (C1, I1–I4).
+// Browser tests for the landing blocks and Grid on a built static page (no
+// <Island>, using useWidth's pre-paint ResizeObserver), in narrow 360 px
+// side-by-side boxes on a wide 1440 px page, inside shrink-to-fit parents
+// (inline-block, positioned popover box, auto grid track, table cell), with
+// long unbroken words and long Hero/Cta button labels at 375 px, and across
+// all three themes and both schemes for WCAG AA contrast at rest, on hover,
+// and on keyboard focus (C1, N1–N4, I1–I4).
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
@@ -26,6 +29,7 @@ function findBrowser(): string | null {
 
 const browserPath = findBrowser()
 const longWord = 'supercalifragilisticexpialidociousunbrokencompoundwordforoverflowtestingatnarrowwidth87c'
+const longBtnLabel = 'Start your free thirty-day trial of the Pro plan today'
 
 const STATIC_PAGE = `<script setup vapor lang="ts">
 import { Card, Cta, FeatureGrid, Hero, Pricing, Testimonials, type FeatureItem, type PricingPlan, type TestimonialItem } from '@weft/ui'
@@ -56,7 +60,7 @@ const quotes: TestimonialItem[] = [
       orientation="horizontal"
       headline="Pre-alpha"
       title="One component tree, every screen"
-      description="Static sections adapt in CSS first."
+      description="Static sections adapt before paint."
       :actions="[{ label: 'Install Weft', to: '/install' }, { label: 'Read docs', to: '/docs' }]"
     >
       <Card>Preview frame</Card>
@@ -115,18 +119,63 @@ const plans = [
 </template>
 `
 
+const SHRINK_PAGE = `<script setup vapor lang="ts">
+import { Card, FeatureGrid, Grid, Pricing, Stack } from '@weft/ui'
+</script>
+
+<template>
+  <main style="padding: 16px; display: flex; flex-direction: column; gap: 32px;">
+    <div>
+      <div id="case-inline-block" style="display: inline-block; border: 1px solid #ccc;">
+        <Grid id="grid-inline-block"><Card>Revenue</Card><Card>Customers</Card><Card>Churn</Card></Grid>
+      </div>
+    </div>
+    <div style="position: relative; height: 120px;">
+      <div id="case-popover" style="position: absolute; top: 0; left: 0; min-inline-size: 8rem; border: 1px solid #ccc;">
+        <Grid id="grid-popover"><Card>Revenue</Card><Card>Customers</Card><Card>Churn</Card></Grid>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: auto 1fr; gap: 16px;">
+      <div id="case-auto-track" style="border: 1px solid #ccc;">
+        <Grid id="grid-auto-track"><Card>Revenue</Card><Card>Customers</Card><Card>Churn</Card></Grid>
+      </div>
+      <div>Sibling 1fr column</div>
+    </div>
+    <table>
+      <tbody>
+        <tr>
+          <td id="case-table-cell" style="border: 1px solid #ccc;">
+            <Grid id="grid-table-cell"><Card>Revenue</Card><Card>Customers</Card><Card>Churn</Card></Grid>
+          </td>
+          <td>Next table cell</td>
+        </tr>
+      </tbody>
+    </table>
+    <Stack id="case-row-stack" direction="row" :gap="4">
+      <Grid id="grid-row-stack"><Card>One</Card><Card>Two</Card></Grid>
+      <Card id="sibling-card">Sibling card</Card>
+    </Stack>
+    <div style="display: grid; justify-items: center;">
+      <FeatureGrid id="fg-shrink" title="Centred FeatureGrid" :items="[{ title: 'Vapor', description: 'Direct DOM' }, { title: 'Go', description: 'One binary' }]" />
+      <Pricing id="pr-shrink" title="Centred Pricing" :plans="[{ title: 'Starter', price: '$0' }, { title: 'Pro', price: '$29' }]" />
+    </div>
+  </main>
+</template>
+`
+
 const LONG_WORD_PAGE = `<script setup vapor lang="ts">
 import { Cta, FeatureGrid, Hero, Pricing, Testimonials } from '@weft/ui'
 const w = '${longWord}'
+const btn = '${longBtnLabel}'
 </script>
 
 <template>
   <main>
-    <Hero :headline="w" :title="w" :description="w" :actions="[{ label: 'Go' }]" />
+    <Hero :headline="w" :title="w" :description="w" :actions="[{ label: btn }, { label: btn }]" />
     <FeatureGrid :title="w" :items="[{ title: w, description: w }]" />
     <Pricing :title="w" :plans="[{ title: w, description: w, price: '$29', badge: 'Tag', features: [w], action: { label: w } }]" />
     <Testimonials :title="w" :items="[{ quote: w, author: w, role: w }]" />
-    <Cta :title="w" :description="w" :actions="[{ label: 'Act' }]" />
+    <Cta :title="w" :description="w" :actions="[{ label: btn }, { label: btn }]" />
   </main>
 </template>
 `
@@ -162,7 +211,7 @@ import CyclesIsland from '../components/CyclesIsland.vue'
 </template>
 `
 
-describe.skipIf(!browserPath)('landing blocks in a real browser (C1, I1–I4)', { timeout: 120_000 }, () => {
+describe.skipIf(!browserPath)('landing blocks in a real browser (C1, N1–N4, I1–I4)', { timeout: 120_000 }, () => {
   let dir: string
   const servers: Server[] = []
   const urls: Record<Theme, string> = { neutral: '', lisa: '', weft: '' }
@@ -195,6 +244,7 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, I1–I4)', 
     symlinkSync(fileURLToPath(new URL('../node_modules', import.meta.url)), join(root, 'node_modules'))
     writeFileSync(join(root, 'pages/static.vue'), STATIC_PAGE)
     writeFileSync(join(root, 'pages/pair.vue'), PAIR_PAGE)
+    writeFileSync(join(root, 'pages/shrink.vue'), SHRINK_PAGE)
     writeFileSync(join(root, 'pages/long.vue'), LONG_WORD_PAGE)
     writeFileSync(join(root, 'components/CyclesIsland.vue'), CYCLES_ISLAND)
     writeFileSync(join(root, 'pages/cycles.vue'), CYCLES_PAGE)
@@ -274,32 +324,39 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, I1–I4)', 
       await new Promise((r) => setTimeout(r, 30))
     }
     await evaluate(`(document.documentElement.dataset.weftScheme = ${JSON.stringify(scheme)}, true)`)
-    await new Promise((r) => setTimeout(r, 40))
+    await new Promise((r) => setTimeout(r, 50))
   }
 
-  it('C1: a built static page with no islands adapts to 1 column at 375 px, 2 at 768 px, and 3 / side-by-side at 1440 px, with no horizontal overflow', async () => {
+  it('C1 & N3: a built static page with no islands adapts to 1 column at 375 px, 2 at 768 px, and 3 / side-by-side at 1024 and 1440 px, with component CSS loaded and no horizontal overflow', async () => {
     const html = readFileSync(join(dir, 'dist-neutral/pages/static/index.html'), 'utf8')
-    // Pure static HTML: no module script on the page.
+    // No island runtime module script, and the pre-paint width observer is in <head>.
     expect(html).not.toContain('type="module"')
+    expect(html).toContain('data-weft-prepaint')
 
     await openAt(`${urls.neutral}/static`, 375)
     const at375 = await evaluate<{
+      gridDisplay: string
       scrollWidth: number
+      fgWidthAttr: string
       fgCols: number
       prCols: number
       teCols: number
       heroStacked: boolean
       ctaStacked: boolean
     }>(`{
+      gridDisplay: getComputedStyle(document.querySelector('#fg .weft-grid')).display,
       scrollWidth: document.documentElement.scrollWidth,
-      fgCols: getComputedStyle(document.querySelector('#fg .weft-grid__inner')).gridTemplateColumns.split(' ').length,
-      prCols: getComputedStyle(document.querySelector('#pr .weft-grid__inner')).gridTemplateColumns.split(' ').length,
-      teCols: getComputedStyle(document.querySelector('#te .weft-grid__inner')).gridTemplateColumns.split(' ').length,
+      fgWidthAttr: document.querySelector('#fg .weft-grid').getAttribute('data-width'),
+      fgCols: getComputedStyle(document.querySelector('#fg .weft-grid')).gridTemplateColumns.split(' ').length,
+      prCols: getComputedStyle(document.querySelector('#pr .weft-grid')).gridTemplateColumns.split(' ').length,
+      teCols: getComputedStyle(document.querySelector('#te .weft-grid')).gridTemplateColumns.split(' ').length,
       heroStacked: getComputedStyle(document.querySelector('#hero-h .weft-hero__inner')).gridTemplateColumns.split(' ').length === 1,
       ctaStacked: getComputedStyle(document.querySelector('#cta-solid .weft-cta__box')).gridTemplateColumns.split(' ').length === 1,
     }`)
     expect(at375).toEqual({
+      gridDisplay: 'grid',
       scrollWidth: 375,
+      fgWidthAttr: 'narrow',
       fgCols: 1,
       prCols: 1,
       teCols: 1,
@@ -308,24 +365,26 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, I1–I4)', 
     })
 
     await openAt(`${urls.neutral}/static`, 768)
-    const at768 = await evaluate<{ fgCols: number; prCols: number; teCols: number; heroStacked: boolean; ctaSplit: boolean }>(`{
-      fgCols: getComputedStyle(document.querySelector('#fg .weft-grid__inner')).gridTemplateColumns.split(' ').length,
-      prCols: getComputedStyle(document.querySelector('#pr .weft-grid__inner')).gridTemplateColumns.split(' ').length,
-      teCols: getComputedStyle(document.querySelector('#te .weft-grid__inner')).gridTemplateColumns.split(' ').length,
+    const at768 = await evaluate<{ fgWidthAttr: string; fgCols: number; prCols: number; teCols: number; heroStacked: boolean; ctaSplit: boolean }>(`{
+      fgWidthAttr: document.querySelector('#fg .weft-grid').getAttribute('data-width'),
+      fgCols: getComputedStyle(document.querySelector('#fg .weft-grid')).gridTemplateColumns.split(' ').length,
+      prCols: getComputedStyle(document.querySelector('#pr .weft-grid')).gridTemplateColumns.split(' ').length,
+      teCols: getComputedStyle(document.querySelector('#te .weft-grid')).gridTemplateColumns.split(' ').length,
       heroStacked: getComputedStyle(document.querySelector('#hero-h .weft-hero__inner')).gridTemplateColumns.split(' ').length === 1,
       ctaSplit: getComputedStyle(document.querySelector('#cta-solid .weft-cta__box')).gridTemplateColumns.split(' ').length === 2,
     }`)
-    expect(at768).toEqual({ fgCols: 2, prCols: 2, teCols: 2, heroStacked: true, ctaSplit: true })
+    expect(at768).toEqual({ fgWidthAttr: 'regular', fgCols: 2, prCols: 2, teCols: 2, heroStacked: true, ctaSplit: true })
 
     await openAt(`${urls.neutral}/static`, 1440)
-    const at1440 = await evaluate<{ fgCols: number; prCols: number; teCols: number; heroSplit: boolean; ctaSplit: boolean }>(`{
-      fgCols: getComputedStyle(document.querySelector('#fg .weft-grid__inner')).gridTemplateColumns.split(' ').length,
-      prCols: getComputedStyle(document.querySelector('#pr .weft-grid__inner')).gridTemplateColumns.split(' ').length,
-      teCols: getComputedStyle(document.querySelector('#te .weft-grid__inner')).gridTemplateColumns.split(' ').length,
+    const at1440 = await evaluate<{ fgWidthAttr: string; fgCols: number; prCols: number; teCols: number; heroSplit: boolean; ctaSplit: boolean }>(`{
+      fgWidthAttr: document.querySelector('#fg .weft-grid').getAttribute('data-width'),
+      fgCols: getComputedStyle(document.querySelector('#fg .weft-grid')).gridTemplateColumns.split(' ').length,
+      prCols: getComputedStyle(document.querySelector('#pr .weft-grid')).gridTemplateColumns.split(' ').length,
+      teCols: getComputedStyle(document.querySelector('#te .weft-grid')).gridTemplateColumns.split(' ').length,
       heroSplit: getComputedStyle(document.querySelector('#hero-h .weft-hero__inner')).gridTemplateColumns.split(' ').length === 2,
       ctaSplit: getComputedStyle(document.querySelector('#cta-solid .weft-cta__box')).gridTemplateColumns.split(' ').length === 2,
     }`)
-    expect(at1440).toEqual({ fgCols: 3, prCols: 3, teCols: 3, heroSplit: true, ctaSplit: true })
+    expect(at1440).toEqual({ fgWidthAttr: 'wide', fgCols: 3, prCols: 3, teCols: 3, heroSplit: true, ctaSplit: true })
   })
 
   it('C1: two static blocks in 360 px boxes on a 1440 px page each adapt to 1 column and stack with no card overflow', async () => {
@@ -347,8 +406,8 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, I1–I4)', 
       }
       return {
         heroStacked: getComputedStyle(document.querySelector('#pair-hero .weft-hero__inner')).gridTemplateColumns.split(' ').length === 1,
-        fgCols: getComputedStyle(document.querySelector('#pair-fg .weft-grid__inner')).gridTemplateColumns.split(' ').length,
-        prCols: getComputedStyle(document.querySelector('#pair-pr .weft-grid__inner')).gridTemplateColumns.split(' ').length,
+        fgCols: getComputedStyle(document.querySelector('#pair-fg .weft-grid')).gridTemplateColumns.split(' ').length,
+        prCols: getComputedStyle(document.querySelector('#pair-pr .weft-grid')).gridTemplateColumns.split(' ').length,
         ctaStacked: getComputedStyle(document.querySelector('#pair-cta .weft-cta__box')).gridTemplateColumns.split(' ').length === 1,
         overflowing,
       }
@@ -362,18 +421,60 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, I1–I4)', 
     })
   })
 
-  it('I4: an 87-character unbroken word wraps inside every block at 375 px without sideways scroll', async () => {
-    await openAt(`${urls.neutral}/long`, 375)
-    const scrollWidth = await evaluate<number>('document.documentElement.scrollWidth')
-    expect(scrollWidth).toBeLessThanOrEqual(375)
+  it('N1 & N2: Grid and landing blocks inside shrink-to-fit parents (inline-block, popover, auto track, table cell, row Stack, centred grid) never collapse to 0 px', async () => {
+    await openAt(`${urls.neutral}/shrink`, 1024)
+    const sizes = await evaluate<{
+      inlineBlock: number
+      popover: number
+      autoTrack: number
+      tableCell: number
+      rowStackGrid: number
+      siblingCard: number
+      fgShrink: number
+      prShrink: number
+    }>(`{
+      inlineBlock: Math.round(document.querySelector('#grid-inline-block').getBoundingClientRect().width),
+      popover: Math.round(document.querySelector('#grid-popover').getBoundingClientRect().width),
+      autoTrack: Math.round(document.querySelector('#grid-auto-track').getBoundingClientRect().width),
+      tableCell: Math.round(document.querySelector('#grid-table-cell').getBoundingClientRect().width),
+      rowStackGrid: Math.round(document.querySelector('#grid-row-stack').getBoundingClientRect().width),
+      siblingCard: Math.round(document.querySelector('#sibling-card').getBoundingClientRect().width),
+      fgShrink: Math.round(document.querySelector('#fg-shrink').getBoundingClientRect().width),
+      prShrink: Math.round(document.querySelector('#pr-shrink').getBoundingClientRect().width),
+    }`)
+    expect(sizes.inlineBlock).toBeGreaterThan(80)
+    expect(sizes.popover).toBeGreaterThan(80)
+    expect(sizes.autoTrack).toBeGreaterThan(80)
+    expect(sizes.tableCell).toBeGreaterThan(80)
+    expect(sizes.rowStackGrid).toBeGreaterThan(60)
+    expect(sizes.rowStackGrid).toBeLessThan(400)
+    expect(sizes.siblingCard).toBeGreaterThan(60)
+    expect(sizes.fgShrink).toBeGreaterThan(400)
+    expect(sizes.prShrink).toBeGreaterThan(400)
   })
 
-  it('I1–I3: Cta solid outline buttons, Cta soft/solid descriptions and Pricing pressed cycle badges meet WCAG AA (>= 4.5:1) in every theme and scheme', async () => {
+  it('I4: an 87-character unbroken word and a 53-character Hero/Cta button label wrap inside every block at 375 px without sideways scroll', async () => {
+    await openAt(`${urls.neutral}/long`, 375)
+    const res = await evaluate<{ scrollWidth: number; heroBtnHeight: number }>(`{
+      scrollWidth: document.documentElement.scrollWidth,
+      heroBtnHeight: Math.round(document.querySelector('.weft-hero__actions .weft-button').getBoundingClientRect().height),
+    }`)
+    expect(res.scrollWidth).toBeLessThanOrEqual(375)
+    expect(res.heroBtnHeight).toBeGreaterThanOrEqual(44)
+  })
+
+  it('I1–I3 & N4: Cta solid outline buttons (rest, hover and focus ring), Cta soft/solid descriptions and Pricing pressed cycle badges meet WCAG AA in every theme and scheme', async () => {
     const contrastHelper = `
-      function parseRgba(s) {
-        const m = s.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)(?:,\\s*([\\d.]+))?\\)/)
-        if (!m) return [0, 0, 0, 0]
-        return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] === undefined ? 1 : Number(m[4])]
+      const canvas = document.createElement('canvas')
+      canvas.width = canvas.height = 1
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })
+      function parseCssColor(s) {
+        if (!s || s === 'transparent' || s === 'rgba(0, 0, 0, 0)') return [0, 0, 0, 0]
+        ctx.clearRect(0, 0, 1, 1)
+        ctx.fillStyle = s
+        ctx.fillRect(0, 0, 1, 1)
+        const d = ctx.getImageData(0, 0, 1, 1).data
+        return [d[0], d[1], d[2], d[3] / 255]
       }
       function blend(fg, bg) {
         const a = fg[3] + bg[3] * (1 - fg[3])
@@ -388,7 +489,7 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, I1–I4)', 
       function effectiveBg(el) {
         const chain = []
         for (let cur = el; cur && cur.nodeType === 1; cur = cur.parentElement) {
-          chain.unshift(parseRgba(getComputedStyle(cur).backgroundColor))
+          chain.unshift(parseCssColor(getComputedStyle(cur).backgroundColor))
         }
         let acc = [255, 255, 255, 1]
         for (const c of chain) acc = blend(c, acc)
@@ -398,29 +499,55 @@ describe.skipIf(!browserPath)('landing blocks in a real browser (C1, I1–I4)', 
         const [r, g, b] = rgb.slice(0, 3).map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
         return 0.2126 * r + 0.7152 * g + 0.0722 * b
       }
+      function contrastRgb(a, b) {
+        const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x)
+        return (hi + 0.05) / (lo + 0.05)
+      }
       function ratioOf(el) {
         const bg = effectiveBg(el)
-        const fg = blend(parseRgba(getComputedStyle(el).color), bg)
-        const [hi, lo] = [lum(fg), lum(bg)].sort((a, b) => b - a)
-        return (hi + 0.05) / (lo + 0.05)
+        const fg = blend(parseCssColor(getComputedStyle(el).color), bg)
+        return contrastRgb(fg, bg)
       }
     `
     for (const theme of ['neutral', 'lisa', 'weft'] as const) {
       for (const scheme of ['light', 'dark'] as const) {
         await openAt(`${urls[theme]}/static`, 1024, scheme)
+        const btnBox = await evaluate<{ x: number; y: number }>(`(() => {
+          const b = document.querySelectorAll('#cta-solid .weft-button')[1].getBoundingClientRect()
+          return { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) }
+        })()`)
+        // Move mouse onto the outline button so :hover rules apply.
+        await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: btnBox.x, y: btnBox.y })
+        // Keyboard focus on the first button in solid Cta so :focus-visible outline applies.
+        await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 })
+        await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 })
+        await evaluate(`(() => {
+          const btn = document.querySelector('#cta-solid .weft-button')
+          btn.focus()
+          return true
+        })()`)
+
         const staticRatios = await evaluate<{
-          solidOutlineBtn: number
+          solidOutlineHoverBtn: number
+          solidFocusRing: number
           solidDesc: number
           softDesc: number
         }>(`(() => {
           ${contrastHelper}
+          const box = document.querySelector('#cta-solid .weft-cta__box')
+          const btn0 = document.querySelectorAll('#cta-solid .weft-button')[0]
+          const btn1 = document.querySelectorAll('#cta-solid .weft-button')[1]
+          const boxBg = effectiveBg(box)
+          const ringColor = parseCssColor(getComputedStyle(btn0).outlineColor)
           return {
-            solidOutlineBtn: ratioOf(document.querySelectorAll('#cta-solid .weft-button')[1]),
+            solidOutlineHoverBtn: ratioOf(btn1),
+            solidFocusRing: contrastRgb(blend(ringColor, boxBg), boxBg),
             solidDesc: ratioOf(document.querySelector('#cta-solid .weft-cta__description')),
             softDesc: ratioOf(document.querySelector('#cta-soft .weft-cta__description')),
           }
         })()`)
-        expect(staticRatios.solidOutlineBtn, `${theme} ${scheme} Cta solid outline button`).toBeGreaterThanOrEqual(4.5)
+        expect(staticRatios.solidOutlineHoverBtn, `${theme} ${scheme} Cta solid outline button on hover`).toBeGreaterThanOrEqual(4.5)
+        expect(staticRatios.solidFocusRing, `${theme} ${scheme} Cta solid focus ring`).toBeGreaterThanOrEqual(3)
         expect(staticRatios.solidDesc, `${theme} ${scheme} Cta solid description`).toBeGreaterThanOrEqual(4.5)
         expect(staticRatios.softDesc, `${theme} ${scheme} Cta soft description`).toBeGreaterThanOrEqual(4.5)
 

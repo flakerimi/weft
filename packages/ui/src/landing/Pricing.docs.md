@@ -5,8 +5,8 @@ use: On a landing or upgrade page to compare plans and let a visitor switch betw
 avoid: For a full matrix of dozens of rows across plans, pair Pricing with a Table below it; for a single product card, use Card.
 adapts:
   input: The ToggleGroup cycle buttons and each plan's call-to-action Button are at least --weft-hit-min (44 px) tall on touch.
-  surface: On a landing surface its container is capped at --weft-page-max (1200 px) with the landing type scale; in an app it runs full width.
-  width: The inner Grid adapts in CSS first from its own container width (@container), stacking plans in 1 column when narrow, up to 2 when regular, and up to the plan count (at most 4) when wide.
+  surface: On a landing surface its container is capped at --weft-page-max (1200 px) with its own block and inline padding (omitted inside a Page, Section or Container); in an app it runs full width.
+  width: The inner Grid measures its own box (useWidth, before paint and on resize), stacking plans in 1 column when narrow, up to 2 when regular, and up to the plan count (at most 4) when wide.
 ---
 `plans` are `{ id, title, description, price, period, billingNote, badge,
 highlight, features, action, slot }`. The section's `title` renders as an
@@ -20,7 +20,7 @@ draws an accent border in `tone` and defaults its `action` button to `solid`
 `v-model:cycle` (or `defaultCycle`, defaulting to the first cycle's `value`),
 keeping the active cycle selected if pressed again. Switching cycles runs in
 the browser, so a `Pricing` with `cycles` needs an `<Island>` around it; a
-static `Pricing` with no `cycles` needs no JavaScript. Each plan's `price`,
+static `Pricing` with no `cycles` needs no island. Each plan's `price`,
 `period` and `billingNote` can be a plain string (the same for every cycle,
 such as `price: '$0'`) or a map keyed by cycle `value` (`price: { monthly:
 '$29', yearly: '$24' }`). A `price` or `period` map that lacks the selected

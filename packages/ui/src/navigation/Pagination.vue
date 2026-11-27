@@ -76,7 +76,7 @@ const count = computed(() => Math.max(0, Math.ceil(props.total / Math.max(1, pro
 // Narrow is the viewport's width: the root element's.
 const viewport = shallowRef<HTMLElement | null>(null)
 onMounted(() => (viewport.value = document.documentElement))
-const width = useWidth(viewport)
+const width = useWidth(viewport, { prepaint: false })
 const narrow = computed(() => width.value === 'narrow')
 const entries = computed(() => pageRange(page.value, count.value, narrow.value ? Math.min(props.siblingCount, 1) : props.siblingCount, props.showEdges))
 

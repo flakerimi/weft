@@ -23,7 +23,7 @@ defineSlots<{
 }>()
 
 const root = useTemplateRef<HTMLElement>('root')
-const width = useWidth(root)
+const width = useWidth(root, { prepaint: false })
 </script>
 
 <template>

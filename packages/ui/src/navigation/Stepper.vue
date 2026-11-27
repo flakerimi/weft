@@ -73,7 +73,7 @@ const currentItem = computed(() => props.items[current.value])
 
 const root = useTemplateRef<HTMLElement>('root')
 const list = useTemplateRef<HTMLElement>('list')
-const width = useWidth(root)
+const width = useWidth(root, { prepaint: false })
 const orientation = computed(() => (props.orientation === 'horizontal' && width.value !== 'narrow' ? 'horizontal' : 'vertical'))
 const roving = useRovingFocus(list, {
   get orientation() {

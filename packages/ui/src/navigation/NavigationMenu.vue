@@ -85,7 +85,7 @@ onMounted(() => {
   viewport.value = document.documentElement
   mounted.value = true
 })
-const width = useWidth(viewport)
+const width = useWidth(viewport, { prepaint: false })
 const horizontal = computed(() => props.orientation === 'horizontal')
 const form = computed<'bar' | 'sheet' | 'column'>(() =>
   !horizontal.value ? 'column' : weft.input.value === 'touch' && width.value === 'narrow' ? 'sheet' : 'bar',
