@@ -16,8 +16,10 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
   links; a count of failed logins per account across addresses; and API keys
   (`API_KEYS=on`). A reset ends every session and deletes the user's API
   keys; a password change ends the other sessions and keeps the keys.
-- The `mail` module prints each message to the log, or sends it over SMTP from
-  a queue in memory; `mailtest` reads it in tests. `auth` needs it: an app made
+- The `mail` module prints each message to standard error, framed and as it
+  is, so a link copies from a terminal (the log gets one line, `mail
+  printed`, with no body), or sends it over SMTP from a queue in memory;
+  `mailtest` reads it in tests. `auth` needs it: an app made
   before lists `mail.Module()` before `auth.Module()` in `app/modules.go`.
 - The `middleware` module adds security headers to every answer, one log line
   per request (`LOG`) and a rate limit on `/api` (`RATE_LIMIT`); `WrapAll`
