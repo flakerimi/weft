@@ -128,8 +128,9 @@ type App struct {
 	routeNames map[string]routeName // a module's name and a route's name to the route
 	needs      []routeNeed          // the modules routes need, by Requires
 	routes     []Route
-	plans      []*plan // each route's binding plan, beside routes; nil for Handle
-	wraps      []func(http.Handler) http.Handler
+	plans      []*plan                           // each route's binding plan, beside routes; nil for Handle
+	wraps      []func(http.Handler) http.Handler // around the API, by Wrap
+	wrapsAll   []func(http.Handler) http.Handler // around everything, by WrapAll
 	provided   map[reflect.Type]any
 	badConfig  []error // the configuration's problems New found, beside cfg.Err
 	mistakes   []error // the registration mistakes
@@ -443,6 +444,25 @@ func (a *App) Wrap(mw func(http.Handler) http.Handler) {
 	a.wraps = append(a.wraps, mw)
 }
 
+// WrapAll puts mw around every request the app answers: its pages, its files
+// and its API, the API's 404s and redirects included, so that a header it
+// sets is on every answer. The first WrapAll given is the outermost, and
+// every WrapAll is outside every Wrap. Handler, the API alone, is inside
+// them too. The App's Serve and Run put them around everything; the
+// package-level Serve, as in warp.Serve(dist, app.Handler()), has them
+// around the API alone, since it wraps only what it is given. A WrapAll
+// after the app started is a mistake, reported by Err.
+func (a *App) WrapAll(mw func(http.Handler) http.Handler) {
+	a.mu.Lock()
+	if a.started {
+		a.mu.Unlock()
+		a.fail("WrapAll was called after the app started; wrap before Serve or Start.")
+		return
+	}
+	defer a.mu.Unlock()
+	a.wrapsAll = append(a.wrapsAll, mw)
+}
+
 // Mistake records a registration mistake found by a package outside the core,
 // such as a module that checks its own types: one sentence that names the
 // thing and says what to do. It is reported with the others by Err, Start and
@@ -486,7 +506,8 @@ func (a *App) Routes() []Route {
 	return slices.Clone(a.routes)
 }
 
-// Handler returns the API alone, at /api/..., inside every Wrap given so far.
+// Handler returns the API alone, at /api/..., inside every Wrap given so far,
+// and those inside every WrapAll.
 // A state-changing request from another site is a 403 before any Wrap runs.
 // A path no route has is a 404 and a method a route does not take is a 405,
 // both in the error shape, and so is the redirect of a path that is not clean
@@ -494,7 +515,11 @@ func (a *App) Routes() []Route {
 // with its status and Location. A panic is logged and answered as a 500.
 // Every answer carries Cache-Control: no-store, so no cache keeps what a
 // session sees, unless the handler sets a Cache-Control of its own.
-func (a *App) Handler() http.Handler {
+func (a *App) Handler() http.Handler { return a.aroundAll(a.api()) }
+
+// api is Handler without the WrapAlls, for serve to put them around the
+// pages and the API at once.
+func (a *App) api() http.Handler {
 	a.mu.Lock()
 	wraps := slices.Clone(a.wraps)
 	a.mu.Unlock()
@@ -503,6 +528,17 @@ func (a *App) Handler() http.Handler {
 		h = wraps[i](h)
 	}
 	return noStore(recoverPanics(refuseCrossSite(a.xo, h)))
+}
+
+// aroundAll puts every WrapAll around h, the first outermost.
+func (a *App) aroundAll(h http.Handler) http.Handler {
+	a.mu.Lock()
+	wraps := slices.Clone(a.wrapsAll)
+	a.mu.Unlock()
+	for i := len(wraps) - 1; i >= 0; i-- {
+		h = wraps[i](h)
+	}
+	return h
 }
 
 // noStore sets Cache-Control: no-store on the answer before h runs, which h

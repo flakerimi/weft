@@ -382,6 +382,42 @@ func TestWrapOrder(t *testing.T) {
 	}
 }
 
+func TestWrapAllOrder(t *testing.T) {
+	var order []string
+	mark := func(name string) func(http.Handler) http.Handler {
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				order = append(order, name)
+				next.ServeHTTP(w, r)
+			})
+		}
+	}
+	app := New(Config{})
+	app.Wrap(mark("wrap"))
+	app.WrapAll(mark("all 1"))
+	app.WrapAll(mark("all 2"))
+	app.Handle("GET /x", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		order = append(order, "handler")
+	}))
+	serve(t, app.Handler(), "GET", "/api/x")
+	if want := []string{"all 1", "all 2", "wrap", "handler"}; !reflect.DeepEqual(order, want) {
+		t.Fatalf("order %v, want %v", order, want)
+	}
+}
+
+func TestWrapAllAfterStart(t *testing.T) {
+	app := New(Config{})
+	if err := app.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer app.Stop(context.Background())
+	app.WrapAll(func(h http.Handler) http.Handler { return h })
+	want := "warp: WrapAll was called after the app started; wrap before Serve or Start."
+	if got := errText(app.Err()); got != want {
+		t.Fatalf("Err() = %q, want %q", got, want)
+	}
+}
+
 // inModule is a module named name whose Register runs register.
 func inModule(name string, register func(app *App)) *testMod {
 	return &testMod{name: name, log: new([]string), register: register}

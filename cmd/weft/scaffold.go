@@ -37,7 +37,7 @@ Types (written, never guessed; none is string):
   int, float                 int64, float64; sorted
   bool                       sorted and filtered
   enum=a,b                   one of the choices, comma-separated; sorted and filtered
-  date, datetime             time.Time, RFC 3339 in JSON; with --api only until 0.2.0
+  date, datetime             time.Time, RFC 3339 in JSON, a pointer unless required; sorted
 Modifiers, after the type in any order:
   nullable    a pointer, which may be null
   required    not on bool or with nullable
@@ -309,12 +309,6 @@ func parseScaffold(args []string) (scaffoldSpec, *scaffoldError) {
 		goNames[pascal(f.Name)] = f.Name
 		spec.Fields = append(spec.Fields, f)
 	}
-	// The pages have no control for a time yet: Go only, with --api.
-	for _, f := range spec.Fields {
-		if !spec.API && (f.Type == "date" || f.Type == "datetime") {
-			return spec, refuse(1, "field %q is a %s, and date and time fields in the pages weft scaffold writes land in Weft 0.2.0; give --api to write only the Go for now.", f.Name, f.Type)
-		}
-	}
 	return spec, nil
 }
 
@@ -422,6 +416,11 @@ func parseField(arg string) (scaffoldField, *scaffoldError) {
 	if f.Required && f.Null {
 		return f, refuse(2, "field %q is nullable, which may be empty, so it cannot be required; remove :nullable or :required.", f.Name)
 	}
+	// A time that is not required is a pointer, so an emptied control
+	// clears it, rather than sending year 1.
+	if f.isTime() && !f.Required {
+		f.Null = true
+	}
 	if f.Type == "enum" && f.Unique && len(f.Choices) < 2 {
 		return f, refuse(2, "field %q is a unique enum with one choice, so only one record could have it; give two choices or more, or remove :unique.", f.Name)
 	}
@@ -448,6 +447,9 @@ func parseField(arg string) (scaffoldField, *scaffoldError) {
 	return f, nil
 }
 
+// isTime reports whether the field is a date or a datetime.
+func (f scaffoldField) isTime() bool { return f.Type == "date" || f.Type == "datetime" }
+
 // goType is the field's Go type.
 func (f scaffoldField) goType() string {
 	t := map[string]string{"int": "int64", "float": "float64", "bool": "bool", "date": "time.Time", "datetime": "time.Time"}[f.Type]
@@ -460,12 +462,15 @@ func (f scaffoldField) goType() string {
 	return t
 }
 
-// rules is the field's warp tag: required, email or url, enum, min, max and
-// unique, in that order.
+// rules is the field's warp tag: required, date, email or url, enum, min,
+// max and unique, in that order.
 func (f scaffoldField) rules() []string {
 	var r []string
 	if f.Required {
 		r = append(r, "required")
+	}
+	if f.Type == "date" {
+		r = append(r, "date")
 	}
 	if f.Type == "email" || f.Type == "url" {
 		r = append(r, f.Type)

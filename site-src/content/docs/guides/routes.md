@@ -179,7 +179,7 @@ A mistake in a route is found when it is registered, before any request: `warp.G
 ```text
 warp: GET /products/{id}: BadIn.Name has no json, query, path or body tag; add one.
 warp: GET /products/{id}: BadIn.Email is tagged json, and GET reads no body; tag it query or path.
-warp: GET /products/{id}: BadIn.Email has the rule "emial", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.
+warp: GET /products/{id}: BadIn.Email has the rule "emial", which warp does not know; use required, email, url, min=, max=, enum=, date, unique or readonly.
 ```
 
 Two keys of one object that differ only in case, at any depth, are refused too, since `encoding/json` would take either for the other; `readonly` on an embedded struct or inside a type that decodes itself likewise:
@@ -204,6 +204,7 @@ Rules go in a field's `warp` tag, separated by commas. They run on every typed i
 | `min=N` | text, a number, a list | it has fewer than N characters, is below N, or has fewer than N items | `Use at least N characters.`, `Enter N or more.`, `Choose at least N.` |
 | `max=N` | the same | more than N | `Use at most N characters.`, `Enter N or less.`, `Choose at most N.` |
 | `enum=a\|b` | text, a number | it is not one of them | `Choose one of: a, b.` |
+| `date` | a `time.Time` | it is not midnight in UTC, written in UTC | `Send a date alone, such as 2026-03-29T00:00:00Z.` |
 | `unique` | text, a number | another record has the value: checked by [Data](data.md)'s store, nothing else | `This is already taken.` |
 | `readonly` | anything | never: the field is answered and not read (see above) | |
 

@@ -219,6 +219,7 @@ func TestDescribeTypes(t *testing.T) {
 	opt := func(fi FieldInfo) FieldInfo { fi.Optional = true; return fi }
 	ro := func(fi FieldInfo) FieldInfo { fi.Readonly = true; return fi }
 	rules := func(fi FieldInfo, rs ...RuleInfo) FieldInfo { fi.Rules = rs; return fi }
+	datetime := func(fi FieldInfo) FieldInfo { fi.Format = "datetime"; return fi }
 	const pkg = "github.com/flakerimi/weft/warp."
 	gadgetFields := []FieldInfo{
 		rules(f("name", "string"), r("required", ""), r("max", "120"), r("unique", "")),
@@ -230,14 +231,14 @@ func TestDescribeTypes(t *testing.T) {
 	want := []TypeInfo{
 		{Name: "descKinds", Go: pkg + "descKinds", Fields: []FieldInfo{
 			f("s", "string"), f("i", "number"), f("i8", "number"), f("u16", "number"), f("f32", "number"),
-			f("b", "boolean"), f("t", "string"), f("raw", "string"), f("ints", "number[]"), f("pair", "number[]"),
+			f("b", "boolean"), datetime(f("t", "string")), f("raw", "string"), f("ints", "number[]"), f("pair", "number[]"),
 			f("flags", "Record<string, boolean>"), f("leaves", "Record<string, descLeaf>"),
 			opt(f("ptr", "string | null")), f("leaf", "descLeaf"), f("maybe_leafs", "(descLeaf | null)[]"),
 			f("any", "unknown"), opt(f("self", "descKinds | null")), f("status", "string"), f("Untagged", "number"),
 		}},
 		{Name: "descLeaf", Go: pkg + "descLeaf", Fields: []FieldInfo{f("n", "number")}},
 		{Name: "Gadget", Go: pkg + "Gadget", Fields: append([]FieldInfo{
-			ro(f("id", "number")), ro(f("created_at", "string")),
+			ro(f("id", "number")), ro(datetime(f("created_at", "string"))),
 		}, append(gadgetFields, f("parts", "GadgetPart[]"))...)},
 		{Name: "GadgetInput", Go: pkg + "Gadget", Fields: append(gadgetFields[:len(gadgetFields):len(gadgetFields)], f("parts", "GadgetPartInput[]"))},
 		{Name: "GadgetPart", Go: pkg + "GadgetPart", Fields: []FieldInfo{
@@ -694,6 +695,31 @@ func omitsApp() *App {
 	Get(app, "/omits", func(context.Context, None) (descOmits, error) { return descOmits{}, nil })
 	Post(app, "/omits", func(context.Context, descOmits) (None, error) { return None{}, nil })
 	return app
+}
+
+type descTimes struct {
+	At       time.Time  `json:"at"`
+	MaybeAt  *time.Time `json:"maybe_at"`
+	Day      time.Time  `json:"day" warp:"date"`
+	MaybeDay *time.Time `json:"maybe_day" warp:"required,date"`
+	Name     string     `json:"name"`
+}
+
+func TestDescribeFormat(t *testing.T) {
+	app := New(Config{})
+	Post(app, "/times", func(context.Context, descTimes) (None, error) { return None{}, nil })
+	var got []string
+	for _, f := range describe(t, app).Types[0].Fields {
+		got = append(got, f.Name+" "+f.Format)
+	}
+	if want := []string{"at datetime", "maybe_at datetime", "day date", "maybe_day date", "name "}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("formats %q, want %q", got, want)
+	}
+	b, _ := json.Marshal(describe(t, app).Types[0].Fields)
+	if s := string(b); !strings.Contains(s, `"name":"at","ts":"string","optional":false,"readonly":false,"rules":[],"format":"datetime"}`) ||
+		!strings.Contains(s, `"name":"name","ts":"string","optional":false,"readonly":false,"rules":[]}`) {
+		t.Errorf("the fields are written %s; want format after rules, left out when there is none", s)
+	}
 }
 
 func TestDescribeOmitempty(t *testing.T) {

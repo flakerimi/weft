@@ -245,6 +245,7 @@ func (r *resource) tableVue() string {
 	label := r.labelField()
 	var columns, filters, fields []string
 	used := map[string]bool{}
+	times := false // a column is a date or a datetime, written with wireTimeText
 	if label == "id" {
 		columns = append(columns, "{ key: 'id', label: 'Id', sortable: true, rowHeader: true },")
 	}
@@ -267,6 +268,9 @@ func (r *resource) tableVue() string {
 		case "int", "float":
 			col += ", align: 'end', format: number"
 			used["number"] = true
+		case "date", "datetime":
+			col += ", format: (v) => wireTimeText(v, '" + f.Type + "')"
+			times = true
 		}
 		if f.Name == label {
 			col += ", rowHeader: true"
@@ -296,7 +300,11 @@ func (r *resource) tableVue() string {
 	} else {
 		imports = "EntityFieldConfig, TableColumn"
 	}
-	fmt.Fprintf(&b, "import type { %s } from '@weft/ui'\n", imports)
+	if times {
+		fmt.Fprintf(&b, "import { useDateFields, wireTimeText, type %s } from '@weft/ui'\n", strings.ReplaceAll(imports, ", ", ", type "))
+	} else {
+		fmt.Fprintf(&b, "import type { %s } from '@weft/ui'\n", imports)
+	}
 	if r.Session {
 		fmt.Fprintf(&b, "import { api, ApiError, schema, type %s } from '../.weft-types/api.ts'\n", r.Type)
 		b.WriteString("import { requireUser, signInAgain, useSession } from '../session.ts'\n\n")
@@ -304,6 +312,9 @@ func (r *resource) tableVue() string {
 		b.WriteString("// The session can end while the list is open (signed out in another tab):\n// the next page, sort or search is a 401, and the visitor signs in again.\nfunction listFailed(e: unknown) {\n  if (e instanceof ApiError && e.status === 401) signInAgain()\n}\n\n")
 	} else {
 		fmt.Fprintf(&b, "import { api, schema, type %s } from '../.weft-types/api.ts'\n\n", r.Type)
+	}
+	if times {
+		b.WriteString("// The dialog's date and time controls: a DatePicker, and an InputTime beside it.\nuseDateFields()\n\n")
 	}
 	if used["number"] {
 		b.WriteString("const number = (v: unknown) => (v == null ? '' : (v as number).toLocaleString())\n")
@@ -367,7 +378,14 @@ func (r *resource) viewVue() string {
 	var b strings.Builder
 	b.WriteString("<script setup vapor lang=\"ts\">\n")
 	b.WriteString(wrap("// ", fmt.Sprintf("An island on the run-time page /%s/[id]: reads the id from the address, asks api.%s.show, and shows the %s, or that there is none with that id. weft scaffold wrote it; it is yours to change.", r.Plural, r.API, human(r.Name))))
-	b.WriteString("import { onMounted, ref } from 'vue'\nimport { entityProblem, useParams } from '@weft/ui'\n")
+	ui := "entityProblem, useParams"
+	for _, f := range r.Fields {
+		if f.isTime() {
+			ui += ", wireTimeText"
+			break
+		}
+	}
+	b.WriteString("import { onMounted, ref } from 'vue'\nimport { " + ui + " } from '@weft/ui'\n")
 	fmt.Fprintf(&b, "import { api, ApiError, type %s } from '../.weft-types/api.ts'\n", r.Type)
 	if r.Session {
 		b.WriteString("import { requireUser, useSession } from '../session.ts'\n")
@@ -393,14 +411,16 @@ func (r *resource) viewVue() string {
 	}
 	b.WriteString("      <Stack :gap=\"2\">\n")
 	for _, f := range r.Fields {
-		show := "shown"
+		show := "shown(record." + f.Name + ")"
 		switch f.Type {
 		case "int", "float":
-			show = "number"
+			show = "number(record." + f.Name + ")"
 		case "bool":
-			show = "yesNo"
+			show = "yesNo(record." + f.Name + ")"
+		case "date", "datetime":
+			show = "wireTimeText(record." + f.Name + ", '" + f.Type + "')"
 		}
-		fmt.Fprintf(&b, "        <span>%s: {{ %s(record.%s) }}</span>\n", capital(human(f.Name)), show, f.Name)
+		fmt.Fprintf(&b, "        <span>%s: {{ %s }}</span>\n", capital(human(f.Name)), show)
 	}
 	b.WriteString("        <span>Made {{ moment(record.created_at) }}, changed {{ moment(record.updated_at) }}</span>\n      </Stack>\n    </Card>\n")
 	fmt.Fprintf(&b, "    <Link to=\"/%s\">Back to the %s</Link>\n  </Stack>\n</template>\n", r.Plural, human(r.Plural))

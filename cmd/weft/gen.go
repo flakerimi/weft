@@ -127,6 +127,7 @@ type fieldInfo struct {
 	Optional bool       `json:"optional"`
 	Readonly bool       `json:"readonly"`
 	Rules    []ruleInfo `json:"rules"`
+	Format   string     `json:"format"` // "date", "datetime" or ""
 }
 
 type ruleInfo struct {
@@ -699,6 +700,8 @@ export interface FieldRules {
   email?: boolean
   url?: boolean
   enum?: string[]
+  /** A time: 'date' is a date alone, midnight in UTC, shown and entered as written; 'datetime' an instant, shown and entered in the browser's time zone and sent in UTC. */
+  format?: 'date' | 'datetime'
   /** null is the field's empty value: a pointer in Go, so an emptied control sends null, which clears it. */
   nullable?: boolean
 }
@@ -1092,12 +1095,16 @@ func writeSchema(b *strings.Builder, d description) {
 	b.WriteString("}\n")
 }
 
-// fieldRules is a field's entry in schema: its kind, then the rules Form
-// checks, in the tag's order, then nullable for a pointer, whose emptied
-// control a Form sends as null. unique, which only the database can check,
+// fieldRules is a field's entry in schema: its kind, its format for a date
+// or a datetime, then the rules Form checks, in the tag's order, then
+// nullable for a pointer, whose emptied control a Form sends as null.
+// unique, which only the database can check, date, which the format says,
 // and a rule weft does not know are left out.
 func fieldRules(f fieldInfo) []string {
 	entries := []string{"kind: " + quote(kind(f.TS))}
+	if f.Format == "date" || f.Format == "datetime" {
+		entries = append(entries, "format: "+quote(f.Format))
+	}
 	for _, r := range f.Rules {
 		switch r.Name {
 		case "required", "email", "url":

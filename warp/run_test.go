@@ -1,6 +1,7 @@
 package warp
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"io"
@@ -291,6 +292,91 @@ func TestRunServesPagesAndAPI(t *testing.T) {
 	}
 }
 
+// noRedirects is a client that answers a redirect as it is.
+var noRedirects = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+
+// headerOn fetches url and returns its status and the header key.
+func headerOn(t *testing.T, url, key string) (int, string) {
+	t.Helper()
+	resp, err := noRedirects.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	return resp.StatusCode, resp.Header.Get(key)
+}
+
+// pagesAndFile is a page build of a single-page app: index.html and a file.
+var pagesAndFile = fstest.MapFS{"index.html": {Data: []byte("<p>page</p>")}, "robots.txt": {Data: []byte("User-agent: *\n")}}
+
+func TestWrapAllCoversPagesFilesAndAPI(t *testing.T) {
+	app := New(Config{})
+	app.WrapAll(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-All", "on")
+			next.ServeHTTP(w, r)
+		})
+	})
+	app.Handle("GET /x", text("x"))
+	app.Handle("GET /files/{rest...}", text("files"))
+	r := startApp(t, app, pagesAndFile)
+	for path, status := range map[string]int{"/": 200, "/robots.txt": 200, "/somewhere": 200, "/api/x": 200, "/api/nothing": 404, "/api/a//x": 307, "/api/files": 307} {
+		if got, h := headerOn(t, r.url+path, "X-All"); got != status || h != "on" {
+			t.Errorf("%s answers %d with X-All %q, want %d with on", path, got, h, status)
+		}
+	}
+	r.stop(t)
+}
+
+func TestWrapAllOnce(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	app := New(Config{})
+	app.WrapAll(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			calls++
+			mu.Unlock()
+			next.ServeHTTP(w, r)
+		})
+	})
+	app.Handle("GET /x", text("x"))
+	r := startApp(t, app, pagesAndFile)
+	for _, path := range []string{"/", "/api/x"} {
+		mu.Lock()
+		calls = 0
+		mu.Unlock()
+		fetch(t, r.url+path)
+		mu.Lock()
+		if calls != 1 {
+			t.Errorf("one request to %s ran WrapAll %d times, want once", path, calls)
+		}
+		mu.Unlock()
+	}
+	r.stop(t)
+}
+
+func TestWrapStillAPIOnly(t *testing.T) {
+	app := New(Config{})
+	app.Wrap(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Api", "on")
+			next.ServeHTTP(w, r)
+		})
+	})
+	app.Handle("GET /x", text("x"))
+	r := startApp(t, app, pagesAndFile)
+	if _, h := headerOn(t, r.url+"/api/x", "X-Api"); h != "on" {
+		t.Errorf("Wrap is not on the API")
+	}
+	for _, path := range []string{"/", "/robots.txt"} {
+		if _, h := headerOn(t, r.url+path, "X-Api"); h != "" {
+			t.Errorf("Wrap is on %s, a page", path)
+		}
+	}
+	r.stop(t)
+}
+
 func TestRunWithoutDist(t *testing.T) {
 	app := New(Config{})
 	app.Handle("GET /ping", text("pong"))
@@ -428,9 +514,113 @@ func TestServeStopsTakingSignalsOnceTold(t *testing.T) {
 	}
 }
 
-func TestServerTimesOutSlowHeaders(t *testing.T) {
-	if got := newServer(http.NotFoundHandler()).ReadHeaderTimeout; got != 10*time.Second {
-		t.Fatalf("ReadHeaderTimeout %v, want 10s", got)
+func TestServerTimeouts(t *testing.T) {
+	srv := newServer(http.NotFoundHandler())
+	if srv.ReadHeaderTimeout != 10*time.Second || srv.ReadTimeout != 30*time.Second || srv.IdleTimeout != 120*time.Second || srv.WriteTimeout != 0 {
+		t.Fatalf("ReadHeaderTimeout %v, ReadTimeout %v, IdleTimeout %v, WriteTimeout %v; want 10s, 30s, 2m0s and none",
+			srv.ReadHeaderTimeout, srv.ReadTimeout, srv.IdleTimeout, srv.WriteTimeout)
+	}
+}
+
+// swapTimeouts sets the server's read and idle timeouts until the test ends.
+func swapTimeouts(t *testing.T, read, idle time.Duration) {
+	r, i := readTimeout, idleTimeout
+	readTimeout, idleTimeout = read, idle
+	t.Cleanup(func() { readTimeout, idleTimeout = r, i })
+}
+
+// bodyApp serves POST /api/body, which reads the whole body and answers how
+// many bytes it read; whole is sent true when a handler read all 100.
+func bodyApp(t *testing.T, whole chan<- bool) *running {
+	app := New(Config{})
+	app.Handle("POST /body", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, err := io.ReadAll(r.Body)
+		whole <- err == nil && len(b) == 100
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		io.WriteString(w, strconv.Itoa(len(b)))
+	}))
+	return startApp(t, app, nil)
+}
+
+// postHead is the head of a POST of a 100-byte body to /api/body.
+const postHead = "POST /api/body HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/octet-stream\r\nContent-Length: 100\r\n\r\n"
+
+// closedWithin reads c until it is closed, and says whether that was within
+// d.
+func closedWithin(c net.Conn, d time.Duration) bool {
+	begun := time.Now()
+	c.SetReadDeadline(begun.Add(d + time.Second))
+	io.Copy(io.Discard, c)
+	return time.Since(begun) < d
+}
+
+func TestSlowBodyIsCut(t *testing.T) {
+	swapTimeouts(t, 200*time.Millisecond, 120*time.Second)
+	whole := make(chan bool, 1)
+	r := bodyApp(t, whole)
+	c, err := net.Dial("tcp", strings.TrimPrefix(r.url, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	io.WriteString(c, postHead+strings.Repeat("x", 10))
+	if !closedWithin(c, time.Second) {
+		t.Error("a body sent slowly kept its connection open past a second, with a read timeout of 200 ms")
+	}
+	select {
+	case ok := <-whole:
+		if ok {
+			t.Error("the handler saw a whole body that was never sent")
+		}
+	case <-time.After(time.Second):
+		t.Error("the handler was not ended by the read timeout")
+	}
+}
+
+func TestQuickBodyIsServed(t *testing.T) {
+	swapTimeouts(t, 200*time.Millisecond, 120*time.Second)
+	whole := make(chan bool, 1)
+	r := bodyApp(t, whole)
+	resp, err := http.Post(r.url+"/api/body", "application/octet-stream", strings.NewReader(strings.Repeat("x", 100)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 || string(b) != "100" || !<-whole {
+		t.Errorf("a body sent at once is answered %d %q", resp.StatusCode, b)
+	}
+}
+
+func TestIdleConnectionClosed(t *testing.T) {
+	swapTimeouts(t, 30*time.Second, 200*time.Millisecond)
+	app := New(Config{})
+	app.Handle("GET /ping", text("pong"))
+	r := startApp(t, app, nil)
+	c, err := net.Dial("tcp", strings.TrimPrefix(r.url, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	io.WriteString(c, "GET /api/ping HTTP/1.1\r\nHost: localhost\r\n\r\n")
+	br := bufio.NewReader(c)
+	resp, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || resp.Close {
+		t.Fatalf("the first request is answered %d with Close %v, want a kept-alive 200", resp.StatusCode, resp.Close)
+	}
+	begun := time.Now()
+	c.SetReadDeadline(begun.Add(2 * time.Second))
+	io.Copy(io.Discard, br)
+	if took := time.Since(begun); took > time.Second {
+		t.Errorf("an idle connection stayed open %v, with an idle timeout of 200 ms", took)
 	}
 }
 

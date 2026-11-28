@@ -283,7 +283,7 @@ func TestCheckRules(t *testing.T) {
 	}
 	got := checkRules(reflect.TypeOf(Product{}))
 	want := []string{
-		`Product.Price has the rule "emial", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`,
+		`Product.Price has the rule "emial", which warp does not know; use required, email, url, min=, max=, enum=, date, unique or readonly.`,
 		`Product.Mail has the rule "email", which is for text; remove it or make the field a string.`,
 		`Product.Name has "min=abc"; write a number after min=.`,
 		`Product.Name has "max=-1"; write a number after max=.`,
@@ -319,6 +319,67 @@ func TestCheckRules(t *testing.T) {
 	}
 }
 
+func TestDateRule(t *testing.T) {
+	type Event struct {
+		Day   time.Time  `json:"day" warp:"date"`
+		Maybe *time.Time `json:"maybe" warp:"date"`
+		Due   time.Time  `json:"due" warp:"required,date"`
+	}
+	const alone = "Send a date alone, such as 2026-03-29T00:00:00Z."
+	for _, c := range []struct {
+		body string
+		want map[string]string
+	}{
+		{`{"day":"2026-03-29T00:00:00Z","due":"2026-03-29T00:00:00Z"}`, nil},
+		{`{"day":"2026-03-29T00:00:00+02:00","due":"2026-03-29T00:00:00Z"}`, map[string]string{"day": alone}},
+		{`{"day":"2026-03-29T00:00:01Z","due":"2026-03-29T00:00:00Z"}`, map[string]string{"day": alone}},
+		{`{"day":"2026-03-29T00:00:00.5Z","due":"2026-03-29T00:00:00Z"}`, map[string]string{"day": alone}},
+		// Midnight UTC written in another zone is still not a date alone.
+		{`{"day":"2026-03-29T02:00:00+02:00","due":"2026-03-29T00:00:00Z"}`, map[string]string{"day": alone}},
+		// The zero time is empty, as for every rule.
+		{`{"day":"0001-01-01T00:00:00Z","due":"2026-03-29T00:00:00Z"}`, nil},
+		{`{"due":"2026-03-29T00:00:00Z"}`, nil},
+		{`{"maybe":"2026-03-29T00:00:00Z","due":"2026-03-29T00:00:00Z"}`, nil},
+		{`{"maybe":"2026-03-29T12:00:00Z","due":"2026-03-29T00:00:00Z"}`, map[string]string{"maybe": alone}},
+		{`{"maybe":null,"due":"2026-03-29T00:00:00Z"}`, nil},
+		{`{"day":"2026-03-29T00:00:00Z"}`, map[string]string{"due": "This is required."}},
+		{`{"due":"2026-03-29T10:00:00Z"}`, map[string]string{"due": alone}},
+	} {
+		var e Event
+		if err := json.Unmarshal([]byte(c.body), &e); err != nil {
+			t.Fatal(err)
+		}
+		if got := fieldsOf(t, e); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: %v, want %v", c.body, got, c.want)
+		}
+	}
+	if got := checkRules(reflect.TypeOf(Event{})); len(got) != 0 {
+		t.Errorf("date on a time.Time and a *time.Time is a mistake: %q", got)
+	}
+}
+
+func TestDateRuleMistake(t *testing.T) {
+	type Product struct {
+		Name  string      `json:"name" warp:"date"`
+		Days  []time.Time `json:"days" warp:"date"`
+		Count *int        `json:"count" warp:"required,date"`
+	}
+	got := checkRules(reflect.TypeOf(Product{}))
+	want := []string{
+		`Product.Name has the rule "date", which is for a time.Time; remove it or make the field a time.`,
+		`Product.Days has the rule "date", which is for a time.Time; remove it or make the field a time.`,
+		`Product.Count has the rule "date", which is for a time.Time; remove it or make the field a time.`,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got:\n%q\nwant:\n%q", got, want)
+	}
+	app := New(Config{})
+	Post(app, "/products", func(context.Context, Product) (None, error) { return None{}, nil })
+	if err := app.Err(); err == nil || !strings.Contains(err.Error(), "warp: POST /products: "+want[0]) {
+		t.Errorf("Err = %v, want %q", err, want[0])
+	}
+}
+
 func TestCheckRulesCorrect(t *testing.T) {
 	type Good struct {
 		Name  string   `json:"name" warp:"required,min=1,max=20,unique"`
@@ -345,7 +406,7 @@ type node struct {
 
 func TestCheckRulesSelfReferencing(t *testing.T) {
 	got := checkRules(reflect.TypeOf(node{}))
-	want := []string{`node.Name has the rule "bogus", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`}
+	want := []string{`node.Name has the rule "bogus", which warp does not know; use required, email, url, min=, max=, enum=, date, unique or readonly.`}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q", got)
 	}
@@ -369,7 +430,7 @@ func TestCheckRulesNestedAndEmbedded(t *testing.T) {
 	}
 	got := checkRules(reflect.TypeOf(Order{}))
 	want := []string{
-		`Base.ID has the rule "nope", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`,
+		`Base.ID has the rule "nope", which warp does not know; use required, email, url, min=, max=, enum=, date, unique or readonly.`,
 		`Line.SKU has the rule "url", which is for text; remove it or make the field a string.`,
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -428,8 +489,8 @@ func TestCheckRulesDeclarationOrder(t *testing.T) {
 	}
 	got := checkRules(reflect.TypeOf(Outer{}))
 	want := []string{
-		`Inner.X has the rule "inner", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`,
-		`Outer.B has the rule "outer", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`,
+		`Inner.X has the rule "inner", which warp does not know; use required, email, url, min=, max=, enum=, date, unique or readonly.`,
+		`Outer.B has the rule "outer", which warp does not know; use required, email, url, min=, max=, enum=, date, unique or readonly.`,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q", got)

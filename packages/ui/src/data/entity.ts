@@ -2,6 +2,7 @@
 // diffing an edited record against the original for PATCH, and mapping Warp's
 // ApiError shape ({ status, code, message, fields }) onto form field errors
 // and a top-level alert sentence.
+import type { Component, InjectionKey } from 'vue'
 import type { Width } from '../adaptive/detect.ts'
 import type { ChoiceItem } from '../forms/choice.ts'
 import type { FieldRule } from '../forms/schema.ts'
@@ -32,6 +33,8 @@ export type EntityControlKind =
   | 'switch'
   | 'radio'
   | 'select'
+  | 'date'
+  | 'datetime'
 
 export interface EntityFieldConfig {
   /** The field's key in `schema` and `state`. */
@@ -44,7 +47,7 @@ export interface EntityFieldConfig {
   description?: string
   /** Placeholder text for text/number/select controls. */
   placeholder?: string
-  /** Control override (`'textarea'`, `'select'`, `'radio'`, `'switch'`, `'checkbox'`, `'number'`, `'input'`, `'text'`, `'email'`, `'url'`). */
+  /** Control override (`'textarea'`, `'select'`, `'radio'`, `'switch'`, `'checkbox'`, `'number'`, `'date'`, `'datetime'`, `'input'`, `'text'`, `'email'`, `'url'`). */
   control?: EntityControlKind
   /** Step for InputNumber (e.g. `0.01` for money, `1` for integers). */
   step?: number
@@ -64,6 +67,8 @@ export interface EntityDialogLabels {
   cancel: string
   close: string
   noneOption: string
+  /** The name of a datetime field's time, beside its date: `Starts, time`. */
+  timeOf: (label: string) => string
   unreachable: string
   unavailable: string
   pageFailed: string
@@ -77,6 +82,7 @@ export const ENTITY_DIALOG_LABELS: EntityDialogLabels = {
   cancel: 'Cancel',
   close: 'Close',
   noneOption: 'None',
+  timeOf: (label) => `${label}, time`,
   unreachable: 'The server could not be reached; check the connection and try again.',
   unavailable: 'The server could not answer right now; try again in a moment.',
   pageFailed: 'Something went wrong on this page; reload it and try again.',
@@ -157,6 +163,7 @@ export function isNonScalarRule(rule: EntityFieldRule | undefined): boolean {
 /** Chooses the control kind for a schema rule and optional field configuration at `width`. */
 export function inferControl(rule: EntityFieldRule | undefined, config: Partial<EntityFieldConfig> | undefined, width: Width): Exclude<EntityControlKind, 'input'> {
   if (config?.control) return config.control === 'input' ? (rule?.email ? 'email' : rule?.url ? 'url' : 'text') : config.control
+  if (rule?.format === 'date' || rule?.format === 'datetime') return rule.format
   const choices = config?.items ?? rule?.enum
   if (choices && choices.length > 0) {
     return choices.length <= 4 && width !== 'narrow' ? 'radio' : 'select'
@@ -226,7 +233,8 @@ export function initialDraft<T extends object, TInput extends object>(
       out[name] = def[name]
       continue
     }
-    if (rule?.nullable) {
+    if (rule?.nullable || rule?.format) {
+      // A time starts empty: null, which a Form leaves out unless null clears it.
       out[name] = null
     } else if (k === 'boolean') {
       out[name] = false
@@ -321,5 +329,14 @@ export function entityProblem(
   }
   return { fields: {}, message: e.message }
 }
+
+/** The date and time controls useDateFields gives the EntityDialogs below it. */
+export interface DateFields {
+  DatePicker: Component
+  FieldGroup: Component
+  FieldTime: Component
+}
+
+export const dateFieldsKey: InjectionKey<DateFields> = Symbol('weft-date-fields')
 
 export type { ChoiceItem, SelectOption }

@@ -133,10 +133,21 @@ func (a *App) describeTo(w io.Writer) error {
 	return nil
 }
 
+// The server's timeouts beyond the headers' 10 seconds, which a test
+// shortens: a request's headers and body must arrive within readTimeout (at
+// the default 1 MiB body limit, at 35 KB/s), and a kept-alive connection
+// with no request is closed after idleTimeout.
+var (
+	readTimeout = 30 * time.Second
+	idleTimeout = 120 * time.Second
+)
+
 // newServer is the server Run serves h with. A client gets 10 seconds to
-// send a request's headers.
+// send a request's headers, 30 to send its headers and body, and a
+// connection is kept open 120 seconds without a request. There is no write
+// timeout, since a stream an answer sends lasts as long as it is open.
 func newServer(h http.Handler) *http.Server {
-	return &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second}
+	return &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: readTimeout, IdleTimeout: idleTimeout}
 }
 
 // untilEOF returns a context that also ends when r reaches its end.
@@ -176,10 +187,13 @@ func (a *App) Run(ctx context.Context, ln net.Listener, dist fs.FS, opts ...Serv
 
 // serve is Run once the app has started.
 func (a *App) serve(ctx context.Context, ln net.Listener, dist fs.FS, opts ...ServeOption) error {
-	h := a.Handler()
+	// Each request passes every WrapAll once: around the pages and the API
+	// together, the API inside them without its own.
+	h := a.api()
 	if dist != nil {
 		h = serveBuild(dist, h, opts...)
 	}
+	h = a.aroundAll(h)
 
 	srv := newServer(h)
 	served := make(chan error, 1)

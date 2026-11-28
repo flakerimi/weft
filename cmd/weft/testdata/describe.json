@@ -462,14 +462,16 @@
           "ts": "string",
           "optional": false,
           "readonly": true,
-          "rules": []
+          "rules": [],
+          "format": "datetime"
         },
         {
           "name": "updated_at",
           "ts": "string",
           "optional": false,
           "readonly": true,
-          "rules": []
+          "rules": [],
+          "format": "datetime"
         },
         {
           "name": "name",
@@ -619,6 +621,32 @@
           "optional": true,
           "readonly": false,
           "rules": []
+        },
+        {
+          "name": "launch",
+          "ts": "string | null",
+          "optional": true,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "date",
+              "arg": ""
+            }
+          ],
+          "format": "date"
+        },
+        {
+          "name": "starts",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "required",
+              "arg": ""
+            }
+          ],
+          "format": "datetime"
         }
       ]
     },
@@ -774,6 +802,32 @@
           "optional": false,
           "readonly": false,
           "rules": []
+        },
+        {
+          "name": "launch",
+          "ts": "string | null",
+          "optional": true,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "date",
+              "arg": ""
+            }
+          ],
+          "format": "date"
+        },
+        {
+          "name": "starts",
+          "ts": "string",
+          "optional": false,
+          "readonly": false,
+          "rules": [
+            {
+              "name": "required",
+              "arg": ""
+            }
+          ],
+          "format": "datetime"
         }
       ]
     },

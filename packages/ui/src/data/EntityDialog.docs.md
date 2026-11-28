@@ -9,7 +9,8 @@ adapts:
   width: Full-screen when the viewport is narrow (under 640 px), and enum fields with four or fewer choices switch from a horizontal RadioGroup to a Select.
 ---
 It has no stylesheet of its own: it composes `Dialog`, `Form`, `Stack`,
-`Alert`, `FormField`, `Button` and the form controls.
+`Alert`, `FormField`, `Button` and the form controls, and with
+`useDateFields()` `DatePicker` and `InputTime`.
 
 `EntityDialog` pairs `Dialog` and `Form` around a generated `schema`
 (`schema.ProductInput` from `weft gen`). In create mode (`record` null or
@@ -31,6 +32,30 @@ whose label defaults to the sentence-cased field name (`firstName` →
   with `control: 'switch'`).
 - `kind: 'number'` (or `type: 'number'`) renders an `InputNumber` with `min`
   and `max` from the rule and `step` from the field's `step` when given.
+- `format: 'date'` (a Go field with the rule `date`) renders a `DatePicker`,
+  and `format: 'datetime'` (any other `time.Time`) a `DatePicker` and an
+  `InputTime` (hours and minutes) side by side in a `FieldGroup`, once
+  `useDateFields()` is called in the setup of the island's component that
+  draws the dialog (a `DataTable`'s too), not in the page's: each island is
+  an app of its own in the browser, so a call outside it reaches only the
+  server's render. Without it they are the browser's own
+  `<Input type="date">` and `<Input type="datetime-local">`: a page's CSS is
+  all its imports reach, so only a page that calls it pays for the date
+  controls and the calendar. With them, the field's label is for the date,
+  and the time is named `labels.timeOf(label)` (`"Starts, time"`). The draft
+  holds what the wire holds: a date as midnight in UTC
+  (`2026-03-29T00:00:00Z`), shown and entered as written in every time zone,
+  and a datetime as an instant in UTC, shown and entered in the browser's
+  zone (a date chosen before a time is at midnight there; a time the clocks
+  skip, such as 02:30 when they go from 02:00 to 03:00, is moved on by the
+  hour skipped, so it is saved as 03:30; a time the clocks repeat, such as
+  02:30 when they go back from 03:00 to 02:00, is the earlier of the two).
+  Go's zero time is empty. Both start
+  empty (`null`), an emptied one is `null`, and one not touched is not in
+  the `update`, so a datetime's seconds survive an edit of other fields.
+  `wireToDate`, `dateToWire`, `wireToLocal`, `localToWire` and
+  `wireTimeText` (for a column's `format`) are exported for pages of your
+  own.
 - `email: true` renders `<Input type="email">`, `url: true` renders
   `<Input type="url">`, `control: 'textarea'` renders `Textarea`, and
   everything else scalar renders `<Input type="text">`. Non-scalar kinds
