@@ -4,10 +4,16 @@
 // (users:edit) and Delete to remove one (users:delete); and, for
 // users:invite, the invitations not yet taken, with New invitation, which
 // mails a link, and Delete. The server decides: a role cannot reach above
-// the actor's, and no one changes their own role or removes themselves.
+// the actor's, and no one changes their own role or removes themselves, so
+// the signed-in user's own row offers neither Edit nor Delete.
+import { useTemplateRef } from 'vue'
 import type { TableColumn } from '@weft/ui'
-import { sessionEnded, wireTimeText } from '@weft/ui'
+import { sessionEnded, useSession, wireTimeText } from '@weft/ui'
 import { ApiError, api, schema, type Invitation, type User } from '../.weft-types/api.ts'
+
+const { session } = useSession()
+/** The users table's own Edit and Delete, which the row actions below call. */
+const table = useTemplateRef<{ edit(row: User): void; askRemove(row: User, index?: number): void }>('table')
 
 const roles = ['owner', 'administrator', 'member', 'viewer']
 const when = (v: unknown) => wireTimeText(v, 'datetime')
@@ -38,11 +44,13 @@ function listFailed(e: unknown) {
     <Stack :gap="8">
       <Section title="Users">
         <DataTable
+          ref="table"
           :resource="users"
           :schema="schema.RoleInput"
           :columns="userColumns"
           perm="users"
           name="user"
+          label-key="email"
           caption="Users"
           hide-caption
           :per-page="20"
@@ -54,7 +62,14 @@ function listFailed(e: unknown) {
           empty-description="Change the search, or invite someone below."
           empty-icon="users"
           @error="listFailed"
-        />
+        >
+          <template #actions-cell="{ row, index }">
+            <Stack v-if="row.id !== session.user?.id" direction="row" :gap="2" justify="end">
+              <Button label="Edit" :aria-label="`Edit ${row.email}`" icon="pencil" variant="ghost" size="sm" perm="users:edit" @click="table?.edit(row)" />
+              <Button label="Delete" :aria-label="`Delete ${row.email}`" icon="trash" variant="ghost" tone="danger" size="sm" perm="users:delete" @click="table?.askRemove(row, index)" />
+            </Stack>
+          </template>
+        </DataTable>
       </Section>
       <Guard perm="users:invite">
         <Section title="Invitations" description="Each mails a link that sets a password and signs in; it works for 7 days.">
