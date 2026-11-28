@@ -39,8 +39,8 @@ func failure(t *testing.T, fn func(tb testing.TB)) (failed string) {
 	return ""
 }
 
-// mailApp is a started app whose mail is printed to nowhere and kept, with
-// a wait of d.
+// mailApp is a started app whose log goes nowhere and whose mail is kept
+// (and printed to standard error), with a wait of d.
 func mailApp(t *testing.T, d time.Duration) (*warp.App, *mail.Mailer) {
 	out := log.Writer()
 	log.SetOutput(io.Discard)

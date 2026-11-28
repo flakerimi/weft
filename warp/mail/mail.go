@@ -1,13 +1,13 @@
-// Package mail sends a Warp app's mail: printed to the log while an app is
-// made, sent over SMTP once it is configured to.
+// Package mail sends a Warp app's mail: printed to standard error while an
+// app is made, sent over SMTP once it is configured to.
 //
 // It is configured in .env, read when the app starts: MAIL is log (the
-// default), which prints each message and keeps the last 20 for mailtest, or
-// smtp, which sends them through MAIL_HOST at MAIL_PORT (default 587),
-// signing in with MAIL_USER and MAIL_PASSWORD when both are set, from
-// MAIL_FROM. Port 465 is TLS from the first byte; any other port must offer
-// STARTTLS, except on a loopback host. Start does not connect, so an app
-// starts while its mail server is down.
+// default), which prints each message to standard error, framed, and keeps
+// the last 20 for mailtest, or smtp, which sends them through MAIL_HOST at
+// MAIL_PORT (default 587), signing in with MAIL_USER and MAIL_PASSWORD when
+// both are set, from MAIL_FROM. Port 465 is TLS from the first byte; any
+// other port must offer STARTTLS, except on a loopback host. Start does not
+// connect, so an app starts while its mail server is down.
 //
 // Under smtp, Send puts a message on a queue in memory and returns: one
 // sender sends them in turn, giving each try 30 seconds and three tries, 5

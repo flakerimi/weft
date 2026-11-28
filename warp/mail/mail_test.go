@@ -8,12 +8,14 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/flakerimi/weft/warp"
+	"github.com/flakerimi/weft/warp/middleware"
 )
 
 // syncBuffer is a buffer the logger and a test may use at once.
@@ -34,17 +36,20 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-// captureLog sends the standard logger, and so slog's default, to a buffer
-// until the test ends. A test that calls it does not run in parallel.
+// captureLog sends the standard logger, and so slog's default, and the log
+// driver's printed mail to a buffer until the test ends. A test that calls it
+// does not run in parallel.
 func captureLog(t *testing.T) *syncBuffer {
 	t.Helper()
 	b := &syncBuffer{}
-	out, flags := log.Writer(), log.Flags()
+	out, flags, to := log.Writer(), log.Flags(), printTo
 	log.SetOutput(b)
 	log.SetFlags(0)
+	printTo = b
 	t.Cleanup(func() {
 		log.SetOutput(out)
 		log.SetFlags(flags)
+		printTo = to
 	})
 	return b
 }
@@ -216,7 +221,7 @@ func TestLogDriverPrintsAndKeeps(t *testing.T) {
 	if m.Kept()[0].To != "a2@example.com" {
 		t.Error("Kept answers the mailer's own slice")
 	}
-	if want := "mail to a1@example.com: Subject 1\n  line one\n  line two\n"; !strings.Contains(logs.String(), want) {
+	if want := "--- mail to a1@example.com: Subject 1 ---\nline one\nline two\n--- end of mail to a1@example.com ---\n"; !strings.Contains(logs.String(), want) {
 		t.Errorf("the log has\n%s\nwant\n%s", logs, want)
 	}
 }
@@ -323,5 +328,51 @@ func TestForWithoutModule(t *testing.T) {
 	want := `warp: the app needs the "mail" module; list mail.Module() in app/modules.go.`
 	if err := app.Err(); err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("Err = %v, want %q", err, want)
+	}
+}
+
+// The log driver writes each message to standard error as it is, between
+// two lines that frame it, and not through the log, so a link in it can be
+// copied from a terminal whatever handler the middleware module gives the
+// log; the log gets one line, mail printed, with the recipient and subject
+// and no body.
+func TestPrintedMailIsPlainUnderMiddleware(t *testing.T) {
+	printed := &syncBuffer{}
+	was := printTo
+	printTo = printed
+	t.Cleanup(func() { printTo = was })
+	logged := &syncBuffer{}
+	app := warp.New(warp.ConfigFrom(nil))
+	app.Use(middleware.Module(middleware.LogTo(logged)), Module())
+	if err := app.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() { app.Stop(context.Background()) })
+	m := For(app)
+
+	link := "https://shop.example.com/password#token=abc_DEF-123"
+	msg := Message{To: "Ann <ann@example.com>", Subject: "Reset your password", Text: "Open this link:\r\n\r\n" + link + "\r\n\r\nIt works once."}
+	if err := m.Send(context.Background(), msg); err != nil {
+		t.Fatal(err)
+	}
+	want := "--- mail to Ann <ann@example.com>: Reset your password ---\nOpen this link:\n\n" + link + "\n\nIt works once.\n--- end of mail to Ann <ann@example.com> ---\n"
+	if got := printed.String(); got != want {
+		t.Errorf("printed\n%q\nwant\n%q", got, want)
+	}
+	if lines := strings.Split(printed.String(), "\n"); !slices.Contains(lines, link) {
+		t.Errorf("the link is not a line of its own: %q", lines)
+	}
+	if strings.Contains(printed.String(), `\n`) {
+		t.Errorf("the printed mail has an escaped line break: %q", printed)
+	}
+	log := logged.String()
+	if !strings.Contains(log, `msg="mail printed"`) || !strings.Contains(log, `to="Ann <ann@example.com>"`) || !strings.Contains(log, `subject="Reset your password"`) {
+		t.Errorf("the log has no mail printed line with to and subject: %q", log)
+	}
+	if strings.Contains(log, "token") || strings.Contains(log, "Open this link") {
+		t.Errorf("the log has the body: %q", log)
+	}
+	if m.Printed() != 1 || len(m.Kept()) != 1 || m.Kept()[0] != msg {
+		t.Errorf("Printed = %d, Kept = %v; want the message once", m.Printed(), m.Kept())
 	}
 }

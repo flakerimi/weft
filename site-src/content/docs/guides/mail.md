@@ -22,7 +22,7 @@ Each mistake is its own sentence, all reported together, such as `MAIL_HOST is n
 
 ## The log driver
 
-`MAIL=log` prints `mail to <to>: <subject>` and the text, each line indented two spaces, through Go's standard logger, so a link the login mails is in the app's log to open by hand. With the [middleware](middleware.md) module listed, the log is one line per entry, so the message's lines are written as `\n` within it; a link ends before the `\n`. It keeps the last 20 messages for `mailtest`. A printed link's token is printed as it is: the log must be as private as the mail would be.
+`MAIL=log` writes each message's text to the app's standard error as it is, between `--- mail to <to>: <subject> ---` and `--- end of mail to <to> ---`, so a link the login mails is a line of its own, to copy from the terminal and open. It goes there directly, not through the log, so the [middleware](middleware.md) module's one-line format does not touch it; the log gets one line, `mail printed`, with the recipient and the subject and no body. It keeps the last 20 messages for `mailtest`. A printed link's token is printed as it is: standard error must be as private as the mail would be.
 
 ## Sending over SMTP
 
