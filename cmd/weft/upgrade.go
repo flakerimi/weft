@@ -46,9 +46,12 @@ func upgradeCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	if cfg.Version == weft.Version {
 		fmt.Fprintf(stdout, "%s is already on Weft %s\n", name, weft.Version)
-		// An app moved part-way, or by an older weft, catches up on the
-		// account pages, which are written over nothing.
-		if src, err := os.ReadFile(filepath.Join(appDir, "app", "modules.go")); err == nil && listsModule(src, authPackage) {
+		// An app moved part-way, or by an older weft, has no /password, the
+		// page every mailed link opens: it catches up on the account files,
+		// written over nothing. With /password there, a page the author
+		// removed stays removed.
+		_, noPassword := os.Stat(filepath.Join(appDir, "web", "pages", "password.vue"))
+		if src, err := os.ReadFile(filepath.Join(appDir, "app", "modules.go")); err == nil && errors.Is(noPassword, fs.ErrNotExist) && listsModule(src, authPackage) {
 			bundle, err := openBundle()
 			if err != nil {
 				return fail(stderr, "upgrade", err)

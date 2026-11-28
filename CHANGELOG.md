@@ -38,10 +38,10 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
   says the line to add and exits 1 before it writes anything), writes the
   pages and forms the login's links open (`/password`, `/forgot`,
   `/register`, `/account`, `/users`) and `web/session-check.ts` where the app
-  lacks them, never writing over a file (an app already on the version still
-  gets them), and says to list `middleware.Module()` first; an old
-  `web/session.ts` is kept and can go once no page imports it. Everyone signs
-  in once after the upgrade.
+  lacks them, never writing over a file (an app already on the version gets
+  them when it lacks `/password`), and says to list `middleware.Module()`
+  first; an old `web/session.ts` is kept and can go once no page imports it.
+  Everyone signs in once after the upgrade.
 
 ## 0.0.24
 

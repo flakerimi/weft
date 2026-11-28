@@ -264,21 +264,32 @@ func TestUpgradeCannotAddMail(t *testing.T) {
 	}
 }
 
-// An app already on this Weft that lacks an account page, upgraded part-way
-// or by an older candidate, gets it from weft upgrade, which still writes
-// over nothing (final review R2-I1).
+// An app already on this Weft catches up only when /password, the page every
+// mailed link opens, is missing, as after an upgrade made part-way or by an
+// older candidate: then the account files it lacks come back, writing over
+// nothing. Otherwise a page the author removed on purpose stays removed
+// (final review R2-I1 and R3-M1).
 func TestUpgradeAlreadyOnAddsMissingPages(t *testing.T) {
 	otherVersionApp(t, "0.2.0")
 	setVersion(t, "0.2.0")
+	register := filepath.Join("web", "pages", "register.vue")
+	if err := os.Remove(register); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs := runCmd("upgrade", "--no-install")
+	if code != 0 || out != "myapp is already on Weft 0.2.0\n" || errs != "" || exists(t, register) {
+		t.Fatalf("register.vue removed: exit %d, stdout %q, stderr %q; it must stay removed", code, out, errs)
+	}
+
 	if err := os.Remove(filepath.Join("web", "pages", "password.vue")); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join("web", "pages", "users.vue"), []byte("<template><p>mine</p></template>\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, out, errs := runCmd("upgrade", "--no-install")
-	if code != 0 || out != "myapp is already on Weft 0.2.0\nAdded web/pages/password.vue\n" || errs != "" {
-		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errs)
+	code, out, errs = runCmd("upgrade", "--no-install")
+	if code != 0 || out != "myapp is already on Weft 0.2.0\nAdded web/pages/password.vue\nAdded web/pages/register.vue\n" || errs != "" {
+		t.Fatalf("password.vue removed: exit %d, stdout %q, stderr %q", code, out, errs)
 	}
 	want, err := os.ReadFile(filepath.Join(repoCmdWeft, "..", "..", "templates", "app", "web", "pages", "password.vue"))
 	if err != nil || readFile(t, filepath.Join("web", "pages", "password.vue")) != string(want) {
