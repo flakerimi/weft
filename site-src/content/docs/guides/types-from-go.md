@@ -1,7 +1,7 @@
 ---
 title: Types from Go
 description: weft gen writes the TypeScript types, a typed function per route and the form rules from the app's Go types, so a renamed Go field is a type error in the page.
-order: 26
+order: 29
 ---
 
 On this page you learn how the Vue side of an app calls its Go API with no fetch written by hand: `weft gen` asks the app to describe its routes and types and writes `web/.weft-types/api.ts`, which the pages import. A renamed Go field is then a TypeScript error in every page that reads it.

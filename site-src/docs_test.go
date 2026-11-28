@@ -170,3 +170,59 @@ func TestDocsCoverWindows(t *testing.T) {
 		t.Error("content/docs/coming-next.md still says Windows is not yet a supported platform")
 	}
 }
+
+// The accounts release is documented: accounts, mail and middleware each
+// have a guide the docs index links; Coming next no longer lists as not built
+// what 0.2.0 built; and every setting the template's .env.sample names is in
+// a guide.
+func TestDocsCoverAccounts(t *testing.T) {
+	index, err := os.ReadFile("content/docs/index.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	guides := ""
+	for _, guide := range []string{"login", "accounts", "mail", "middleware"} {
+		b, err := os.ReadFile("content/docs/guides/" + guide + ".md")
+		if err != nil {
+			t.Errorf("content/docs/guides/%s.md is missing (%v); write that guide", guide, err)
+		}
+		guides += string(b)
+		if !strings.Contains(string(index), "(guides/"+guide+".md)") {
+			t.Errorf("content/docs/index.md does not link guides/%s.md; list it with the guides", guide)
+		}
+	}
+	warp, _ := os.ReadFile("content/docs/guides/warp.md")
+	guides += string(warp)
+	coming, err := os.ReadFile("content/docs/coming-next.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(coming), "\n") {
+		if !strings.HasPrefix(line, "| ") && !strings.HasPrefix(line, "- ") {
+			continue
+		}
+		for _, built := range []string{"egistration", "nvitation", "eset", "roles", "Roles", "session table", "sessions in a table", "`useSession", "`perm`", "route guard", "rate limit", "Rate limit", "date field", "Date field", "`mail`", "`middleware`", "API key"} {
+			if strings.Contains(line, built) {
+				t.Errorf("content/docs/coming-next.md lists %q as not built: %q; 0.2.0 built it, so say so or take it out", built, line)
+			}
+		}
+	}
+	sample, err := os.ReadFile("../templates/app/env.sample.tmpl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(sample), "\n") {
+		key, _, ok := strings.Cut(strings.TrimPrefix(line, "# "), "=")
+		if !ok || key == "" || strings.ContainsAny(key, " .,") {
+			continue
+		}
+		all := guides
+		for _, other := range []string{"data", "routes", "go-serving"} {
+			b, _ := os.ReadFile("content/docs/guides/" + other + ".md")
+			all += string(b)
+		}
+		if !strings.Contains(all, "`"+key+"`") && !strings.Contains(all, key+"=") {
+			t.Errorf("no guide names %s, which the template's .env.sample sets; say what it does in its guide", key)
+		}
+	}
+}

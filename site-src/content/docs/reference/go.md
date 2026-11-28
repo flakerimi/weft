@@ -4,7 +4,7 @@ description: Everything the warp package exports, with its signature, and the ro
 order: 36
 ---
 
-Look up here everything the `warp` Go package exports today, with its signature and what it does. The packages beside it list theirs at the end of their guides: [data](../guides/data.md#everything-it-exports), [auth and authtest](../guides/login.md#everything-it-exports) and [warptest](../guides/warp.md#everything-warptest-exports). Import it as `github.com/flakerimi/weft/warp`. It uses only the standard library. [Warp, the Go side](../guides/warp.md) explains the app and [Typed routes](../guides/routes.md) its routes and errors, and [Serving from Go](../guides/go-serving.md) what `Serve` sends.
+Look up here everything the `warp` Go package exports today, with its signature and what it does. The packages beside it list theirs at the end of their guides: [data](../guides/data.md#everything-it-exports), [auth and authtest](../guides/login.md#everything-it-exports), [mail and mailtest](../guides/mail.md#everything-it-exports), [middleware](../guides/middleware.md) and [warptest](../guides/warp.md#everything-warptest-exports). Import it as `github.com/flakerimi/weft/warp`. It uses only the standard library. [Warp, the Go side](../guides/warp.md) explains the app and [Typed routes](../guides/routes.md) its routes and errors, and [Serving from Go](../guides/go-serving.md) what `Serve` sends.
 
 ## App
 
@@ -14,6 +14,7 @@ func (a *App) Config() Config
 func (a *App) Use(modules ...Module)
 func (a *App) Handle(pattern string, h http.Handler, opts ...RouteOption)
 func (a *App) Wrap(mw func(http.Handler) http.Handler)
+func (a *App) WrapAll(mw func(http.Handler) http.Handler)
 func (a *App) Err() error
 func (a *App) Routes() []Route
 func (a *App) Handler() http.Handler
@@ -31,9 +32,9 @@ func (a *App) IsHTTPS(r *http.Request) bool
 
 - `New` makes an app configured by `cfg`, with no modules. The zero `Config` works: port 8080, a 1 MB body limit.
 - `Config` returns the configuration, with its defaults filled in.
-- `Use` calls each module's `Register` at once, in order. Two modules with one name, a `Register` that fails, and a `Use`, `Handle` or `Wrap` after the app started are mistakes; one made after the start is also logged, since `Run` has checked `Err` by then.
+- `Use` calls each module's `Register` at once, in order. Two modules with one name, a `Register` that fails, and a `Use`, `Handle`, `Wrap` or `WrapAll` after the app started are mistakes; one made after the start is also logged, since `Run` has checked `Err` by then.
 - `Handle` mounts `h` at `pattern`: a method, a space and a path without `/api` (`"GET /export.csv"`), or a path alone for every method.
-- `Wrap` puts `mw` around every API request; the first given is the outermost.
+- `Wrap` puts `mw` around every API request, and `WrapAll` around every request the app answers, pages and files too, outside every `Wrap`; the first given is the outermost.
 - `Err` returns every mistake so far, the configuration's first, joined; nil when there is none. Each is one sentence; a registration mistake starts `warp: `, a configuration one does not.
 - `Routes` returns every route, in the order registered. `Describe` returns them with every struct type they take and answer, each field with its JSON name, TypeScript type and rules, which `weft gen` reads; a type it cannot write as TypeScript, such as two types of one name, is a mistake it returns. Its types:
 
@@ -86,7 +87,7 @@ type RuleInfo struct {
 ```
 - `Handler` is the API alone, at `/api/...`: a path no route has is a 404, a method a route does not take a 405 with `Allow`, the redirect of a path that is not clean a 3xx with `Location`, and a panic a 500, all in the error shape. Every answer carries `Cache-Control: no-store` unless the handler sets its own.
 - `Serve` returns `Err()` if there is a mistake. With `WARP_DESCRIBE=1` it prints `Describe` as JSON and returns, without migrating, starting or listening. Otherwise it starts the app, as `Start` does, then listens on `Host` and `Port`, logs `listening on http://localhost:<port>`, and serves as `Run` does until SIGINT or SIGTERM, so nothing answers on the port while the modules migrate. It returns nil after a clean stop. A taken port stops what started and is `warp: port 8080 is taken; stop what uses it or set PORT in .env.` Once the first signal comes it stops taking them, so a second Ctrl-C ends the process at once. Under `weft dev` (`WEFT_DEV_PARENT=1`) it logs nothing and also stops when standard input closes.
-- `Run` does the same on `ln` until `ctx` ends: `Migrate` on every `Migrator`, then `Start` on every `Starter`, in order; it serves `dist` and the API through `Serve` (the API alone when `dist` is nil); when `ctx` ends it lets the requests in flight finish, for up to 10 seconds, then calls `Stop` on every `Stopper`, last first, with 10 seconds more. When a step fails, every module already migrated or started is stopped. A client has 10 seconds to send a request's headers. A nil `ln` is `warp: Run needs a listener; call Serve, or pass one from net.Listen.` With `WARP_DESCRIBE=1` it closes `ln` and does what `Serve` does then, and `Start` prints the description and ends the process, so a describing run never migrates or serves.
+- `Run` does the same on `ln` until `ctx` ends: `Migrate` on every `Migrator`, then `Start` on every `Starter`, in order; it serves `dist` and the API through `Serve` (the API alone when `dist` is nil); when `ctx` ends it lets the requests in flight finish, for up to 10 seconds, then calls `Stop` on every `Stopper`, last first, with 10 seconds more. When a step fails, every module already migrated or started is stopped. A client has 10 seconds to send a request's headers and 30 for all of it, and an idle connection is closed after 120. A nil `ln` is `warp: Run needs a listener; call Serve, or pass one from net.Listen.` With `WARP_DESCRIBE=1` it closes `ln` and does what `Serve` does then, and `Start` prints the description and ends the process, so a describing run never migrates or serves.
 - `Start` runs every `Migrate`, then every `Start`, without listening, once; `Stop` stops what it started, last first, within 10 seconds. A module whose `Stop` has not returned when they are up is left running, and named: `warp: module "x" did not stop before the app's time to stop ran out, so the app went on without it; make its Stop return when its context ends.` A test that calls `Handler` uses them; `Run` is built on them.
 - `Mistake` records a registration mistake found by a package outside the core, with `warp: ` in front, for `Err` to report. `Module` is the name of the module whose `Register` is running, `""` outside one.
 - `ClientIP` is the client's address without its port, and `IsHTTPS` whether it came over HTTPS; with `TRUST_PROXY` on they read `X-Forwarded-For` and `X-Forwarded-Proto`. `ClientKey` is the address for IPv4 and its /64 for IPv6, for a limit to count by.

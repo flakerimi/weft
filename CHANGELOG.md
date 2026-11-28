@@ -9,6 +9,28 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
 
 ## Unreleased
 
+- Accounts (0.2.0). The login has four roles, owner, administrator, member
+  and viewer, with permissions by grant (`auth.Grant`); sessions kept in a
+  table, so one or all can be ended; invitations, sign-up
+  (`AUTH_REGISTRATION`, `invite` by default) and password reset by mailed
+  links; a count of failed logins per account across addresses; and API keys
+  (`API_KEYS=on`). A reset ends every session and deletes the user's API
+  keys; a password change ends the other sessions and keeps the keys.
+- The `mail` module prints each message to the log, or sends it over SMTP from
+  a queue in memory; `mailtest` reads it in tests. `auth` needs it: an app made
+  before lists `mail.Module()` before `auth.Module()` in `app/modules.go`.
+- The `middleware` module adds security headers to every answer, one log line
+  per request (`LOG`) and a rate limit on `/api` (`RATE_LIMIT`); `WrapAll`
+  wraps every request an app answers; the server times out a slow request
+  (30 s) and an idle connection (120 s).
+- `@weft/ui` has `useSession()`, `requireSession()`, `sessionEnded()`,
+  `nextPath()`, `perm` on `Button` and `DataTable`, and `Guard`. An app's own
+  `web/session.ts` is no longer written; `weft create` writes pages to sign
+  up, reset a password, and manage one's account and the users, and
+  `weft scaffold` guards its pages by permission.
+- Date and time fields: the `date` rule, `format` in the generated schema,
+  date and time controls in `EntityDialog` (`useDateFields()`), and date
+  fields in the pages `weft scaffold` writes.
 - A FormField's label is a `<label for>` only over a labelable control. Over a
   RadioGroup, CheckboxGroup, Slider, Listbox without a filter, ToggleGroup or
   InputTime's parts it is a `<span>` the control is `aria-labelledby`, drawn so

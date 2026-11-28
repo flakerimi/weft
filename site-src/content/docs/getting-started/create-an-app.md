@@ -19,7 +19,7 @@ Set AUTH_OWNER_EMAIL in myapp/.env to the owner's email address; it is owner@exa
 Created myapp. Next: cd myapp && weft dev
 ```
 
-The app keeps its records in SQLite and has one user, its owner, whose email is `AUTH_OWNER_EMAIL` in `.env`: set it to yours. `.env` also holds `AUTH_SECRET`, 48 random bytes made for this app, which sign the session cookie.
+The app keeps its records in SQLite, and its first user is its owner, whose email is `AUTH_OWNER_EMAIL` in `.env`: set it to yours. The owner invites the others, whose mail is printed in the app's log until `MAIL=smtp` ([Accounts](../guides/accounts.md)). `.env` also holds `AUTH_SECRET`, 48 random bytes made for this app, which sign the session cookie.
 
 If Go cannot fetch them (offline, or behind a proxy that refuses it), `weft create` says so and leaves the app; once Go can reach the module proxy, `cd myapp && weft gen` (or `weft dev`) fetches them and finishes.
 
@@ -27,13 +27,13 @@ The app has:
 
 | Path | What it is |
 | --- | --- |
-| `web/pages/` | The pages. `index.vue` is `/`, `login.vue` signs the owner in, `setup.vue` sets the owner's password, and `404.vue` is the page for an unknown path. |
-| `web/components/` | The app's own components: `Hello.vue`, an island that asks the API for a message, and the login and setup forms. |
-| `web/session.ts`, `web/answers.ts` | Who is signed in, asked once per page, and the rules for what the server answers. |
-| `app/modules.go` | The one list of the app's Go modules: `data`, `auth` and `hello`. |
+| `web/pages/` | The pages. `index.vue` is `/`, `login.vue` signs in, `setup.vue` sets the owner's password, `register.vue`, `forgot.vue` and `password.vue` ask for and use a mailed link, `account.vue` and `users.vue` manage accounts, and `404.vue` is the page for an unknown path. |
+| `web/components/` | The app's own components: `Hello.vue`, an island that asks the API for a message, and the forms and panels of those pages. |
+| `web/answers.ts`, `web/session-check.ts` | What a form says when a call fails, and a check that the generated `Me` fits `@weft/ui`'s session. |
+| `app/modules.go` | The one list of the app's Go modules: `middleware`, `data`, `mail`, `auth` and `hello`. |
 | `app/hello/` | The first module: `routes.go` has the route `GET /api/hello`, which answers anyone, and `hello_test.go` its test. |
 | `main.go`, `dist.go`, `dist_dev.go` | The Go server, a `warp.App` from `github.com/flakerimi/weft/warp`, with the SQLite driver. `dist.go` embeds the built pages. |
-| `.env`, `.env.sample` | The settings: the port, the database, `AUTH_SECRET` and `AUTH_OWNER_EMAIL`. Git ignores `.env` and `data/`, where the database is; `.env.sample` is committed and says what each one is. |
+| `.env`, `.env.sample` | The settings: the port, the database, `AUTH_SECRET` and `AUTH_OWNER_EMAIL`, and in `.env.sample` the others, commented with their defaults. Git ignores `.env` and `data/`, where the database is; `.env.sample` is committed and says what each one is. |
 | `package.json` | Its `"weft"` object records the Weft version and the theme. |
 | `go.mod`, `go.sum` | `go.mod` requires Warp, the module `github.com/flakerimi/weft`, at the release's tag, `v<version>`; `go.sum` holds its checksums. Commit both. `weft upgrade` moves the version. |
 | `.weft/` | Weft's packages, at the app's version. Git ignores it, and every `weft` command puts it back when it is missing. |

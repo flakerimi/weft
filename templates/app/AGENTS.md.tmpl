@@ -32,7 +32,7 @@ Until the first `weft build`, `web/dist` holds only an empty marker (`weft creat
 | `app/<name>/routes.go` | One module: its routes, under `/api` |
 | `.env`, `.env.sample` | The settings: the port, the database, `AUTH_SECRET` and `AUTH_OWNER_EMAIL`, and the login's, mail's and middleware's, commented with their defaults; `.env` is not committed, `.env.sample` is and says what each one is |
 | `data/` | The SQLite database, not committed |
-| `web/pages/` | One page per `.vue` file; its path is the route. `login.vue` signs in, `setup.vue` sets the owner's password, `register.vue` and `forgot.vue` ask for a mailed link, `password.vue` sets a password from one |
+| `web/pages/` | One page per `.vue` file; its path is the route. `login.vue` signs in, `setup.vue` sets the owner's password, `register.vue` and `forgot.vue` ask for a mailed link, `password.vue` sets a password from one, `account.vue` is the signed-in user's own, `users.vue` lists users and invitations |
 | `web/components/` | Your components; an island is one used with `Island` |
 | `web/answers.ts` | `formProblem`, what a form shows for a failed call; given `sessionEnded`, a 401 sends the visitor to sign in |
 | `web/session-check.ts` | Fails `pnpm typecheck` when the generated `Me` stops fitting `@weft/ui`'s `SessionUser` |

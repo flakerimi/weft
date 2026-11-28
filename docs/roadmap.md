@@ -85,16 +85,19 @@ What a newcomer meets first works, on every platform.
 ### 0.2.0: accounts (W4, with the middleware it needs)
 
 - Registration, invitations and password reset, with the `mail` module (log
-  and SMTP drivers).
+  and SMTP drivers) (done: Tracks A5 and B1).
 - Roles and permissions beyond the owner; a session table on the server, so a
-  user can sign out everywhere and one session can be ended.
-- `useSession()` in `@weft/ui` (the template has its own `web/session.ts` and
-  login page), `perm` on `Button` and row actions, and a route guard in Vue.
-- Date and time fields in `EntityDialog` and the pages `weft scaffold` writes.
+  user can sign out everywhere and one session can be ended (done: A2, A4, A6).
+- `useSession()` in `@weft/ui`, `perm` on `Button` and row actions, and a
+  route guard in Vue (done: C1 to C3; the template's own `web/session.ts` is
+  gone, and its pages, and the ones `weft scaffold` writes, use them: E1 to E4).
+- Date and time fields in `EntityDialog` and the pages `weft scaffold` writes
+  (done: D1 to D4).
 - From W7, brought forward because accounts need them: the `middleware` module's
   security headers, request logging, a rate limit and API keys; body-read and
-  idle timeouts on the server.
-- The login's open limits closed: a per-account count across addresses.
+  idle timeouts on the server (done: B2 to B6, and API keys in `auth`, A7).
+- The login's open limits closed: a per-account count across addresses (done:
+  A3).
 
 ### 0.3.0: data beyond SQLite (W3)
 

@@ -12,7 +12,7 @@ Weft is one UI system for Go and Vue apps. It has four parts:
 
 - **`@weft/ui`**: 85 Vue components, written once, that adapt to touch or pointer, to a landing page or an app, and to the width they are given. Every component is a Vapor component: no virtual DOM.
 - **`@weft/vite`**: the page build. It renders your pages to HTML when you build, compresses them, and ships JavaScript only for the parts you mark interactive.
-- **Warp, the Go package** `github.com/flakerimi/weft/warp`: an app made of modules, with typed routes that check their input and answer in one error shape, records in SQLite, a login, and `warp.Serve`, which serves the page build from memory next to that API, in one binary.
+- **Warp, the Go package** `github.com/flakerimi/weft/warp`: an app made of modules, with typed routes that check their input and answer in one error shape, records in SQLite, a login with roles, mail, and `warp.Serve`, which serves the page build from memory next to that API, in one binary.
 - **The `weft` command**: it makes an app, runs it while you work, writes the TypeScript types and client from its Go, builds it into one binary, and updates itself. It carries the other three parts.
 
 Weft is pre-alpha. Its packages are not published to npm: the `weft` command puts them in each app it makes. Warp, the Go module, comes from GitHub, where the repository is public.
@@ -31,7 +31,10 @@ Then read the guides as you need them:
 - [Warp, the Go side](guides/warp.md): the app, its modules, `.env`, a proxy, cross-site requests and tests.
 - [Typed routes](guides/routes.md): routes, their input, validation and errors.
 - [Data](guides/data.md): records in SQLite, and the five routes of a resource.
-- [Login](guides/login.md): the owner, sessions and permissions.
+- [Login](guides/login.md): the owner, sessions, roles, API keys, and who is signed in, in Vue.
+- [Accounts](guides/accounts.md): invitations, sign-up and password reset.
+- [Mail](guides/mail.md): printed to the log, or sent over SMTP.
+- [Middleware](guides/middleware.md): security headers, a request log and a rate limit.
 - [Types from Go](guides/types-from-go.md): the typed client and form rules `weft gen` writes.
 - [Serving from Go](guides/go-serving.md): what `warp.Serve` sends, and when.
 - [Themes](guides/themes.md): colours, type and spacing as tokens.
