@@ -35,7 +35,10 @@ type seen struct {
 // Last returns the newest message to to that the app's log driver kept since
 // the one Last returned for to before, waiting up to 5 s for one to come. It
 // fails the test when the app has no mail module or none comes. Addresses are
-// compared without their names and in any case.
+// compared without their names and in any case. What Last has returned for an
+// address is remembered until the test that first asked for that address
+// ends, so a parent test's Last after a subtest's may return the message the
+// subtest read.
 func Last(t testing.TB, app *warp.App, to string) wmail.Message {
 	t.Helper()
 	m := mailer(t, app)
