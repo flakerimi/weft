@@ -7,7 +7,7 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
 0.0.12 have no GitHub Release: they were published at weft.base.al, and
 `site/releases.txt` lists them (only 0.0.1 and 0.0.2 have a tag).
 
-## Unreleased
+## 0.0.25
 
 - Accounts (0.2.0). The login has four roles, owner, administrator, member
   and viewer, with permissions by grant (`auth.Grant`); sessions kept in a
