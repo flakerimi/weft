@@ -22,7 +22,7 @@ func main() {
 }
 ```
 
-- `dist` embeds `web/dist`, nil under `-tags dev` (`weft dev`); before the first `weft build` a binary refuses to start.
+- `dist` embeds `web/dist`, nil under `weft dev`; before the first `weft build` a binary refuses to start.
 - `app/modules.go` lists the modules in the order they start; a new one is `app/<name>/` with a `Module()`, added there.
 - A module is `Name() string` and `Register(app *warp.App) error`, and may add `Migrate`, `Start` and `Stop(ctx) error`: in order before serving, stop in reverse after.
 - `go.mod` requires Warp (`github.com/flakerimi/weft`) at the release's tag, from GitHub; `weft upgrade` moves it. Never edit `.weft/`.
@@ -65,11 +65,11 @@ Errors are `{"error":{"code":"…","message":"…","fields":{…}}}`. Return `wa
 
 ## Testing a module
 
-Test `app.Handler()` with `httptest` after checking `app.Err()`; `app.Start(ctx)` a module that migrates or starts. `warptest.New(t, vars, modules...)` starts the app with a client that keeps cookies; `authtest.Owner(t, c)` signs it in, `authtest.As(t, c, role)` a fork as a role.
+Test `app.Handler()` with `httptest` after checking `app.Err()`; `app.Start(ctx)` a module that migrates or starts. `warptest.New(t, vars, modules...)` starts the app with a client that keeps cookies; `authtest.Owner(t, c)` signs it in, `authtest.As(t, c, role)` a fork.
 
 ## What Serve answers
 
-`/api` goes to the API. Any other path gets its page, else a listed file, else the app's `index.html` under `--app-prefix`, else a run-time page whose pattern matches, else `pages/404.vue` with 404. Serve sends the stored brotli or gzip and the build's `ETag`, caches hashed files for a year, and answers `GET` and `HEAD` only. It panics at start if the build is incomplete.
+`/api` goes to the API. Any other path gets its page, else a listed file, else the app's `index.html` under `--app-prefix`, else a run-time page whose pattern matches, else `pages/404.vue` with 404. Serve sends the stored brotli or gzip and the build's `ETag`, caches hashed files for a year, and answers `GET` and `HEAD` only.
 
 ## Files from disk
 
@@ -108,7 +108,7 @@ Build for the image's system; `.dockerignore`: `*`, `!myapp`.
 
 ## Do not
 
-- Add a Go dependency for what the standard library and `warp` do; a database driver is the exception.
+- Add a Go dependency you do not need. Go: use the standard library and `github.com/flakerimi/weft/warp`; add a dependency only for what the standard library cannot do, such as a database driver.
 - Register a module from `init`, write `/api` in a route's path, or answer an error with JSON of your own.
 - Compress, render or hash anything per request, or embed large media.
 - Run `scripts/publish-site.sh`, `scripts/rollback-site.sh` or `lisa` for weft.base.al without `--dry-run`: that is the owner's step.
