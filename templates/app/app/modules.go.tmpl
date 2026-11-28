@@ -5,6 +5,7 @@ import (
 	"github.com/flakerimi/weft/warp"
 	"github.com/flakerimi/weft/warp/auth"
 	"github.com/flakerimi/weft/warp/data"
+	"github.com/flakerimi/weft/warp/mail"
 
 	"[[.Module]]/app/hello"
 )
@@ -15,6 +16,7 @@ import (
 func Modules() []warp.Module {
 	return []warp.Module{
 		data.Module(),
+		mail.Module(),
 		auth.Module(),
 		hello.Module(),
 	}

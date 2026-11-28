@@ -15,6 +15,8 @@ import (
 	"github.com/flakerimi/weft/warp/auth"
 	"github.com/flakerimi/weft/warp/auth/authtest"
 	"github.com/flakerimi/weft/warp/data"
+	"github.com/flakerimi/weft/warp/mail"
+	"github.com/flakerimi/weft/warp/mail/mailtest"
 	"github.com/flakerimi/weft/warp/warptest"
 )
 
@@ -56,11 +58,11 @@ func TestRegisterThenSetPassword(t *testing.T) {
 	if len(res.Body) != 0 || res.Header.Get("Set-Cookie") != "" {
 		t.Fatalf("register answered %q, cookie %q", res.Body, res.Header.Get("Set-Cookie"))
 	}
-	msg := lastMail(t, c.App, email)
+	msg := mailtest.Last(t, c.App, email)
 	if msg.To != email || msg.Subject != "Finish signing up to shop.example.com" {
 		t.Fatalf("mailed %+v", msg)
 	}
-	token := mailToken(t, msg)
+	token := mailtest.Token(t, msg)
 	var info auth.TokenInfo
 	tokenInfo(c, token).Want(200).JSON(&info)
 	if info != (auth.TokenInfo{Purpose: "register", Email: email}) {
@@ -128,7 +130,7 @@ func TestRegisterAndForgotSayNothing(t *testing.T) {
 	}
 	// What was mailed: register mails both, forgot only the known address.
 	var subjects []string
-	for _, m := range sent(t, c.App, 3) {
+	for _, m := range kept(t, c.App, 3) {
 		subjects = append(subjects, m.To+": "+m.Subject)
 	}
 	want := []string{
@@ -143,7 +145,7 @@ func TestRegisterAndForgotSayNothing(t *testing.T) {
 		t.Fatalf("mailed %q, want %q", subjects, want)
 	}
 	time.Sleep(100 * time.Millisecond)
-	if n := len(sent(t, c.App, 0)); n != 3 {
+	if n := len(mail.For(c.App).Kept()); n != 3 {
 		t.Fatalf("%d mails, want 3: forgot mailed an address with no account", n)
 	}
 }
@@ -232,9 +234,9 @@ func TestRegisterAndForgotTakeAlike(t *testing.T) {
 	c := startClocked(t, withRegistration(t, "open"), at)
 	for _, route := range []string{"/api/auth/forgot", "/api/auth/register"} {
 		k, u := answerTimes(t, c, at, route, func() {
-			lastMail(t, c.App, ownerEmail)
+			mailtest.Last(t, c.App, ownerEmail)
 			if route == "/api/auth/register" { // register mails the address without an account too
-				lastMail(t, c.App, "nobody@example.com")
+				mailtest.Last(t, c.App, "nobody@example.com")
 			}
 		})
 		alike(t, route, k, u)
@@ -269,11 +271,11 @@ func TestRegisterKnownAddressMailsReset(t *testing.T) {
 	c, _ := startAuth(t, withRegistration(t, "open"))
 	authtest.Owner(t, c)
 	c.Fork().Post("/api/auth/register", map[string]string{"email": ownerEmail}).Want(204)
-	msg := lastMail(t, c.App, ownerEmail)
+	msg := mailtest.Last(t, c.App, ownerEmail)
 	if msg.Subject != "You already have an account at shop.example.com" || !strings.Contains(msg.Text, "already has an account") {
 		t.Fatalf("mailed %+v", msg)
 	}
-	token := mailToken(t, msg)
+	token := mailtest.Token(t, msg)
 	var info auth.TokenInfo
 	tokenInfo(c, token).Want(200).JSON(&info)
 	if info != (auth.TokenInfo{Purpose: "reset", Email: ownerEmail}) {
@@ -297,12 +299,12 @@ func TestForgotThenReset(t *testing.T) {
 	other := c.Fork()
 	copied := held(t, login(other, ownerEmail, authtest.Password).Want(200))
 	c.Fork().Post("/api/auth/forgot", map[string]string{"email": "OWNER@example.com"}).Want(204)
-	msg := lastMail(t, c.App, ownerEmail)
+	msg := mailtest.Last(t, c.App, ownerEmail)
 	if msg.Subject != "Reset your password for shop.example.com" {
 		t.Fatalf("mailed %+v", msg)
 	}
 	u := c.Fork()
-	setPassword(u, mailToken(t, msg), newPassword).Want(200)
+	setPassword(u, mailtest.Token(t, msg), newPassword).Want(200)
 	for _, old := range []*warptest.Client{c, other} {
 		wantError(t, old.Get("/api/auth/me"), 401, "unauthorized", signIn)
 	}
@@ -321,7 +323,7 @@ func TestResetClearsAccountCount(t *testing.T) {
 	wantError(t, from(c, http.MethodPost, "/api/auth/login", map[string]string{"email": ownerEmail, "password": authtest.Password}, "198.51.100.1:1000"),
 		429, "rate_limited", tooManyForAccount)
 	c.Fork().Post("/api/auth/forgot", map[string]string{"email": ownerEmail}).Want(204)
-	setPassword(c.Fork(), mailToken(t, lastMail(t, c.App, ownerEmail)), newPassword).Want(200)
+	setPassword(c.Fork(), mailtest.Token(t, mailtest.Last(t, c.App, ownerEmail)), newPassword).Want(200)
 	from(c, http.MethodPost, "/api/auth/login", map[string]string{"email": ownerEmail, "password": newPassword}, "198.51.100.2:1000").Want(200)
 }
 
@@ -329,7 +331,7 @@ func TestTokenOnce(t *testing.T) {
 	c, _ := startAuth(t, authEnv(t))
 	authtest.Owner(t, c)
 	c.Fork().Post("/api/auth/forgot", map[string]string{"email": ownerEmail}).Want(204)
-	token := mailToken(t, lastMail(t, c.App, ownerEmail))
+	token := mailtest.Token(t, mailtest.Last(t, c.App, ownerEmail))
 	setPassword(c.Fork(), token, newPassword).Want(200)
 	wantError(t, setPassword(c.Fork(), token, "yet another password"), 403, "forbidden", linkGone)
 	wantError(t, tokenInfo(c, token), 403, "forbidden", linkGone)
@@ -364,7 +366,7 @@ func TestTokenLifetimes(t *testing.T) {
 		case "invite":
 			admin.Post("/api/auth/invitations", map[string]string{"email": email, "role": "member"}).Want(201)
 		}
-		return mailToken(t, lastMail(t, c.App, email))
+		return mailtest.Token(t, mailtest.Last(t, c.App, email))
 	}
 	for _, tc := range []struct {
 		kind         string
@@ -396,7 +398,7 @@ func TestTokenPurposeIsKept(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.Fork().Post("/api/auth/forgot", map[string]string{"email": u.Email}).Want(204)
-	reset := mailToken(t, lastMail(t, c.App, u.Email))
+	reset := mailtest.Token(t, mailtest.Last(t, c.App, u.Email))
 	if err := auth.RemoveUser(ctx, c.App, u.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -407,7 +409,7 @@ func TestTokenPurposeIsKept(t *testing.T) {
 	// its password.
 	const email = "late@example.com"
 	c.Fork().Post("/api/auth/register", map[string]string{"email": email}).Want(204)
-	register := mailToken(t, lastMail(t, c.App, email))
+	register := mailtest.Token(t, mailtest.Last(t, c.App, email))
 	if _, err := auth.AddUser(ctx, c.App, email, "the real password", auth.RoleMember); err != nil {
 		t.Fatal(err)
 	}
@@ -419,9 +421,9 @@ func TestNewResetEndsOldOne(t *testing.T) {
 	c, _ := startAuth(t, authEnv(t))
 	authtest.Owner(t, c)
 	c.Fork().Post("/api/auth/forgot", map[string]string{"email": ownerEmail}).Want(204)
-	first := mailToken(t, lastMail(t, c.App, ownerEmail))
+	first := mailtest.Token(t, mailtest.Last(t, c.App, ownerEmail))
 	c.Fork().Post("/api/auth/forgot", map[string]string{"email": ownerEmail}).Want(204)
-	second := mailToken(t, lastMail(t, c.App, ownerEmail))
+	second := mailtest.Token(t, mailtest.Last(t, c.App, ownerEmail))
 	if first == second {
 		t.Fatal("two resets mailed one token")
 	}
@@ -437,8 +439,8 @@ func TestTokensStoredAsHashes(t *testing.T) {
 	c.Fork().Post("/api/auth/register", map[string]string{"email": "new@example.com"}).Want(204)
 	c.Post("/api/auth/invitations", map[string]string{"email": "asked@example.com", "role": "member"}).Want(201)
 	var tokens []string
-	for _, m := range sent(t, c.App, 3) {
-		tokens = append(tokens, mailToken(t, m))
+	for _, m := range kept(t, c.App, 3) {
+		tokens = append(tokens, mailtest.Token(t, m))
 	}
 	if len(tokens) != 3 {
 		t.Fatalf("%d mails", len(tokens))
@@ -483,12 +485,12 @@ func TestLinksUseFragment(t *testing.T) {
 	c.Fork().Post("/api/auth/register", map[string]string{"email": ownerEmail}).Want(204)
 	c.Fork().Post("/api/auth/register", map[string]string{"email": "new@example.com"}).Want(204)
 	c.Post("/api/auth/invitations", map[string]string{"email": "asked@example.com", "role": "viewer"}).Want(201)
-	mails := sent(t, c.App, 4)
+	mails := kept(t, c.App, 4)
 	if len(mails) != 4 {
 		t.Fatalf("%d mails", len(mails))
 	}
 	for _, m := range mails {
-		token := mailToken(t, m)
+		token := mailtest.Token(t, m)
 		link := linkStart + token
 		if !strings.Contains(m.Text, link) || !strings.Contains(m.HTML, `href="`+link+`"`) {
 			t.Errorf("%q does not carry %s in its text and HTML:\n%s\n%s", m.Subject, link, m.Text, m.HTML)
@@ -512,7 +514,7 @@ func TestInvite(t *testing.T) {
 	if inv.ID == 0 || inv.Email != email || inv.Role != "member" || inv.InvitedBy != au.ID || inv.ExpiresAt.Sub(inv.CreatedAt).Round(time.Minute) != 7*24*time.Hour {
 		t.Fatalf("invite answered %+v", inv)
 	}
-	msg := lastMail(t, c.App, email)
+	msg := mailtest.Last(t, c.App, email)
 	if msg.Subject != "You are invited to shop.example.com" || !strings.Contains(msg.Text, "member") {
 		t.Fatalf("mailed %+v", msg)
 	}
@@ -525,7 +527,7 @@ func TestInvite(t *testing.T) {
 	if strings.Contains(body, "token") {
 		t.Fatalf("the list has a token: %s", body)
 	}
-	token := mailToken(t, msg)
+	token := mailtest.Token(t, msg)
 	var info auth.TokenInfo
 	tokenInfo(c, token).Want(200).JSON(&info)
 	if info != (auth.TokenInfo{Purpose: "invite", Email: email, Role: "member"}) {
@@ -579,9 +581,9 @@ func TestInviterDemotedVoidsInvitation(t *testing.T) {
 	authtest.Owner(t, c)
 	admin, au := authtest.As(t, c, auth.RoleAdministrator)
 	admin.Post("/api/auth/invitations", map[string]string{"email": "peer@example.com", "role": "administrator"}).Want(201)
-	peer := mailToken(t, lastMail(t, c.App, "peer@example.com"))
+	peer := mailtest.Token(t, mailtest.Last(t, c.App, "peer@example.com"))
 	admin.Post("/api/auth/invitations", map[string]string{"email": "low@example.com", "role": "member"}).Want(201)
-	low := mailToken(t, lastMail(t, c.App, "low@example.com"))
+	low := mailtest.Token(t, mailtest.Last(t, c.App, "low@example.com"))
 	tokenInfo(c, peer).Want(200)
 
 	if _, err := data.For(c.App).Exec(ctx, `UPDATE "users" SET "role" = 'member' WHERE "id" = ?`, au.ID); err != nil {
@@ -705,7 +707,7 @@ func TestInvitationsListAndRemove(t *testing.T) {
 	}
 	viewer, _ := authtest.As(t, c, auth.RoleViewer)
 	wantError(t, viewer.Delete("/api/auth/invitations/1"), 403, "forbidden", "Your account cannot do that.")
-	token := mailToken(t, lastMail(t, c.App, "ann@example.com"))
+	token := mailtest.Token(t, mailtest.Last(t, c.App, "ann@example.com"))
 	c.Delete("/api/auth/invitations/1").Want(204)
 	wantError(t, c.Delete("/api/auth/invitations/1"), 404, "not_found", "No invitation has id 1.")
 	wantError(t, tokenInfo(c, token), 403, "forbidden", linkGone)
@@ -721,7 +723,7 @@ func TestMailSettingsMistakes(t *testing.T) {
 		vars := authEnv(t)
 		vars[tc.key] = tc.value
 		app := warp.New(warp.ConfigFrom(vars))
-		app.Use(data.Module(), mailModule(), auth.Module())
+		app.Use(data.Module(), mail.Module(), auth.Module())
 		err := app.Start(context.Background())
 		if err == nil {
 			app.Stop(context.Background())
@@ -746,7 +748,6 @@ func TestMailSettingsMistakes(t *testing.T) {
 
 // The plan's TestAuthNeedsMail: without mail.Module(), the sentence of Calls.
 func TestAuthNeedsMail(t *testing.T) {
-	t.Skip("waits on Task B1: until warp/mail is merged, the login looks for its mail module when it first sends, not in Register; see warp/auth/postman.go.")
 	app := warp.New(warp.ConfigFrom(nil))
 	app.Use(data.Module(), auth.Module())
 	want := `warp: module "auth" needs the "mail" module; list mail.Module() before it in app/modules.go.`
@@ -766,7 +767,7 @@ func TestResetLinkDiesWithItsUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.Fork().Post("/api/auth/forgot", map[string]string{"email": email}).Want(204)
-	token := mailToken(t, lastMail(t, c.App, email))
+	token := mailtest.Token(t, mailtest.Last(t, c.App, email))
 	if err := auth.RemoveUser(ctx, c.App, old.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -783,7 +784,7 @@ func TestResetLinkDiesWithItsUser(t *testing.T) {
 	// Through the route as well: remove_user takes the user's reset links.
 	_, u := authtest.As(t, c, auth.RoleMember)
 	c.Fork().Post("/api/auth/forgot", map[string]string{"email": u.Email}).Want(204)
-	token = mailToken(t, lastMail(t, c.App, u.Email))
+	token = mailtest.Token(t, mailtest.Last(t, c.App, u.Email))
 	c.Delete(fmt.Sprintf("/api/auth/users/%d", u.ID)).Want(204)
 	if _, err := auth.AddUser(ctx, c.App, u.Email, "another password", auth.RoleViewer); err != nil {
 		t.Fatal(err)
@@ -803,76 +804,4 @@ func TestRemoveInvitationByRank(t *testing.T) {
 	wantError(t, admin.Delete(fmt.Sprintf("/api/auth/invitations/%d", boss.ID)), 403, "forbidden", "Your account cannot remove an invitation for a higher role.")
 	admin.Delete(fmt.Sprintf("/api/auth/invitations/%d", peer.ID)).Want(204)
 	c.Delete(fmt.Sprintf("/api/auth/invitations/%d", boss.ID)).Want(204)
-}
-
-// blockMail is a mail module whose Send waits until the test lets it go, or
-// until the mailing's context ends.
-type blockMail struct {
-	started chan struct{}
-	release chan struct{}
-}
-
-func (*blockMail) Name() string { return "mail" }
-
-func (b *blockMail) Register(app *warp.App) error {
-	warp.Provide[postman](app, b)
-	return nil
-}
-
-func (b *blockMail) Send(ctx context.Context, _ letter) error {
-	b.started <- struct{}{}
-	select {
-	case <-b.release:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-// Review N4: Stop waits for a mailing under way, and when its time runs
-// out first it says so and ends the mailing.
-func TestStopWaitsForMailing(t *testing.T) {
-	start := func(t *testing.T) (*warptest.Client, *blockMail) {
-		b := &blockMail{started: make(chan struct{}, 1), release: make(chan struct{})}
-		c := warptest.New(t, authEnv(t), data.Module(), b, auth.Module(), things{})
-		authtest.Owner(t, c)
-		c.Fork().Post("/api/auth/forgot", map[string]string{"email": ownerEmail}).Want(204)
-		select {
-		case <-b.started:
-		case <-time.After(mailWait):
-			t.Fatal("the mailing did not begin")
-		}
-		return c, b
-	}
-
-	t.Run("waits", func(t *testing.T) {
-		c, b := start(t)
-		done := make(chan error, 1)
-		go func() { done <- c.App.Stop(context.Background()) }()
-		select {
-		case err := <-done:
-			t.Fatalf("Stop returned (%v) while a mailing was under way", err)
-		case <-time.After(100 * time.Millisecond):
-		}
-		close(b.release)
-		select {
-		case err := <-done:
-			if err != nil {
-				t.Fatalf("Stop = %v once the mailing was done", err)
-			}
-		case <-time.After(mailWait):
-			t.Fatal("Stop did not return once the mailing was done")
-		}
-	})
-
-	t.Run("gives up", func(t *testing.T) {
-		c, _ := start(t)
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-		defer cancel()
-		err := c.App.Stop(ctx)
-		want := `warp: module "auth" could not stop: the mail register or forgot asked for was still being made when the app stopped, so it was not sent; ask for it again.`
-		if err == nil || !strings.Contains(err.Error(), want) {
-			t.Fatalf("Stop = %v\nwant it to have %s", err, want)
-		}
-	})
 }

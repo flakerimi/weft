@@ -12,6 +12,7 @@ import (
 	"github.com/flakerimi/weft/warp/auth"
 	"github.com/flakerimi/weft/warp/auth/authtest"
 	"github.com/flakerimi/weft/warp/data"
+	"github.com/flakerimi/weft/warp/mail/mailtest"
 	"github.com/flakerimi/weft/warp/warptest"
 )
 
@@ -291,7 +292,7 @@ func TestResetEndsKeysAndChangeKeepsThem(t *testing.T) {
 	}
 
 	c.Fork().Post("/api/auth/forgot", map[string]string{"email": ownerEmail}).Want(204)
-	setPassword(c.Fork(), mailToken(t, lastMail(t, c.App, ownerEmail)), "a third password, for tests").Want(200)
+	setPassword(c.Fork(), mailtest.Token(t, mailtest.Last(t, c.App, ownerEmail)), "a third password, for tests").Want(200)
 	wantError(t, bearer(c, k.Secret, http.MethodGet, "/api/things", nil), 401, "unauthorized", keyNotValid)
 	if n := rowsIn(t, c, "api_keys"); n != 1 {
 		t.Fatalf("%d keys after a reset, want the other user's alone", n)

@@ -168,8 +168,14 @@ func assertCreated(t *testing.T, dir string) {
 		t.Errorf("main.go does not import the SQLite driver: %q", read("main.go"))
 	}
 	modules := read("app/modules.go")
-	if i, j, k := strings.Index(modules, "data.Module(),"), strings.Index(modules, "auth.Module(),"), strings.Index(modules, "hello.Module(),"); i < 0 || j < i || k < j {
-		t.Errorf("app/modules.go does not list data, auth and hello in that order: %q", modules)
+	at := -1
+	for _, m := range []string{"data", "mail", "auth", "hello"} {
+		i := strings.Index(modules, "\t\t"+m+".Module(),\n")
+		if i <= at {
+			t.Errorf("app/modules.go does not list data, mail, auth and hello in that order: %q", modules)
+			break
+		}
+		at = i
 	}
 	// An agent starts from /index.md, as the app's AGENTS.md says too.
 	for _, f := range []string{"README.md", "AGENTS.md"} {

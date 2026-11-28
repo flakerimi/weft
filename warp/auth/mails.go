@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/flakerimi/weft/warp/mail"
 )
 
 // mailData is what the login's mails are filled with: APP_URL's host, the
@@ -78,13 +80,13 @@ The link works once, for 1 hour. If it was not you, you can ignore this mail; yo
 
 // mails is the four templates, parsed once, in Register.
 type mails struct {
-	invite, register, known, reset *letterTemplate
+	invite, register, known, reset *mail.Template
 }
 
 func parseMails() (*mails, error) {
 	var m mails
 	for _, t := range []struct {
-		to                  **letterTemplate
+		to                  **mail.Template
 		name                string
 		subject, text, html string
 	}{
@@ -93,7 +95,7 @@ func parseMails() (*mails, error) {
 		{&m.known, "known address", knownSubject, knownText, knownHTML},
 		{&m.reset, "reset", resetSubject, resetText, resetHTML},
 	} {
-		tpl, err := newLetterTemplate(t.subject, t.text, t.html)
+		tpl, err := mail.NewTemplate(t.subject, t.text, t.html)
 		if err != nil {
 			return nil, fmt.Errorf("auth: the %s mail does not parse (%v); fix its template in warp/auth/mails.go.", t.name, err)
 		}

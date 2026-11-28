@@ -8,6 +8,7 @@ import (
 
 	"github.com/flakerimi/weft/warp"
 	"github.com/flakerimi/weft/warp/data"
+	"github.com/flakerimi/weft/warp/mail"
 )
 
 // rolesOf is the roles of a module given opts, failing the test on a mistake.
@@ -92,7 +93,7 @@ func TestGrantIncludesRolesAbove(t *testing.T) {
 
 func TestGrantMistakes(t *testing.T) {
 	app := warp.New(warp.ConfigFrom(nil))
-	app.Use(data.Module(), Module(
+	app.Use(data.Module(), mail.Module(), Module(
 		Grant(RoleMember, "products:export", "Products"),
 		Grant("editor", "products:export"),
 		Grant(RoleViewer, "products", "*:*:*", "a b:read", "*:read"),
@@ -138,7 +139,7 @@ func (productRoutes) Register(app *warp.App) error {
 
 func TestPermissionsOfMe(t *testing.T) {
 	app := warp.New(warp.ConfigFrom(nil))
-	app.Use(data.Module(), Module(Grant(RoleMember, "reports:export", "invoices:*", "archive:read")), productRoutes{})
+	app.Use(data.Module(), mail.Module(), Module(Grant(RoleMember, "reports:export", "invoices:*", "archive:read")), productRoutes{})
 	if err := app.Err(); err != nil {
 		t.Fatal(err)
 	}

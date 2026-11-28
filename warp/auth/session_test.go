@@ -13,6 +13,7 @@ import (
 
 	"github.com/flakerimi/weft/warp"
 	"github.com/flakerimi/weft/warp/data"
+	"github.com/flakerimi/weft/warp/mail"
 )
 
 var (
@@ -180,7 +181,7 @@ func TestTheLoginsNamesAreReserved(t *testing.T) {
 		Name string `json:"name"`
 	}
 	app := warp.New(warp.Config{})
-	app.Use(data.Module(), Module(), appStore{func(app *warp.App) {
+	app.Use(data.Module(), mail.Module(), Module(), appStore{func(app *warp.App) {
 		warp.Get(app, "/people", func(context.Context, warp.None) (User, error) { return User{}, nil })
 	}})
 	_, err := app.Describe()

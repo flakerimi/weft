@@ -14,6 +14,7 @@ import (
 	"github.com/flakerimi/weft/warp/auth"
 	"github.com/flakerimi/weft/warp/auth/authtest"
 	"github.com/flakerimi/weft/warp/data"
+	"github.com/flakerimi/weft/warp/mail"
 	"github.com/flakerimi/weft/warp/warptest"
 )
 
@@ -34,7 +35,7 @@ func (products) Register(app *warp.App) error {
 // signed in on the client it returns.
 func startShop(t *testing.T, vars map[string]string, opts ...auth.Option) *warptest.Client {
 	t.Helper()
-	c := warptest.New(t, vars, data.Module(), mailModule(), auth.Module(opts...), things{}, products{})
+	c := warptest.New(t, vars, data.Module(), mail.Module(), auth.Module(opts...), things{}, products{})
 	authtest.Owner(t, c)
 	return c
 }

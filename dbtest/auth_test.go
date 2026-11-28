@@ -24,6 +24,7 @@ import (
 	"github.com/flakerimi/weft/warp/auth"
 	"github.com/flakerimi/weft/warp/auth/authtest"
 	"github.com/flakerimi/weft/warp/data"
+	"github.com/flakerimi/weft/warp/mail"
 	"github.com/flakerimi/weft/warp/warptest"
 )
 
@@ -60,18 +61,19 @@ func authEnv(t *testing.T) map[string]string {
 	}
 }
 
-// startAuth starts an app with data, auth and things over vars and returns
-// its client and what the app logged while starting.
+// startAuth starts an app with data, mail, auth and things over vars and
+// returns its client and what the app logged while starting, without the
+// line the mail module's log driver writes at its start.
 func startAuth(t *testing.T, vars map[string]string) (*warptest.Client, string) {
 	t.Helper()
 	var logged bytes.Buffer
 	out, flags := log.Writer(), log.Flags()
 	log.SetOutput(&logged)
 	log.SetFlags(0)
-	c := warptest.New(t, vars, data.Module(), mailModule(), auth.Module(), things{})
+	c := warptest.New(t, vars, data.Module(), mail.Module(), auth.Module(), things{})
 	log.SetOutput(out)
 	log.SetFlags(flags)
-	return c, logged.String()
+	return c, strings.Replace(logged.String(), "mail is printed, not sent; set MAIL=smtp in .env to send it.\n", "", 1)
 }
 
 var setupLine = regexp.MustCompile(`^Set up the owner at https://shop\.example\.com/setup#token=([A-Za-z0-9_-]{43})\n$`)
@@ -561,7 +563,7 @@ func wantField(t *testing.T, res *warptest.Response, field, message string) {
 func TestEnvironmentMistakes(t *testing.T) {
 	// Registering reads nothing, so an app with an empty .env describes itself.
 	app := warp.New(warp.ConfigFrom(nil))
-	app.Use(data.Module(), mailModule(), auth.Module())
+	app.Use(data.Module(), mail.Module(), auth.Module())
 	if err := app.Err(); err != nil {
 		t.Fatalf("an empty .env: %v", err)
 	}
@@ -585,7 +587,7 @@ func TestEnvironmentMistakes(t *testing.T) {
 		vars := authEnv(t)
 		vars[tc.key] = tc.value
 		app := warp.New(warp.ConfigFrom(vars))
-		app.Use(data.Module(), mailModule(), auth.Module())
+		app.Use(data.Module(), mail.Module(), auth.Module())
 		if err := app.Err(); err != nil {
 			t.Fatalf("%s=%q is a registration mistake: %v", tc.key, tc.value, err)
 		}
@@ -630,7 +632,7 @@ func TestOwnerHelper(t *testing.T) {
 
 func TestDescribeHidesTheHash(t *testing.T) {
 	app := warp.New(warp.ConfigFrom(nil))
-	app.Use(data.Module(), mailModule(), auth.Module())
+	app.Use(data.Module(), mail.Module(), auth.Module())
 	d, err := app.Describe()
 	if err != nil {
 		t.Fatal(err)
@@ -763,7 +765,7 @@ func TestTheLoginsTableIsReserved(t *testing.T) {
 		Body string `json:"body"`
 	}
 	app := warp.New(warp.Config{})
-	app.Use(data.Module(), mailModule(), auth.Module(), stores{"notes", func(db *data.DB) { data.NewStore[Note](db, "users") }})
+	app.Use(data.Module(), mail.Module(), auth.Module(), stores{"notes", func(db *data.DB) { data.NewStore[Note](db, "users") }})
 	want := `warp: the table users is the login's, which warp/auth keeps its users in; give the store of Note another table.`
 	if err := app.Err(); err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("Err = %v\nwant %s", err, want)

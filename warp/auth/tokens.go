@@ -11,6 +11,7 @@ import (
 
 	"github.com/flakerimi/weft/warp"
 	"github.com/flakerimi/weft/warp/data"
+	"github.com/flakerimi/weft/warp/mail"
 )
 
 // Registration, invitation and reset are one mechanism: a mailed link,
@@ -253,14 +254,14 @@ func (m *module) later(work func(ctx context.Context) error) error {
 // mailToken makes a token of purpose for email (a reset for the user id),
 // ending the address's earlier one, and mails its link, in one transaction,
 // so a mail the mail module refuses (a full queue) leaves no token.
-func (m *module) mailToken(ctx context.Context, email string, userID int64, purpose string, tpl *letterTemplate) error {
+func (m *module) mailToken(ctx context.Context, email string, userID int64, purpose string, tpl *mail.Template) error {
 	lasts := resetLasts
 	if purpose == purposeRegister {
 		lasts = registerLasts
 	}
 	token := newToken()
 	row := tokenRow{Purpose: purpose, Email: email, UserID: userID, TokenHash: tokenHash(token), ExpiresAt: m.now().Add(lasts)}
-	msg, err := tpl.message(email, mailData{Host: m.host, Link: m.link(token)})
+	msg, err := tpl.Message(email, mailData{Host: m.host, Link: m.link(token)})
 	if err != nil {
 		return err
 	}
@@ -271,7 +272,7 @@ func (m *module) mailToken(ctx context.Context, email string, userID int64, purp
 		if err := m.tokens.Create(ctx, &row); err != nil {
 			return err
 		}
-		return m.send(ctx, msg)
+		return m.mail.Send(ctx, msg)
 	})
 }
 
@@ -471,7 +472,7 @@ func (m *module) invite(ctx context.Context, in InviteInput) (Invitation, error)
 	}
 	token := newToken()
 	row := invitationRow{Email: email, Role: in.Role, InvitedBy: actor.ID, ExpiresAt: m.now().Add(inviteLasts), TokenHash: tokenHash(token)}
-	msg, err := m.mails.invite.message(email, mailData{Host: m.host, Link: m.link(token), Role: in.Role})
+	msg, err := m.mails.invite.Message(email, mailData{Host: m.host, Link: m.link(token), Role: in.Role})
 	if err != nil {
 		return Invitation{}, err
 	}
@@ -482,7 +483,7 @@ func (m *module) invite(ctx context.Context, in InviteInput) (Invitation, error)
 		if err := m.invitations.Create(ctx, &row); err != nil {
 			return err
 		}
-		return m.send(ctx, msg)
+		return m.mail.Send(ctx, msg)
 	})
 	if err != nil {
 		return Invitation{}, err

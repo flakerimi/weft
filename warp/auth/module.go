@@ -31,6 +31,7 @@ import (
 
 	"github.com/flakerimi/weft/warp"
 	"github.com/flakerimi/weft/warp/data"
+	"github.com/flakerimi/weft/warp/mail"
 )
 
 // User is a person who can sign in. The password's hash is kept beside it in
@@ -56,10 +57,11 @@ func (r userRow) user() User {
 	return User{Record: r.Record, Email: r.Email, Name: r.Name, Role: r.Role}
 }
 
-// Module is the auth module, named "auth", which needs the data module before
-// it. Registering adds its routes under /api/auth and the users store, and
-// reads nothing; its Start reads the AUTH_ settings and, while no user exists,
-// logs the link that sets up the owner. Grant adds permissions to a role.
+// Module is the auth module, named "auth", which needs the data and mail
+// modules before it. Registering adds its routes under /api/auth and the
+// users store, and reads nothing; its Start reads the AUTH_ settings and,
+// while no user exists, logs the link that sets up the owner. Grant adds
+// permissions to a role.
 func Module(opts ...Option) warp.Module {
 	m := newModule(nil)
 	for _, opt := range opts {
@@ -83,9 +85,8 @@ type module struct {
 	pending     sync.WaitGroup // of those, for Stop
 	base        context.Context
 	cancelBase  context.CancelFunc
-	stopping    bool // set by Stop, under mu
-	postOnce    sync.Once
-	post        postman // the mail module's, once looked for
+	stopping    bool         // set by Stop, under mu
+	mail        *mail.Mailer // the mail module's, which sends the login's links
 	opts        options
 	roles       *roles // set by Register
 	known       known  // the permissions Me may list
@@ -159,6 +160,7 @@ func (m *module) Name() string { return "auth" }
 func (m *module) Register(app *warp.App) error {
 	var err error
 	m.app = app
+	m.mail = mail.For(app)
 	r, mistakes := newRoles(m.opts.grants)
 	for _, s := range mistakes {
 		app.Mistake("%s", s)

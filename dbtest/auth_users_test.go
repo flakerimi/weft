@@ -11,6 +11,7 @@ import (
 	"github.com/flakerimi/weft/warp/auth"
 	"github.com/flakerimi/weft/warp/auth/authtest"
 	"github.com/flakerimi/weft/warp/data"
+	"github.com/flakerimi/weft/warp/mail/mailtest"
 	"github.com/flakerimi/weft/warp/warptest"
 )
 
@@ -159,7 +160,7 @@ func TestRemoveUserTakesEverything(t *testing.T) {
 	admin, au := authtest.As(t, c, auth.RoleAdministrator)
 	copied := held(t, login(c.Fork(), au.Email, authtest.Password).Want(200))
 	admin.Post("/api/auth/invitations", map[string]string{"email": "asked@example.com", "role": "member"}).Want(201)
-	token := mailToken(t, lastMail(t, c.App, "asked@example.com"))
+	token := mailtest.Token(t, mailtest.Last(t, c.App, "asked@example.com"))
 	c.Delete(fmt.Sprintf("/api/auth/users/%d", au.ID)).Want(204)
 	wantError(t, admin.Get("/api/auth/me"), 401, "unauthorized", signIn)
 	wantError(t, with(c, copied, http.MethodGet, "/api/auth/me"), 401, "unauthorized", signIn)
