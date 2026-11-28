@@ -17,8 +17,9 @@ import (
 // SHA-256. It has a name, a role no higher than its maker's, and an end 1 to
 // 365 days on (90 when not given). It acts with the lower of its role and
 // its user's role now, so a user demoted is a key demoted. It reaches the
-// routes auth.Can guards and me, never the rest of /api/auth: a stolen key
-// cannot make more keys, read sessions or change a password. API_KEYS=on
+// routes auth.Can guards and me, never the rest of /api/auth, and none that
+// manages accounts or keys: a stolen key cannot make more keys, invite,
+// change or remove an account, read sessions or change a password. API_KEYS=on
 // turns keys on; off, a key is refused.
 const (
 	keyStart       = "wk_"
@@ -186,10 +187,30 @@ func (m *module) keyed(ctx context.Context, key string) (User, error) {
 // keyRoutes adds keys, create_key and remove_key under /auth, which take the
 // session cookie alone.
 func (m *module) keyRoutes() {
-	warp.Get(m.app, "/auth/keys", m.listKeys, warp.Name("keys"))
-	warp.Post(m.app, "/auth/keys", m.createKey, warp.Name("create_key"))
-	warp.Delete(m.app, "/auth/keys/{id}", m.removeKey, warp.Name("remove_key"))
+	warp.Get(m.app, "/auth/keys", m.listKeys, warp.Name("keys"), noKey)
+	warp.Post(m.app, "/auth/keys", m.createKey, warp.Name("create_key"), noKey)
+	warp.Delete(m.app, "/auth/keys/{id}", m.removeKey, warp.Name("remove_key"), noKey)
 }
+
+// errKeyCannot is the answer of a route that manages accounts or keys to a
+// request that carries an API key.
+const errKeyCannot = "An API key cannot manage accounts or keys; sign in to do that."
+
+// noKey is the route option of the routes that manage accounts or keys:
+// invitations, role changes, removing a user, ending a user's sessions, and
+// the keys. A request that carries an API key is answered 403 before
+// anything else, whatever the key's role, so a stolen key cannot give its
+// thief an account or a key of their own. Listed before Can, it is outside
+// Can's guard.
+var noKey = warp.With(func(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := bearer(r); ok {
+			warp.WriteError(w, r, warp.Forbidden(errKeyCannot))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+})
 
 // mine is a query for the rows of the user id, at most n.
 func mine(id int64, sort string, n int) data.Query {

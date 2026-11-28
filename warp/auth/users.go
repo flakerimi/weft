@@ -43,9 +43,9 @@ const (
 // password, under /auth.
 func (m *module) userRoutes() {
 	warp.Get(m.app, "/auth/users", m.listUsers, warp.Name("users"), Can("users:read"))
-	warp.Patch(m.app, "/auth/users/{id}", m.updateUser, warp.Name("update_user"), Can("users:edit"))
-	warp.Delete(m.app, "/auth/users/{id}", m.removeUserRoute, warp.Name("remove_user"), Can("users:delete"))
-	warp.Delete(m.app, "/auth/users/{id}/sessions", m.endUserSessions, warp.Name("end_user_sessions"), Can("users:edit"))
+	warp.Patch(m.app, "/auth/users/{id}", m.updateUser, warp.Name("update_user"), noKey, Can("users:edit"))
+	warp.Delete(m.app, "/auth/users/{id}", m.removeUserRoute, warp.Name("remove_user"), noKey, Can("users:delete"))
+	warp.Delete(m.app, "/auth/users/{id}/sessions", m.endUserSessions, warp.Name("end_user_sessions"), noKey, Can("users:edit"))
 	warp.Patch(m.app, "/auth/me", m.updateMe, warp.Name("update_me"))
 	warp.Post(m.app, "/auth/password/change", m.changePassword, warp.Name("change_password"))
 }

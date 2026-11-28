@@ -140,8 +140,8 @@ func (m *module) mailRoutes() {
 	warp.Post(m.app, "/auth/token", m.tokenInfo, warp.Name("token"), warp.Status(http.StatusOK))
 	warp.Post(m.app, "/auth/password", m.setPassword, warp.Name("password"), warp.Status(http.StatusOK))
 	warp.Get(m.app, "/auth/invitations", m.listInvitations, warp.Name("invitations"), Can("users:read"))
-	warp.Post(m.app, "/auth/invitations", m.invite, warp.Name("invite"), Can("users:invite"))
-	warp.Delete(m.app, "/auth/invitations/{id}", m.removeInvitation, warp.Name("remove_invitation"), Can("users:invite"))
+	warp.Post(m.app, "/auth/invitations", m.invite, warp.Name("invite"), noKey, Can("users:invite"))
+	warp.Delete(m.app, "/auth/invitations/{id}", m.removeInvitation, warp.Name("remove_invitation"), noKey, Can("users:invite"))
 }
 
 // settings answers AUTH_REGISTRATION and whether API_KEYS is on.

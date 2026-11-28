@@ -101,8 +101,8 @@ func TestKeyRoleIsTheLower(t *testing.T) {
 	// A member's key cannot manage users, though its user may.
 	wantError(t, bearer(c, high.Secret, http.MethodGet, "/api/auth/users", nil), 403, "forbidden", "Your account cannot do that.")
 	admin.Get("/api/auth/users").Want(200)
-	// Nor invite with more than its role.
-	wantError(t, bearer(c, high.Secret, http.MethodPost, "/api/auth/invitations", map[string]string{"email": "x@example.com", "role": "member"}), 403, "forbidden", "Your account cannot do that.")
+	// Nor invite, as no key does (TestKeyCannotManageAccounts).
+	wantError(t, bearer(c, high.Secret, http.MethodPost, "/api/auth/invitations", map[string]string{"email": "x@example.com", "role": "member"}), 403, "forbidden", keyCannot)
 	// The user demoted to viewer: the member key is a viewer's now.
 	c.Patch(fmt.Sprintf("/api/auth/users/%d", au.ID), map[string]string{"role": "viewer"}).Want(200)
 	wantError(t, bearer(c, high.Secret, http.MethodPatch, "/api/products/1", map[string]any{"price": 3}), 403, "forbidden", "Your account cannot do that.")
@@ -121,9 +121,6 @@ func TestKeyCannotManageKeys(t *testing.T) {
 		method, path string
 		body         any
 	}{
-		{http.MethodPost, "/api/auth/keys", map[string]any{"name": "More", "role": "owner"}},
-		{http.MethodGet, "/api/auth/keys", nil},
-		{http.MethodDelete, fmt.Sprintf("/api/auth/keys/%d", k.ID), nil},
 		{http.MethodGet, "/api/auth/sessions", nil},
 		{http.MethodPost, "/api/auth/logout/everywhere", nil},
 		{http.MethodPost, "/api/auth/password/change", map[string]string{"current": authtest.Password, "password": newPassword}},
@@ -298,4 +295,43 @@ func TestResetEndsKeysAndChangeKeepsThem(t *testing.T) {
 		t.Fatalf("%d keys after a reset, want the other user's alone", n)
 	}
 	bearer(c, theirs.Secret, http.MethodGet, "/api/things", nil).Want(200)
+}
+
+// keyCannot is the answer of a route that manages accounts or keys to a
+// request that carries an API key.
+const keyCannot = "An API key cannot manage accounts or keys; sign in to do that."
+
+// Final review M2: an API key cannot manage accounts or keys, whatever its
+// role: invitations, role changes, removing a user, ending a user's sessions
+// and the key routes answer 403 to a request that carries one, so a stolen
+// key cannot invite its thief an account of their own. It may still read the
+// users and invitations its role allows.
+func TestKeyCannotManageAccounts(t *testing.T) {
+	c := startShop(t, keysOn(t))
+	k := makeKey(t, c, "Admin's", auth.RoleAdministrator, 30)
+	_, user := authtest.As(t, c, auth.RoleMember)
+	var inv auth.Invitation
+	c.Post("/api/auth/invitations", map[string]string{"email": "later@example.com", "role": "member"}).Want(201).JSON(&inv)
+	for _, tc := range []struct {
+		method, path string
+		body         any
+	}{
+		{http.MethodPost, "/api/auth/invitations", map[string]string{"email": "thief@evil.example", "role": "administrator"}},
+		{http.MethodDelete, fmt.Sprintf("/api/auth/invitations/%d", inv.ID), nil},
+		{http.MethodPatch, fmt.Sprintf("/api/auth/users/%d", user.ID), map[string]string{"role": "viewer"}},
+		{http.MethodDelete, fmt.Sprintf("/api/auth/users/%d", user.ID), nil},
+		{http.MethodDelete, fmt.Sprintf("/api/auth/users/%d/sessions", user.ID), nil},
+		{http.MethodPost, "/api/auth/keys", map[string]any{"name": "More", "role": "viewer"}},
+		{http.MethodGet, "/api/auth/keys", nil},
+		{http.MethodDelete, fmt.Sprintf("/api/auth/keys/%d", k.ID), nil},
+	} {
+		wantError(t, bearer(c, k.Secret, tc.method, tc.path, tc.body), 403, "forbidden", keyCannot)
+	}
+	bearer(c, k.Secret, http.MethodGet, "/api/auth/users", nil).Want(200)
+	bearer(c, k.Secret, http.MethodGet, "/api/auth/invitations", nil).Want(200)
+	if n := rowsIn(t, c, "invitations"); n != 1 {
+		t.Fatalf("%d invitations, want the one the owner made", n)
+	}
+	// The same routes still serve a session.
+	c.Patch(fmt.Sprintf("/api/auth/users/%d", user.ID), map[string]string{"role": "viewer"}).Want(200)
 }
