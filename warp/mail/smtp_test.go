@@ -421,3 +421,21 @@ func TestSMTPRetries(t *testing.T) {
 		t.Errorf("the log has\n%s\nwant once\n%s", logs, want)
 	}
 }
+
+// A server's answer reads in a sentence as the server gave it, code and text,
+// whichever way the Go release formats a textproto.Error (Go 1.26.11 quotes
+// its text, which a quoted sentence then escaped).
+func TestServerReplyIsCodeAndText(t *testing.T) {
+	for _, c := range []struct {
+		err  *textproto.Error
+		want string
+	}{
+		{&textproto.Error{Code: 451, Msg: "4.3.0 try again later"}, "451 4.3.0 try again later"},
+		{&textproto.Error{Code: 535, Msg: `5.7.8 "bad" credentials`}, `535 5.7.8 "bad" credentials`},
+		{&textproto.Error{Code: 50, Msg: "odd"}, "050 odd"},
+	} {
+		if got := serverReply(c.err); got != c.want {
+			t.Errorf("serverReply(%d, %q) = %q, want %q", c.err.Code, c.err.Msg, got, c.want)
+		}
+	}
+}

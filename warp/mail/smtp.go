@@ -215,13 +215,13 @@ func failure(ctx context.Context, addr, step string, err error) *sendError {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		return &sendError{reason: fmt.Sprintf("the mail server at %s did not finish within 30 s; check that it is up and takes mail on that port.", addr)}
 	case errors.As(err, &answer) && answer.Code >= 400 && answer.Code < 500:
-		return &sendError{reason: fmt.Sprintf("the mail server at %s answered %q to the last of %d tries; check its log for why.", addr, answer.Error(), tries)}
+		return &sendError{reason: fmt.Sprintf("the mail server at %s answered %q to the last of %d tries; check its log for why.", addr, serverReply(answer), tries)}
 	case errors.As(err, &answer) && step == "auth":
-		return &sendError{reason: fmt.Sprintf("the mail server at %s refused to sign in (%q); check MAIL_USER and MAIL_PASSWORD.", addr, answer.Error()), permanent: true}
+		return &sendError{reason: fmt.Sprintf("the mail server at %s refused to sign in (%q); check MAIL_USER and MAIL_PASSWORD.", addr, serverReply(answer)), permanent: true}
 	case errors.As(err, &answer) && step == "rcpt":
-		return &sendError{reason: fmt.Sprintf("the mail server at %s refused the address (%q); check that it is right.", addr, answer.Error()), permanent: true}
+		return &sendError{reason: fmt.Sprintf("the mail server at %s refused the address (%q); check that it is right.", addr, serverReply(answer)), permanent: true}
 	case errors.As(err, &answer):
-		return &sendError{reason: fmt.Sprintf("the mail server at %s answered %q; check its log for why.", addr, answer.Error()), permanent: true}
+		return &sendError{reason: fmt.Sprintf("the mail server at %s answered %q; check its log for why.", addr, serverReply(answer)), permanent: true}
 	case step == "connect":
 		return &sendError{reason: fmt.Sprintf("the mail server at %s could not be reached (%v); check MAIL_HOST and MAIL_PORT, and that it is up.", addr, err)}
 	case step == "tls":
@@ -290,4 +290,11 @@ func writeQP(w interface{ Write([]byte) (int, error) }, text string) {
 	qp := quotedprintable.NewWriter(w)
 	qp.Write([]byte(text))
 	qp.Close()
+}
+
+// serverReply is a server's answer as it gave it, code and text, for a
+// sentence to quote. It never uses textproto.Error's own Error, whose form a
+// Go release may change (Go 1.26.11 quotes the text).
+func serverReply(e *textproto.Error) string {
+	return fmt.Sprintf("%03d %s", e.Code, e.Msg)
 }

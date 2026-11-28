@@ -1,6 +1,6 @@
 ---
 title: Mail
-description: The mail module - printed to the log while you build, sent over SMTP once configured, from a queue in memory; templates for text and HTML; and mailtest for tests.
+description: The mail module - printed to standard error while you build, sent over SMTP once configured, from a queue in memory; templates for text and HTML; and mailtest for tests.
 order: 28
 ---
 
