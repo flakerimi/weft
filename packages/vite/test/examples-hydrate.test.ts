@@ -43,13 +43,18 @@ beforeAll(async () => {
 // No server answers here: GET /api/auth/me, which an example with `perm` or a
 // Guard asks, is answered as the gallery's server answers it (site-src/main.go),
 // with the demo user in fixtures/demo-me.json; any other request is a mistake
-// of the example's.
+// of the example's. The answer comes a few milliseconds late, as over a network
+// and as on a loaded CI machine, so a test of what the session shows waits for
+// it rather than for a set number of ticks.
 const demoMe = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'demo-me.json'), 'utf8')
 let strays: string[] = []
 beforeEach(() => {
   strays = []
   vi.stubGlobal('fetch', async (url: string) => {
-    if (url === '/api/auth/me') return new Response(demoMe, { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url === '/api/auth/me') {
+      await new Promise((r) => setTimeout(r, 5))
+      return new Response(demoMe, { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     strays.push(String(url))
     throw new TypeError('Failed to fetch')
   })
@@ -123,10 +128,12 @@ describe('every @weft/ui example, server-rendered in an island', () => {
 
     // The demo user may edit products, not delete them or read users: each perm example shows both ways.
     if (file === 'Button/by-permission.vue') {
-      expect([...island.querySelectorAll('button')].map((b) => b.textContent!.trim())).toEqual(['View', 'Edit'])
+      await vi.waitFor(() =>
+        expect([...island.querySelectorAll('button')].map((b) => b.textContent!.trim())).toEqual(['View', 'Edit']),
+      )
     }
     if (file === 'Guard/basic.vue') {
-      expect(island.textContent).toContain('Demo may edit products.')
+      await vi.waitFor(() => expect(island.textContent).toContain('Demo may edit products.'))
       expect(island.textContent).not.toContain('The users of this app.')
       expect(island.querySelector('.weft-alert[role="status"]')!.textContent).toBe('Your account cannot see this; ask an administrator.')
     }
