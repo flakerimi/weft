@@ -26,4 +26,5 @@ func (m *Mailer) print(msg Message) {
 		m.kept = append(m.kept[:0], m.kept[1:]...)
 	}
 	m.kept = append(m.kept, msg)
+	m.count++
 }

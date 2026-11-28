@@ -76,6 +76,7 @@ type Mailer struct {
 	state int // notStarted, running or stopped
 	s     settings
 	kept  []Message // the log driver's last messages, oldest first
+	count int       // how many the log driver has printed in all
 
 	// The smtp driver's queue and sender.
 	queue    chan outgoing
@@ -270,4 +271,16 @@ func (m *Mailer) Kept() []Message {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return slices.Clone(m.kept)
+}
+
+// Printed returns how many messages the log driver has printed in all, the
+// ones Kept holds and those before them, so mailtest can tell a new message
+// from one it has seen. Under smtp it is 0.
+func (m *Mailer) Printed() int {
+	if m == nil {
+		return 0
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.count
 }

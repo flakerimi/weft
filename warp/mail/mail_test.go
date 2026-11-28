@@ -209,6 +209,9 @@ func TestLogDriverPrintsAndKeeps(t *testing.T) {
 	if len(kept) != 20 || kept[0].To != "a2@example.com" || kept[19].To != "a21@example.com" {
 		t.Fatalf("Kept = %d messages, %v first and %v last; want the last 20, oldest first", len(kept), kept[0].To, kept[len(kept)-1].To)
 	}
+	if n := m.Printed(); n != 21 {
+		t.Errorf("Printed = %d, want 21, the 20 kept and the one before them", n)
+	}
 	kept[0].To = "changed"
 	if m.Kept()[0].To != "a2@example.com" {
 		t.Error("Kept answers the mailer's own slice")
@@ -233,8 +236,8 @@ func TestQueueFull(t *testing.T) {
 	if !errors.As(err, &we) || we.Status != http.StatusServiceUnavailable || we.Code != "unavailable" || we.Message != "The server is busy sending mail; try again in a moment." {
 		t.Fatalf("the 101st message gives %#v, want the 503", err)
 	}
-	if len(m.Kept()) != 0 {
-		t.Errorf("the smtp driver keeps messages: %v", m.Kept())
+	if len(m.Kept()) != 0 || m.Printed() != 0 {
+		t.Errorf("the smtp driver keeps messages: %v, %d printed", m.Kept(), m.Printed())
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
