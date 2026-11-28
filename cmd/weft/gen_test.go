@@ -764,13 +764,18 @@ console.log(JSON.stringify(out))
 // genApp copies the installed app into a new temp folder and runs the test
 // in it.
 // withoutClient makes the pages of a created app those of an app with no
-// API, as a 0.0.6 app's were: the login and setup pages and the session,
-// which call the client, go, and the hello island asks /api/hello itself.
+// API, as a 0.0.6 app's were: the login's pages and forms, answers.ts and
+// session-check.ts, which call the client or its types, go, and the hello
+// island asks /api/hello itself.
 // Such an app's client has no routes, which those pages would not
 // type-check against.
 func withoutClient(t *testing.T, app string) {
 	t.Helper()
-	for _, p := range []string{"web/pages/login.vue", "web/pages/setup.vue", "web/components/LoginForm.vue", "web/components/SetupForm.vue", "web/session.ts", "web/answers.ts"} {
+	for _, p := range []string{
+		"web/pages/login.vue", "web/pages/setup.vue", "web/pages/register.vue", "web/pages/forgot.vue", "web/pages/password.vue", "web/pages/account.vue", "web/pages/users.vue",
+		"web/components/LoginForm.vue", "web/components/SetupForm.vue", "web/components/RegisterForm.vue", "web/components/ForgotForm.vue", "web/components/PasswordForm.vue", "web/components/AccountPanel.vue", "web/components/UsersPanel.vue",
+		"web/answers.ts", "web/session-check.ts",
+	} {
 		if err := os.Remove(filepath.Join(app, filepath.FromSlash(p))); err != nil {
 			t.Fatal(err)
 		}
