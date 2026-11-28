@@ -388,6 +388,40 @@ func TestCreateTableSQL(t *testing.T) {
 	}
 }
 
+func TestDeleteBySQL(t *testing.T) {
+	type Session struct {
+		Record
+		UserID int64  `json:"user_id"`
+		Odd    string `json:"odd\"name"`
+	}
+	tb, mistakes := tableOf(reflect.TypeFor[Session](), "sessions")
+	if len(mistakes) > 0 {
+		t.Fatal(mistakes)
+	}
+	var d sqlite
+	if got, want := tb.deleteBySQL(d, tb.col("user_id")), `DELETE FROM "sessions" WHERE "user_id" = ?`; got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+	if got, want := tb.deleteBySQL(d, tb.col(`odd"name`)), `DELETE FROM "sessions" WHERE "odd""name" = ?`; got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestDeleteBeforeSQL(t *testing.T) {
+	type Session struct {
+		Record
+		ExpiresAt time.Time `json:"expires_at"`
+	}
+	tb, mistakes := tableOf(reflect.TypeFor[Session](), "sessions")
+	if len(mistakes) > 0 {
+		t.Fatal(mistakes)
+	}
+	var d sqlite
+	if got, want := tb.deleteBeforeSQL(d, tb.col("expires_at")), `DELETE FROM "sessions" WHERE "expires_at" < ?`; got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
 func TestTimeText(t *testing.T) {
 	var d sqlite
 	at := time.Date(2026, 11, 25, 10, 30, 0, 5, time.FixedZone("CET", 3600))

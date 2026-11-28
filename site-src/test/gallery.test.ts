@@ -95,6 +95,10 @@ describe('the gallery model', () => {
     expect(isInteractive(source('Button/basic.vue'))).toBe(false)
     expect(isInteractive(source('Button/variants-and-tones.vue'))).toBe(false)
     expect(isInteractive(source('Button/loading.vue'))).toBe(true)
+    // A perm button is drawn only once the session is known, in the browser.
+    expect(isInteractive(source('Button/by-permission.vue'))).toBe(true)
+    expect(isInteractive('<template><Button label="Go" perm="x:y" /></template>')).toBe(true)
+    expect(isInteractive('<template><Button label="Go" :perm="p" /></template>')).toBe(true)
     expect(isInteractive(source('Select/basic.vue'))).toBe(true)
     expect(isInteractive(source('Grid/basic.vue'))).toBe(false)
     // A comment in the template is not markup.

@@ -121,7 +121,7 @@ func TestShopCopyFollowsItsGitignore(t *testing.T) {
 func writeShopEnv(app string) error {
 	secret := make([]byte, 48)
 	rand.Read(secret)
-	env := "PORT=8080\nDB_DRIVER=sqlite\nDB_URL=file:data/shop.db\nAUTH_SECRET=" + base64.RawURLEncoding.EncodeToString(secret) + "\nAUTH_OWNER_EMAIL=owner@example.com\n"
+	env := "PORT=8080\nDB_DRIVER=sqlite\nDB_URL=file:data/shop.db\nAUTH_SECRET=" + base64.RawURLEncoding.EncodeToString(secret) + "\nAUTH_OWNER_EMAIL=owner@example.com\nAPI_KEYS=on\n"
 	return os.WriteFile(filepath.Join(app, ".env"), []byte(env), 0o600)
 }
 
@@ -436,6 +436,11 @@ func TestShop(t *testing.T) {
 		"/setup":       `<weft-island data-id="SetupForm"`,
 		"/products":    `<weft-island data-id="ProductsTable"`,
 		"/products/42": `data-weft-route="/products/:id"`,
+		"/register":    `<weft-island data-id="RegisterForm"`,
+		"/forgot":      `<weft-island data-id="ForgotForm"`,
+		"/password":    `<weft-island data-id="PasswordForm"`,
+		"/account":     `<weft-island data-id="AccountPanel"`,
+		"/users":       `<weft-island data-id="UsersPanel"`,
 	} {
 		code, body := get(t, url+path)
 		if code != 200 || !strings.Contains(body, want) {

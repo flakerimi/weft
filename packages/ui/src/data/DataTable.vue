@@ -5,7 +5,9 @@
 // "New <name>" button when `create` is present), `Table` (with a trailing
 // Actions column of Edit and Delete buttons when `update` or `remove` is
 // present), `EntityDialog` for create and edit, and `ConfirmDialog` for
-// delete.
+// delete. With `perm`, a resource name, New, Edit and Delete are each drawn
+// only for a user with `<perm>:create`, `<perm>:edit` and `<perm>:delete`,
+// and the Actions column only when one of the row actions is left.
 import { computed, nextTick, ref, shallowRef, useSlots, useTemplateRef } from 'vue'
 import { useWeft } from '../adaptive/context.ts'
 import { useLocale } from '../adaptive/locale.ts'
@@ -20,6 +22,7 @@ import { useControllable } from '../headless/useControllable.ts'
 import Stack from '../layout/Stack.vue'
 import ConfirmDialog from '../overlays/ConfirmDialog.vue'
 import Select from '../selection/Select.vue'
+import { useCan } from '../session/can.ts'
 import type { Size } from '../types.ts'
 import EntityDialog from './EntityDialog.vue'
 import {
@@ -108,6 +111,8 @@ const props = withDefaults(
     size?: Size
     /** Labels override. */
     labels?: Partial<DataTableLabels>
+    /** Resource name; New, Edit and Delete need its create, edit and delete permissions. */
+    perm?: string
   }>(),
   {
     resource: undefined,
@@ -141,6 +146,7 @@ const props = withDefaults(
     emptyDescription: undefined,
     emptyIcon: undefined,
     size: 'md',
+    perm: undefined,
   },
 )
 
@@ -193,11 +199,14 @@ const sort = useControllable<{ sort?: string | null }, 'sort'>(props, 'sort', em
 const page = useControllable<{ page?: number }, 'page'>(props, 'page', emit, () => props.defaultPage)
 const selected = useControllable<{ selected?: RowKey[] }, 'selected'>(props, 'selected', emit, () => [...(props.defaultSelected ?? [])])
 
+const can = useCan()
+/** Without `perm`, every action; with it, the ones the session allows on that resource, once mounted. */
+const allowed = (action: 'create' | 'edit' | 'delete') => !props.perm || can.value(`${props.perm}:${action}`)
 const hasDialog = computed(() => Boolean(props.schema || slots.dialog))
 const fetchFn = computed(() => props.fetch ?? props.resource?.list)
-const createFn = computed(() => (hasDialog.value ? (props.create ?? props.resource?.create) : undefined))
-const updateFn = computed(() => (hasDialog.value ? (props.update ?? props.resource?.update) : undefined))
-const removeFn = computed(() => props.remove ?? props.resource?.remove)
+const createFn = computed(() => (hasDialog.value && allowed('create') ? (props.create ?? props.resource?.create) : undefined))
+const updateFn = computed(() => (hasDialog.value && allowed('edit') ? (props.update ?? props.resource?.update) : undefined))
+const removeFn = computed(() => (allowed('delete') ? (props.remove ?? props.resource?.remove) : undefined))
 const hasRowActions = computed(() => Boolean(updateFn.value || removeFn.value))
 
 const allColumns = computed<TableColumn<T>[]>(() => {

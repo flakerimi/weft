@@ -50,6 +50,7 @@ DB_DRIVER=sqlite
 DB_URL=file:data/shop.db
 AUTH_SECRET=$secret
 AUTH_OWNER_EMAIL=owner@example.com
+API_KEYS=on
 EOF
 	)
 	echo "scripts/shop.sh: wrote examples/shop/.env, for the owner owner@example.com" >&2

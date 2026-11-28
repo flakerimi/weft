@@ -176,6 +176,8 @@ export interface Product {
   maker?: Maker | null
   parts: Part[]
   summary?: string
+  launch?: string | null
+  starts: string
 }
 
 /** main.Product as a route takes it: without its readonly fields. */
@@ -194,6 +196,8 @@ export interface ProductInput {
   maker?: Maker | null
   parts: PartInput[]
   summary: string
+  launch?: string | null
+  starts: string
 }
 
 /** main.Maker */
@@ -288,6 +292,8 @@ export interface FieldRules {
   email?: boolean
   url?: boolean
   enum?: string[]
+  /** A time: 'date' is a date alone, midnight in UTC, shown and entered as written; 'datetime' an instant, shown and entered in the browser's time zone and sent in UTC. */
+  format?: 'date' | 'datetime'
   /** null is the field's empty value: a pointer in Go, so an emptied control sends null, which clears it. */
   nullable?: boolean
 }
@@ -317,6 +323,8 @@ export const schema: {
     maker: { kind: 'object', nullable: true },
     parts: { kind: 'list' },
     summary: { kind: 'string' },
+    launch: { kind: 'string', format: 'date', nullable: true },
+    starts: { kind: 'string', format: 'datetime', required: true },
   },
   Note: {
     text: { kind: 'string', required: true, max: 500 },

@@ -78,12 +78,16 @@ func TestScaffoldTypes(t *testing.T) {
 		"score:float:max=9.5":         {"float64", `json:"score" warp:"max=9.5" data:"sort"`},
 		"live:bool":                   {"bool", `json:"live" data:"sort,filter"`},
 		"live:bool:nullable":          {"*bool", `json:"live" data:"sort,filter"`},
-		"on:date":                     {"time.Time", `json:"on" data:"sort"`},
-		"at:datetime:nullable":        {"*time.Time", `json:"at" data:"sort"`},
-		"kind:enum=a,b,c":             {"string", `json:"kind" warp:"enum=a|b|c" data:"sort,filter"`},
-		"kind:enum=a,b:nullable":      {"*string", `json:"kind" warp:"enum=a|b" data:"sort,filter"`},
-		"code:string:unique":          {"string", `json:"code" warp:"unique" data:"sort,search"`},
-		"n:int:unique:min=1":          {"int64", `json:"n" warp:"min=1,unique" data:"sort"`},
+		// A date or datetime that is not required is a pointer, so emptied it is null.
+		"on:date":                {"*time.Time", `json:"on" warp:"date" data:"sort"`},
+		"on:date:required":       {"time.Time", `json:"on" warp:"required,date" data:"sort"`},
+		"at:datetime":            {"*time.Time", `json:"at" data:"sort"`},
+		"at:datetime:nullable":   {"*time.Time", `json:"at" data:"sort"`},
+		"at:datetime:required":   {"time.Time", `json:"at" warp:"required" data:"sort"`},
+		"kind:enum=a,b,c":        {"string", `json:"kind" warp:"enum=a|b|c" data:"sort,filter"`},
+		"kind:enum=a,b:nullable": {"*string", `json:"kind" warp:"enum=a|b" data:"sort,filter"`},
+		"code:string:unique":     {"string", `json:"code" warp:"unique" data:"sort,search"`},
+		"n:int:unique:min=1":     {"int64", `json:"n" warp:"min=1,unique" data:"sort"`},
 	} {
 		s, err := parseScaffold([]string{"thing", arg, "--api"})
 		if err != nil {
@@ -121,9 +125,6 @@ func TestScaffoldRefuses(t *testing.T) {
 		{[]string{"thing", "name", "--plural", "strings"}, 2, `weft scaffold: "strings" is a package of Go's standard library, which the files weft scaffold writes may import; give another with --plural.`},
 		// A one-choice unique enum holds one record: the story makes two.
 		{[]string{"thing", "kind:enum=a:unique"}, 2, `weft scaffold: field "kind" is a unique enum with one choice, so only one record could have it; give two choices or more, or remove :unique.`},
-		// Dates in the pages are 0.2.0: Go only, with --api.
-		{[]string{"event", "title", "starts_on:date"}, 1, `weft scaffold: field "starts_on" is a date, and date and time fields in the pages weft scaffold writes land in Weft 0.2.0; give --api to write only the Go for now.`},
-		{[]string{"event", "title", "seen_at:datetime:nullable"}, 1, `weft scaffold: field "seen_at" is a datetime, and date and time fields in the pages weft scaffold writes land in Weft 0.2.0; give --api to write only the Go for now.`},
 		{[]string{"user", "name"}, 2, `weft scaffold: "user" would make the type User, which Weft's own modules or the generated client use already; choose another name.`},
 		{[]string{"thing", "name", "--plural", "users"}, 2, `weft scaffold: "users" is the table auth keeps its users in; give another with --plural.`},
 		{[]string{"product", "status:enum(draft|live)"}, 2, "weft scaffold: write enum choices separated by commas after enum=, as in status:enum=draft,live."},
@@ -203,14 +204,97 @@ func TestScaffoldHelp(t *testing.T) {
 	}
 }
 
-// With --api, date and datetime are Go only: a time.Time, RFC 3339 in JSON.
+// With --api, date and datetime are a time.Time, RFC 3339 in JSON, as with
+// the pages: a pointer unless required.
 func TestScaffoldDatesWithAPI(t *testing.T) {
-	s, err := parseScaffold([]string{"event", "title", "starts_on:date", "seen_at:datetime:nullable", "--api"})
+	s, err := parseScaffold([]string{"event", "title", "starts_on:date:required", "seen_at:datetime:nullable", "--api"})
 	if err != nil {
 		t.Fatal(err.msg)
 	}
 	if s.Fields[1].goType() != "time.Time" || s.Fields[2].goType() != "*time.Time" {
 		t.Errorf("fields = %+v", s.Fields)
+	}
+}
+
+// A date and a datetime in the pages: no refusal; the model has the rule
+// date, a pointer for one not required; the table writes each as text in
+// its column, and the record's page too.
+func TestScaffoldDateFieldsWritePages(t *testing.T) {
+	files, _ := planned(t, templateModules, true, "event", "title:string:required", "due:date", "starts:datetime:required", "seen:datetime", "held:date:required")
+	model := files["app/events/model.go"]
+	for _, want := range []string{
+		"\t\"time\"\n",
+		"Due    *time.Time `json:\"due\" warp:\"date\" data:\"sort\"`",
+		"Starts time.Time  `json:\"starts\" warp:\"required\" data:\"sort\"`",
+		"Seen   *time.Time `json:\"seen\" data:\"sort\"`",
+		"Held   time.Time  `json:\"held\" warp:\"required,date\" data:\"sort\"`",
+	} {
+		if !strings.Contains(model, want) {
+			t.Errorf("model.go lacks %q:\n%s", want, model)
+		}
+	}
+	table := files["web/components/EventsTable.vue"]
+	for _, want := range []string{
+		"import { sessionEnded, useDateFields, wireTimeText, type EntityFieldConfig, type TableColumn } from '@weft/ui'",
+		"\nuseDateFields()\n",
+		"{ key: 'due', label: 'Due', sortable: true, format: (v) => wireTimeText(v, 'date') },",
+		"{ key: 'starts', label: 'Starts', sortable: true, format: (v) => wireTimeText(v, 'datetime') },",
+		"{ key: 'held', label: 'Held', sortable: true, format: (v) => wireTimeText(v, 'date') },",
+		"{ name: 'due', label: 'Due' },",
+		"{ name: 'starts', label: 'Starts' },",
+	} {
+		if !strings.Contains(table, want) {
+			t.Errorf("EventsTable.vue lacks %q:\n%s", want, table)
+		}
+	}
+	view := files["web/components/EventView.vue"]
+	for _, want := range []string{
+		"import { entityProblem, requireSession, useParams, wireTimeText } from '@weft/ui'",
+		"<span>Due: {{ wireTimeText(record.due, 'date') }}</span>",
+		"<span>Starts: {{ wireTimeText(record.starts, 'datetime') }}</span>",
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("EventView.vue lacks %q:\n%s", want, view)
+		}
+	}
+	// A resource with no time imports nothing for one.
+	files, _ = planned(t, templateModules, true, "note", "title")
+	if src := files["web/components/NotesTable.vue"]; strings.Contains(src, "wireTimeText") || strings.Contains(src, "useDateFields") {
+		t.Errorf("NotesTable.vue imports wireTimeText:\n%s", src)
+	}
+	if src := files["web/components/NoteView.vue"]; strings.Contains(src, "wireTimeText") {
+		t.Errorf("NoteView.vue imports wireTimeText:\n%s", src)
+	}
+}
+
+// In a created app, a resource with a date and a datetime, pages and all:
+// its story passes, the pages typecheck against the generated client, and
+// weft build builds it.
+func TestScaffoldDateAppBuilds(t *testing.T) {
+	if testing.Short() {
+		t.Skip("creates an app and builds it")
+	}
+	app := scaffoldedApp(t)
+	if code, out, errs := scaffold(t, "event", "title", "due:date", "starts:datetime:required"); code != 0 {
+		t.Fatalf("weft scaffold: exit %d: %s%s", code, out, errs)
+	}
+	if test := goIn(t, app, "test", "-count=1", "-tags", "dev", "./..."); !strings.Contains(test, "ok  \tmyapp/app/events") {
+		t.Errorf("go test did not run the story:\n%s", test)
+	}
+	api, err := os.ReadFile(filepath.Join(app, "web", ".weft-types", "api.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"due: { kind: 'string', format: 'date', nullable: true },", "starts: { kind: 'string', format: 'datetime', required: true },"} {
+		if !strings.Contains(string(api), want) {
+			t.Errorf("the client's schema lacks %q:\n%s", want, api)
+		}
+	}
+	if out, err := exec.Command("pnpm", "typecheck").CombinedOutput(); err != nil {
+		t.Fatalf("pnpm typecheck: %v\n%s", err, out)
+	}
+	if code, out, errs := build(t); code != 0 {
+		t.Fatalf("weft build: exit %d: %s%s", code, out, errs)
 	}
 }
 
@@ -271,8 +355,9 @@ func Modules() []warp.Module {
 
 // fakeApp writes the files weft scaffold reads into a new folder: a
 // package.json with a "weft" object, go.mod, app/modules.go and, with
-// session, web/session.ts. It returns the folder.
-func fakeApp(t *testing.T, modules string, session bool) string {
+// old, a web/session.ts of its own, as an app made before 0.2.0 has. It
+// returns the folder.
+func fakeApp(t *testing.T, modules string, old bool) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "myapp")
 	files := map[string]string{
@@ -281,7 +366,7 @@ func fakeApp(t *testing.T, modules string, session bool) string {
 		"app/modules.go":      modules,
 		"web/pages/index.vue": "<template><p>hi</p></template>\n",
 	}
-	if session {
+	if old {
 		files["web/session.ts"] = "export {}\n"
 	}
 	for name, text := range files {
@@ -539,15 +624,14 @@ func TestScaffoldEditsModules(t *testing.T) {
 }
 
 // Without --api, the islands and the two pages, against DataTable's props
-// and the generated client; the session is waited on when the app has one.
+// and the generated client; with auth listed, they show by permission.
 func TestScaffoldWritesPages(t *testing.T) {
 	files, _ := planned(t, templateModules, true, "line_item", "name:string:required", "body:text", "qty:int:min=1", "price:float:nullable", "live:bool", "kind:enum=a,b_c")
 	table := files["web/components/LineItemsTable.vue"]
 	for _, want := range []string{
 		"<script setup vapor lang=\"ts\">",
-		"import type { DataTableFilter, EntityFieldConfig, TableColumn } from '@weft/ui'",
+		"import { sessionEnded, type DataTableFilter, type EntityFieldConfig, type TableColumn } from '@weft/ui'",
 		"import { api, ApiError, schema, type LineItem } from '../.weft-types/api.ts'",
-		"import { requireUser, signInAgain, useSession } from '../session.ts'",
 		"const columns: TableColumn<LineItem>[] = [",
 		"{ key: 'name', label: 'Name', sortable: true, rowHeader: true },",
 		"{ key: 'qty', label: 'Qty', sortable: true, align: 'end', format: number },",
@@ -555,8 +639,9 @@ func TestScaffoldWritesPages(t *testing.T) {
 		"{ key: 'live', label: 'Live', items: [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }] },",
 		"{ name: 'body', label: 'Body', control: 'textarea' },",
 		"{ name: 'qty', label: 'Qty', step: 1 },",
-		"<DataTable\n    v-if=\"ready\"",
+		"<Guard perm=\"line_items:read\">\n    <DataTable\n",
 		":resource=\"api.lineItems\"",
+		"perm=\"line_items\"",
 		":schema=\"schema.LineItemInput\"",
 		":columns=\"columns\"",
 		":filter-defs=\"filterDefs\"",
@@ -565,7 +650,7 @@ func TestScaffoldWritesPages(t *testing.T) {
 		"caption=\"Line items\"",
 		"empty-title=\"No line items\"",
 		"@error=\"listFailed\"",
-		"<template #name-cell=\"{ row }\">\n      <Link :to=\"`/line_items/${row.id}`\">{{ row.name }}</Link>",
+		"<template #name-cell=\"{ row }\">\n        <Link :to=\"`/line_items/${row.id}`\">{{ row.name }}</Link>",
 		"<template #kind-cell=\"{ row }\">",
 		"<template #live-cell=\"{ row }\">",
 	} {
@@ -579,12 +664,13 @@ func TestScaffoldWritesPages(t *testing.T) {
 	view := files["web/components/LineItemView.vue"]
 	for _, want := range []string{
 		"<script setup vapor lang=\"ts\">",
-		"import { entityProblem, useParams } from '@weft/ui'",
+		"import { entityProblem, requireSession, useParams } from '@weft/ui'",
 		// A failure is said as the components say it: a non-Warp answer
 		// (code http) the unavailable sentence, no reach the unreachable one.
 		"else problem.value = entityProblem(e, new Set()).message",
 		"import { api, ApiError, type LineItem } from '../.weft-types/api.ts'",
-		"import { requireUser, useSession } from '../session.ts'",
+		"if (!(await requireSession({ perm: 'line_items:read' }))) return",
+		"<Guard perm=\"line_items:read\">",
 		"useParams('/line_items/:id').id",
 		"await api.lineItems.show(id)",
 		"<Link to=\"/line_items\">Back to the line items</Link>",
@@ -607,21 +693,39 @@ func TestScaffoldWritesPages(t *testing.T) {
 		}
 	}
 
-	// web/session.ts kept but auth gone: api.auth.me is not in the client,
-	// so nothing waits on a session.
-	noAuth := strings.Replace(strings.Replace(templateModules, "\t\"github.com/flakerimi/weft/warp/auth\"\n", "", 1), "\t\tauth.Module(),\n", "", 1)
-	files, _ = planned(t, noAuth, true, "note", "title")
-	for _, name := range []string{"web/components/NotesTable.vue", "web/components/NoteView.vue"} {
-		if src := files[name]; strings.Contains(src, "session") || strings.Contains(src, "requireUser") {
-			t.Errorf("%s waits on a session in an app without auth:\n%s", name, src)
+}
+
+// The plan's TestScaffoldPagesUsePerm: with auth in app/modules.go, the table
+// is in a Guard for <plural>:read and its DataTable has perm="<plural>", and
+// the record's view is in a Guard too; without auth, as the routes have no
+// permission, neither. An app made before 0.2.0 may still have its own
+// web/session.ts, which no page imports.
+func TestScaffoldPagesUsePerm(t *testing.T) {
+	for _, old := range []bool{false, true} {
+		files, _ := planned(t, templateModules, old, "note", "title")
+		table, view := files["web/components/NotesTable.vue"], files["web/components/NoteView.vue"]
+		for _, want := range []string{"<Guard perm=\"notes:read\">", "perm=\"notes\"", "@error=\"listFailed\"", "if (e instanceof ApiError && e.status === 401) void sessionEnded()"} {
+			if !strings.Contains(table, want) {
+				t.Errorf("NotesTable.vue lacks %q:\n%s", want, table)
+			}
+		}
+		for _, want := range []string{"<Guard perm=\"notes:read\">", "requireSession({ perm: 'notes:read' })"} {
+			if !strings.Contains(view, want) {
+				t.Errorf("NoteView.vue lacks %q:\n%s", want, view)
+			}
+		}
+		for name, src := range map[string]string{"NotesTable.vue": table, "NoteView.vue": view} {
+			if strings.Contains(src, "session.ts") || strings.Contains(src, "requireUser") {
+				t.Errorf("%s imports the app's own session:\n%s", name, src)
+			}
 		}
 	}
 
-	// An app with no web/session.ts: nothing waits on a session.
-	files, _ = planned(t, templateModules, false, "note", "title")
+	noAuth := strings.Replace(strings.Replace(templateModules, "\t\"github.com/flakerimi/weft/warp/auth\"\n", "", 1), "\t\tauth.Module(),\n", "", 1)
+	files, _ := planned(t, noAuth, true, "note", "title")
 	for _, name := range []string{"web/components/NotesTable.vue", "web/components/NoteView.vue"} {
-		if src := files[name]; strings.Contains(src, "session") || strings.Contains(src, "requireUser") {
-			t.Errorf("%s waits on a session the app does not have:\n%s", name, src)
+		if src := files[name]; strings.Contains(src, "Guard") || strings.Contains(src, "perm") || strings.Contains(src, "ession") {
+			t.Errorf("%s shows by permission in an app without auth:\n%s", name, src)
 		}
 	}
 	if src := files["web/components/NotesTable.vue"]; !strings.Contains(src, "<DataTable\n    :resource=\"api.notes\"") {
@@ -761,7 +865,7 @@ func TestScaffoldedPagesInBrowser(t *testing.T) {
 	if code, out, errs := build(t); code != 0 {
 		t.Fatalf("weft build: exit %d: %s%s", code, out, errs)
 	}
-	url, token := startApp(t, filepath.Join(app, "myapp"), app)
+	url, token, _ := startApp(t, filepath.Join(app, "myapp"), app)
 	for path, want := range map[string]string{
 		"/products":    `<weft-island data-id="ProductsTable"`,
 		"/products/42": `data-weft-route="/products/:id"`,

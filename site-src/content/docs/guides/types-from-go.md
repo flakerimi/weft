@@ -1,7 +1,7 @@
 ---
 title: Types from Go
 description: weft gen writes the TypeScript types, a typed function per route and the form rules from the app's Go types, so a renamed Go field is a type error in the page.
-order: 27
+order: 30
 ---
 
 On this page you learn how the Vue side of an app calls its Go API with no fetch written by hand: `weft gen` asks the app to describe its routes and types and writes `web/.weft-types/api.ts`, which the pages import. A renamed Go field is then a TypeScript error in every page that reads it.
@@ -116,7 +116,7 @@ try {
 }
 ```
 
-A field that is a pointer in Go is `nullable` in `schema`, so a `Form` given it sends the field as `null` when the person empties it, which clears it; without the schema, an emptied number, date or choice is left out, and the server keeps what it had. `unique`, and every rule of a type nested in a body, are checked by the server only, and arrive the same way, as `This is already taken.` under the name field. A `Form` sends only from its island, so put it in one ([Islands](pages-and-islands.md#islands)); in development, a submit of one in no island says so in the console.
+A `time.Time` or `*time.Time` field has `format: 'datetime'` in `schema`, and one with the rule `date` `format: 'date'`, so a form draws a date control for it. A field that is a pointer in Go is `nullable` in `schema`, so a `Form` given it sends the field as `null` when the person empties it, which clears it; without the schema, an emptied number, date or choice is left out, and the server keeps what it had. `unique`, and every rule of a type nested in a body, are checked by the server only, and arrive the same way, as `This is already taken.` under the name field. A `Form` sends only from its island, so put it in one ([Islands](pages-and-islands.md#islands)); in development, a submit of one in no island says so in the console.
 
 ### Where the browser and Go differ
 

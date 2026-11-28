@@ -403,7 +403,7 @@ func TestRegistrationMistakes(t *testing.T) {
 				Name string `query:"name" warp:"emal"`
 			}
 			Get(app, "/products/{id}", func(context.Context, ShowIn) (Item, error) { return Item{}, nil })
-		}, []string{`ShowIn.Name has the rule "emal", which warp does not know; use required, email, url, min=, max=, enum=, unique or readonly.`}},
+		}, []string{`ShowIn.Name has the rule "emal", which warp does not know; use required, email, url, min=, max=, enum=, date, unique or readonly.`}},
 		{"every mistake", func(app *App) {
 			type ShowIn struct {
 				Name string

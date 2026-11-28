@@ -24,6 +24,7 @@ import (
 	"github.com/flakerimi/weft/warp/auth"
 	"github.com/flakerimi/weft/warp/auth/authtest"
 	"github.com/flakerimi/weft/warp/data"
+	"github.com/flakerimi/weft/warp/mail"
 	"github.com/flakerimi/weft/warp/warptest"
 )
 
@@ -46,6 +47,7 @@ func (things) Register(app *warp.App) error {
 		}
 		return map[string]string{"email": u.Email, "role": u.Role}, nil
 	}, auth.Can("things:read"))
+	warp.Post(app, "/things/purge", func(ctx context.Context, _ warp.None) (warp.None, error) { return warp.None{}, nil }, auth.Can("things:purge"))
 	return nil
 }
 
@@ -59,19 +61,23 @@ func authEnv(t *testing.T) map[string]string {
 	}
 }
 
-// startAuth starts an app with data, auth and things over vars and returns
-// its client and what the app logged while starting.
+// startAuth starts an app with data, mail, auth and things over vars and
+// returns its client and what the app logged while starting, without the
+// line the mail module's log driver writes at its start.
 func startAuth(t *testing.T, vars map[string]string) (*warptest.Client, string) {
 	t.Helper()
 	var logged bytes.Buffer
 	out, flags := log.Writer(), log.Flags()
 	log.SetOutput(&logged)
 	log.SetFlags(0)
-	c := warptest.New(t, vars, data.Module(), auth.Module(), things{})
+	c := warptest.New(t, vars, data.Module(), mail.Module(), auth.Module(), things{})
 	log.SetOutput(out)
 	log.SetFlags(flags)
-	return c, logged.String()
+	return c, strings.Replace(logged.String(), "mail is printed, not sent; set MAIL=smtp in .env to send it.\n", "", 1)
 }
+
+// ownerSetUp is setup's refusal once an owner exists.
+const ownerSetUp = "The owner is set up already; sign in at /login."
 
 var setupLine = regexp.MustCompile(`^Set up the owner at https://shop\.example\.com/setup#token=([A-Za-z0-9_-]{43})\n$`)
 
@@ -105,7 +111,7 @@ func wantError(t *testing.T, res *warptest.Response, status int, code, message s
 	}
 }
 
-var sessionCookie = regexp.MustCompile(`^session=1\.(\d+)\.(\d+)\.[A-Za-z0-9_-]{43}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax$`)
+var sessionCookie = regexp.MustCompile(`^session=(\d+)\.[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax$`)
 
 func TestSetupThenLogin(t *testing.T) {
 	c, logged := startAuth(t, authEnv(t))
@@ -135,6 +141,9 @@ func TestSetupThenLogin(t *testing.T) {
 	if owner.ID != 1 || owner.Email != ownerEmail || owner.Role != "owner" || owner.CreatedAt.IsZero() {
 		t.Fatalf("setup made %+v", owner)
 	}
+	// The link used once says the owner is set up, not to restart, which
+	// would print no link while a user exists (final review M4).
+	wantError(t, c.Fork().Post("/api/auth/setup", map[string]string{"token": token, "password": authtest.Password}), 403, "forbidden", ownerSetUp)
 	cookies := res.Header.Values("Set-Cookie")
 	if len(cookies) != 1 {
 		t.Fatalf("setup set %d cookies: %q", len(cookies), cookies)
@@ -143,12 +152,15 @@ func TestSetupThenLogin(t *testing.T) {
 	if cm == nil {
 		t.Fatalf("Set-Cookie = %q", cookies[0])
 	}
-	if cm[1] != strconv.FormatInt(owner.CreatedAt.UnixNano(), 10) {
-		t.Fatalf("the cookie names the making %s, want the owner's created_at, %d", cm[1], owner.CreatedAt.UnixNano())
+	if cm[1] != "1" {
+		t.Fatalf("the cookie names the session %s, want 1", cm[1])
 	}
-	expiry, _ := strconv.ParseInt(cm[2], 10, 64)
-	if d := time.Until(time.Unix(expiry, 0)); d < 30*24*time.Hour-time.Minute || d > 30*24*time.Hour+time.Minute {
-		t.Fatalf("the session ends in %v, want 30 days", d)
+	var ends string
+	if err := data.For(c.App).QueryRow(ctx, `SELECT "expires_at" FROM "sessions" WHERE "id" = 1 AND "user_id" = 1`).Scan(&ends); err != nil {
+		t.Fatal(err)
+	}
+	if expiry, err := time.Parse(time.RFC3339Nano, ends); err != nil || time.Until(expiry) < 30*24*time.Hour-time.Minute || time.Until(expiry) > 30*24*time.Hour+time.Minute {
+		t.Fatalf("the session ends at %s (%v), want in 30 days", ends, err)
 	}
 
 	var me auth.User
@@ -158,7 +170,7 @@ func TestSetupThenLogin(t *testing.T) {
 	}
 
 	// The token worked once.
-	wantError(t, c.Post("/api/auth/setup", map[string]string{"token": token, "password": authtest.Password}), 403, "forbidden", notValid)
+	wantError(t, c.Post("/api/auth/setup", map[string]string{"token": token, "password": authtest.Password}), 403, "forbidden", ownerSetUp)
 	if got := auth.SetupToken(c.App); got != "" {
 		t.Fatalf("SetupToken after setup = %q, want empty", got)
 	}
@@ -191,7 +203,7 @@ func TestSetupNotOfferedOnceAUserExists(t *testing.T) {
 	if got := auth.SetupToken(again.App); got != "" {
 		t.Fatalf("SetupToken = %q, want empty", got)
 	}
-	wantError(t, again.Post("/api/auth/setup", map[string]string{"token": "x", "password": authtest.Password}), 403, "forbidden", "This setup link is not valid; restart the app to get a new one.")
+	wantError(t, again.Post("/api/auth/setup", map[string]string{"token": "x", "password": authtest.Password}), 403, "forbidden", ownerSetUp)
 	login(again, ownerEmail, authtest.Password).Want(200)
 }
 
@@ -209,7 +221,7 @@ func TestSetupRefusedOnceAnotherMadeAUser(t *testing.T) {
 		t.Fatal("both apps should have a setup token")
 	}
 	authtest.Owner(t, second)
-	wantError(t, first.Post("/api/auth/setup", map[string]string{"token": token, "password": authtest.Password}), 403, "forbidden", "This setup link is not valid; restart the app to get a new one.")
+	wantError(t, first.Post("/api/auth/setup", map[string]string{"token": token, "password": authtest.Password}), 403, "forbidden", ownerSetUp)
 	wantError(t, login(first, ownerEmail, authtest.Password), 401, "unauthorized", "That email and password do not match.")
 }
 
@@ -299,15 +311,20 @@ func TestLoginIsLimited(t *testing.T) {
 	wantError(t, try("other@example.com", "wrong", a), 401, "unauthorized", "That email and password do not match.")
 	try(ownerEmail, authtest.Password, b).Want(200)
 
-	// A success clears the email's count.
-	for range 4 {
-		try(ownerEmail, "wrong", b).Want(401)
+	// A success clears the email and address's count (another account,
+	// since the owner's has spent five of its ten).
+	const clerk = "clerk@example.com"
+	if _, err := auth.AddUser(ctx, c.App, clerk, "clerk password", auth.RoleMember); err != nil {
+		t.Fatal(err)
 	}
-	try(ownerEmail, authtest.Password, b).Want(200)
 	for range 4 {
-		try(ownerEmail, "wrong", b).Want(401)
+		try(clerk, "wrong", b).Want(401)
 	}
-	try(ownerEmail, authtest.Password, b).Want(200)
+	try(clerk, "clerk password", b).Want(200)
+	for range 4 {
+		try(clerk, "wrong", b).Want(401)
+	}
+	try(clerk, "clerk password", b).Want(200)
 }
 
 func TestGuard(t *testing.T) {
@@ -328,16 +345,18 @@ func TestGuard(t *testing.T) {
 		t.Fatalf("the guarded route saw %v", got)
 	}
 
-	clerk, err := auth.AddUser(context.Background(), c.App, " Clerk@Example.com", "clerk password", "clerk")
+	clerk, err := auth.AddUser(context.Background(), c.App, " Clerk@Example.com", "clerk password", "member")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if clerk.Email != "clerk@example.com" || clerk.Role != "clerk" || clerk.ID == 0 {
+	if clerk.Email != "clerk@example.com" || clerk.Role != "member" || clerk.ID == 0 {
 		t.Fatalf("AddUser made %+v", clerk)
 	}
 	cc := c.Fork()
 	login(cc, "clerk@example.com", "clerk password").Want(200)
-	wantError(t, cc.Get("/api/things"), 403, "forbidden", "Your account cannot do that.")
+	cc.Get("/api/things").Want(200)
+	wantError(t, cc.Post("/api/things/purge", nil), 403, "forbidden", "Your account cannot do that.")
+	c.Post("/api/things/purge", nil).Want(204)
 	var me auth.User
 	cc.Get("/api/auth/me").Want(200).JSON(&me)
 	if me != clerk {
@@ -356,11 +375,13 @@ func TestAddUserMistakes(t *testing.T) {
 	authtest.Owner(t, c)
 	for _, tc := range []struct{ email, password, role, field, message string }{
 		{" OWNER@example.com", "a good password", "owner", "email", "This is already taken."},
-		{"not an address", "a good password", "clerk", "email", "Enter an email address."},
-		{"", "a good password", "clerk", "email", "This is required."},
-		{"a@example.com", "short", "clerk", "password", "Use at least 8 characters."},
-		{"a@example.com", strings.Repeat("x", 201), "clerk", "password", "Use at most 200 characters."},
+		{"not an address", "a good password", "member", "email", "Enter an email address."},
+		{"", "a good password", "member", "email", "This is required."},
+		{"a@example.com", "short", "member", "password", "Use at least 8 characters."},
+		{"a@example.com", strings.Repeat("x", 201), "member", "password", "Use at most 200 characters."},
 		{"a@example.com", "a good password", "", "role", "This is required."},
+		{"a@example.com", "a good password", "clerk", "role", "Choose one of: owner, administrator, member, viewer."},
+		{"a@example.com", "a good password", "Owner", "role", "Choose one of: owner, administrator, member, viewer."},
 	} {
 		_, err := auth.AddUser(context.Background(), c.App, tc.email, tc.password, tc.role)
 		var e *warp.Error
@@ -370,7 +391,7 @@ func TestAddUserMistakes(t *testing.T) {
 			t.Errorf("AddUser(%q, %q, %q) names %v", tc.email, tc.password, tc.role, e.Fields)
 		}
 	}
-	if _, err := auth.AddUser(context.Background(), c.App, "a@example.com", strings.Repeat("x", 200), "clerk"); err != nil {
+	if _, err := auth.AddUser(context.Background(), c.App, "a@example.com", strings.Repeat("x", 200), "viewer"); err != nil {
 		t.Errorf("a 200-character password: %v", err)
 	}
 }
@@ -453,7 +474,7 @@ func TestSecureCookieBehindProxy(t *testing.T) {
 		at := fmt.Sprintf("TRUST_PROXY=%q, X-Forwarded-Proto %q", tc.proxy, tc.proto)
 		u := c.Fork()
 		cookie := send(u, http.MethodPost, "/api/auth/login", map[string]string{"email": ownerEmail, "password": authtest.Password}).Want(200).Header.Get("Set-Cookie")
-		if !strings.HasPrefix(cookie, name+"=1.") || !strings.HasSuffix(cookie, "; Path=/; Max-Age=2592000"+attrs) || strings.Contains(cookie, "Domain") {
+		if !strings.HasPrefix(cookie, name+"=2.") || !strings.HasSuffix(cookie, "; Path=/; Max-Age=2592000"+attrs) || strings.Contains(cookie, "Domain") {
 			t.Errorf("%s: login's Set-Cookie %q, want %s=… ending %q", at, cookie, name, "; Path=/; Max-Age=2592000"+attrs)
 		}
 		send(u, http.MethodGet, "/api/auth/me", nil).Want(200)
@@ -483,9 +504,9 @@ func TestSecureCookieBehindProxy(t *testing.T) {
 	h.Do(httpsMe).Want(200)
 }
 
-// A cookie names its user's id and the moment the user was made, so a cookie
-// of another database with the same secret, whose user 1 is someone else, is
-// no session; nor is the old form, which named only the id.
+// A cookie names a session of its database, so a cookie of another database
+// with the same secret, whose session 1 is someone else's, is no session; nor
+// is the first form, which named only the id and an expiry.
 func TestSessionIsBoundToItsUser(t *testing.T) {
 	first, _ := startAuth(t, authEnv(t))
 	authtest.Owner(t, first)
@@ -548,7 +569,7 @@ func wantField(t *testing.T, res *warptest.Response, field, message string) {
 func TestEnvironmentMistakes(t *testing.T) {
 	// Registering reads nothing, so an app with an empty .env describes itself.
 	app := warp.New(warp.ConfigFrom(nil))
-	app.Use(data.Module(), auth.Module())
+	app.Use(data.Module(), mail.Module(), auth.Module())
 	if err := app.Err(); err != nil {
 		t.Fatalf("an empty .env: %v", err)
 	}
@@ -572,7 +593,7 @@ func TestEnvironmentMistakes(t *testing.T) {
 		vars := authEnv(t)
 		vars[tc.key] = tc.value
 		app := warp.New(warp.ConfigFrom(vars))
-		app.Use(data.Module(), auth.Module())
+		app.Use(data.Module(), mail.Module(), auth.Module())
 		if err := app.Err(); err != nil {
 			t.Fatalf("%s=%q is a registration mistake: %v", tc.key, tc.value, err)
 		}
@@ -617,29 +638,34 @@ func TestOwnerHelper(t *testing.T) {
 
 func TestDescribeHidesTheHash(t *testing.T) {
 	app := warp.New(warp.ConfigFrom(nil))
-	app.Use(data.Module(), auth.Module())
+	app.Use(data.Module(), mail.Module(), auth.Module())
 	d, err := app.Describe()
 	if err != nil {
 		t.Fatal(err)
 	}
-	var user *warp.TypeInfo
-	for i, ty := range d.Types {
-		if ty.Name == "User" {
-			user = &d.Types[i]
+	for name, want := range map[string]string{
+		"User": "id,created_at,updated_at,email,name,role",
+		"Me":   "id,created_at,updated_at,email,name,role,permissions",
+	} {
+		var ty *warp.TypeInfo
+		for i := range d.Types {
+			if d.Types[i].Name == name {
+				ty = &d.Types[i]
+			}
+		}
+		if ty == nil {
+			t.Fatalf("Describe lists no %s: %+v", name, d.Types)
+		}
+		var names []string
+		for _, f := range ty.Fields {
+			names = append(names, f.Name)
+		}
+		if got := strings.Join(names, ","); got != want {
+			t.Fatalf("%s has the fields %s, want %s", name, got, want)
 		}
 	}
-	if user == nil {
-		t.Fatalf("Describe lists no User: %+v", d.Types)
-	}
-	var names []string
-	for _, f := range user.Fields {
-		names = append(names, f.Name)
-	}
-	if got := strings.Join(names, ","); got != "id,created_at,updated_at,email,role" {
-		t.Fatalf("User has the fields %s", got)
-	}
 	all, _ := json.Marshal(d)
-	for _, hidden := range []string{"password_hash", "userRow"} {
+	for _, hidden := range []string{"password_hash", "token_hash", "secret_hash", "userRow", "sessionRow", "tokenRow", "invitationRow", "keyRow"} {
 		if bytes.Contains(all, []byte(hidden)) {
 			t.Errorf("the description has %q: %s", hidden, all)
 		}
@@ -651,10 +677,30 @@ func TestDescribeHidesTheHash(t *testing.T) {
 		}
 	}
 	want := map[string]string{
-		"login":  "POST /api/auth/login 200",
-		"logout": "POST /api/auth/logout 204",
-		"me":     "GET /api/auth/me 200",
-		"setup":  "POST /api/auth/setup 201",
+		"login":             "POST /api/auth/login 200",
+		"logout":            "POST /api/auth/logout 204",
+		"logout_everywhere": "POST /api/auth/logout/everywhere 204",
+		"me":                "GET /api/auth/me 200",
+		"setup":             "POST /api/auth/setup 201",
+		"sessions":          "GET /api/auth/sessions 200",
+		"end_session":       "DELETE /api/auth/sessions/{id} 204",
+		"settings":          "GET /api/auth/settings 200",
+		"register":          "POST /api/auth/register 204",
+		"forgot":            "POST /api/auth/forgot 204",
+		"token":             "POST /api/auth/token 200",
+		"password":          "POST /api/auth/password 200",
+		"invitations":       "GET /api/auth/invitations 200",
+		"invite":            "POST /api/auth/invitations 201",
+		"remove_invitation": "DELETE /api/auth/invitations/{id} 204",
+		"users":             "GET /api/auth/users 200",
+		"update_user":       "PATCH /api/auth/users/{id} 200",
+		"remove_user":       "DELETE /api/auth/users/{id} 204",
+		"end_user_sessions": "DELETE /api/auth/users/{id}/sessions 204",
+		"update_me":         "PATCH /api/auth/me 200",
+		"change_password":   "POST /api/auth/password/change 204",
+		"keys":              "GET /api/auth/keys 200",
+		"create_key":        "POST /api/auth/keys 201",
+		"remove_key":        "DELETE /api/auth/keys/{id} 204",
 	}
 	if !maps.Equal(routes, want) {
 		t.Fatalf("auth's routes are %v, want %v", routes, want)
@@ -725,9 +771,88 @@ func TestTheLoginsTableIsReserved(t *testing.T) {
 		Body string `json:"body"`
 	}
 	app := warp.New(warp.Config{})
-	app.Use(data.Module(), auth.Module(), stores{"notes", func(db *data.DB) { data.NewStore[Note](db, "users") }})
+	app.Use(data.Module(), mail.Module(), auth.Module(), stores{"notes", func(db *data.DB) { data.NewStore[Note](db, "users") }})
 	want := `warp: the table users is the login's, which warp/auth keeps its users in; give the store of Note another table.`
 	if err := app.Err(); err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("Err = %v\nwant %s", err, want)
 	}
+}
+
+// startClocked starts an app as startAuth does, with its owner, the
+// database's clock, which the login reads too, set to clock.
+func startClocked(t *testing.T, vars map[string]string, clock *clock) *warptest.Client {
+	t.Helper()
+	c, _ := startAuth(t, vars)
+	data.For(c.App).SetClock(clock.Now)
+	authtest.Owner(t, c)
+	return c
+}
+
+const tooManyForAccount = "Too many tries for this account; wait 10 minutes, or reset the password."
+
+// Review Focus 4: ten failed logins for one account from ten addresses
+// refuse the eleventh from a fresh address, the right password included,
+// until ten minutes have passed.
+func TestLoginLimitedPerAccountAcrossAddresses(t *testing.T) {
+	at := &clock{now: time.Date(2026, 11, 28, 9, 0, 0, 0, time.UTC)}
+	c := startClocked(t, authEnv(t), at)
+	try := func(email, password, remote string) *warptest.Response {
+		return c.Fork().Do(request(http.MethodPost, "/api/auth/login", map[string]string{"email": email, "password": password}, remote))
+	}
+	for i := range 10 {
+		wantError(t, try(ownerEmail, "wrong", fmt.Sprintf("192.0.2.%d:1000", i+1)), 401, "unauthorized", "That email and password do not match.")
+	}
+	wantError(t, try(ownerEmail, authtest.Password, "198.51.100.1:1000"), 429, "rate_limited", tooManyForAccount)
+	wantError(t, try(" OWNER@example.com", authtest.Password, "198.51.100.2:1000"), 429, "rate_limited", tooManyForAccount)
+	// Another account from the same addresses is not refused.
+	if _, err := auth.AddUser(ctx, c.App, "clerk@example.com", "clerk password", auth.RoleMember); err != nil {
+		t.Fatal(err)
+	}
+	try("clerk@example.com", "clerk password", "198.51.100.1:1000").Want(200)
+	// The session the owner already has is not touched.
+	c.Get("/api/auth/me").Want(200)
+
+	at.set(at.Now().Add(10*time.Minute - time.Second))
+	wantError(t, try(ownerEmail, authtest.Password, "198.51.100.3:1000"), 429, "rate_limited", tooManyForAccount)
+	at.set(at.Now().Add(time.Second))
+	try(ownerEmail, authtest.Password, "198.51.100.3:1000").Want(200)
+}
+
+// An email no one has is counted the same way, so the answer says nothing
+// of who has an account.
+func TestAccountCountForAnEmailWithNoUser(t *testing.T) {
+	at := &clock{now: time.Date(2026, 11, 28, 9, 0, 0, 0, time.UTC)}
+	c := startClocked(t, authEnv(t), at)
+	try := func(email, remote string) *warptest.Response {
+		return c.Fork().Do(request(http.MethodPost, "/api/auth/login", map[string]string{"email": email, "password": "wrong"}, remote))
+	}
+	for i := range 10 {
+		try("nobody@example.com", fmt.Sprintf("192.0.2.%d:1000", i+1)).Want(401)
+		try(ownerEmail, fmt.Sprintf("192.0.2.%d:1000", i+1)).Want(401)
+	}
+	none, owner := try("nobody@example.com", "198.51.100.1:1000"), try(ownerEmail, "198.51.100.1:1000")
+	wantError(t, none, 429, "rate_limited", tooManyForAccount)
+	if none.Status != owner.Status || !bytes.Equal(none.Body, owner.Body) {
+		t.Fatalf("an email with no user answered %d %s, one with a user %d %s", none.Status, none.Body, owner.Status, owner.Body)
+	}
+}
+
+// Review I4: only failures count against an account. Twenty correct
+// sign-ins in a row all succeed; failures mixed among successes still
+// count, and the tenth refuses the next.
+func TestOnlyFailuresCountAgainstAnAccount(t *testing.T) {
+	at := &clock{now: time.Date(2026, 11, 28, 9, 0, 0, 0, time.UTC)}
+	c := startClocked(t, authEnv(t), at)
+	try := func(password string, i int) *warptest.Response {
+		return c.Fork().Do(request(http.MethodPost, "/api/auth/login", map[string]string{"email": ownerEmail, "password": password}, fmt.Sprintf("192.0.2.%d:1000", i+1)))
+	}
+	for i := range 20 {
+		try(authtest.Password, i).Want(200)
+	}
+	for i := range 9 {
+		try("wrong", 20+i).Want(401)
+		try(authtest.Password, 40+i).Want(200)
+	}
+	try("wrong", 60).Want(401) // the tenth failure
+	wantError(t, try(authtest.Password, 61), 429, "rate_limited", tooManyForAccount)
 }

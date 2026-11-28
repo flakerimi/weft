@@ -6,6 +6,8 @@ import type { TableQuery, TableResult } from '../../src/data/table.ts'
 import { mount } from '../mount.ts'
 import { installResizeObserver } from '../resize-observer.ts'
 import { $, $$, overlays, reset, settle } from '../overlays/helpers.ts'
+// What perm loads on demand, taken as fetched, as it is once one on the page has asked.
+import '../../src/session/load.ts'
 
 beforeAll(() => {
   for (const name of ['plus', 'pencil', 'trash']) registerIcon(name, '<path d="M0 0"/>')
@@ -311,5 +313,90 @@ describe('DataTable', () => {
     expect($$('button').find((b) => b.textContent!.trim() === 'New product')).toBeUndefined()
     expect($$('thead th').map((th) => th.textContent!.trim())).toEqual(['Name', 'Price', 'Status'])
     expect($$('tbody button')).toHaveLength(0)
+  })
+
+  // perm: a resource name. Who is signed in is GET /api/auth/me (the
+  // contract's Me JSON, stubbed); each test asks again with refresh().
+  describe('perm', () => {
+    const fetchMock = vi.fn()
+    const me = (permissions: string[], role = 'member') => ({
+      id: 7,
+      created_at: '2026-11-28T09:00:00Z',
+      updated_at: '2026-11-28T09:00:00Z',
+      email: 'mia@example.com',
+      name: 'Mia',
+      role,
+      permissions,
+    })
+    async function signIn(permissions: string[], role?: string) {
+      vi.stubGlobal('fetch', fetchMock)
+      // A fresh answer each time: a body is read once.
+      fetchMock.mockImplementation(async () => new Response(JSON.stringify(me(permissions, role)), { status: 200, headers: { 'content-type': 'application/json' } }))
+      const { useSession } = await import('../../src/session/session.ts')
+      await useSession().refresh()
+    }
+    afterEach(() => vi.unstubAllGlobals())
+    const newButton = () => $$('button').find((b) => b.textContent!.trim() === 'New product')
+    const headers = () => $$('thead th').map((th) => th.textContent!.trim())
+
+    it('DataTable perm hides New, Edit and Delete by permission', async () => {
+      await signIn(['products:create', 'products:delete', 'products:edit', 'products:read'])
+      const { resource } = makeResource()
+      await cases({ resource, perm: 'products' })
+      expect(newButton()).toBeDefined()
+      expect($$('button[data-weft-row-action="edit"]')).toHaveLength(2)
+      expect($$('button[data-weft-row-action="delete"]')).toHaveLength(2)
+      unmount!()
+
+      await signIn(['products:create', 'products:read'])
+      await cases({ resource, perm: 'products' })
+      expect(newButton()).toBeDefined()
+      expect($$('button[data-weft-row-action]')).toHaveLength(0)
+      unmount!()
+
+      await signIn(['products:delete', 'products:read'])
+      await cases({ resource, perm: 'products' })
+      expect(newButton()).toBeUndefined()
+      expect($$('button[data-weft-row-action="edit"]')).toHaveLength(0)
+      expect($$('button[data-weft-row-action="delete"]')).toHaveLength(2)
+      expect(headers()).toEqual(['Name', 'Price', 'Status', 'Actions'])
+      unmount!()
+
+      // The owner may do anything, listed or not.
+      await signIn([], 'owner')
+      await cases({ resource, perm: 'products' })
+      expect(newButton()).toBeDefined()
+      expect($$('button[data-weft-row-action]')).toHaveLength(4)
+    })
+
+    it('DataTable perm drops Actions when neither row action is left', async () => {
+      await signIn(['products:read'])
+      const { resource } = makeResource()
+      await cases({ resource, perm: 'products' })
+      expect(newButton()).toBeUndefined()
+      expect(headers()).toEqual(['Name', 'Price', 'Status'])
+      expect($$('tbody button')).toHaveLength(0)
+      expect($('tbody').textContent).toContain('Brass Lamp')
+    })
+
+    it('follows the session after mounting', async () => {
+      await signIn(['products:read'])
+      const { resource } = makeResource()
+      await cases({ resource, perm: 'products' })
+      expect(headers()).toEqual(['Name', 'Price', 'Status'])
+      await signIn(['products:edit', 'products:read'])
+      await settle()
+      expect(headers()).toEqual(['Name', 'Price', 'Status', 'Actions'])
+      expect($$('button[data-weft-row-action="edit"]')).toHaveLength(2)
+    })
+
+    it('without perm asks nothing', async () => {
+      vi.stubGlobal('fetch', fetchMock)
+      fetchMock.mockClear()
+      const { resource } = makeResource()
+      await cases({ resource })
+      expect(newButton()).toBeDefined()
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
   })
 })

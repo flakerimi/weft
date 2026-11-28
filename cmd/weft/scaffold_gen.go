@@ -15,8 +15,7 @@ type resource struct {
 	Type        string // Product
 	API         string // products, as weft gen names api.products
 	Table, View string // ProductsTable, ProductView
-	Auth        bool   // app/modules.go lists auth.Module()
-	Session     bool   // the app has web/session.ts
+	Auth        bool   // app/modules.go lists auth.Module(): the pages show by permission
 }
 
 func newResource(s scaffoldSpec) *resource {
@@ -245,6 +244,7 @@ func (r *resource) tableVue() string {
 	label := r.labelField()
 	var columns, filters, fields []string
 	used := map[string]bool{}
+	times := false // a column is a date or a datetime, written with wireTimeText
 	if label == "id" {
 		columns = append(columns, "{ key: 'id', label: 'Id', sortable: true, rowHeader: true },")
 	}
@@ -267,6 +267,9 @@ func (r *resource) tableVue() string {
 		case "int", "float":
 			col += ", align: 'end', format: number"
 			used["number"] = true
+		case "date", "datetime":
+			col += ", format: (v) => wireTimeText(v, '" + f.Type + "')"
+			times = true
 		}
 		if f.Name == label {
 			col += ", rowHeader: true"
@@ -287,23 +290,32 @@ func (r *resource) tableVue() string {
 	var b strings.Builder
 	b.WriteString("<script setup vapor lang=\"ts\">\n")
 	b.WriteString(wrap("// ", fmt.Sprintf("An island on /%s: the %s from the server, searched, sorted, filtered and paged there, through DataTable, which makes, changes and deletes them in its dialog with the rules the server has. weft scaffold wrote it; it is yours to change.", r.Plural, human(r.Plural))))
-	if r.Session {
-		b.WriteString("import { onMounted, ref } from 'vue'\n")
-	}
 	imports := "TableColumn"
 	if len(filters) > 0 {
 		imports = "DataTableFilter, EntityFieldConfig, TableColumn"
 	} else {
 		imports = "EntityFieldConfig, TableColumn"
 	}
-	fmt.Fprintf(&b, "import type { %s } from '@weft/ui'\n", imports)
-	if r.Session {
-		fmt.Fprintf(&b, "import { api, ApiError, schema, type %s } from '../.weft-types/api.ts'\n", r.Type)
-		b.WriteString("import { requireUser, signInAgain, useSession } from '../session.ts'\n\n")
-		b.WriteString("// The table asks only once the visitor is known to be signed in.\nconst ready = ref(false)\nconst { session } = useSession()\nonMounted(async () => {\n  ready.value = (await requireUser()) !== null\n})\n\n")
-		b.WriteString("// The session can end while the list is open (signed out in another tab):\n// the next page, sort or search is a 401, and the visitor signs in again.\nfunction listFailed(e: unknown) {\n  if (e instanceof ApiError && e.status === 401) signInAgain()\n}\n\n")
+	var values []string
+	if r.Auth {
+		values = append(values, "sessionEnded")
+	}
+	if times {
+		values = append(values, "useDateFields", "wireTimeText")
+	}
+	if len(values) > 0 {
+		fmt.Fprintf(&b, "import { %s, type %s } from '@weft/ui'\n", strings.Join(values, ", "), strings.ReplaceAll(imports, ", ", ", type "))
+	} else {
+		fmt.Fprintf(&b, "import type { %s } from '@weft/ui'\n", imports)
+	}
+	if r.Auth {
+		fmt.Fprintf(&b, "import { api, ApiError, schema, type %s } from '../.weft-types/api.ts'\n\n", r.Type)
+		b.WriteString("// The session can end while the list is open (signed out in another tab):\n// the next page, sort or search is a 401, so the session is asked again\n// and the visitor sent to sign in and back.\nfunction listFailed(e: unknown) {\n  if (e instanceof ApiError && e.status === 401) void sessionEnded()\n}\n\n")
 	} else {
 		fmt.Fprintf(&b, "import { api, schema, type %s } from '../.weft-types/api.ts'\n\n", r.Type)
+	}
+	if times {
+		b.WriteString("// The dialog's date and time controls: a DatePicker, and an InputTime beside it.\nuseDateFields()\n\n")
 	}
 	if used["number"] {
 		b.WriteString("const number = (v: unknown) => (v == null ? '' : (v as number).toLocaleString())\n")
@@ -327,36 +339,41 @@ func (r *resource) tableVue() string {
 	for _, f := range fields {
 		b.WriteString("  " + f + "\n")
 	}
-	b.WriteString("]\n</script>\n\n<template>\n  <DataTable\n")
-	if r.Session {
-		b.WriteString("    v-if=\"ready\"\n")
+	b.WriteString("]\n</script>\n\n<template>\n")
+	// The table, which a Guard holds when the routes have permissions.
+	var t strings.Builder
+	t.WriteString("  <DataTable\n")
+	fmt.Fprintf(&t, "    :resource=\"api.%s\"\n    :schema=\"schema.%sInput\"\n    :columns=\"columns\"\n", r.API, r.Type)
+	if r.Auth {
+		fmt.Fprintf(&t, "    perm=%q\n", r.Plural)
 	}
-	fmt.Fprintf(&b, "    :resource=\"api.%s\"\n    :schema=\"schema.%sInput\"\n    :columns=\"columns\"\n", r.API, r.Type)
 	if len(filters) > 0 {
-		b.WriteString("    :filter-defs=\"filterDefs\"\n")
+		t.WriteString("    :filter-defs=\"filterDefs\"\n")
 	}
-	b.WriteString("    :fields=\"fields\"\n")
-	fmt.Fprintf(&b, "    name=%q\n", human(r.Name))
+	t.WriteString("    :fields=\"fields\"\n")
+	fmt.Fprintf(&t, "    name=%q\n", human(r.Name))
 	if label != "name" {
-		fmt.Fprintf(&b, "    label-key=%q\n", label)
+		fmt.Fprintf(&t, "    label-key=%q\n", label)
 	}
-	fmt.Fprintf(&b, "    caption=%q\n    empty-title=%q\n    empty-description=%q\n", capital(human(r.Plural)), "No "+human(r.Plural), "Make one with New "+human(r.Name)+", or change the search.")
-	if r.Session {
-		b.WriteString("    @error=\"listFailed\"\n")
+	fmt.Fprintf(&t, "    caption=%q\n    empty-title=%q\n    empty-description=%q\n", capital(human(r.Plural)), "No "+human(r.Plural), "Make one with New "+human(r.Name)+", or change the search.")
+	if r.Auth {
+		t.WriteString("    @error=\"listFailed\"\n")
 	}
-	b.WriteString("  >\n")
-	fmt.Fprintf(&b, "    <template #%s-cell=\"{ row }\">\n      <Link :to=\"`/%s/${row.id}`\">{{ row.%s }}</Link>\n    </template>\n", label, r.Plural, label)
+	t.WriteString("  >\n")
+	fmt.Fprintf(&t, "    <template #%s-cell=\"{ row }\">\n      <Link :to=\"`/%s/${row.id}`\">{{ row.%s }}</Link>\n    </template>\n", label, r.Plural, label)
 	for _, f := range r.Fields {
 		switch f.Type {
 		case "enum":
-			fmt.Fprintf(&b, "    <template #%s-cell=\"{ row }\">\n      <Badge v-if=\"row.%s\" :label=\"row.%s\" variant=\"soft\" />\n    </template>\n", f.Name, f.Name, f.Name)
+			fmt.Fprintf(&t, "    <template #%s-cell=\"{ row }\">\n      <Badge v-if=\"row.%s\" :label=\"row.%s\" variant=\"soft\" />\n    </template>\n", f.Name, f.Name, f.Name)
 		case "bool":
-			fmt.Fprintf(&b, "    <template #%s-cell=\"{ row }\">\n      <Badge v-if=\"row.%s != null\" :label=\"row.%s ? 'Yes' : 'No'\" :tone=\"row.%s ? 'success' : 'neutral'\" variant=\"soft\" />\n    </template>\n", f.Name, f.Name, f.Name, f.Name)
+			fmt.Fprintf(&t, "    <template #%s-cell=\"{ row }\">\n      <Badge v-if=\"row.%s != null\" :label=\"row.%s ? 'Yes' : 'No'\" :tone=\"row.%s ? 'success' : 'neutral'\" variant=\"soft\" />\n    </template>\n", f.Name, f.Name, f.Name, f.Name)
 		}
 	}
-	b.WriteString("  </DataTable>\n")
-	if r.Session {
-		b.WriteString("  <Alert v-else-if=\"session.problem\" tone=\"danger\" :title=\"session.problem\" />\n  <Skeleton v-else height=\"12rem\" />\n")
+	t.WriteString("  </DataTable>\n")
+	if r.Auth {
+		fmt.Fprintf(&b, "  <Guard perm=\"%s:read\">\n%s    <template #loading><Skeleton height=\"12rem\" /></template>\n  </Guard>\n", r.Plural, indent(t.String()))
+	} else {
+		b.WriteString(t.String())
 	}
 	b.WriteString("</template>\n")
 	return b.String()
@@ -367,43 +384,61 @@ func (r *resource) viewVue() string {
 	var b strings.Builder
 	b.WriteString("<script setup vapor lang=\"ts\">\n")
 	b.WriteString(wrap("// ", fmt.Sprintf("An island on the run-time page /%s/[id]: reads the id from the address, asks api.%s.show, and shows the %s, or that there is none with that id. weft scaffold wrote it; it is yours to change.", r.Plural, r.API, human(r.Name))))
-	b.WriteString("import { onMounted, ref } from 'vue'\nimport { entityProblem, useParams } from '@weft/ui'\n")
-	fmt.Fprintf(&b, "import { api, ApiError, type %s } from '../.weft-types/api.ts'\n", r.Type)
-	if r.Session {
-		b.WriteString("import { requireUser, useSession } from '../session.ts'\n")
+	ui := "entityProblem, useParams"
+	if r.Auth {
+		ui = "entityProblem, requireSession, useParams"
 	}
+	for _, f := range r.Fields {
+		if f.isTime() {
+			ui += ", wireTimeText"
+			break
+		}
+	}
+	b.WriteString("import { onMounted, ref } from 'vue'\nimport { " + ui + " } from '@weft/ui'\n")
+	fmt.Fprintf(&b, "import { api, ApiError, type %s } from '../.weft-types/api.ts'\n", r.Type)
 	fmt.Fprintf(&b, "\nconst record = ref<%s | null>(null)\nconst missing = ref(false)\nconst problem = ref('')\nconst loading = ref(true)\n\n", r.Type)
 	b.WriteString("// Only an id as the server writes one: digits with no leading zero, so\n// /" + r.Plural + "/0x2a is not record 42.\nfunction idOf(raw: string | undefined): number | null {\n  if (!raw || !/^[1-9][0-9]*$/.test(raw)) return null\n  const id = Number(raw)\n  return Number.isSafeInteger(id) ? id : null\n}\n\n")
 	b.WriteString("onMounted(async () => {\n  try {\n")
-	if r.Session {
-		b.WriteString("    if (!(await requireUser())) {\n      problem.value = useSession().session.problem\n      return\n    }\n")
+	if r.Auth {
+		fmt.Fprintf(&b, "    if (!(await requireSession({ perm: '%s:read' }))) return\n", r.Plural)
 	}
 	fmt.Fprintf(&b, "    const id = idOf(useParams('/%s/:id').id)\n    if (id === null) missing.value = true\n    else record.value = await api.%s.show(id)\n", r.Plural, r.API)
 	b.WriteString("  } catch (e) {\n    if (e instanceof ApiError && e.status === 404) missing.value = true\n")
 	b.WriteString("    // Said as the components say it: no answer, a non-Warp answer, or a bug.\n    else problem.value = entityProblem(e, new Set()).message\n")
 	b.WriteString("  } finally {\n    loading.value = false\n  }\n})\n\n")
 	b.WriteString("const shown = (v: unknown) => (v == null ? '' : String(v))\nconst number = (v: number | null | undefined) => (v == null ? '' : v.toLocaleString())\nconst moment = (v: string | null | undefined) => (v == null ? '' : new Date(v).toLocaleString())\nconst yesNo = (v: boolean | null | undefined) => (v == null ? '' : v ? 'Yes' : 'No')\n")
-	b.WriteString("</script>\n\n<template>\n  <Stack :gap=\"4\">\n    <Skeleton v-if=\"loading\" height=\"8rem\" />\n")
-	fmt.Fprintf(&b, "    <EmptyState v-else-if=\"missing\" title=\"No %s has that id.\" />\n", human(r.Name))
-	b.WriteString("    <Alert v-else-if=\"problem\" tone=\"danger\" :title=\"problem\" />\n    <Card v-else-if=\"record\">\n")
+	b.WriteString("</script>\n\n<template>\n")
+	// The record, which a Guard holds when the routes have permissions.
+	var v strings.Builder
+	v.WriteString("  <Stack :gap=\"4\">\n    <Skeleton v-if=\"loading\" height=\"8rem\" />\n")
+	fmt.Fprintf(&v, "    <EmptyState v-else-if=\"missing\" title=\"No %s has that id.\" />\n", human(r.Name))
+	v.WriteString("    <Alert v-else-if=\"problem\" tone=\"danger\" :title=\"problem\" />\n    <Card v-else-if=\"record\">\n")
 	if label == "id" {
-		fmt.Fprintf(&b, "      <template #header>%s {{ record.id }}</template>\n", capital(human(r.Name)))
+		fmt.Fprintf(&v, "      <template #header>%s {{ record.id }}</template>\n", capital(human(r.Name)))
 	} else {
-		fmt.Fprintf(&b, "      <template #header>{{ record.%s }}</template>\n", label)
+		fmt.Fprintf(&v, "      <template #header>{{ record.%s }}</template>\n", label)
 	}
-	b.WriteString("      <Stack :gap=\"2\">\n")
+	v.WriteString("      <Stack :gap=\"2\">\n")
 	for _, f := range r.Fields {
-		show := "shown"
+		show := "shown(record." + f.Name + ")"
 		switch f.Type {
 		case "int", "float":
-			show = "number"
+			show = "number(record." + f.Name + ")"
 		case "bool":
-			show = "yesNo"
+			show = "yesNo(record." + f.Name + ")"
+		case "date", "datetime":
+			show = "wireTimeText(record." + f.Name + ", '" + f.Type + "')"
 		}
-		fmt.Fprintf(&b, "        <span>%s: {{ %s(record.%s) }}</span>\n", capital(human(f.Name)), show, f.Name)
+		fmt.Fprintf(&v, "        <span>%s: {{ %s }}</span>\n", capital(human(f.Name)), show)
 	}
-	b.WriteString("        <span>Made {{ moment(record.created_at) }}, changed {{ moment(record.updated_at) }}</span>\n      </Stack>\n    </Card>\n")
-	fmt.Fprintf(&b, "    <Link to=\"/%s\">Back to the %s</Link>\n  </Stack>\n</template>\n", r.Plural, human(r.Plural))
+	v.WriteString("        <span>Made {{ moment(record.created_at) }}, changed {{ moment(record.updated_at) }}</span>\n      </Stack>\n    </Card>\n")
+	fmt.Fprintf(&v, "    <Link to=\"/%s\">Back to the %s</Link>\n  </Stack>\n", r.Plural, human(r.Plural))
+	if r.Auth {
+		fmt.Fprintf(&b, "  <Guard perm=\"%s:read\">\n%s    <template #loading><Skeleton height=\"8rem\" /></template>\n  </Guard>\n", r.Plural, indent(v.String()))
+	} else {
+		b.WriteString(v.String())
+	}
+	b.WriteString("</template>\n")
 	return b.String()
 }
 
@@ -450,4 +485,15 @@ useHead({ title: %[2]s, description: %[3]s })
 </template>
 `, r.View, ts(capital(human(r.Name))), ts("One "+human(r.Name)+" the app keeps."), strconv.Quote(capital(human(r.Name))),
 		wrap("// ", fmt.Sprintf("The %s are made after the build, so this page is built once, as a shell, and served for every /%s/<id>; its island reads the id.", human(r.Plural), r.Plural)))
+}
+
+// indent puts two more spaces before each line of text that is not empty.
+func indent(text string) string {
+	lines := strings.SplitAfter(text, "\n")
+	for i, l := range lines {
+		if strings.TrimSpace(l) != "" {
+			lines[i] = "  " + l
+		}
+	}
+	return strings.Join(lines, "")
 }

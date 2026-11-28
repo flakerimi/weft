@@ -764,13 +764,18 @@ console.log(JSON.stringify(out))
 // genApp copies the installed app into a new temp folder and runs the test
 // in it.
 // withoutClient makes the pages of a created app those of an app with no
-// API, as a 0.0.6 app's were: the login and setup pages and the session,
-// which call the client, go, and the hello island asks /api/hello itself.
+// API, as a 0.0.6 app's were: the login's pages and forms, answers.ts and
+// session-check.ts, which call the client or its types, go, and the hello
+// island asks /api/hello itself.
 // Such an app's client has no routes, which those pages would not
 // type-check against.
 func withoutClient(t *testing.T, app string) {
 	t.Helper()
-	for _, p := range []string{"web/pages/login.vue", "web/pages/setup.vue", "web/components/LoginForm.vue", "web/components/SetupForm.vue", "web/session.ts", "web/answers.ts"} {
+	for _, p := range []string{
+		"web/pages/login.vue", "web/pages/setup.vue", "web/pages/register.vue", "web/pages/forgot.vue", "web/pages/password.vue", "web/pages/account.vue", "web/pages/users.vue",
+		"web/components/LoginForm.vue", "web/components/SetupForm.vue", "web/components/RegisterForm.vue", "web/components/ForgotForm.vue", "web/components/PasswordForm.vue", "web/components/AccountPanel.vue", "web/components/UsersPanel.vue",
+		"web/answers.ts", "web/session-check.ts",
+	} {
 		if err := os.Remove(filepath.Join(app, filepath.FromSlash(p))); err != nil {
 			t.Fatal(err)
 		}
@@ -825,10 +830,33 @@ func TestGenInApp(t *testing.T) {
 	}
 
 	code, out, errs = runCmd("routes")
-	// The frame's routes: auth's four and hello.
-	want := "METHOD  PATH              MODULE  NAME    PERMISSION\n" +
-		"POST    /api/auth/login   auth    login   -\nPOST    /api/auth/logout  auth    logout  -\nGET     /api/auth/me      auth    me      -\n" +
-		"POST    /api/auth/setup   auth    setup   -\nGET     /api/hello        hello   hello   -\n"
+	// The frame's routes: auth's and hello.
+	want := "METHOD  PATH                           MODULE  NAME               PERMISSION\n" +
+		"POST    /api/auth/login                auth    login              -\n" +
+		"POST    /api/auth/logout               auth    logout             -\n" +
+		"POST    /api/auth/logout/everywhere    auth    logout_everywhere  -\n" +
+		"GET     /api/auth/me                   auth    me                 -\n" +
+		"POST    /api/auth/setup                auth    setup              -\n" +
+		"GET     /api/auth/sessions             auth    sessions           -\n" +
+		"DELETE  /api/auth/sessions/{id}        auth    end_session        -\n" +
+		"GET     /api/auth/settings             auth    settings           -\n" +
+		"POST    /api/auth/register             auth    register           -\n" +
+		"POST    /api/auth/forgot               auth    forgot             -\n" +
+		"POST    /api/auth/token                auth    token              -\n" +
+		"POST    /api/auth/password             auth    password           -\n" +
+		"GET     /api/auth/invitations          auth    invitations        users:read\n" +
+		"POST    /api/auth/invitations          auth    invite             users:invite\n" +
+		"DELETE  /api/auth/invitations/{id}     auth    remove_invitation  users:invite\n" +
+		"GET     /api/auth/users                auth    users              users:read\n" +
+		"PATCH   /api/auth/users/{id}           auth    update_user        users:edit\n" +
+		"DELETE  /api/auth/users/{id}           auth    remove_user        users:delete\n" +
+		"DELETE  /api/auth/users/{id}/sessions  auth    end_user_sessions  users:edit\n" +
+		"PATCH   /api/auth/me                   auth    update_me          -\n" +
+		"POST    /api/auth/password/change      auth    change_password    -\n" +
+		"GET     /api/auth/keys                 auth    keys               -\n" +
+		"POST    /api/auth/keys                 auth    create_key         -\n" +
+		"DELETE  /api/auth/keys/{id}            auth    remove_key         -\n" +
+		"GET     /api/hello                     hello   hello              -\n"
 	if code != 0 || out != want {
 		t.Errorf("weft routes: exit %d, stdout %q, stderr %q, want %q", code, out, errs, want)
 	}

@@ -1,7 +1,7 @@
 ---
 title: Serving from Go
 description: What warp.Serve sends for each request, and how to serve files from disk beside the build.
-order: 28
+order: 31
 ---
 
 On this page you learn what `warp.Serve` answers for each request, how it caches and compresses, and how to serve a folder from disk next to your pages. An app's `server.Serve(dist)` serves through it, with the app's API beside the pages; [Warp, the Go side](warp.md) and [Typed routes](routes.md) cover the API. For the signatures, see the [Go package reference](../reference/go.md).

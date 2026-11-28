@@ -166,8 +166,8 @@ func TestDevServesPagesAndAPI(t *testing.T) {
 	check()
 	// The Go server prints no URL of its own, and answers on 127.0.0.1 only.
 	// The owner's setup link auth logs is the page server's, and is not
-	// counted.
-	if got := strings.Count(r.stdout.String()+withoutSetupLink(r.stderr.String()), "http://"); got != 1 {
+	// counted, nor are the app's other routine lines.
+	if got := strings.Count(r.stdout.String()+withoutRoutineLines(r.stderr.String()), "http://"); got != 1 {
 		t.Errorf("the output has %d URLs: %q", got, r.stdout.String()+r.stderr.String())
 	}
 	goPort := r.goPort(t)
@@ -559,8 +559,8 @@ func TestDevStopsWhileStarting(t *testing.T) {
 	if got := out.String(); got != "" && !regexp.MustCompile(`^weft dev: http://localhost:\d+\n$`).MatchString(got) {
 		t.Errorf("stdout %q", got)
 	}
-	// Nothing but the owner's setup link, which auth logs at its start.
-	if got := withoutSetupLink(errb.String()); got != "" {
+	// Nothing but the lines a created app writes in every run.
+	if got := withoutRoutineLines(errb.String()); got != "" {
 		t.Errorf("stderr %q, want nothing", got)
 	}
 	if left := appGroups(t, app, port); len(left) != 0 {

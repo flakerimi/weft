@@ -302,6 +302,15 @@ await waitFor('the first page again', `!__t.dialog() && __t.text().includes('P01
 await waitFor('focus on a row Delete button after delete', `document.activeElement?.getAttribute('data-weft-row-action') === 'delete'`)
 await shot('last-row-deleted')
 
+step("/users offers no Edit or Delete on the signed-in user's own row")
+await go(`${base}/users`)
+await waitFor('the users table, live, with the owner', `__t.live('UsersPanel') && [...document.querySelectorAll('.weft-table tbody tr')].some((r) => r.innerText.includes('owner@example.com'))`)
+await sleep(500)
+const ownRow = `[...document.querySelectorAll('.weft-table tbody tr')].find((r) => r.innerText.includes('owner@example.com'))`
+if (await evaluate(`!!__t.button('Edit', ${ownRow}) || !!__t.button('Delete', ${ownRow})`)) await fail("the owner's own row offers Edit or Delete, which can only answer 409")
+await go(`${base}/products`)
+await waitFor('the table', `__t.live('ProductsTable') && __t.text().includes('P01')`)
+
 step('signing out with the server out of reach says so, and stays signed in')
 unreachableUrls.add('/api/auth/logout')
 await send('Fetch.enable', { patterns: [{ urlPattern: '*/api/auth/logout*', requestStage: 'Request' }] })

@@ -17,9 +17,9 @@ go test ./...   # the Go tests; in a fresh clone, run weft unpack first
 pnpm typecheck  # check the Vue files
 ```
 
-To add a resource (a model and its five routes), run `weft scaffold` with its name and typed fields (https://weft.base.al/docs/reference/scaffold); it writes the pages too (a `DataTable` and the record's page), and needs `--api`, Go only, for `date` and `datetime` fields until Weft 0.2.0. To add a route, add it in a module's `Register` with `warp.Get(app, "/path", fn)`; to add a module, make `app/<name>/` with a `Module()` and list it in `app/modules.go`. `weft dev` restarts the Go server when a `.go` file or `.env` changes.
+To add a resource (a model and its five routes), run `weft scaffold` with its name and typed fields (https://weft.base.al/docs/reference/scaffold); it writes the pages too (a `DataTable` and the record's page), or only the Go with `--api`. To add a route, add it in a module's `Register` with `warp.Get(app, "/path", fn)`; to add a module, make `app/<name>/` with a `Module()` and list it in `app/modules.go`. `weft dev` restarts the Go server when a `.go` file or `.env` changes.
 
-The app keeps its records in SQLite (`data.Module()`, the file `DB_URL` names in `.env`) and signs its owner in (`auth.Module()`). At its first start, while no user exists, it logs a one-time link, `/setup#token=…`, that sets the owner's password; the owner's email is `AUTH_OWNER_EMAIL` in `.env`. `GET /api/hello` answers anyone.
+The app keeps its records in SQLite (`data.Module()`, the file `DB_URL` names in `.env`), sends mail (`mail.Module()`, which prints each message to the log until `MAIL=smtp`), and signs people in (`auth.Module()`) with four roles, owner, administrator, member and viewer. At its first start, while no user exists, it logs a one-time link, `/setup#token=…`, that sets the owner's password; the owner's email is `AUTH_OWNER_EMAIL` in `.env`. Others come by invitation (`AUTH_REGISTRATION=invite`, the default), and every mailed link opens `/password#token=…`. `middleware.Module()` adds security headers, one log line per request and a rate limit on `/api`. `GET /api/hello` answers anyone.
 
 Until the first `weft build`, `web/dist` holds only an empty marker (`weft create` writes it, `weft unpack` puts it back in a fresh clone), so Go commands work; a binary built from it refuses to start, saying the pages are not built.
 
@@ -28,19 +28,20 @@ Until the first `weft build`, `web/dist` holds only an empty marker (`weft creat
 | Path | What it is |
 | --- | --- |
 | `main.go`, `dist.go`, `dist_dev.go` | The server. `main.go` makes the `warp.App` and serves it; `dist.go` embeds `web/dist`; with `-tags dev`, as `weft dev` builds it, `dist_dev.go` embeds nothing |
-| `app/modules.go` | The one list of the app's modules: `data`, `auth`, `hello` |
+| `app/modules.go` | The one list of the app's modules: `middleware`, `data`, `mail`, `auth`, `hello` |
 | `app/<name>/routes.go` | One module: its routes, under `/api` |
-| `.env`, `.env.sample` | The settings: the port, the database, `AUTH_SECRET` and `AUTH_OWNER_EMAIL`; `.env` is not committed, `.env.sample` is and says what each one is |
+| `.env`, `.env.sample` | The settings: the port, the database, `AUTH_SECRET` and `AUTH_OWNER_EMAIL`, and the login's, mail's and middleware's, commented with their defaults; `.env` is not committed, `.env.sample` is and says what each one is |
 | `data/` | The SQLite database, not committed |
-| `web/pages/` | One page per `.vue` file; its path is the route. `login.vue` signs the owner in, `setup.vue` sets the owner's password |
+| `web/pages/` | One page per `.vue` file; its path is the route. `login.vue` signs in, `setup.vue` sets the owner's password, `register.vue` and `forgot.vue` ask for a mailed link, `password.vue` sets a password from one, `account.vue` is the signed-in user's own, `users.vue` lists users and invitations |
 | `web/components/` | Your components; an island is one used with `Island` |
-| `web/session.ts` | `useSession()`: who is signed in, asked once per page; `requireUser()`; `signInAgain()` |
-| `web/answers.ts` | Plain rules with no Vue: `nextPath`, `formProblem`, `sessionFrom` |
+| `web/answers.ts` | `formProblem`, what a form shows for a failed call |
+| `web/session-check.ts` | Fails `pnpm typecheck` when the generated `Me` stops fitting `@weft/ui`'s `SessionUser` |
 | `web/.weft-types/api.ts` | The typed client `weft gen` writes; every call to the server goes through it |
 
 ## Rules
 
 - Call the server only through `api` from `web/.weft-types/api.ts`; never write `fetch` or a URL under `/api`.
+- Who is signed in is `useSession()` from `@weft/ui`; show an island only to some accounts with `<Guard perm="reports:read">`, and a button with `perm`. They hide and guard nothing: the route's `auth.Per` or `auth.Can` decides. In a signed-in page's `catch`, a 401 means the session ended: call `sessionEnded()` from `@weft/ui`, which sends the visitor to sign in.
 - Use a Weft component wherever one exists: never write a raw `<button>`, `<input>`, `<select>` or `<dialog>`, and never hand-roll a menu, a popover or a date field.
 - Before you write markup, run `weft catalog` for the list of components, then `weft catalog <Name>` for each one you use: its props, events, slots and an example; `weft catalog --find <word>` when you do not know the name. Never read `.weft/catalog/components.json` whole: it is too large.
 - Lay pages out with `Page`, `Section`, `Stack` and `Grid`, not with custom CSS.

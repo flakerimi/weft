@@ -37,7 +37,7 @@ Types (written, never guessed; none is string):
   int, float                 int64, float64; sorted
   bool                       sorted and filtered
   enum=a,b                   one of the choices, comma-separated; sorted and filtered
-  date, datetime             time.Time, RFC 3339 in JSON; with --api only until 0.2.0
+  date, datetime             time.Time, RFC 3339 in JSON, a pointer unless required; sorted
 Modifiers, after the type in any order:
   nullable    a pointer, which may be null
   required    not on bool or with nullable
@@ -309,12 +309,6 @@ func parseScaffold(args []string) (scaffoldSpec, *scaffoldError) {
 		goNames[pascal(f.Name)] = f.Name
 		spec.Fields = append(spec.Fields, f)
 	}
-	// The pages have no control for a time yet: Go only, with --api.
-	for _, f := range spec.Fields {
-		if !spec.API && (f.Type == "date" || f.Type == "datetime") {
-			return spec, refuse(1, "field %q is a %s, and date and time fields in the pages weft scaffold writes land in Weft 0.2.0; give --api to write only the Go for now.", f.Name, f.Type)
-		}
-	}
 	return spec, nil
 }
 
@@ -422,6 +416,11 @@ func parseField(arg string) (scaffoldField, *scaffoldError) {
 	if f.Required && f.Null {
 		return f, refuse(2, "field %q is nullable, which may be empty, so it cannot be required; remove :nullable or :required.", f.Name)
 	}
+	// A time that is not required is a pointer, so an emptied control
+	// clears it, rather than sending year 1.
+	if f.isTime() && !f.Required {
+		f.Null = true
+	}
 	if f.Type == "enum" && f.Unique && len(f.Choices) < 2 {
 		return f, refuse(2, "field %q is a unique enum with one choice, so only one record could have it; give two choices or more, or remove :unique.", f.Name)
 	}
@@ -448,6 +447,9 @@ func parseField(arg string) (scaffoldField, *scaffoldError) {
 	return f, nil
 }
 
+// isTime reports whether the field is a date or a datetime.
+func (f scaffoldField) isTime() bool { return f.Type == "date" || f.Type == "datetime" }
+
 // goType is the field's Go type.
 func (f scaffoldField) goType() string {
 	t := map[string]string{"int": "int64", "float": "float64", "bool": "bool", "date": "time.Time", "datetime": "time.Time"}[f.Type]
@@ -460,12 +462,15 @@ func (f scaffoldField) goType() string {
 	return t
 }
 
-// rules is the field's warp tag: required, email or url, enum, min, max and
-// unique, in that order.
+// rules is the field's warp tag: required, date, email or url, enum, min,
+// max and unique, in that order.
 func (f scaffoldField) rules() []string {
 	var r []string
 	if f.Required {
 		r = append(r, "required")
+	}
+	if f.Type == "date" {
+		r = append(r, "date")
 	}
 	if f.Type == "email" || f.Type == "url" {
 		r = append(r, f.Type)
@@ -696,9 +701,6 @@ func planScaffold(appDir string, s scaffoldSpec) (*scaffoldPlan, error) {
 		return nil, err
 	}
 	p.auth, r.Auth = hasAuth, hasAuth
-	_, serr := os.Stat(filepath.Join(appDir, "web", "session.ts"))
-	// The islands wait on the session only when there is one to ask for.
-	r.Session = hasAuth && serr == nil
 
 	for _, f := range []struct {
 		name string
@@ -800,39 +802,12 @@ func addModule(src []byte, importPath, name string) ([]byte, bool, error) {
 		}
 		local[p] = n
 	}
-	var list *ast.CompositeLit
-	for _, d := range f.Decls {
-		fn, ok := d.(*ast.FuncDecl)
-		if !ok || fn.Recv != nil || fn.Name.Name != "Modules" || fn.Body == nil {
-			continue
-		}
-		ast.Inspect(fn.Body, func(n ast.Node) bool {
-			ret, ok := n.(*ast.ReturnStmt)
-			if !ok || len(ret.Results) != 1 {
-				return list == nil
-			}
-			if lit, ok := ret.Results[0].(*ast.CompositeLit); ok && isModuleList(lit, local[warpPackage]) {
-				list = lit
-			}
-			return list == nil
-		})
-	}
+	list := moduleList(f, local[warpPackage])
 	if list == nil {
 		return nil, false, errors.New(noList)
 	}
 	lists := func(pkg string) bool {
-		return slices.ContainsFunc(list.Elts, func(e ast.Expr) bool {
-			call, ok := e.(*ast.CallExpr)
-			if !ok {
-				return false
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok {
-				return false
-			}
-			x, ok := sel.X.(*ast.Ident)
-			return ok && local[pkg] != "" && x.Name == local[pkg] && sel.Sel.Name == "Module"
-		})
+		return slices.ContainsFunc(list.Elts, func(e ast.Expr) bool { return isModuleCall(e, local[pkg]) })
 	}
 	if !lists(dataPackage) {
 		return nil, false, errors.New("app/modules.go does not list data.Module(), which keeps the records; add it first in Modules(), import a database driver in main.go as weft create's template does, then run weft scaffold again.")

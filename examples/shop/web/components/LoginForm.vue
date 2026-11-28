@@ -1,15 +1,16 @@
 <script setup vapor lang="ts">
-// An island: signs the owner in with api.auth.login, then goes to the page
-// that sent the visitor here (?next=), when that is a path on this site, or
-// to the front page.
+// An island: signs a user in with api.auth.login, then goes to the page that
+// sent the visitor here (?next=), when that is a path on this site, or to the
+// front page. It links to /forgot, and to /register when the app takes
+// sign-ups (AUTH_REGISTRATION=open).
 import { onMounted, reactive, ref, useTemplateRef } from 'vue'
-import type { FormApi } from '@weft/ui'
+import { nextPath, useSession, type FormApi } from '@weft/ui'
 import { api, schema, type LoginInput } from '../.weft-types/api.ts'
-import { formProblem, nextPath } from '../answers.ts'
-import { useSession } from '../session.ts'
+import { formProblem } from '../answers.ts'
 
 const state = reactive<LoginInput>({ email: '', password: '' })
 const problem = ref('')
+const signUps = ref(false)
 const form = useTemplateRef<FormApi>('form')
 
 const next = () => nextPath(new URLSearchParams(location.search).get('next'), location.origin)
@@ -18,6 +19,13 @@ const next = () => nextPath(new URLSearchParams(location.search).get('next'), lo
 onMounted(async () => {
   if (await useSession().ready) location.assign(next())
 })
+onMounted(async () => {
+  try {
+    signUps.value = (await api.auth.settings()).registration === 'open'
+  } catch {
+    // Without the setting, no link to sign up: the form works as it is.
+  }
+})
 
 async function signIn(values: LoginInput) {
   problem.value = ''
@@ -25,6 +33,7 @@ async function signIn(values: LoginInput) {
     await api.auth.login(values)
     location.assign(next())
   } catch (e) {
+    // A 401 here is a wrong password, not a session that ended.
     const { fields, message } = formProblem(e)
     form.value?.setErrors(fields)
     problem.value = message
@@ -43,6 +52,10 @@ async function signIn(values: LoginInput) {
         <Input v-model="state.password" type="password" autocomplete="current-password" />
       </FormField>
       <Button type="submit" label="Sign in" />
+      <Stack direction="row" :gap="4" wrap>
+        <Link to="/forgot">Forgot your password?</Link>
+        <Link v-if="signUps" to="/register">Sign up</Link>
+      </Stack>
     </Stack>
   </Form>
 </template>

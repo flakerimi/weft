@@ -37,9 +37,29 @@ no `actions` column, `DataTable` appends a trailing `Actions` column with
 `Edit` (`aria-label` `"Edit <itemLabel>"`) and `Delete` (`aria-label`
 `"Delete <itemLabel>"`).
 
+**By permission.** `perm` takes a resource name, such as `perm="products"`:
+`"New <name>"` is drawn only for a signed-in user with `products:create`,
+`Edit` only with `products:edit` and `Delete` only with `products:delete`
+(`useSession().can`, always true for the role `owner`), and the `Actions`
+column is dropped when neither row action is left. It hides; it does not
+disable, and the server still decides: a route guarded by `auth.Per` answers
+403 to anyone without the permission. Pages are built with no session, so the
+server draws none of the three, and neither does the browser's first render;
+they appear once the table has mounted and `GET /api/auth/me` has answered,
+so hydration always matches. Without `perm` nothing is asked. When they
+appear, the toolbar gains New and every row its Actions cell, so the table
+shifts once, as the page's first answer arrives.
+
 **Dialogs and refresh.** Saving in `EntityDialog` emits `saved` and refreshes
 `Table`. Confirming in `ConfirmDialog` calls `remove(row[idKey])`, emits
 `deleted`, refreshes the table, and moves focus to the next row's action
 button (or `"New <name>"` when empty); if `remove` rejects, the dialog stays
 open with an `Alert` (`role="alert"`). `defineExpose` provides `refresh()`,
 `edit(record)` and `askRemove(record)`.
+
+**Dates and times.** A field the schema gives a `format` (`date` or
+`datetime`) is drawn in the dialog with the browser's own inputs, or with a
+`DatePicker` and an `InputTime` once `useDateFields()` is called in the setup
+of the island's component that draws the table, not in the page's: each
+island is an app of its own in the browser, so a call outside it reaches only
+the server's render. `EntityDialog` says what each saves.

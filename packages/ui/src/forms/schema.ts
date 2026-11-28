@@ -23,6 +23,9 @@
  * - `message`: one sentence to show in place of any of the sentences below.
  * - `nullable`: not a check: null is the field's empty value, so a Form sends
  *   an emptied one (null, or '') as null; every other null it leaves out.
+ * - `format`: not a check: the field is a time, `date` (a date alone, sent as
+ *   midnight in UTC) or `datetime` (an instant, sent in UTC), as weft gen's
+ *   schema says, so EntityDialog draws a date, or a date and a time, for it.
  *
  * By the value's type at run time:
  *
@@ -59,6 +62,11 @@ export interface FieldRule {
    * says): a Form sends an emptied one as null, which clears it. Not checked.
    */
   nullable?: boolean
+  /**
+   * The field is a time: `date`, a date alone (`2026-03-29T00:00:00Z`), or
+   * `datetime`, an instant in UTC, as weft gen's schema says. Not checked.
+   */
+  format?: 'date' | 'datetime'
 }
 
 /** Rules by field name. */

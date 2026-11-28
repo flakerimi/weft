@@ -18,6 +18,7 @@ Rules go in a field's `warp` tag, separated by commas. They run on every typed i
 | `min=N` | text, a number, a list | it has fewer than N characters, is below N, or has fewer than N items | `Use at least N characters.`, `Enter N or more.`, `Choose at least N.` |
 | `max=N` | the same | more than N | `Use at most N characters.`, `Enter N or less.`, `Choose at most N.` |
 | `enum=a\|b` | text, a number | it is not one of them | `Choose one of: a, b.` |
+| `date` | a `time.Time` | it is not midnight in UTC, written in UTC | `Send a date alone, such as 2026-03-29T00:00:00Z.` |
 | `unique` | text, a number | another record has the value: checked by [Data](data.md)'s store, nothing else | `This is already taken.` |
 | `readonly` | anything | never: the field is answered and not read ([one struct for create and update](routes.md#one-struct-for-create-and-update)) | |
 

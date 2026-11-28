@@ -425,7 +425,7 @@ func TestDevStopsWhileStarting(t *testing.T) {
 	if got := out.String(); got != "" && !regexp.MustCompile(`^weft dev: http://localhost:\d+\r?\n$`).MatchString(got) {
 		t.Errorf("stdout %q", got)
 	}
-	if got := withoutSetupLink(errb.String()); got != "" {
+	if got := withoutRoutineLines(errb.String()); got != "" {
 		t.Errorf("stderr %q, want nothing", got)
 	}
 	waitHandlesGone(t, hs, 2*time.Second)

@@ -41,7 +41,7 @@ var (
 	timeType  = reflect.TypeOf(time.Time{})
 )
 
-const ruleList = "required, email, url, min=, max=, enum=, unique or readonly"
+const ruleList = "required, email, url, min=, max=, enum=, date, unique or readonly"
 
 // The limits on what a 422 lists, so that a small body cannot make a huge
 // answer: at most maxListed fields, at most maxKeyBytes of key bytes in all,
@@ -586,6 +586,13 @@ func checkRule(v reflect.Value, r rule) string {
 			return ""
 		}
 		return "Choose one of: " + strings.Join(r.items, ", ") + "."
+	case "date":
+		if v.Type() != timeType {
+			return ""
+		}
+		if !isDate(v.Interface().(time.Time)) {
+			return "Send a date alone, such as 2026-03-29T00:00:00Z."
+		}
 	case "min", "max":
 		var size float64
 		var low, high string
@@ -613,6 +620,13 @@ func checkRule(v reflect.Value, r rule) string {
 		}
 	}
 	return ""
+}
+
+// isDate reports whether t is a date alone, as the date rule has it: midnight
+// in UTC, written in UTC, with no fraction of a second.
+func isDate(t time.Time) bool {
+	_, offset := t.Zone()
+	return offset == 0 && t.Hour() == 0 && t.Minute() == 0 && t.Second() == 0 && t.Nanosecond() == 0
 }
 
 // specsOf returns the validated fields of a struct type, parsed once.
@@ -789,6 +803,11 @@ func parseRules(owner reflect.Type, f reflect.StructField, tag string) ([]rule, 
 			}
 			if err != nil {
 				problems = append(problems, fmt.Sprintf("%s has %q; write a number after %s=.", at, part, name))
+				continue
+			}
+		case "date":
+			if ft != timeType {
+				problems = append(problems, fmt.Sprintf("%s has the rule \"date\", which is for a time.Time; remove it or make the field a time.", at))
 				continue
 			}
 		case "unique":

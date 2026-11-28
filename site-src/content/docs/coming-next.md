@@ -37,18 +37,14 @@ A client-side router and `layouts/`, for an app whose pages the browser switches
 
 ## Login and permissions
 
-The `auth` module works today, with one role, the owner ([Login](guides/login.md)). Not yet, phase W4:
+The login works today, with four roles, sessions, invitations, sign-up, password reset and API keys, and so do sending mail and, in Vue, who is signed in ([Login](guides/login.md), [Accounts](guides/accounts.md), [Mail](guides/mail.md)). Not yet:
 
-- registration, invitations and password reset, with the `mail` module, which sends email through SMTP or prints it to the log;
-- roles other than the owner, and permissions given to them;
-- a session table on the server, for signing out everywhere and ending one session;
-- `useSession()` in `@weft/ui`, `perm` on `Button` and row actions, and a route guard in Vue. An app `weft create` makes has its own `web/session.ts`, with its login and setup pages.
+- an avatar on a user, which needs the `storage` module (W6, in 0.4.0);
+- changing a user's email (W4).
 
 ## Scaffolding and app blocks
 
-`weft scaffold`, the app template, `DataTable` (server-side paging, sorting, debounced search and filtering over the list shape) and `EntityDialog` (creating and editing records from a form schema) work today ([weft scaffold](reference/scaffold.md), [Components](/components)). Not yet, Weft 0.2.0:
-
-- date and time fields in `EntityDialog` and in the pages `weft scaffold` writes: a date control, and the schema saying a field is a time. Until then `weft scaffold` takes `date` and `datetime` only with `--api`.
+`weft scaffold`, the app template, `DataTable` (server-side paging, sorting, debounced search and filtering over the list shape) and `EntityDialog` (creating and editing records from a form schema, dates and times included) work today ([weft scaffold](reference/scaffold.md), [Components](/components)).
 
 ## The browser's rules and Go's
 
@@ -64,7 +60,10 @@ Phase W6:
 
 ## More modules
 
-Phase W7: `jobs`, for work on a schedule; `i18n`, for translated fields; `middleware`, for request logging, security headers, CORS, a rate limit and API keys; and `docs`, an OpenAPI document at `/api/openapi.json`.
+Phase W7: `jobs`, for work on a schedule; `i18n`, for translated fields; and `docs`, an OpenAPI document at `/api/openapi.json`. The [middleware](guides/middleware.md) module works today; not yet, also W7:
+
+- CORS, for an API called from pages on another origin;
+- a `Content-Security-Policy` with `script-src`, naming the page build's inline scripts by their hashes (in 0.6.0).
 
 ## Errors
 

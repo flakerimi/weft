@@ -115,6 +115,8 @@ A module may also have any of three more methods, each a step of the app's life:
 | `warp.Starter` | `Start(ctx context.Context) error` | Next, before the app serves, in the same order |
 | `warp.Stopper` | `Stop(ctx context.Context) error` | Last, after the app has stopped serving, in reverse order |
 
+The server gives a client 10 seconds to send a request's headers, 30 seconds for the whole request, its body included (at the default 1 MiB limit, a body must come at 35 KB/s), and closes a kept-alive connection idle for 120 seconds; it sets no time to write, since a stream may write for as long as it is open. They are fixed.
+
 When the app is told to stop, it takes no new requests and lets the ones in flight finish, for up to 10 seconds. Then it stops the modules, last first, with 10 seconds more for them; a module still stopping then is left, and named. When a step fails, every module that already migrated or started is stopped, last first, and `Serve` returns the error, such as `warp: module "jobs" could not start: <the error>`.
 
 A module with work of its own while the app runs:
@@ -201,12 +203,13 @@ Every request under `/api` with a method other than `GET`, `HEAD` or `OPTIONS` g
 app.Handle("GET /export.csv", http.HandlerFunc(exportCSV))
 ```
 
-There are two places for middleware, a `func(http.Handler) http.Handler`:
+There are three places for middleware, a `func(http.Handler) http.Handler`:
 
-- `app.Wrap(mw)` puts it around every API request;
+- `app.WrapAll(mw)` puts it around every request the app answers: pages, files and API, 404s and redirects included, so a header it sets is on every answer;
+- `app.Wrap(mw)` puts it around every API request, inside every `WrapAll`;
 - `warp.With(mw)`, given to one route, puts it around that route alone, inside every `Wrap`.
 
-The first given is the outermost. A module may call both from its `Register`:
+The first given is the outermost, and a request passes each once. `app.Handler()`, the API alone, is inside every `WrapAll` too, so a test through warptest sees what they do; the package-level `warp.Serve(dist, app.Handler())` has them around the API alone, since it wraps only what it is given. Either after the app started is a mistake. The [middleware](middleware.md) module puts its headers and log on with `WrapAll` and its rate limit with `Wrap`. A module may call any of them from its `Register`:
 
 ```go
 func needsKey(next http.Handler) http.Handler {

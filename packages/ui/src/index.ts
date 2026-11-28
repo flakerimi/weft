@@ -15,6 +15,9 @@ export { default as Island, type IslandWhen } from './islands/Island.vue'
 export { useHead, type Head } from './head/useHead.ts'
 export { usePrePaint } from './head/usePrePaint.ts'
 export { useParams, type WeftRouteParams } from './head/useParams.ts'
+export { requireSession, sessionEnded, signInAgain, useSession, type Session, type SessionUser } from './session/session.ts'
+export { nextPath } from './session/next.ts'
+export { default as Guard } from './session/Guard.vue'
 export { default as Icon } from './basics/Icon.vue'
 export { default as Button } from './basics/Button.vue'
 export { default as Spinner } from './basics/Spinner.vue'
@@ -174,6 +177,8 @@ export {
   type EntityFieldRule,
   type EntitySchema,
 } from './data/entity.ts'
+export { dateToWire, localToWire, wireTimeText, wireToDate, wireToLocal, type WireTimeFormat } from './data/when.ts'
+export { useDateFields } from './data/dateFields.ts'
 export { default as StatCard } from './data/StatCard.vue'
 export type { StatLabels } from './data/stat.ts'
 export { default as Timeline } from './data/Timeline.vue'

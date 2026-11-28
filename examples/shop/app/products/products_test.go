@@ -8,8 +8,10 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/flakerimi/weft/warp/auth"
 	"github.com/flakerimi/weft/warp/auth/authtest"
 	"github.com/flakerimi/weft/warp/data"
+	"github.com/flakerimi/weft/warp/mail/mailtest"
 	"github.com/flakerimi/weft/warp/warptest"
 
 	"shop/app"
@@ -18,7 +20,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// shop starts the app's modules over a database file of the test's own.
+// shop starts the app's modules over a database file of the test's own,
+// taking API keys, with the request log off.
 func shop(t *testing.T) *warptest.Client {
 	t.Helper()
 	return warptest.New(t, map[string]string{
@@ -26,6 +29,9 @@ func shop(t *testing.T) *warptest.Client {
 		"DB_URL":           "file:" + filepath.Join(t.TempDir(), "data", "shop.db"),
 		"AUTH_SECRET":      "a secret for tests that is long enough to sign",
 		"AUTH_OWNER_EMAIL": "owner@example.com",
+		"APP_URL":          "https://shop.example.com",
+		"API_KEYS":         "on",
+		"LOG":              "off",
 	}, app.Modules()...)
 }
 
@@ -139,6 +145,69 @@ func TestStory(t *testing.T) {
 		t.Errorf("a cross-site DELETE: %+v", e)
 	}
 	c.Get("/api/products/" + id(lamp)).Want(http.StatusOK)
+}
+
+// The story with roles: the owner invites a member and a viewer, and each
+// takes the invitation through the mailed link. The member makes, changes
+// and deletes products; the viewer lists them and is refused making one.
+// The owner makes the member a viewer, and the member's next create is
+// refused. An API key of the owner's lists the products with no cookie.
+func TestRolesStory(t *testing.T) {
+	c := shop(t)
+	authtest.Owner(t, c)
+
+	join := func(email, role string) *warptest.Client {
+		t.Helper()
+		var inv auth.Invitation
+		c.Post("/api/auth/invitations", map[string]string{"email": email, "role": role}).Want(http.StatusCreated).JSON(&inv)
+		msg := mailtest.Last(t, c.App, email)
+		if msg.Subject != "You are invited to shop.example.com" {
+			t.Fatalf("the invitation to %s is %q", email, msg.Subject)
+		}
+		u := c.Fork()
+		var me auth.Me
+		u.Post("/api/auth/password", map[string]string{"token": mailtest.Token(t, msg), "password": "a password of " + email}).Want(http.StatusOK).JSON(&me)
+		if me.Email != email || me.Role != role {
+			t.Fatalf("%s took the invitation as %+v", email, me)
+		}
+		return u
+	}
+	member := join("member@example.com", auth.RoleMember)
+	viewer := join("viewer@example.com", auth.RoleViewer)
+
+	var lamp, chair products.Product
+	member.Post("/api/products", map[string]any{"name": "Lamp", "price": 30, "status": "live"}).Want(http.StatusCreated).JSON(&lamp)
+	member.Post("/api/products", map[string]any{"name": "Chair", "price": 120, "status": "draft"}).Want(http.StatusCreated).JSON(&chair)
+	member.Patch("/api/products/"+id(lamp), map[string]any{"price": 35}).Want(http.StatusOK)
+	member.Delete("/api/products/" + id(chair)).Want(http.StatusNoContent)
+
+	var l data.List[products.Product]
+	viewer.Get("/api/products").Want(http.StatusOK).JSON(&l)
+	if got := names(l); !slices.Equal(got, []string{"Lamp"}) {
+		t.Errorf("the viewer lists %v, want [Lamp]", got)
+	}
+	viewer.Get("/api/products/" + id(lamp)).Want(http.StatusOK)
+	if e := viewer.Post("/api/products", map[string]any{"name": "Stool", "price": 9, "status": "live"}).Want(http.StatusForbidden).Error(); e.Message != "Your account cannot do that." {
+		t.Errorf("the viewer's create: %+v", e)
+	}
+
+	var users data.List[auth.User]
+	c.Get("/api/auth/users?q=member").Want(http.StatusOK).JSON(&users)
+	if len(users.Items) != 1 {
+		t.Fatalf("the member is not listed once: %+v", users)
+	}
+	c.Patch("/api/auth/users/"+strconv.FormatInt(users.Items[0].ID, 10), map[string]string{"role": auth.RoleViewer}).Want(http.StatusOK)
+	member.Post("/api/products", map[string]any{"name": "Stool", "price": 9, "status": "live"}).Want(http.StatusForbidden)
+
+	var key auth.NewKey
+	c.Post("/api/auth/keys", map[string]any{"name": "export", "role": auth.RoleViewer, "days": 30}).Want(http.StatusCreated).JSON(&key)
+	r := httptest.NewRequest(http.MethodGet, "http://warptest.local/api/products", nil)
+	r.Header.Set("Authorization", "Bearer "+key.Secret)
+	var byKey data.List[products.Product]
+	c.Fork().Do(r).Want(http.StatusOK).JSON(&byKey)
+	if got := names(byKey); !slices.Equal(got, []string{"Lamp"}) {
+		t.Errorf("the key lists %v, want [Lamp]", got)
+	}
 }
 
 // id is the product's id as a path segment.

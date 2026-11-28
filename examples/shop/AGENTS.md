@@ -23,13 +23,13 @@ In a fresh clone `.weft/` is missing, and the Go module it holds with it: run `w
 | Path | What it is |
 | --- | --- |
 | `main.go`, `dist.go`, `dist_dev.go` | The server. `main.go` makes the `warp.App`, imports the SQLite driver and serves it; `dist.go` embeds `web/dist`; with `-tags dev` `dist_dev.go` embeds nothing |
-| `app/modules.go` | The one list of the app's modules: `data`, `auth`, `products` |
+| `app/modules.go` | The one list of the app's modules: `middleware`, `data`, `mail`, `auth`, `products` |
 | `app/products/` | The products: the model, its five routes through `data.Resource`, and the story test |
 | `.env`, `.env.sample` | The settings; `.env` is not committed, `.env.sample` is and says what each one is |
 | `web/pages/` | One page per `.vue` file; its path is the route. `products/[id].vue` is built once and served for every id |
-| `web/components/` | The islands (`LoginForm`, `SetupForm`, `ProductsTable`, `ProductView`, `SessionBar`) and `ShopHeader` |
-| `web/session.ts` | `useSession()`: who is signed in, asked once per page; `requireUser()`; `signInAgain()`, which a 401 from the list leads to |
-| `web/answers.ts` | Plain rules with no Vue: `nextPath` (where to go after signing in, only on this site), `formProblem`, `sessionFrom`, `productId` |
+| `web/components/` | The islands (`LoginForm`, `SetupForm`, `RegisterForm`, `ForgotForm`, `PasswordForm`, `AccountPanel`, `UsersPanel`, `ProductsTable`, `ProductView`, `SessionBar`) and `ShopHeader` |
+| `web/answers.ts` | Plain rules with no Vue: `formProblem` and `productId`; a page's `catch` calls `sessionEnded()` from `@weft/ui` on a 401. Who is signed in is `useSession()` from `@weft/ui`, and `Guard` and `perm` show by permission |
+| `web/session-check.ts` | Fails the type check when the generated `Me` stops fitting `@weft/ui`'s `SessionUser` |
 | `test/` | `answers.test.ts` (Node's test runner, `pnpm test`), and `browser.mjs`, the browser test `cmd/weft/shop_test.go` runs |
 | `web/.weft-types/api.ts` | The typed client `weft gen` writes; every call to the server goes through it |
 

@@ -1,6 +1,11 @@
+import { spawnSync } from 'node:child_process'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import EntityDialogCases, { type Item, type ItemInput } from '../fixtures/data/EntityDialogCases.vue'
 import { changes, entityProblem, humanLabel, inferControl, initialDraft, type EntityFieldConfig, type EntityFieldRule, type EntitySchema } from '../../src/data/entity.ts'
+import { localToWire, wireToLocal } from '../../src/data/when.ts'
+import { type as typeInto } from '../forms/helpers.ts'
 import { mount } from '../mount.ts'
 import { installResizeObserver } from '../resize-observer.ts'
 import { $, $$, key, overlays, reset, settle } from '../overlays/helpers.ts'
@@ -57,6 +62,13 @@ describe('entity helpers', () => {
     expect(inferControl({ type: 'string', enum: ['a', 'b', 'c', 'd'] }, undefined, 'narrow')).toBe('select')
     expect(inferControl({ type: 'string', enum: ['a', 'b', 'c', 'd', 'e'] }, undefined, 'regular')).toBe('select')
     expect(inferControl({ type: 'string' }, { control: 'textarea' }, 'regular')).toBe('textarea')
+  })
+
+  it('draws a date or a datetime for a field the schema says is one, and starts them empty', () => {
+    expect(inferControl({ kind: 'string', format: 'date' }, undefined, 'regular')).toBe('date')
+    expect(inferControl({ kind: 'string', format: 'datetime' }, undefined, 'narrow')).toBe('datetime')
+    expect(inferControl({ kind: 'string', format: 'date' }, { control: 'text' }, 'regular')).toBe('text')
+    expect(initialDraft({ due: { kind: 'string', format: 'date' }, at: { kind: 'string', format: 'datetime', required: true } }, null)).toEqual({ due: null, at: null })
   })
 
   it('initializes non-scalar list, record and object fields to [] and {}, and supports a defaults factory function', () => {
@@ -266,6 +278,195 @@ describe('EntityDialog', () => {
     expect(update).toHaveBeenCalledWith(3, { name: 'Copper Kettle', sale: null })
     expect(m.exposed.isOpen).toBe(false)
     expect(m.exposed.savedRecords).toHaveLength(1)
+  })
+
+  describe('dates and times', () => {
+    const TIMES: EntitySchema = {
+      name: { kind: 'string', required: true },
+      due: { kind: 'string', format: 'date', nullable: true },
+      starts: { kind: 'string', format: 'datetime', required: true },
+    }
+    const field = (label: string) => $$('.weft-form-field', $('[role="dialog"]', overlays()!)).find((f) => f.querySelector('.weft-form-field__label')?.textContent?.trim().startsWith(label))!
+    const dateIn = (label: string) => $<HTMLInputElement>('.weft-date-picker input.weft-input__field', field(label))
+    async function typeDate(label: string, text: string) {
+      const el = dateIn(label)
+      el.focus()
+      typeInto(el, text)
+      el.dispatchEvent(new Event('change', { bubbles: true }))
+      await settle()
+    }
+    const button = (text: string) => $$('button', $('[role="dialog"]', overlays()!)).find((b) => b.textContent!.trim() === text)!
+
+    it('draws a DatePicker for a date, and a DatePicker and an InputTime side by side for a datetime, the time labelled', async () => {
+      await cases({ schema: TIMES, name: 'event', dateFields: true })
+      expect($$('.weft-date-picker', field('Due'))).toHaveLength(1)
+      expect(field('Due').querySelector('.weft-input-time')).toBeNull()
+      const group = $('.weft-field-group', field('Starts'))
+      expect($$('.weft-date-picker', group)).toHaveLength(1)
+      const time = $('.weft-input-time', group)
+      // The field's label is for the date; the time names itself.
+      const label = $('.weft-form-field__label', field('Starts'))
+      expect(label.tagName).toBe('LABEL')
+      expect(label.getAttribute('for')).toBe(dateIn('Starts').id)
+      expect(time.getAttribute('role')).toBe('group')
+      expect(time.id).not.toBe(dateIn('Starts').id)
+      const named = document.getElementById(time.getAttribute('aria-labelledby')!)
+      expect(named?.textContent).toBe('Starts, time')
+      expect($$('[role="spinbutton"]', time).map((s) => s.getAttribute('aria-label'))).toEqual(['Hour', 'Minute', 'AM/PM'])
+    })
+
+    it('saves a date as midnight UTC and a datetime as its instant in UTC', async () => {
+      const create = vi.fn(async (body: ItemInput) => ({ id: 1, ...body }))
+      await cases({ schema: TIMES, name: 'event', dateFields: true, create: fn(create) })
+      const nameInput = $<HTMLInputElement>('input[name="name"]', $('[role="dialog"]', overlays()!))
+      typeInto(nameInput, 'Launch')
+      await typeDate('Due', '3/29/2026')
+      await typeDate('Starts', '3/29/2026')
+      // A date with no time yet is at midnight where the browser is.
+      expect(button('Create')).toBeTruthy()
+      const hour = $$('[role="spinbutton"]', field('Starts'))[0]!
+      hour.focus()
+      key('ArrowUp')
+      await settle()
+      button('Create').click()
+      await settle()
+      expect(create).toHaveBeenCalledWith({ name: 'Launch', due: '2026-03-29T00:00:00Z', starts: localToWire('2026-03-29', '01:00') })
+    })
+
+    it('keeps an untouched date and datetime out of the PATCH, and sends null for an emptied nullable date', async () => {
+      const record = { id: 4, name: 'Launch', due: '2026-03-29T00:00:00Z', starts: '2026-03-29T10:00:30Z' } as unknown as Item
+      const update = vi.fn(async (id: number, body: Partial<ItemInput>) => ({ ...record, id, ...body }))
+      await cases({ schema: TIMES, record, dateFields: true, update: fn(update) })
+      expect(dateIn('Due').value).toBe('03/29/2026')
+      const [y, mo, d] = wireToLocal('2026-03-29T10:00:30Z')!.date.split('-')
+      expect(dateIn('Starts').value).toBe(`${mo}/${d}/${y}`)
+      typeInto($<HTMLInputElement>('input[name="name"]', $('[role="dialog"]', overlays()!)), 'Launch day')
+      await settle()
+      button('Save').click()
+      await settle()
+      expect(update).toHaveBeenLastCalledWith(4, { name: 'Launch day' })
+
+      update.mockClear()
+      unmount!()
+      reset()
+      await cases({ schema: TIMES, record, dateFields: true, update: fn(update) })
+      await typeDate('Due', '')
+      button('Save').click()
+      await settle()
+      expect(update).toHaveBeenLastCalledWith(4, { due: null })
+    })
+
+    it('draws the browser’s own date and datetime inputs without useDateFields, and saves the same values', async () => {
+      const create = vi.fn(async (body: ItemInput) => ({ id: 1, ...body }))
+      await cases({ schema: TIMES, name: 'event', create: fn(create) })
+      const dialog = $('[role="dialog"]', overlays()!)
+      expect(dialog.querySelector('.weft-date-picker')).toBeNull()
+      expect(dialog.querySelector('.weft-input-time')).toBeNull()
+      const due = $<HTMLInputElement>('input[type="date"]', field('Due'))
+      const starts = $<HTMLInputElement>('input[type="datetime-local"]', field('Starts'))
+      // The field's label is for each, as for any Input.
+      expect($('.weft-form-field__label', field('Starts')).getAttribute('for')).toBe(starts.id)
+      typeInto($<HTMLInputElement>('input[name="name"]', dialog), 'Launch')
+      typeInto(due, '2026-03-29')
+      typeInto(starts, '2026-03-29T09:15')
+      await settle()
+      button('Create').click()
+      await settle()
+      expect(create).toHaveBeenCalledWith({ name: 'Launch', due: '2026-03-29T00:00:00Z', starts: localToWire('2026-03-29', '09:15') })
+
+      const record = { id: 4, name: 'Launch', due: '2026-03-29T00:00:00Z', starts: '2026-03-29T10:00:30Z' } as unknown as Item
+      const update = vi.fn(async (id: number, body: Partial<ItemInput>) => ({ ...record, id, ...body }))
+      unmount!()
+      reset()
+      await cases({ schema: TIMES, record, update: fn(update) })
+      const local = wireToLocal('2026-03-29T10:00:30Z')!
+      expect($<HTMLInputElement>('input[type="date"]', field('Due')).value).toBe('2026-03-29')
+      expect($<HTMLInputElement>('input[type="datetime-local"]', field('Starts')).value).toBe(`${local.date}T${local.time}`)
+      typeInto($<HTMLInputElement>('input[type="date"]', field('Due')), '')
+      await settle()
+      button('Save').click()
+      await settle()
+      expect(update).toHaveBeenLastCalledWith(4, { due: null })
+    })
+
+    it('moves a datetime by the time typed into it, in the browser’s zone', async () => {
+      const record = { id: 4, name: 'Launch', due: null, starts: '2026-03-29T10:00:00Z' } as unknown as Item
+      const update = vi.fn(async (id: number, body: Partial<ItemInput>) => ({ ...record, id, ...body }))
+      await cases({ schema: TIMES, record, dateFields: true, update: fn(update) })
+      const local = wireToLocal('2026-03-29T10:00:00Z')!
+      const minute = $$('[role="spinbutton"]', field('Starts'))[1]!
+      minute.focus()
+      key('ArrowUp')
+      await settle()
+      button('Save').click()
+      await settle()
+      expect(update).toHaveBeenLastCalledWith(4, { starts: localToWire(local.date, local.time.replace(/:00$/, ':01')) })
+    })
+
+    // A datetime changed and changed back before Save is the record's own
+    // value again, seconds and all.
+    async function revert(starts: string, native: boolean) {
+      const record = { id: 4, name: 'Launch', due: null, starts } as unknown as Item
+      const update = vi.fn(async (id: number, body: Partial<ItemInput>) => ({ ...record, id, ...body }))
+      await cases({ schema: TIMES, record, dateFields: !native, update: fn(update) })
+      const local = wireToLocal(starts)!
+      if (native) {
+        const input = $<HTMLInputElement>('input[type="datetime-local"]', field('Starts'))
+        typeInto(input, `${local.date}T${local.time.slice(0, 3)}${String((Number(local.time.slice(3)) + 1) % 60).padStart(2, '0')}`)
+        await settle()
+        typeInto(input, `${local.date}T${local.time}`)
+      } else {
+        const minute = $$('[role="spinbutton"]', field('Starts'))[1]!
+        minute.focus()
+        key('ArrowUp')
+        await settle()
+        key('ArrowDown')
+      }
+      await settle()
+      typeInto($<HTMLInputElement>('input[name="name"]', $('[role="dialog"]', overlays()!)), 'Launch day')
+      await settle()
+      button('Save').click()
+      await settle()
+      return update
+    }
+
+    it('sends a datetime changed and changed back as the record has it, seconds and all', async () => {
+      for (const native of [true, false]) {
+        const update = await revert('2026-06-01T08:15:45Z', native)
+        expect(update).toHaveBeenLastCalledWith(4, { name: 'Launch day' })
+        unmount!()
+        unmount = undefined
+        reset()
+      }
+    })
+
+    // The zone is the process's, fixed when it starts, so this case runs in a
+    // vitest started with TZ set, as when.test.ts runs its zones.
+    if (Intl.DateTimeFormat().resolvedOptions().timeZone === 'Europe/Berlin') {
+      it('sends a datetime in the hour the clocks repeat, changed and changed back, as the record has it', async () => {
+        // 01:30:45Z on 2026-10-25 is the second 02:30 in Berlin.
+        expect(wireToLocal('2026-10-25T01:30:45Z')).toEqual({ date: '2026-10-25', time: '02:30' })
+        for (const native of [true, false]) {
+          const update = await revert('2026-10-25T01:30:45Z', native)
+          expect(update).toHaveBeenLastCalledWith(4, { name: 'Launch day' })
+          unmount!()
+          unmount = undefined
+          reset()
+        }
+      })
+    } else {
+      it('runs the repeated hour’s case in a process started in Berlin', () => {
+        const ui = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+        const run = spawnSync(
+          process.execPath,
+          [join(ui, 'node_modules', 'vitest', 'vitest.mjs'), 'run', 'test/data/entity-dialog.test.ts', '-t', 'the hour the clocks repeat'],
+          { cwd: ui, env: { ...process.env, TZ: 'Europe/Berlin' }, encoding: 'utf8' },
+        )
+        const out = `${run.stdout}${run.stderr}`
+        expect(out, out).toMatch(/1 passed/)
+        expect(run.status, out).toBe(0)
+      }, 60_000)
+    }
   })
 
   it('shows server field errors on known fields (and focuses the first invalid control after busy ends), unknown, hidden or omitted field errors in the top Alert with role="alert", and clears them when reopened', async () => {

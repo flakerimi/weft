@@ -5,7 +5,7 @@ description: Use before writing or changing the markup of a Weft page, island or
 
 # Choosing and composing Weft components
 
-Weft has 84 Vapor components in `@weft/ui`. Each one adapts to touch or pointer, to a landing page or an app, and to the width of its own container. Pick the right one and compose it; never rebuild it. The catalogue says what each component is for, when not to use it, and what it does on each axis.
+Weft has 85 Vapor components in `@weft/ui`. Each one adapts to touch or pointer, to a landing page or an app, and to the width of its own container. Pick the right one and compose it; never rebuild it. The catalogue says what each component is for, when not to use it, and what it does on each axis.
 
 ## Read the catalogue first
 

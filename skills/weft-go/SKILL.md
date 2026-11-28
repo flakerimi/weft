@@ -1,6 +1,6 @@
 ---
 name: weft-go
-description: Use when writing or shipping the Go side of a Weft app - warp.App in main.go and its modules in app/modules.go, typed routes with warp.Get and warp.Post, tags and validation, the error shape, .env configuration, records with warp/data, login with warp/auth, the client weft gen writes, testing with warptest, serving the page build with warp.Serve and a folder with warp.WithFiles, and building the binary with weft build for another system or a scratch image.
+description: Use when writing or shipping the Go side of a Weft app - warp.App in main.go and its modules in app/modules.go, typed routes with warp.Get and warp.Post, tags and validation, the error shape, .env configuration, records with warp/data, login and mail with warp/auth and warp/mail, the client weft gen writes, testing with warptest, serving the page build with warp.Serve and a folder with warp.WithFiles, and building the binary with weft build for another system or a scratch image.
 ---
 
 # The Go side of a Weft app, and shipping it
@@ -22,7 +22,7 @@ func main() {
 }
 ```
 
-- `dist` embeds `web/dist`, nil under `-tags dev` (`weft dev`); until the first `weft build` it is an empty marker a binary refuses to start on.
+- `dist` embeds `web/dist`, nil under `weft dev`; before the first `weft build` a binary refuses to start.
 - `app/modules.go` lists the modules in the order they start; a new one is `app/<name>/` with a `Module()`, added there.
 - A module is `Name() string` and `Register(app *warp.App) error`, and may add `Migrate`, `Start` and `Stop(ctx) error`: in order before serving, stop in reverse after.
 - `go.mod` requires Warp (`github.com/flakerimi/weft`) at the release's tag, from GitHub; `weft upgrade` moves it. Never edit `.weft/`.
@@ -48,7 +48,7 @@ func (module) Register(app *warp.App) error {
 - A body is `application/json` (else 415), with no field the input lacks (400).
 - Rules: `required`, `email`, `url`, `min=N`, `max=N`, `enum=a|b`, `unique` (a `data` store checks it), `readonly` (never read). All rules but `required` pass an empty value; a non-nil pointer was sent. On `Patch` rules run only on sent fields (`warp.Sent`). A failure is 422. A `Validate(ctx) error` method checks across fields.
 - `GET /products` and `GET /products/{id}` are both named `products`: give each a `warp.Name`. A mistake is one sentence from `app.Err()`; `Serve` will not start.
-- `warp.Request(ctx)` is the request, `warp.ResponseHeader(ctx)` the answer's headers. `app.Handle("GET /export.csv", h)` mounts a plain handler; `app.Wrap(mw)` wraps every API request, `warp.With(mw)` one route.
+- `warp.Request(ctx)` is the request, `warp.ResponseHeader(ctx)` the answer's headers. `app.Handle("GET /export.csv", h)` mounts a plain handler; `app.WrapAll(mw)` wraps every request, `app.Wrap(mw)` the API, `warp.With(mw)` one route.
 
 ## Errors and configuration
 
@@ -58,18 +58,18 @@ Errors are `{"error":{"code":"…","message":"…","fields":{…}}}`. Return `wa
 
 ## Data, login and types
 
-- `weft create` lists `data.Module()`, `auth.Module()` and `hello.Module()`, with SQLite (`DB_DRIVER`, `DB_URL` in `.env`; the driver in `main.go`). A model embeds `data.Record`; `data.Resource(app, "/products", data.NewStore[Product](data.For(app), "products"), data.PerAction(auth.Per("products")))` gives five routes. `data:"sort,filter,search"` opens fields to `?sort=-price&q=lamp&filter[status]=live`.
-- `auth.Module()` after data: `AUTH_SECRET` (`weft create` writes one), `AUTH_OWNER_EMAIL`; the first start logs `<APP_URL>/setup#token=…`, the app's `/setup` page. `auth.Can("x:edit")` guards a route; `auth.UserOf(ctx)`.
+- `weft create` lists `middleware`, `data`, `mail`, `auth` and `hello` modules, with SQLite (`DB_DRIVER`, `DB_URL` in `.env`; the driver in `main.go`). A model embeds `data.Record`; `data.Resource(app, "/products", data.NewStore[Product](data.For(app), "products"), data.PerAction(auth.Per("products")))` gives five routes. `data:"sort,filter,search"` opens fields to `?sort=-price&q=lamp&filter[status]=live`.
+- `auth.Module()` after data and mail: `AUTH_SECRET`, `AUTH_OWNER_EMAIL`; the first start logs `<APP_URL>/setup#token=…`. Four roles; others join by an invitation `mail` prints to the log until `MAIL=smtp`. `auth.Can("x:edit")` guards a route; `auth.UserOf(ctx)`.
 - `weft scaffold item title done:bool` writes `app/items/` (model, routes, story test), its line in `app/modules.go` and the pages; `--api` for Go only. [Types](https://weft.base.al/docs/reference/scaffold).
 - `weft dev` and `weft build` run `weft gen`, which writes `web/.weft-types/api.ts`: `api.<module>.<name>()`, `ApiError`, and `schema` for `Form`.
 
 ## Testing a module
 
-Test `app.Handler()` with `httptest` after checking `app.Err()`; `app.Start(ctx)` a module that migrates or starts. `warptest.New(t, vars, modules...)` starts the app with a client that keeps cookies; `authtest.Owner(t, c)` signs it in.
+Test `app.Handler()` with `httptest` after checking `app.Err()`; `app.Start(ctx)` a module that migrates or starts. `warptest.New(t, vars, modules...)` starts the app with a client that keeps cookies; `authtest.Owner(t, c)` signs it in, `authtest.As(t, c, role)` a fork.
 
 ## What Serve answers
 
-`/api` goes to the API. Any other path gets its page, else a listed file, else the app's `index.html` under `--app-prefix`, else a run-time page whose pattern matches, else `pages/404.vue` with 404. Serve sends the stored brotli or gzip and the build's `ETag`, caches hashed files for a year, sends `103 Early Hints` over HTTP/2 or a proxy, and answers `GET` and `HEAD` only. It panics at start if the build is incomplete.
+`/api` goes to the API. Any other path gets its page, else a listed file, else the app's `index.html` under `--app-prefix`, else a run-time page whose pattern matches, else `pages/404.vue` with 404. Serve sends the stored brotli or gzip and the build's `ETag`, caches hashed files for a year, and answers `GET` and `HEAD` only.
 
 ## Files from disk
 
@@ -115,4 +115,4 @@ Build for the image's system; `.dockerignore`: `*`, `!myapp`.
 
 ## Not yet
 
-Planned, not built (https://weft.base.al/docs/coming-next): PostgreSQL, MySQL and relations; roles, registration, reset and `mail`; date fields in scaffolded pages; `storage`, `events` and `live`; `jobs`, `i18n`, `middleware`, `docs`; `weft deploy`.
+Planned, not built (https://weft.base.al/docs/coming-next): PostgreSQL, MySQL and relations; `storage`, `events` and `live`; `jobs`, `i18n`, CORS, `docs`; `weft deploy`.

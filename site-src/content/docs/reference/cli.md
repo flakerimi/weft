@@ -120,7 +120,7 @@ Makes `.weft/` present and current as `weft build` does, with no `pnpm install`,
 
 ### weft gen
 
-Writes `web/.weft-types/api.ts` from the app's Go code. It builds the app with the `dev` tag, as `weft dev` does, and runs it with `WARP_DESCRIBE=1`, a free `PORT` and `HOST=127.0.0.1`, so warp's `Serve` prints the routes and types as JSON. From that it writes an interface per Go type, `api.<module>.<name>()` per typed route (`api.app` outside a module), the `ApiError` every failed call rejects with, and `schema`, the rules of each body type for a form to check before sending (`unique` and nested types' rules are checked by the server only, arriving as field errors). It prints `Wrote web/.weft-types/api.ts`, or `web/.weft-types/api.ts is up to date` leaving the file alone. `weft dev` runs it after each Go build that succeeds, and `weft build` before the page build. Never edit the file. An app no package of which calls `warp.New`, as `go list` finds them with the `dev` tag, is not run: it gets the client of an app with no routes, which `weft gen` says, or keeps one with routes, saying so (exit 1).
+Writes `web/.weft-types/api.ts` from the app's Go code. It builds the app with the `dev` tag and runs it with `WARP_DESCRIBE=1`, a free `PORT` and `HOST=127.0.0.1`, so warp's `Serve` prints the routes and types as JSON. From that it writes an interface per Go type, `api.<module>.<name>()` per typed route (`api.app` outside a module), the `ApiError` every failed call rejects with, and `schema`, the rules of each body type for a form to check before sending (`unique` and nested types' rules the server checks, answering field errors). It prints `Wrote web/.weft-types/api.ts`, or `web/.weft-types/api.ts is up to date` leaving the file alone. `weft dev` runs it after each Go build that succeeds, and `weft build` before the page build. Never edit the file. An app no package of which calls `warp.New`, as `go list` finds them with the `dev` tag, is not run: it gets the client of an app with no routes, which `weft gen` says, or keeps one with routes, saying so (exit 1).
 
 A compile error, an app that exits with an error or prints something else or nothing, or one still running after 30 s (stopped) is one sentence after its output (exit 1), leaving the file as it was. `weft build` stops on the first two only; on the others it says so, as `weft dev` does, and goes on. A name the file cannot use (two routes that become one in camelCase, a reserved TypeScript type name, an optional field, or any field of a partial body's type, named `constructor` or `toString`) is a sentence saying what to rename.
 
@@ -145,6 +145,16 @@ DELETE  /api/products/{id}  products  remove  products:delete
 ### weft upgrade
 
 Moves an app to the Weft version of the `weft` you run: it rewrites `weft.version` in `package.json`, changing no other byte, moves `go.mod`'s require of Warp's module to that release, dropping a replace into `./.weft/go` (another is kept, and named), unpacks that version's packages into `.weft/`, and runs `pnpm install` and `go mod download`. It prints `Moved <name> from Weft <a> to <b>`, or `<name> is already on Weft <b>`. It never moves an app backwards: an app on a newer Weft is refused (exit 1), saying to run `weft update`; `0.0.0-dev` is older than any release. `--no-install` skips `pnpm install` and `go mod download`.
+
+#### Upgrading from 0.0.24
+
+From 0.2.0 the login needs the `mail` module and mails links to pages an app made before has not. For an app whose `app/modules.go` lists `auth.Module()`, `weft upgrade`:
+
+- lists `mail.Module()` just before it, with its import, and says so; a list it cannot edit (built by hand) stops it before it writes anything, exit 1, saying the line to add and to run `weft upgrade` again;
+- writes the account pages and forms the app lacks, `/register`, `/forgot`, `/password`, `/account` and `/users`, and `web/session-check.ts`, printing `Added <file>` for each, and never writes over a file the app has; an app already on its version gets the ones it lacks only when `/password`, the page every mailed link opens, is missing, so a page you removed stays removed;
+- says to list `middleware.Module()` first, which it does not add, and that an old `web/session.ts`, which it keeps, can go once no page imports it.
+
+The login page the app has is kept, so it links to neither `/forgot` nor `/register` until you add the links. Everyone signs in once after the upgrade: sessions are kept in a table now.
 
 #### Moving an app to Warp
 

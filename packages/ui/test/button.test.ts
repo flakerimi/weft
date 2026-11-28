@@ -7,6 +7,8 @@ import TooltipIconButton from './fixtures/basics/TooltipIconButton.vue'
 import { navigations, press } from './keyboard.ts'
 import { mount } from './mount.ts'
 import { loadStyles, ruleFor } from './styles.ts'
+// What a Button with perm loads on demand, taken as fetched, as it is once one on the page has asked.
+import '../src/session/load.ts'
 
 registerIcon('plus', '<path d="M5 12h14"></path>')
 registerIcon('arrow-right', '<path d="M12 5l7 7"></path>')
@@ -373,5 +375,106 @@ describe('Button', () => {
       expect(heights('pointer', 'md').square).toBe(36)
       expect(heights('touch', 'lg')).toMatchObject({ plain: 44, square: 44 })
     })
+  })
+})
+
+// perm: the button is drawn only for a user with the permission. Who is signed
+// in comes from GET /api/auth/me (the contract's Me JSON, stubbed), asked once
+// for this file: the session is module state, so these tests run in order,
+// the first while it is still loading, and each later one asks again.
+describe('Button perm', () => {
+  const me = (permissions: string[], role = 'member') => ({
+    id: 7,
+    created_at: '2026-11-28T09:00:00Z',
+    updated_at: '2026-11-28T09:00:00Z',
+    email: 'mia@example.com',
+    name: 'Mia',
+    role,
+    permissions,
+  })
+  const answer = (status: number, body: unknown) =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+  const fetchMock = vi.fn()
+  beforeEach(() => vi.stubGlobal('fetch', fetchMock))
+  afterEach(() => vi.unstubAllGlobals())
+  const settle = () => new Promise((r) => setTimeout(r, 0))
+  /** The button a mounted Button drew, or null when it drew nothing. */
+  function drawn(props: Record<string, unknown>) {
+    const m = mount(Button, props)
+    mounted.push(m)
+    return () => m.el.querySelector('button, a')
+  }
+  async function signIn(body: ReturnType<typeof me> | null) {
+    const { useSession } = await import('../src/session/session.ts')
+    fetchMock.mockResolvedValueOnce(body ? answer(200, body) : answer(401, { error: { code: 'unauthorized', message: 'Sign in to do that.' } }))
+    await useSession().refresh()
+    await nextTick()
+  }
+
+  it('without perm nothing changes and no request is made', async () => {
+    const b = drawn({ label: 'Save' })
+    await settle()
+    expect(b()?.textContent).toBe('Save')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('Button with perm renders nothing while loading, then appears', async () => {
+    let resolve!: (r: Response) => void
+    fetchMock.mockReturnValueOnce(new Promise<Response>((r) => (resolve = r)))
+    const b = drawn({ label: 'Edit', perm: 'products:edit', class: 'mine', 'data-test': 'edit' })
+    await settle()
+    expect(b()).toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/auth/me')
+    // A second button asks nothing more.
+    drawn({ label: 'Delete', perm: 'products:delete' })
+    resolve(answer(200, me(['products:edit', 'products:read'])))
+    await settle()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const el = b() as HTMLElement
+    expect(el.textContent).toBe('Edit')
+    // Attributes still fall through to the element.
+    expect(el.classList.contains('weft-button')).toBe(true)
+    expect(el.classList.contains('mine')).toBe(true)
+    expect(el.dataset.test).toBe('edit')
+  })
+
+  it('Button with perm stays hidden without it', async () => {
+    await signIn(me(['products:read']))
+    const edit = drawn({ label: 'Edit', perm: 'products:edit' })
+    const link = drawn({ label: 'Reports', to: '/reports', perm: 'reports:read' })
+    const read = drawn({ label: 'Open', perm: 'products:read' })
+    await settle()
+    expect(edit()).toBeNull()
+    expect(link()).toBeNull()
+    expect(read()?.textContent).toBe('Open')
+  })
+
+  it('follows the session: the owner, a role change and signing out', async () => {
+    const users = drawn({ label: 'Users', perm: 'users:read' })
+    await settle()
+    expect(users()).toBeNull()
+    await signIn(me([], 'owner'))
+    expect(users()?.textContent).toBe('Users')
+    await signIn(me(['products:read']))
+    expect(users()).toBeNull()
+    await signIn(me(['users:read'], 'administrator'))
+    expect(users()?.textContent).toBe('Users')
+    await signIn(null)
+    expect(users()).toBeNull()
+  })
+
+  it('a perm given later is followed', async () => {
+    await signIn(me(['products:read']))
+    const perm = ref<string | undefined>(undefined)
+    const b = drawn({ label: 'Edit', perm: () => perm.value })
+    await settle()
+    expect(b()).not.toBeNull()
+    perm.value = 'products:edit'
+    await settle()
+    expect(b()).toBeNull()
+    perm.value = 'products:read'
+    await settle()
+    expect(b()).not.toBeNull()
   })
 })
