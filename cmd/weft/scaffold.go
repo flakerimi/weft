@@ -701,9 +701,6 @@ func planScaffold(appDir string, s scaffoldSpec) (*scaffoldPlan, error) {
 		return nil, err
 	}
 	p.auth, r.Auth = hasAuth, hasAuth
-	_, serr := os.Stat(filepath.Join(appDir, "web", "session.ts"))
-	// The islands wait on the session only when there is one to ask for.
-	r.Session = hasAuth && serr == nil
 
 	for _, f := range []struct {
 		name string
