@@ -22,7 +22,7 @@ A secret that is too short stops the app with `warp: module "auth" could not sta
 
 ## The owner
 
-While no user exists, the app logs a one-time link at each start, `Set up the owner at http://localhost:8080/setup#token=…`. It begins with `APP_URL` (see [Configuration](warp.md#configuration)); under `weft dev` that is the page server's address. The token is random, kept only in memory, made again at each start while no user exists, and useless once one does. It is after `#`, so it reaches no proxy's log and no `Referer`. The `/setup` page sends it with a password, 8 to 200 characters, to `setup`, which makes the user `AUTH_OWNER_EMAIL` with the role `owner` and signs them in. A wrong token, or one that comes once a user exists, is a 403: `This setup link is not valid; restart the app to get a new one.`
+While no user exists, the app logs a one-time link at each start, `Set up the owner at http://localhost:8080/setup#token=…`. It begins with `APP_URL` (see [Configuration](warp.md#configuration)); under `weft dev` that is the page server's address. The token is random, kept only in memory, made again at each start while no user exists, and useless once one does. It is after `#`, so it reaches no proxy's log and no `Referer`. The `/setup` page sends it with a password, 8 to 200 characters, to `setup`, which makes the user `AUTH_OWNER_EMAIL` with the role `owner` and signs them in. A wrong token is a 403, `This setup link is not valid; restart the app to get a new one.`, and the link once a user exists is a 403 that says `The owner is set up already; sign in at /login.`
 
 ## Signing in and sessions
 

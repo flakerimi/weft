@@ -296,6 +296,14 @@ func (m *module) tokenIs(token string) bool {
 	return m.setupHash != nil && subtle.ConstantTimeCompare(sum[:], m.setupHash) == 1
 }
 
+// settingUp reports whether the app keeps a setup token: it started with no
+// user, and none has been made since.
+func (m *module) settingUp() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.setupHash != nil
+}
+
 // endSetup forgets the setup token, once a user exists.
 func (m *module) endSetup() {
 	m.mu.Lock()

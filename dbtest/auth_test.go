@@ -76,6 +76,9 @@ func startAuth(t *testing.T, vars map[string]string) (*warptest.Client, string) 
 	return c, strings.Replace(logged.String(), "mail is printed, not sent; set MAIL=smtp in .env to send it.\n", "", 1)
 }
 
+// ownerSetUp is setup's refusal once an owner exists.
+const ownerSetUp = "The owner is set up already; sign in at /login."
+
 var setupLine = regexp.MustCompile(`^Set up the owner at https://shop\.example\.com/setup#token=([A-Za-z0-9_-]{43})\n$`)
 
 // request is a same-site request from the address remote, with a JSON body
@@ -138,6 +141,9 @@ func TestSetupThenLogin(t *testing.T) {
 	if owner.ID != 1 || owner.Email != ownerEmail || owner.Role != "owner" || owner.CreatedAt.IsZero() {
 		t.Fatalf("setup made %+v", owner)
 	}
+	// The link used once says the owner is set up, not to restart, which
+	// would print no link while a user exists (final review M4).
+	wantError(t, c.Fork().Post("/api/auth/setup", map[string]string{"token": token, "password": authtest.Password}), 403, "forbidden", ownerSetUp)
 	cookies := res.Header.Values("Set-Cookie")
 	if len(cookies) != 1 {
 		t.Fatalf("setup set %d cookies: %q", len(cookies), cookies)
@@ -164,7 +170,7 @@ func TestSetupThenLogin(t *testing.T) {
 	}
 
 	// The token worked once.
-	wantError(t, c.Post("/api/auth/setup", map[string]string{"token": token, "password": authtest.Password}), 403, "forbidden", notValid)
+	wantError(t, c.Post("/api/auth/setup", map[string]string{"token": token, "password": authtest.Password}), 403, "forbidden", ownerSetUp)
 	if got := auth.SetupToken(c.App); got != "" {
 		t.Fatalf("SetupToken after setup = %q, want empty", got)
 	}
@@ -197,7 +203,7 @@ func TestSetupNotOfferedOnceAUserExists(t *testing.T) {
 	if got := auth.SetupToken(again.App); got != "" {
 		t.Fatalf("SetupToken = %q, want empty", got)
 	}
-	wantError(t, again.Post("/api/auth/setup", map[string]string{"token": "x", "password": authtest.Password}), 403, "forbidden", "This setup link is not valid; restart the app to get a new one.")
+	wantError(t, again.Post("/api/auth/setup", map[string]string{"token": "x", "password": authtest.Password}), 403, "forbidden", ownerSetUp)
 	login(again, ownerEmail, authtest.Password).Want(200)
 }
 
@@ -215,7 +221,7 @@ func TestSetupRefusedOnceAnotherMadeAUser(t *testing.T) {
 		t.Fatal("both apps should have a setup token")
 	}
 	authtest.Owner(t, second)
-	wantError(t, first.Post("/api/auth/setup", map[string]string{"token": token, "password": authtest.Password}), 403, "forbidden", "This setup link is not valid; restart the app to get a new one.")
+	wantError(t, first.Post("/api/auth/setup", map[string]string{"token": token, "password": authtest.Password}), 403, "forbidden", ownerSetUp)
 	wantError(t, login(first, ownerEmail, authtest.Password), 401, "unauthorized", "That email and password do not match.")
 }
 

@@ -17,6 +17,11 @@ var errSetupDone = errors.New("a user exists")
 // email is the last guard, so two setups at once make one owner.
 func (m *module) setup(ctx context.Context, in SetupInput) (Me, error) {
 	if !m.tokenIs(in.Token) {
+		// With no token kept, a user exists: the link was used, or the app
+		// started with an owner, so a restart would print none.
+		if !m.settingUp() {
+			return Me{}, warp.Forbidden(errOwnerSetUp)
+		}
 		return Me{}, warp.Forbidden(errNotSetup)
 	}
 	hash, err := m.hash(ctx, in.Password) // before the transaction, which holds the write lock
@@ -46,7 +51,7 @@ func (m *module) setup(ctx context.Context, in SetupInput) (Me, error) {
 	case errors.Is(err, errSetupDone),
 		errors.As(err, &e) && e.Status == http.StatusUnprocessableEntity: // someone else just became the owner
 		m.endSetup()
-		return Me{}, warp.Forbidden(errNotSetup)
+		return Me{}, warp.Forbidden(errOwnerSetUp)
 	case err != nil:
 		return Me{}, err
 	}

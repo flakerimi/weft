@@ -26,6 +26,7 @@ const (
 
 	errTooManyForAccount = "Too many tries for this account; wait 10 minutes, or reset the password."
 	errNotSetup          = "This setup link is not valid; restart the app to get a new one."
+	errOwnerSetUp        = "The owner is set up already; sign in at /login."
 )
 
 // routes adds the login's routes under /auth.
