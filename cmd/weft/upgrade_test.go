@@ -69,7 +69,7 @@ func TestAddMailModule(t *testing.T) {
 		})
 	}
 
-	const cannot = "app/modules.go lists auth.Module() without mail.Module(), which the login needs from Weft 0.2.0, and weft upgrade could not add it; add the line mail.Module(), before auth.Module() in Modules(), and the import \"github.com/flakerimi/weft/warp/mail\", then run weft gen."
+	const cannot = "app/modules.go lists auth.Module() without mail.Module(), which the login needs from Weft 0.2.0, and weft upgrade could not add it; add the line mail.Module(), before auth.Module() in Modules(), and the import \"github.com/flakerimi/weft/warp/mail\", then run weft upgrade again."
 	for _, src := range []string{
 		// Built by hand, not as one list.
 		"package app\n\nimport (\n\t\"github.com/flakerimi/weft/warp\"\n\t\"github.com/flakerimi/weft/warp/auth\"\n)\n\nfunc Modules() []warp.Module {\n\tvar m []warp.Module\n\tm = append(m, auth.Module())\n\treturn m\n}\n",
@@ -129,19 +129,27 @@ func as024(t *testing.T, app string) {
 // and says what is left to the author: listing middleware.Module() first,
 // and the old web/session.ts, which it keeps. Then weft gen and weft build
 // pass, the owner signs in, and an invitation's link opens /password.
-func TestUpgradeFrom0024(t *testing.T) {
+// installed024 is a copy of the installed app as 0.0.24 made it, the test
+// run in it, whose go.mod replaces Warp's module with this repository, as an
+// author's own replace, which upgrade keeps, so the app builds against the
+// code under test. It returns the app's folder and the repository's.
+func installed024(t *testing.T) (string, string) {
+	t.Helper()
 	inTempDir(t, "work")
 	app := copyApp(t, ".")
 	t.Chdir(app)
 	as024(t, app)
-	// The module is this repository's, as the author's own replace, which
-	// upgrade keeps, so the app builds against the code under test.
 	root, _ := filepath.Abs(filepath.Join(repoCmdWeft, "..", ".."))
 	mod := readFile(t, "go.mod")
 	mod = mod[:strings.Index(mod, "replace ")] + "replace github.com/flakerimi/weft => " + filepath.ToSlash(root) + "\n"
 	if err := os.WriteFile("go.mod", []byte(mod), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	return app, root
+}
+
+func TestUpgradeFrom0024(t *testing.T) {
+	app, root := installed024(t)
 	before := map[string]string{}
 	for _, f := range []string{"web/answers.ts", "web/session.ts", "web/components/LoginForm.vue", "web/pages/index.vue", "web/tsconfig.json"} {
 		before[f] = readFile(t, f)
@@ -206,21 +214,77 @@ func TestUpgradeFrom0024(t *testing.T) {
 	}
 }
 
-// A modules.go weft upgrade cannot edit stops the upgrade with the line to
-// add, exit 1, so it never reports success for an app that does not build.
+// A modules.go weft upgrade cannot edit stops it before it writes anything
+// (final review R2-I1): go.mod, the recorded version and .weft/ are as they
+// were, and the sentence says to run weft upgrade again. Run again once the
+// line is added by hand, it moves the app and adds the account pages, and
+// the app builds.
 func TestUpgradeCannotAddMail(t *testing.T) {
-	otherVersionApp(t, "0.0.24")
-	hand := "package app\n\nimport (\n\t\"github.com/flakerimi/weft/warp\"\n\t\"github.com/flakerimi/weft/warp/auth\"\n\t\"github.com/flakerimi/weft/warp/data\"\n)\n\nfunc Modules() []warp.Module {\n\tm := []warp.Module{data.Module()}\n\treturn append(m, auth.Module())\n}\n"
+	_, root := installed024(t)
+	hand := "package app\n\nimport (\n\t\"github.com/flakerimi/weft/warp\"\n\t\"github.com/flakerimi/weft/warp/auth\"\n\t\"github.com/flakerimi/weft/warp/data\"\n\n\t\"myapp/app/hello\"\n)\n\nfunc Modules() []warp.Module {\n\tm := []warp.Module{data.Module(), auth.Module()}\n\treturn append(m, hello.Module())\n}\n"
 	if err := os.WriteFile(filepath.Join("app", "modules.go"), []byte(hand), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	before := map[string]string{}
+	for _, f := range []string{"go.mod", "go.sum", "package.json", ".weft/VERSION", "app/modules.go"} {
+		before[f] = readFile(t, f)
+	}
 	setVersion(t, "0.2.0")
 	code, out, errs := runCmd("upgrade", "--no-install")
-	want := "weft upgrade: app/modules.go lists auth.Module() without mail.Module(), which the login needs from Weft 0.2.0, and weft upgrade could not add it; add the line mail.Module(), before auth.Module() in Modules(), and the import \"github.com/flakerimi/weft/warp/mail\", then run weft gen.\n"
-	if code != 1 || errs != want || strings.Contains(out, "Moved") {
+	want := "weft upgrade: app/modules.go lists auth.Module() without mail.Module(), which the login needs from Weft 0.2.0, and weft upgrade could not add it; add the line mail.Module(), before auth.Module() in Modules(), and the import \"github.com/flakerimi/weft/warp/mail\", then run weft upgrade again.\n"
+	if code != 1 || errs != want || out != "" {
 		t.Errorf("exit %d, stdout %q, stderr %q, want exit 1 and %q", code, out, errs, want)
 	}
-	if readFile(t, filepath.Join("app", "modules.go")) != hand {
-		t.Error("app/modules.go was changed")
+	for f, b := range before {
+		if readFile(t, f) != b {
+			t.Errorf("%s was changed by the refused upgrade", f)
+		}
+	}
+	if exists(t, "web/pages/password.vue") {
+		t.Error("the refused upgrade wrote pages")
+	}
+
+	// As the sentence says: the line by hand, then weft upgrade again.
+	fixed := strings.Replace(strings.Replace(hand, "\t\"github.com/flakerimi/weft/warp/data\"\n", "\t\"github.com/flakerimi/weft/warp/data\"\n\t\"github.com/flakerimi/weft/warp/mail\"\n", 1), "data.Module(), auth.Module()", "data.Module(), mail.Module(), auth.Module()", 1)
+	if err := os.WriteFile(filepath.Join("app", "modules.go"), []byte(fixed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs = runCmd("upgrade", "--no-install")
+	if code != 0 || !strings.Contains(out, "Added web/pages/password.vue\n") || !strings.Contains(out, "Moved myapp from Weft 0.0.24 to 0.2.0\n") {
+		t.Fatalf("again: exit %d, stdout %q, stderr %q", code, out, errs)
+	}
+	if !strings.HasPrefix(errs, "weft upgrade: go.mod replaces github.com/flakerimi/weft with "+filepath.ToSlash(root)) {
+		t.Errorf("again: stderr %q", errs)
+	}
+	if code, out, errs := runCmd("gen"); code != 0 {
+		t.Fatalf("weft gen: exit %d: %s%s", code, out, errs)
+	}
+	if code, out, errs := build(t); code != 0 {
+		t.Fatalf("weft build: exit %d: %s%s", code, out, errs)
+	}
+}
+
+// An app already on this Weft that lacks an account page, upgraded part-way
+// or by an older candidate, gets it from weft upgrade, which still writes
+// over nothing (final review R2-I1).
+func TestUpgradeAlreadyOnAddsMissingPages(t *testing.T) {
+	otherVersionApp(t, "0.2.0")
+	setVersion(t, "0.2.0")
+	if err := os.Remove(filepath.Join("web", "pages", "password.vue")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("web", "pages", "users.vue"), []byte("<template><p>mine</p></template>\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs := runCmd("upgrade", "--no-install")
+	if code != 0 || out != "myapp is already on Weft 0.2.0\nAdded web/pages/password.vue\n" || errs != "" {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errs)
+	}
+	want, err := os.ReadFile(filepath.Join(repoCmdWeft, "..", "..", "templates", "app", "web", "pages", "password.vue"))
+	if err != nil || readFile(t, filepath.Join("web", "pages", "password.vue")) != string(want) {
+		t.Errorf("web/pages/password.vue is not the template's (%v)", err)
+	}
+	if got := readFile(t, filepath.Join("web", "pages", "users.vue")); got != "<template><p>mine</p></template>\n" {
+		t.Errorf("web/pages/users.vue was written over: %q", got)
 	}
 }

@@ -19,7 +19,7 @@ const (
 
 // errCannotAddMail is what weft upgrade says of an app/modules.go that lists
 // the login without mail and that it cannot edit.
-var errCannotAddMail = errors.New(`app/modules.go lists auth.Module() without mail.Module(), which the login needs from Weft 0.2.0, and weft upgrade could not add it; add the line mail.Module(), before auth.Module() in Modules(), and the import "github.com/flakerimi/weft/warp/mail", then run weft gen.`)
+var errCannotAddMail = errors.New(`app/modules.go lists auth.Module() without mail.Module(), which the login needs from Weft 0.2.0, and weft upgrade could not add it; add the line mail.Module(), before auth.Module() in Modules(), and the import "github.com/flakerimi/weft/warp/mail", then run weft upgrade again.`)
 
 // addMailModule lists mail.Module() just before auth.Module() in the
 // []warp.Module{...} that Modules() returns, with the import, when the file
@@ -106,16 +106,23 @@ func addMailModule(src []byte) ([]byte, bool, error) {
 	return formatted, true, nil
 }
 
-// listsModule reports whether src's Modules() list has the module of the
-// package at importPath, as pkg.Module(...).
+// listsModule reports whether src, app/modules.go, calls the Module of the
+// package at importPath, as pkg.Module(...), anywhere: in the list Modules()
+// returns, or in one an author builds by hand.
 func listsModule(src []byte, importPath string) bool {
 	f, err := parser.ParseFile(token.NewFileSet(), "app/modules.go", src, parser.SkipObjectResolution)
 	if err != nil {
 		return false
 	}
-	local := imported(f)
-	list := moduleList(f, local[warpPackage])
-	return list != nil && local[importPath] != "" && slices.ContainsFunc(list.Elts, func(e ast.Expr) bool { return isModuleCall(e, local[importPath]) })
+	name := imported(f)[importPath]
+	found := false
+	ast.Inspect(f, func(n ast.Node) bool {
+		if e, ok := n.(ast.Expr); ok && isModuleCall(e, name) {
+			found = true
+		}
+		return !found
+	})
+	return found
 }
 
 // imported maps each import path of f to the name the file uses for it.

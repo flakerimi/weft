@@ -46,6 +46,21 @@ func upgradeCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	if cfg.Version == weft.Version {
 		fmt.Fprintf(stdout, "%s is already on Weft %s\n", name, weft.Version)
+		// An app moved part-way, or by an older weft, catches up on the
+		// account pages, which are written over nothing.
+		if src, err := os.ReadFile(filepath.Join(appDir, "app", "modules.go")); err == nil && listsModule(src, authPackage) {
+			bundle, err := openBundle()
+			if err != nil {
+				return fail(stderr, "upgrade", err)
+			}
+			added, err := addAccountFiles(bundle, appDir)
+			for _, f := range added {
+				fmt.Fprintln(stdout, "Added "+f)
+			}
+			if err != nil {
+				return fail(stderr, "upgrade", err)
+			}
+		}
 		sayWeftServe(appDir, stderr)
 		return 0
 	}
@@ -59,6 +74,18 @@ func upgradeCmd(args []string, stdout, stderr io.Writer) int {
 	bundle, err := openBundle()
 	if err != nil {
 		return fail(stderr, "upgrade", err)
+	}
+	// An app made before 0.2.0 lists the login without mail. What refuses
+	// does so here, before anything is written, so a refused upgrade leaves
+	// the app as it was.
+	modulesGo := filepath.Join(appDir, "app", "modules.go")
+	modules, err := os.ReadFile(modulesGo)
+	moduleList, addedMail := modules, false
+	if err == nil {
+		if moduleList, addedMail, err = addMailModule(modules); err != nil {
+			fmt.Fprintln(stderr, "weft upgrade: "+err.Error())
+			return 1
+		}
 	}
 	// go.mod first: it is the author's file, the likeliest to be refused.
 	if !localModule(weft.Version) {
@@ -76,24 +103,14 @@ func upgradeCmd(args []string, stdout, stderr io.Writer) int {
 	if err := keepDist(appDir); err != nil {
 		return fail(stderr, "upgrade", err)
 	}
-	// An app made before 0.2.0 lists the login without mail, and has no page
-	// for the links it mails.
-	login, middleware := false, false
-	modulesGo := filepath.Join(appDir, "app", "modules.go")
-	if src, err := os.ReadFile(modulesGo); err == nil {
-		out, changed, err := addMailModule(src)
-		if err != nil {
-			fmt.Fprintln(stderr, "weft upgrade: "+err.Error())
-			return 1
+	// mail.Module(), checked above, and the pages for the links it mails.
+	if addedMail {
+		if err := os.WriteFile(modulesGo, moduleList, 0o644); err != nil {
+			return fail(stderr, "upgrade", err)
 		}
-		if changed {
-			if err := os.WriteFile(modulesGo, out, 0o644); err != nil {
-				return fail(stderr, "upgrade", err)
-			}
-			fmt.Fprintln(stdout, "weft upgrade: listed mail.Module() before auth.Module() in app/modules.go, which the login needs from Weft 0.2.0.")
-		}
-		login, middleware = listsModule(out, authPackage), listsModule(out, middlewarePackage)
+		fmt.Fprintln(stdout, "weft upgrade: listed mail.Module() before auth.Module() in app/modules.go, which the login needs from Weft 0.2.0.")
 	}
+	login, middleware := listsModule(moduleList, authPackage), listsModule(moduleList, middlewarePackage)
 	if login {
 		added, err := addAccountFiles(bundle, appDir)
 		for _, f := range added {
