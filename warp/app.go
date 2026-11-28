@@ -448,7 +448,10 @@ func (a *App) Wrap(mw func(http.Handler) http.Handler) {
 // and its API, the API's 404s and redirects included, so that a header it
 // sets is on every answer. The first WrapAll given is the outermost, and
 // every WrapAll is outside every Wrap. Handler, the API alone, is inside
-// them too. A WrapAll after the app started is a mistake, reported by Err.
+// them too. The App's Serve and Run put them around everything; the
+// package-level Serve, as in warp.Serve(dist, app.Handler()), has them
+// around the API alone, since it wraps only what it is given. A WrapAll
+// after the app started is a mistake, reported by Err.
 func (a *App) WrapAll(mw func(http.Handler) http.Handler) {
 	a.mu.Lock()
 	if a.started {

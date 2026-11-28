@@ -43,3 +43,10 @@ no `actions` column, `DataTable` appends a trailing `Actions` column with
 button (or `"New <name>"` when empty); if `remove` rejects, the dialog stays
 open with an `Alert` (`role="alert"`). `defineExpose` provides `refresh()`,
 `edit(record)` and `askRemove(record)`.
+
+**Dates and times.** A field the schema gives a `format` (`date` or
+`datetime`) is drawn in the dialog with the browser's own inputs, or with a
+`DatePicker` and an `InputTime` once `useDateFields()` is called in the setup
+of the island's component that draws the table, not in the page's: each
+island is an app of its own in the browser, so a call outside it reaches only
+the server's render. `EntityDialog` says what each saves.

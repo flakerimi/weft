@@ -174,6 +174,12 @@ func (m *Mailer) try(parent context.Context, o outgoing) *sendError {
 				return fail("tls", err)
 			}
 		} else if !loopback(s.host) {
+			// A loopback host without STARTTLS is used as it is, MAIL_USER and
+			// MAIL_PASSWORD included, on purpose: a relay there is a development
+			// server, or a TLS-terminating sidecar or SSH tunnel that needs the
+			// provider's password while it does the TLS, and loopback traffic
+			// does not leave the machine. Only localhost and loopback addresses
+			// count, and no name is looked up, so a DNS answer cannot widen it.
 			return &sendError{reason: fmt.Sprintf("the mail server at %s offers no STARTTLS; use port 465 or a server that does.", addr), permanent: true}
 		}
 	}
@@ -209,7 +215,7 @@ func failure(ctx context.Context, addr, step string, err error) *sendError {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		return &sendError{reason: fmt.Sprintf("the mail server at %s did not finish within 30 s; check that it is up and takes mail on that port.", addr)}
 	case errors.As(err, &answer) && answer.Code >= 400 && answer.Code < 500:
-		return &sendError{reason: fmt.Sprintf("the mail server at %s answered %q to each of %d tries; check its log for why.", addr, answer.Error(), tries)}
+		return &sendError{reason: fmt.Sprintf("the mail server at %s answered %q to the last of %d tries; check its log for why.", addr, answer.Error(), tries)}
 	case errors.As(err, &answer) && step == "auth":
 		return &sendError{reason: fmt.Sprintf("the mail server at %s refused to sign in (%q); check MAIL_USER and MAIL_PASSWORD.", addr, answer.Error()), permanent: true}
 	case errors.As(err, &answer) && step == "rcpt":

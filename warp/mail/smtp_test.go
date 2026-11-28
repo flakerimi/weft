@@ -416,7 +416,7 @@ func TestSMTPRetries(t *testing.T) {
 	app, m := started(t, srv2.vars())
 	m.Send(context.Background(), Message{To: "bob@example.com", Subject: "Welcome", Text: "x"})
 	app.Stop(context.Background())
-	want := `mail to bob@example.com ("Welcome") was not sent: the mail server at smtp.example.com:587 answered "451 4.3.0 try again later" to each of 3 tries; check its log for why.`
+	want := `mail to bob@example.com ("Welcome") was not sent: the mail server at smtp.example.com:587 answered "451 4.3.0 try again later" to the last of 3 tries; check its log for why.`
 	if !strings.Contains(logs.String(), want) || strings.Count(logs.String(), "was not sent") != 1 {
 		t.Errorf("the log has\n%s\nwant once\n%s", logs, want)
 	}

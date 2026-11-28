@@ -35,8 +35,10 @@ whose label defaults to the sentence-cased field name (`firstName` →
 - `format: 'date'` (a Go field with the rule `date`) renders a `DatePicker`,
   and `format: 'datetime'` (any other `time.Time`) a `DatePicker` and an
   `InputTime` (hours and minutes) side by side in a `FieldGroup`, once
-  `useDateFields()` is called in the setup of the island that draws the
-  dialog (a `DataTable`'s too). Without it they are the browser's own
+  `useDateFields()` is called in the setup of the island's component that
+  draws the dialog (a `DataTable`'s too), not in the page's: each island is
+  an app of its own in the browser, so a call outside it reaches only the
+  server's render. Without it they are the browser's own
   `<Input type="date">` and `<Input type="datetime-local">`: a page's CSS is
   all its imports reach, so only a page that calls it pays for the date
   controls and the calendar. With them, the field's label is for the date,
@@ -46,7 +48,9 @@ whose label defaults to the sentence-cased field name (`firstName` →
   and a datetime as an instant in UTC, shown and entered in the browser's
   zone (a date chosen before a time is at midnight there; a time the clocks
   skip, such as 02:30 when they go from 02:00 to 03:00, is moved on by the
-  hour skipped, so it is saved as 03:30). Go's zero time is empty. Both start
+  hour skipped, so it is saved as 03:30; a time the clocks repeat, such as
+  02:30 when they go back from 03:00 to 02:00, is the earlier of the two).
+  Go's zero time is empty. Both start
   empty (`null`), an emptied one is `null`, and one not touched is not in
   the `update`, so a datetime's seconds survive an edit of other fields.
   `wireToDate`, `dateToWire`, `wireToLocal`, `localToWire` and
