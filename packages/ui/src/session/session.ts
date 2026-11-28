@@ -36,6 +36,13 @@ const shown = readonly(state) as Readonly<Session>
 /** The newest question asked, and its number, so an older answer that comes late is dropped. */
 let asked: Promise<SessionUser | null> | undefined
 let asking = 0
+/**
+ * Set once the page is on its way to another (signOut, signInAgain), so a
+ * later redirect, such as a Guard's after a sign-out or several Guards' at
+ * once, folds into the first; cleared when an answer brings a user again or
+ * the page comes back from the back-forward cache.
+ */
+let leaving = false
 
 const inBrowser = () => typeof window !== 'undefined'
 
@@ -85,13 +92,14 @@ function ask(): Promise<SessionUser | null> {
   const mine: Promise<SessionUser | null> = answer().then((got) => {
     if (n !== asking) return asked!
     Object.assign(state, got, { loading: false })
+    if (state.user) leaving = false
     return state.user
   })
   asked = mine
   if (!listening) {
     listening = true
     document.addEventListener('visibilitychange', () => void (document.visibilityState === 'visible' && ask()))
-    addEventListener('pageshow', (e) => void ((e as PageTransitionEvent).persisted && ask()))
+    addEventListener('pageshow', (e) => void ((e as PageTransitionEvent).persisted && ((leaving = false), ask())))
   }
   return mine
 }
@@ -119,6 +127,7 @@ async function signOut(): Promise<string> {
   asking++
   asked = Promise.resolve(null)
   Object.assign(state, { user: null, problem: '', loading: false })
+  leaving = true
   location.assign('/login')
   return ''
 }
@@ -142,8 +151,14 @@ export function useSession(): {
   return { session: shown, ready: asked ?? Promise.resolve(null), can, signOut, refresh }
 }
 
-/** Sends the visitor to `signIn` (default /login), with this page's path as `next`, so that signing in comes back here. */
+/**
+ * Sends the visitor to `signIn` (default /login), with this page's path as
+ * `next`, so that signing in comes back here; nothing when the page is
+ * already leaving, after signOut or an earlier call.
+ */
 export function signInAgain(signIn = '/login'): void {
+  if (leaving) return
+  leaving = true
   const next = encodeURIComponent(location.pathname + location.search)
   location.assign(`${signIn}${signIn.includes('?') ? '&' : '?'}next=${next}`)
 }
@@ -164,4 +179,16 @@ export async function requireSession(options: { perm?: string; signIn?: string }
     return null
   }
   return options.perm && !can(options.perm) ? null : user
+}
+
+/**
+ * For a call answered 401: the session ended while the page was open, signed
+ * out in another window, ended from another device, or past its days. Asks
+ * who is signed in again, so `perm` buttons and Guards follow at once, and
+ * sends the visitor to `signIn` (default /login) with `next` when no one is;
+ * a session that could not be read sends no one. Nothing on the server.
+ */
+export async function sessionEnded(signIn?: string): Promise<void> {
+  await refresh()
+  await requireSession({ signIn })
 }

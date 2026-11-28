@@ -114,10 +114,35 @@ describe('Guard', () => {
     expect(el.querySelector('.weft-spinner')).not.toBeNull()
     expect(el.querySelector('.secret')).toBeNull()
 
+    // Signed in again, then out: a Guard sends to the sign-in page it is given.
+    mounted.pop()!.unmount()
+    await answerWith(() => answer(200, me(['reports:read'])))
+    await answerWith(unauthorized)
     assign.mockClear()
     guard({ case: 'plain', signIn: '/enter' })
     await settle()
     expect(assign).toHaveBeenCalledWith('/enter?next=%2Freports%3Fyear%3D2026')
+  })
+
+  it('several Guards send to sign in once', async () => {
+    await answerWith(() => answer(200, me(['reports:read'])))
+    for (const perm of ['reports:read', 'users:read', undefined]) guard({ case: 'plain', perm })
+    await settle()
+    await answerWith(unauthorized)
+    expect(assign).toHaveBeenCalledTimes(1)
+    expect(assign).toHaveBeenCalledWith('/login?next=%2Freports%3Fyear%3D2026')
+  })
+
+  it('signing out on a guarded page goes to /login alone', async () => {
+    await answerWith(() => answer(200, me(['reports:read'])))
+    const el = guard({ case: 'plain', perm: 'reports:read' })
+    await settle()
+    expect(el.querySelector('.secret')).not.toBeNull()
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }))
+    expect(await useSession().signOut()).toBe('')
+    await settle()
+    expect(assign).toHaveBeenCalledTimes(1)
+    expect(assign).toHaveBeenCalledWith('/login')
   })
 
   it('a session that ends mid-page sends to sign-in with next', async () => {

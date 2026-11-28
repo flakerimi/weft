@@ -31,9 +31,12 @@ known:
 - otherwise the default slot, given `{ user }`, the signed-in user.
 
 It follows the session: after `useSession().refresh()` a role that lost the
-permission sees `denied`, and a session that has ended (signed out in another
-tab, which the page notices when it is shown again) sends the visitor to sign
-in, as on load. `perm` names a permission a route records or an `auth.Grant`
+permission sees `denied`, and a session that has ended sends the visitor to
+sign in, as on load. A hidden tab learns of a sign-out elsewhere when it is
+shown again; a window that stays visible beside the one that signed out
+learns at its next request, when a call answers 401 and the page calls
+`sessionEnded()`. Several Guards send the visitor once, and none sends again
+after `signOut()`, which goes to `/login` alone. `perm` names a permission a route records or an `auth.Grant`
 names, which is what `me` lists. It hides what it holds and guards nothing: the
 server's routes must still check, as `auth.Per` does, and send nothing a
 viewer may not read.

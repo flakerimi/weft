@@ -295,11 +295,85 @@ describe('requireSession', () => {
 
   it('sends to the sign-in page it is given', async () => {
     fetchMock.mockResolvedValue(unauthorized())
-    const { requireSession, signInAgain } = await load()
+    const { requireSession } = await load()
     await requireSession({ signIn: '/account/sign-in' })
     expect(assign).toHaveBeenLastCalledWith('/account/sign-in?next=%2Fproducts%2F3%3Ftab%3Dstock')
+    const { signInAgain } = await load()
     signInAgain('/enter?from=menu')
     expect(assign).toHaveBeenLastCalledWith('/enter?from=menu&next=%2Fproducts%2F3%3Ftab%3Dstock')
+  })
+
+  it('a page leaves once: later redirects fold into the first', async () => {
+    fetchMock.mockResolvedValue(unauthorized())
+    const { requireSession, signInAgain } = await load()
+    await Promise.all([requireSession(), requireSession({ perm: 'users:read' }), requireSession({ signIn: '/enter' })])
+    signInAgain()
+    expect(assign).toHaveBeenCalledTimes(1)
+    expect(assign).toHaveBeenCalledWith('/login?next=%2Fproducts%2F3%3Ftab%3Dstock')
+  })
+
+  it('after signOut, requireSession sends no one to sign in with next', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, member)).mockResolvedValueOnce(json(204)).mockResolvedValue(unauthorized())
+    const { useSession, requireSession } = await load()
+    await useSession().ready
+    expect(await useSession().signOut()).toBe('')
+    await requireSession()
+    await useSession().refresh()
+    await requireSession()
+    expect(assign).toHaveBeenCalledTimes(1)
+    expect(assign).toHaveBeenCalledWith('/login')
+  })
+
+  it('a page back from history, or signed in again, may leave again', async () => {
+    fetchMock.mockResolvedValue(unauthorized())
+    const { requireSession, useSession } = await load()
+    await requireSession()
+    expect(assign).toHaveBeenCalledTimes(1)
+    window.dispatchEvent(Object.defineProperty(new Event('pageshow'), 'persisted', { value: true }))
+    await new Promise((r) => setTimeout(r, 0))
+    await requireSession()
+    expect(assign).toHaveBeenCalledTimes(2)
+
+    fetchMock.mockResolvedValueOnce(json(200, member))
+    await useSession().refresh()
+    await useSession().refresh()
+    await requireSession()
+    expect(assign).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('sessionEnded', () => {
+  it('asks again, and sends to sign in when no one is signed in now', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, member)).mockResolvedValueOnce(unauthorized())
+    const { useSession, sessionEnded } = await load()
+    const { session } = useSession()
+    await useSession().ready
+    await sessionEnded()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(session.user).toBeNull()
+    expect(assign).toHaveBeenCalledWith('/login?next=%2Fproducts%2F3%3Ftab%3Dstock')
+
+    // To the sign-in page it is given.
+    fetchMock.mockReset().mockResolvedValueOnce(json(200, member)).mockResolvedValueOnce(unauthorized())
+    const again = await load()
+    await again.useSession().ready
+    await again.sessionEnded('/enter')
+    expect(assign).toHaveBeenLastCalledWith('/enter?next=%2Fproducts%2F3%3Ftab%3Dstock')
+  })
+
+  it('stays when someone is still signed in, or the session cannot be read', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, member)).mockResolvedValueOnce(json(200, owner))
+    let s = await load()
+    await s.useSession().ready
+    await s.sessionEnded()
+    expect(s.useSession().session.user).toEqual(owner)
+
+    fetchMock.mockReset().mockResolvedValueOnce(json(200, member)).mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    s = await load()
+    await s.useSession().ready
+    await s.sessionEnded()
+    expect(s.useSession().session.problem).toBe('The server could not be reached; check the connection and try again.')
+    expect(assign).not.toHaveBeenCalled()
   })
 
   it('requireSession without the perm stays', async () => {
@@ -316,7 +390,8 @@ describe('requireSession', () => {
 describe('on the server', () => {
   it('on the server nothing is asked', async () => {
     vi.stubGlobal('window', undefined)
-    const { useSession, requireSession } = await load()
+    const { useSession, requireSession, sessionEnded } = await load()
+    await sessionEnded()
     const { session, ready, can } = useSession()
     expect(await ready).toBeNull()
     expect(await requireSession({ perm: 'products:read' })).toBeNull()
