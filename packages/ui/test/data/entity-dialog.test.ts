@@ -1,3 +1,6 @@
+import { spawnSync } from 'node:child_process'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import EntityDialogCases, { type Item, type ItemInput } from '../fixtures/data/EntityDialogCases.vue'
 import { changes, entityProblem, humanLabel, inferControl, initialDraft, type EntityFieldConfig, type EntityFieldRule, type EntitySchema } from '../../src/data/entity.ts'
@@ -399,6 +402,71 @@ describe('EntityDialog', () => {
       await settle()
       expect(update).toHaveBeenLastCalledWith(4, { starts: localToWire(local.date, local.time.replace(/:00$/, ':01')) })
     })
+
+    // A datetime changed and changed back before Save is the record's own
+    // value again, seconds and all.
+    async function revert(starts: string, native: boolean) {
+      const record = { id: 4, name: 'Launch', due: null, starts } as unknown as Item
+      const update = vi.fn(async (id: number, body: Partial<ItemInput>) => ({ ...record, id, ...body }))
+      await cases({ schema: TIMES, record, dateFields: !native, update: fn(update) })
+      const local = wireToLocal(starts)!
+      if (native) {
+        const input = $<HTMLInputElement>('input[type="datetime-local"]', field('Starts'))
+        typeInto(input, `${local.date}T${local.time.slice(0, 3)}${String((Number(local.time.slice(3)) + 1) % 60).padStart(2, '0')}`)
+        await settle()
+        typeInto(input, `${local.date}T${local.time}`)
+      } else {
+        const minute = $$('[role="spinbutton"]', field('Starts'))[1]!
+        minute.focus()
+        key('ArrowUp')
+        await settle()
+        key('ArrowDown')
+      }
+      await settle()
+      typeInto($<HTMLInputElement>('input[name="name"]', $('[role="dialog"]', overlays()!)), 'Launch day')
+      await settle()
+      button('Save').click()
+      await settle()
+      return update
+    }
+
+    it('sends a datetime changed and changed back as the record has it, seconds and all', async () => {
+      for (const native of [true, false]) {
+        const update = await revert('2026-06-01T08:15:45Z', native)
+        expect(update).toHaveBeenLastCalledWith(4, { name: 'Launch day' })
+        unmount!()
+        unmount = undefined
+        reset()
+      }
+    })
+
+    // The zone is the process's, fixed when it starts, so this case runs in a
+    // vitest started with TZ set, as when.test.ts runs its zones.
+    if (Intl.DateTimeFormat().resolvedOptions().timeZone === 'Europe/Berlin') {
+      it('sends a datetime in the hour the clocks repeat, changed and changed back, as the record has it', async () => {
+        // 01:30:45Z on 2026-10-25 is the second 02:30 in Berlin.
+        expect(wireToLocal('2026-10-25T01:30:45Z')).toEqual({ date: '2026-10-25', time: '02:30' })
+        for (const native of [true, false]) {
+          const update = await revert('2026-10-25T01:30:45Z', native)
+          expect(update).toHaveBeenLastCalledWith(4, { name: 'Launch day' })
+          unmount!()
+          unmount = undefined
+          reset()
+        }
+      })
+    } else {
+      it('runs the repeated hour’s case in a process started in Berlin', () => {
+        const ui = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+        const run = spawnSync(
+          process.execPath,
+          [join(ui, 'node_modules', 'vitest', 'vitest.mjs'), 'run', 'test/data/entity-dialog.test.ts', '-t', 'the hour the clocks repeat'],
+          { cwd: ui, env: { ...process.env, TZ: 'Europe/Berlin' }, encoding: 'utf8' },
+        )
+        const out = `${run.stdout}${run.stderr}`
+        expect(out, out).toMatch(/1 passed/)
+        expect(run.status, out).toBe(0)
+      }, 60_000)
+    }
   })
 
   it('shows server field errors on known fields (and focuses the first invalid control after busy ends), unknown, hidden or omitted field errors in the top Alert with role="alert", and clears them when reopened', async () => {

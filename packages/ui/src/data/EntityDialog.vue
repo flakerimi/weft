@@ -271,6 +271,15 @@ function setLocal(key: string, which: 'date' | 'time', v: unknown) {
   writeLocal(key, next)
 }
 function writeLocal(key: string, next: { date: string | null; time: string | null }) {
+  // Back to the record's minute: the record's own instant, so an edit undone
+  // keeps its seconds and, in an hour the clocks repeat, its occurrence.
+  const record = props.record as Record<string, unknown> | null | undefined
+  const kept = record ? wireToLocal(record[key] as string | null) : null
+  if (kept && next.date === kept.date && next.time === kept.time) {
+    delete halves[key]
+    draft[key] = record![key]
+    return
+  }
   const was = wireToLocal(draft[key] as string | null)
   if (was && next.date === was.date && next.time === was.time) {
     delete halves[key]
