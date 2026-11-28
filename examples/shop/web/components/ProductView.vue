@@ -22,7 +22,11 @@ onMounted(async () => {
     else product.value = await api.products.show(id)
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) missing.value = true
-    else problem.value = formProblem(e, sessionEnded).message
+    else {
+      // A 401: the session ended while the page was open.
+      if (e instanceof ApiError && e.status === 401) void sessionEnded()
+      problem.value = formProblem(e).message
+    }
   } finally {
     loading.value = false
   }

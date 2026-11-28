@@ -146,6 +146,16 @@ DELETE  /api/products/{id}  products  remove  products:delete
 
 Moves an app to the Weft version of the `weft` you run: it rewrites `weft.version` in `package.json`, changing no other byte, moves `go.mod`'s require of Warp's module to that release, dropping a replace into `./.weft/go` (another is kept, and named), unpacks that version's packages into `.weft/`, and runs `pnpm install` and `go mod download`. It prints `Moved <name> from Weft <a> to <b>`, or `<name> is already on Weft <b>`. It never moves an app backwards: an app on a newer Weft is refused (exit 1), saying to run `weft update`; `0.0.0-dev` is older than any release. `--no-install` skips `pnpm install` and `go mod download`.
 
+#### Upgrading from 0.0.24
+
+From 0.2.0 the login needs the `mail` module and mails links to pages an app made before has not. For an app whose `app/modules.go` lists `auth.Module()`, `weft upgrade`:
+
+- lists `mail.Module()` just before it, with its import, and says so; a list it cannot edit (built by hand) stops it with the line to add, exit 1;
+- writes the account pages and forms the app lacks, `/register`, `/forgot`, `/password`, `/account` and `/users`, and `web/session-check.ts`, printing `Added <file>` for each, and never writes over a file the app has;
+- says to list `middleware.Module()` first, which it does not add, and that an old `web/session.ts`, which it keeps, can go once no page imports it.
+
+The login page the app has is kept, so it links to neither `/forgot` nor `/register` until you add the links. Everyone signs in once after the upgrade: sessions are kept in a table now.
+
 #### Moving an app to Warp
 
 An app made by Weft 0.0.6 or before calls `weft.Serve` in `main.go`, now `warp.Serve`, so once upgraded it does not compile (`undefined: weft.Serve`). `weft upgrade` says so after its output, exiting 0: `weft upgrade: main.go still calls weft.Serve, which moved; see https://weft.base.al/docs/reference/cli#moving-an-app-to-warp for the two lines to change.` The smallest change is two lines of `main.go`: the import of `github.com/flakerimi/weft` becomes the first line below, and the `weft.Serve` call in `handler` the second.

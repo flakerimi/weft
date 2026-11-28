@@ -31,6 +31,14 @@ name, with the same archives and `SHA256SUMS`, from 0.0.12 on. Releases before
 - Date and time fields: the `date` rule, `format` in the generated schema,
   date and time controls in `EntityDialog` (`useDateFields()`), and date
   fields in the pages `weft scaffold` writes.
+- Upgrading from 0.0.24: `weft upgrade` lists `mail.Module()` before
+  `auth.Module()` in `app/modules.go` (or, when it cannot edit the list,
+  says the line to add and exits 1), writes the pages and forms the login's
+  links open (`/password`, `/forgot`, `/register`, `/account`, `/users`) and
+  `web/session-check.ts` where the app lacks them, never writing over a file,
+  and says to list `middleware.Module()` first; an old `web/session.ts` is
+  kept and can go once no page imports it. Everyone signs in once after the
+  upgrade.
 
 ## 0.0.24
 

@@ -2,12 +2,14 @@ package main
 
 import (
 	"cmp"
+	"errors"
 	"flag"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -74,6 +76,33 @@ func upgradeCmd(args []string, stdout, stderr io.Writer) int {
 	if err := keepDist(appDir); err != nil {
 		return fail(stderr, "upgrade", err)
 	}
+	// An app made before 0.2.0 lists the login without mail, and has no page
+	// for the links it mails.
+	login, middleware := false, false
+	modulesGo := filepath.Join(appDir, "app", "modules.go")
+	if src, err := os.ReadFile(modulesGo); err == nil {
+		out, changed, err := addMailModule(src)
+		if err != nil {
+			fmt.Fprintln(stderr, "weft upgrade: "+err.Error())
+			return 1
+		}
+		if changed {
+			if err := os.WriteFile(modulesGo, out, 0o644); err != nil {
+				return fail(stderr, "upgrade", err)
+			}
+			fmt.Fprintln(stdout, "weft upgrade: listed mail.Module() before auth.Module() in app/modules.go, which the login needs from Weft 0.2.0.")
+		}
+		login, middleware = listsModule(out, authPackage), listsModule(out, middlewarePackage)
+	}
+	if login {
+		added, err := addAccountFiles(bundle, appDir)
+		for _, f := range added {
+			fmt.Fprintln(stdout, "Added "+f)
+		}
+		if err != nil {
+			return fail(stderr, "upgrade", err)
+		}
+	}
 	if !*noInstall {
 		if err := pnpmInstall(appDir, stdout, stderr); err != nil {
 			return fail(stderr, "upgrade", err)
@@ -86,8 +115,51 @@ func upgradeCmd(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	fmt.Fprintf(stdout, "Moved %s from Weft %s to %s\n", name, cfg.Version, weft.Version)
+	if login && !middleware {
+		fmt.Fprintln(stdout, `Next: list middleware.Module() in app/modules.go, first, so the lines the other modules log are in its format, with the import "github.com/flakerimi/weft/warp/middleware"; it adds security headers, a request log and a rate limit on /api.`)
+	}
+	if _, err := os.Stat(filepath.Join(appDir, "web", "session.ts")); err == nil {
+		fmt.Fprintln(stdout, "web/session.ts is kept: pages may now import useSession, requireSession and nextPath from @weft/ui, and once none imports ../session.ts, the file can go.")
+	}
 	sayWeftServe(appDir, stderr)
 	return 0
+}
+
+// accountFiles are the pages and forms of the login's links and accounts,
+// which weft create writes from 0.2.0 and an app made before has not.
+var accountFiles = []string{
+	"web/components/AccountLinks.vue", "web/components/AccountPanel.vue", "web/components/ForgotForm.vue",
+	"web/components/PasswordForm.vue", "web/components/RegisterForm.vue", "web/components/UsersPanel.vue",
+	"web/pages/account.vue", "web/pages/forgot.vue", "web/pages/password.vue", "web/pages/register.vue", "web/pages/users.vue",
+	"web/session-check.ts",
+}
+
+// addAccountFiles writes each of accountFiles from the bundle's template that
+// the app at appDir does not have, and returns those it wrote. A file the app
+// has is the author's and is never written over; nor are other template
+// files, so a page or module the author removed does not come back.
+func addAccountFiles(bundle fs.FS, appDir string) ([]string, error) {
+	var added []string
+	for _, f := range accountFiles {
+		target := filepath.Join(appDir, filepath.FromSlash(f))
+		if _, err := os.Lstat(target); err == nil {
+			continue
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return added, err
+		}
+		content, err := fs.ReadFile(bundle, "template/"+f)
+		if err != nil {
+			return added, fmt.Errorf("the bundle's template has no %s (%v); reinstall weft", f, err)
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return added, err
+		}
+		if err := os.WriteFile(target, content, 0o644); err != nil {
+			return added, err
+		}
+		added = append(added, f)
+	}
+	return added, nil
 }
 
 // sayWeftServe says how to move an app whose Go, in its folder's .go files,

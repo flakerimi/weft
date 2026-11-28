@@ -802,39 +802,12 @@ func addModule(src []byte, importPath, name string) ([]byte, bool, error) {
 		}
 		local[p] = n
 	}
-	var list *ast.CompositeLit
-	for _, d := range f.Decls {
-		fn, ok := d.(*ast.FuncDecl)
-		if !ok || fn.Recv != nil || fn.Name.Name != "Modules" || fn.Body == nil {
-			continue
-		}
-		ast.Inspect(fn.Body, func(n ast.Node) bool {
-			ret, ok := n.(*ast.ReturnStmt)
-			if !ok || len(ret.Results) != 1 {
-				return list == nil
-			}
-			if lit, ok := ret.Results[0].(*ast.CompositeLit); ok && isModuleList(lit, local[warpPackage]) {
-				list = lit
-			}
-			return list == nil
-		})
-	}
+	list := moduleList(f, local[warpPackage])
 	if list == nil {
 		return nil, false, errors.New(noList)
 	}
 	lists := func(pkg string) bool {
-		return slices.ContainsFunc(list.Elts, func(e ast.Expr) bool {
-			call, ok := e.(*ast.CallExpr)
-			if !ok {
-				return false
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok {
-				return false
-			}
-			x, ok := sel.X.(*ast.Ident)
-			return ok && local[pkg] != "" && x.Name == local[pkg] && sel.Sel.Name == "Module"
-		})
+		return slices.ContainsFunc(list.Elts, func(e ast.Expr) bool { return isModuleCall(e, local[pkg]) })
 	}
 	if !lists(dataPackage) {
 		return nil, false, errors.New("app/modules.go does not list data.Module(), which keeps the records; add it first in Modules(), import a database driver in main.go as weft create's template does, then run weft scaffold again.")

@@ -32,19 +32,6 @@ test("formProblem: a bug in the page's own code is logged, and is not a server o
   assert.equal(logged.mock.callCount(), 1)
 })
 
-test('formProblem: a 401 is a session that ended, and calls ended; nothing else does', () => {
-  let ended = 0
-  const end = () => ended++
-  assert.deepEqual(formProblem(new ApiError(401, 'unauthorized', 'Sign in to do that.'), end), { fields: {}, message: 'Sign in to do that.' })
-  assert.equal(ended, 1)
-  formProblem(new ApiError(403, 'forbidden', 'Your account cannot do that.'), end)
-  formProblem(new ApiError(0, 'network', 'Failed to fetch'), end)
-  formProblem(new ApiError(422, 'invalid', '1 field has a problem.', { name: 'This is already taken.' }), end)
-  assert.equal(ended, 1)
-  // Without ended, as the login form calls it, a 401 is only its message.
-  assert.deepEqual(formProblem(new ApiError(401, 'unauthorized', 'That email and password do not match.')), { fields: {}, message: 'That email and password do not match.' })
-})
-
 test('productId takes only an id as the server writes it', () => {
   assert.equal(productId('42'), 42)
   assert.equal(productId('9007199254740991'), 9007199254740991)

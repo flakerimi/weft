@@ -5,10 +5,17 @@
 // key's secret is shown once, as the server answers it once.
 import { onMounted, reactive, ref, useTemplateRef } from 'vue'
 import { sessionEnded, useSession, wireTimeText, type FormApi, type TableColumn } from '@weft/ui'
-import { api, schema, type APIKey, type ChangePasswordInput, type KeyInput, type NewKey, type ProfileInput, type SessionInfo } from '../.weft-types/api.ts'
+import { api, ApiError, schema, type APIKey, type ChangePasswordInput, type KeyInput, type NewKey, type ProfileInput, type SessionInfo } from '../.weft-types/api.ts'
 import { formProblem } from '../answers.ts'
 
 const { refresh, signOut } = useSession()
+
+// What a failed call shows. A 401 means the session ended while the page
+// was open: sessionEnded asks again and sends the visitor to sign in.
+function failed(e: unknown) {
+  if (e instanceof ApiError && e.status === 401) void sessionEnded()
+  return formProblem(e)
+}
 const when = (v: unknown) => wireTimeText(v, 'datetime')
 const roles = ['owner', 'administrator', 'member', 'viewer']
 
@@ -23,7 +30,7 @@ async function saveProfile(values: ProfileInput) {
     await refresh()
     profileSaid.value = 'Saved.'
   } catch (e) {
-    const { fields, message } = formProblem(e, sessionEnded)
+    const { fields, message } = failed(e)
     profileForm.value?.setErrors(fields)
     profileSaid.value = message
   }
@@ -43,7 +50,7 @@ async function changePassword(values: ChangePasswordInput) {
     changed.value = true
     await loadSessions()
   } catch (e) {
-    const { fields, message } = formProblem(e, sessionEnded)
+    const { fields, message } = failed(e)
     changeForm.value?.setErrors(fields)
     changeSaid.value = message
   }
@@ -63,7 +70,7 @@ async function loadSessions() {
   try {
     sessions.value = await api.auth.sessions()
   } catch (e) {
-    sessionsSaid.value = formProblem(e, sessionEnded).message
+    sessionsSaid.value = failed(e).message
   }
 }
 // Why signing out did not happen, such as a server out of reach.
@@ -77,7 +84,7 @@ async function endSession(s: SessionInfo) {
     await api.auth.endSession(s.id)
     await loadSessions()
   } catch (e) {
-    sessionsSaid.value = formProblem(e, sessionEnded).message
+    sessionsSaid.value = failed(e).message
   }
 }
 async function signOutEverywhere() {
@@ -86,7 +93,7 @@ async function signOutEverywhere() {
     await api.auth.logoutEverywhere()
     location.assign('/login')
   } catch (e) {
-    sessionsSaid.value = formProblem(e, sessionEnded).message
+    sessionsSaid.value = failed(e).message
   }
 }
 
@@ -110,7 +117,7 @@ async function loadKeys() {
   try {
     keys.value = await api.auth.keys()
   } catch (e) {
-    keysSaid.value = formProblem(e, sessionEnded).message
+    keysSaid.value = failed(e).message
   }
 }
 async function makeKey(values: KeyInput) {
@@ -121,7 +128,7 @@ async function makeKey(values: KeyInput) {
     Object.assign(key, { name: '', role: 'viewer', days: 90 })
     await loadKeys()
   } catch (e) {
-    const { fields, message } = formProblem(e, sessionEnded)
+    const { fields, message } = failed(e)
     keyForm.value?.setErrors(fields)
     keysSaid.value = message
   }
@@ -132,7 +139,7 @@ async function removeKey(k: APIKey) {
     await api.auth.removeKey(k.id)
     await loadKeys()
   } catch (e) {
-    keysSaid.value = formProblem(e, sessionEnded).message
+    keysSaid.value = failed(e).message
   }
 }
 async function copySecret() {

@@ -28,7 +28,7 @@ In a fresh clone `.weft/` is missing, and the Go module it holds with it: run `w
 | `.env`, `.env.sample` | The settings; `.env` is not committed, `.env.sample` is and says what each one is |
 | `web/pages/` | One page per `.vue` file; its path is the route. `products/[id].vue` is built once and served for every id |
 | `web/components/` | The islands (`LoginForm`, `SetupForm`, `RegisterForm`, `ForgotForm`, `PasswordForm`, `AccountPanel`, `UsersPanel`, `ProductsTable`, `ProductView`, `SessionBar`) and `ShopHeader` |
-| `web/answers.ts` | Plain rules with no Vue: `formProblem` (which calls `sessionEnded` on a 401 when given it) and `productId`. Who is signed in is `useSession()` from `@weft/ui`, and `Guard` and `perm` show by permission |
+| `web/answers.ts` | Plain rules with no Vue: `formProblem` and `productId`; a page's `catch` calls `sessionEnded()` from `@weft/ui` on a 401. Who is signed in is `useSession()` from `@weft/ui`, and `Guard` and `perm` show by permission |
 | `web/session-check.ts` | Fails the type check when the generated `Me` stops fitting `@weft/ui`'s `SessionUser` |
 | `test/` | `answers.test.ts` (Node's test runner, `pnpm test`), and `browser.mjs`, the browser test `cmd/weft/shop_test.go` runs |
 | `web/.weft-types/api.ts` | The typed client `weft gen` writes; every call to the server goes through it |
