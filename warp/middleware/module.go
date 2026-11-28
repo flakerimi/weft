@@ -47,8 +47,7 @@ type module struct {
 
 	// Set by Start.
 	requests *slog.Logger // nil while there is no request log
-	previous *previous
-	limit    *limiter // nil while there is no rate limit
+	limit    *limiter     // nil while there is no rate limit
 }
 
 func (m *module) Name() string { return "middleware" }
@@ -75,13 +74,16 @@ func (m *module) Start(ctx context.Context) error {
 	}
 	if format != "off" {
 		m.requests = logger(format, m.out)
-		m.previous = takeDefault(m.requests)
+		takeDefault(m.requests)
 	}
 	return nil
 }
 
-// Stop puts slog's default and the standard logger back as Start found them.
+// Stop gives slog's default to the newest app still running, or, when none
+// is, puts it and the standard logger back as the first Start found them.
 func (m *module) Stop(ctx context.Context) error {
-	m.previous.restore()
+	if m.requests != nil {
+		giveBack(m.requests)
+	}
 	return nil
 }

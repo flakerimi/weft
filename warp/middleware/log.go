@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -34,32 +36,57 @@ func logger(format string, w io.Writer) *slog.Logger {
 	return slog.New(slog.NewTextHandler(w, nil))
 }
 
-// previous is how slog's default and the standard logger were before Start
-// set them, for Stop to put back.
-type previous struct {
+// installs are the loggers the running apps' Starts made slog's default,
+// oldest first, and how slog's default and the standard logger were before
+// the first of them. slog's default is the process's already, so the
+// bookkeeping of who set it is too: this is the package's one variable, and
+// its mutex is why apps in one process, as an app's tests start them, may
+// start and stop in any order.
+var installs struct {
+	sync.Mutex
+	list  []*slog.Logger
 	slog  *slog.Logger
-	set   *slog.Logger // the one Start set
 	out   io.Writer
 	flags int
 }
 
 // takeDefault makes l slog's default, which the standard logger then writes
-// through too, and returns how they were.
-func takeDefault(l *slog.Logger) *previous {
-	p := &previous{slog: slog.Default(), set: l, out: log.Writer(), flags: log.Flags()}
+// through too.
+func takeDefault(l *slog.Logger) {
+	installs.Lock()
+	defer installs.Unlock()
+	if len(installs.list) == 0 {
+		installs.slog, installs.out, installs.flags = slog.Default(), log.Writer(), log.Flags()
+	}
+	installs.list = append(installs.list, l)
 	slog.SetDefault(l)
-	return p
 }
 
-// restore puts slog's default and the standard logger back, unless
-// something since has made another logger the default.
-func (p *previous) restore() {
-	if p == nil || slog.Default() != p.set {
+// giveBack takes l from the installs. If l is slog's default, the newest
+// logger left becomes it, or, with none left, slog's default and the
+// standard logger are put back as they were before the first; a default
+// something else has set since is left as it is.
+func giveBack(l *slog.Logger) {
+	installs.Lock()
+	defer installs.Unlock()
+	i := slices.Index(installs.list, l)
+	if i < 0 {
 		return
 	}
-	slog.SetDefault(p.slog)
-	log.SetOutput(p.out)
-	log.SetFlags(p.flags)
+	installs.list = slices.Delete(installs.list, i, i+1)
+	n := len(installs.list)
+	switch {
+	case slog.Default() != l:
+	case n > 0:
+		slog.SetDefault(installs.list[n-1])
+	default:
+		slog.SetDefault(installs.slog)
+		log.SetOutput(installs.out)
+		log.SetFlags(installs.flags)
+	}
+	if n == 0 {
+		installs.slog, installs.out = nil, nil
+	}
 }
 
 // logRequests writes one line per request once next has answered: method,

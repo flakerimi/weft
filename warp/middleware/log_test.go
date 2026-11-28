@@ -190,6 +190,55 @@ func TestDefaultLoggerFollows(t *testing.T) {
 	}
 }
 
+// TestAppsStoppedInAnyOrder starts two apps, A and then B, and stops them in
+// each order: the default is the newest app's still running, and the
+// process's own once both have stopped.
+func TestAppsStoppedInAnyOrder(t *testing.T) {
+	for _, order := range []string{"AB", "BA"} {
+		t.Run(order, func(t *testing.T) {
+			keepLogging(t)
+			before := slog.Default()
+			outs := map[byte]*lockedBuffer{'A': {}, 'B': {}}
+			apps := map[byte]*warp.App{}
+			for _, name := range []byte("AB") {
+				apps[name] = logApp(t, map[string]string{"LOG": "json"}, outs[name])
+				if err := apps[name].Start(context.Background()); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// says writes a line and answers which app's log it went to.
+			says := func(msg string) string {
+				slog.Info(msg)
+				var in string
+				for name, out := range outs {
+					if strings.Contains(out.String(), msg) {
+						in += string(name)
+					}
+				}
+				return in
+			}
+			if got := says("both running"); got != "B" {
+				t.Fatalf("with A and B running, slog's default writes to %q, want B", got)
+			}
+			first, second := order[0], order[1]
+			apps[first].Stop(context.Background())
+			if got := says("one stopped"); got != string(second) {
+				t.Errorf("after %c stopped, slog's default writes to %q, want %c, which still runs", first, got, second)
+			}
+			apps[second].Stop(context.Background())
+			if slog.Default() != before {
+				t.Errorf("after both stopped, slog's default is not the one before; a line goes to %q", says("both stopped"))
+			}
+			var b bytes.Buffer
+			log.SetOutput(&b)
+			log.Print("plain")
+			if !strings.HasSuffix(b.String(), "plain\n") || strings.Contains(b.String(), "{") {
+				t.Errorf("after both stopped the standard logger writes %q", b.String())
+			}
+		})
+	}
+}
+
 func TestStopPutsTheLoggerBack(t *testing.T) {
 	keepLogging(t)
 	before := slog.Default()
