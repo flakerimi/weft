@@ -845,7 +845,7 @@ func TestScaffoldedPagesInBrowser(t *testing.T) {
 	if code, out, errs := build(t); code != 0 {
 		t.Fatalf("weft build: exit %d: %s%s", code, out, errs)
 	}
-	url, token := startApp(t, filepath.Join(app, "myapp"), app)
+	url, token, _ := startApp(t, filepath.Join(app, "myapp"), app)
 	for path, want := range map[string]string{
 		"/products":    `<weft-island data-id="ProductsTable"`,
 		"/products/42": `data-weft-route="/products/:id"`,

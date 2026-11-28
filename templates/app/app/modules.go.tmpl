@@ -6,15 +6,18 @@ import (
 	"github.com/flakerimi/weft/warp/auth"
 	"github.com/flakerimi/weft/warp/data"
 	"github.com/flakerimi/weft/warp/mail"
+	"github.com/flakerimi/weft/warp/middleware"
 
 	"[[.Module]]/app/hello"
 )
 
-// Modules is the one list of the app's modules, in the order they start: the
-// database first, since the login keeps its users in it. weft scaffold adds
-// each resource it makes at the end.
+// Modules is the one list of the app's modules, in the order they start:
+// middleware first, so every line the others log is in its format; then the
+// database, since the login keeps its users in it, and mail, which sends the
+// login's links. weft scaffold adds each resource it makes at the end.
 func Modules() []warp.Module {
 	return []warp.Module{
+		middleware.Module(),
 		data.Module(),
 		mail.Module(),
 		auth.Module(),

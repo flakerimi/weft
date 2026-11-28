@@ -44,12 +44,14 @@ type devRun struct {
 	code           int
 }
 
-// withoutSetupLink is a log without the line auth writes at its start while
-// no user exists, Set up the owner at …/setup#token=….
-func withoutSetupLink(log string) string {
+// withoutRoutineLines is a log without the lines a created app writes in
+// every run: the mail module's at its start (mail is printed, not sent …),
+// auth's while no user exists (Set up the owner at …/setup#token=…), and the
+// middleware's request log, one line per request (msg=request …).
+func withoutRoutineLines(log string) string {
 	var kept []string
 	for _, l := range strings.SplitAfter(log, "\n") {
-		if !strings.Contains(l, "Set up the owner at ") {
+		if !strings.Contains(l, "Set up the owner at ") && !strings.Contains(l, "mail is printed, not sent;") && !strings.Contains(l, " msg=request ") {
 			kept = append(kept, l)
 		}
 	}
