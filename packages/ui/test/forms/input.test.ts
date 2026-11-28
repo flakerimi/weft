@@ -38,6 +38,19 @@ describe('Input', () => {
     expect(input.className).toBe('weft-input__field')
     expect(input.type).toBe('text')
     expect(input.value).toBe('')
+    expect(input.id).toMatch(/^input-/)
+  })
+
+  it('updates the DOM id when the id prop changes after mount, falling back to a generated id when cleared', async () => {
+    const m = cases({ case: 'model' })
+    const input = m.el.querySelector<HTMLInputElement>('.dynamic-id input')!
+    expect(input.id).toBe('first')
+    m.exposed.dynamicId = 'second'
+    await nextTick()
+    expect(input.id).toBe('second')
+    m.exposed.dynamicId = undefined
+    await nextTick()
+    expect(input.id).toMatch(/^input-/)
   })
 
   it('gives attributes to the input, and class and style to the box', () => {
@@ -49,6 +62,7 @@ describe('Input', () => {
     expect(input.getAttribute('autocomplete')).toBe('email')
     expect(input.getAttribute('aria-label')).toBe('Find')
     expect(input.getAttribute('name')).toBe('q')
+    expect(input.id).toMatch(/^input-/)
     expect(input.hasAttribute('class') && input.classList.contains('wide')).toBe(false)
     expect(input.hasAttribute('style')).toBe(false)
   })

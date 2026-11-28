@@ -58,7 +58,7 @@ Scaffolded product as products:
 Wrote web/.weft-types/api.ts
 ```
 
-`app/products/` is the model, `Product`, and `data.Resource`, which answers `GET`, `POST`, `PATCH` and `DELETE` under `/api/products`, each behind the owner's login; `app/modules.go` lists it last; and `weft gen` has written `api.products.list()`, `show`, `create`, `update` and `remove` into the client, with the form rules in `schema.ProductInput`. `go test ./...` runs the story test it wrote, over a database of its own. Without `--api` it also writes the pages `/products`, a `DataTable` that searches, sorts, filters and pages on the server and makes, changes and deletes products in an `EntityDialog`, and `/products/<id>`. Every type and modifier is in [weft scaffold](../reference/cli.md#weft-scaffold).
+`app/products/` is the model, `Product`, and `data.Resource`, which answers `GET`, `POST`, `PATCH` and `DELETE` under `/api/products`, each behind the owner's login; `app/modules.go` lists it last; and `weft gen` has written `api.products.list()`, `show`, `create`, `update` and `remove` into the client, with the form rules in `schema.ProductInput`. `go test ./...` runs the story test it wrote, over a database of its own. Without `--api` it also writes the pages `/products`, a `DataTable` that searches, sorts, filters and pages on the server and makes, changes and deletes products in an `EntityDialog`, and `/products/<id>`. Every type and modifier is in [weft scaffold](../reference/scaffold.md).
 
 ## Run it
 

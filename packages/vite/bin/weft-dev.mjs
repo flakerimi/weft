@@ -9,7 +9,7 @@
 // which it does by default from Node 22.18.
 import { parseArgs } from 'node:util'
 
-const usage = 'usage: weft-dev --root <site> [--port n] [--host h] [--api <url>] [--theme neutral|lisa|weft] [--exit-with-parent]'
+const usage = 'usage: weft-dev --root <site> [--port n] [--host h] [--api <url>] [--theme neutral|lisa|weft|synthwave|editor|sandstorm] [--exit-with-parent]'
 
 function fail(message, code = 1) {
   process.stderr.write(`weft dev: ${message}\n${code === 2 ? usage + '\n' : ''}`)

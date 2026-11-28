@@ -41,7 +41,7 @@ const commands = [
 
 <template>
   <div class="site">
-    <SiteHeader current="agents" path="/skills" menu="skills-nav" />
+    <SiteHeader current="agents" path="/skills" menu="skills-nav" :themes="false" />
     <div class="docs">
       <SkillsNav current="/skills" />
       <Page id="main" class="docs-page">

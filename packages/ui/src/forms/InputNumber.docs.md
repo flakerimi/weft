@@ -23,4 +23,5 @@ With `wheel`, the wheel steps it, but only while it has focus.
 `decrement-label` and `increment-label` ("Decrease", "Increase"), disabled at
 the bounds, and a press keeps focus where it was. The input is a text input
 with `role="spinbutton"` and `inputmode="decimal"`, carrying
-`aria-valuenow`, `aria-valuemin` and `aria-valuemax`.
+`aria-valuenow`, `aria-valuemin` and `aria-valuemax`. Outside a FormField,
+with no `id` prop, it takes a generated id.

@@ -1,7 +1,7 @@
 ---
 title: Login
 description: The auth module - the owner's setup link, sessions kept in a table, four roles with permissions, API keys, useSession, perm and Guard in Vue, the limits on guessing, and what it does not protect against.
-order: 25
+order: 26
 ---
 
 On this page you learn how an app signs people in with the `auth` module, `github.com/flakerimi/weft/warp/auth`: the owner is set up once, everyone signs in with an email and a password, and each sign-in is a session kept in a table and named by a signed cookie, which guarded routes check on every request. People other than the owner come by invitation or sign-up, which [Accounts](accounts.md) covers. What the login does not do is at the [end of this page](#what-it-does-not-protect-against).

@@ -1,7 +1,7 @@
 ---
 title: Middleware
 description: The middleware module - security headers on every answer, one log line per request, and a rate limit per client on the API.
-order: 28
+order: 29
 ---
 
 On this page you learn what the `middleware` module, `github.com/flakerimi/weft/warp/middleware`, adds to an app: security headers on every answer, one log line per request, and a rate limit on `/api`. An app `weft create` makes lists `middleware.Module()` first in `app/modules.go`, so the lines the other modules log at their start, the owner's setup link included, are in its format. It needs no other module.

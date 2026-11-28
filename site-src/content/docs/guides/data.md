@@ -1,7 +1,7 @@
 ---
 title: Data
 description: Records in SQLite through warp/data - a model, its table made at start, the five routes of a resource, lists with paging, sorting, search and filters, transactions and SQL of your own.
-order: 24
+order: 25
 ---
 
 On this page you learn how an app keeps its records: the `data` module opens the database and makes the tables, a store keeps one model in one table, and `data.Resource` gives it five routes. The package is `github.com/flakerimi/weft/warp/data`, on `database/sql` with no ORM. SQLite is the one engine today. The examples are from the shop in the repository's `examples/shop`.

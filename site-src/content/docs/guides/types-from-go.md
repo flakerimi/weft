@@ -1,7 +1,7 @@
 ---
 title: Types from Go
 description: weft gen writes the TypeScript types, a typed function per route and the form rules from the app's Go types, so a renamed Go field is a type error in the page.
-order: 29
+order: 30
 ---
 
 On this page you learn how the Vue side of an app calls its Go API with no fetch written by hand: `weft gen` asks the app to describe its routes and types and writes `web/.weft-types/api.ts`, which the pages import. A renamed Go field is then a TypeScript error in every page that reads it.
@@ -83,7 +83,7 @@ try {
 }
 ```
 
-Every rejection is an `ApiError`, with `status`, `code`, `message` and `fields` from the [error shape](routes.md#errors). When nothing could be sent, the status is 0 and the code `network`. What the server would misread is refused before anything is sent, with status 0 and code `bad_request`: a path parameter that is empty, `.` or `..`, which would reach another route (`The id in the address cannot be empty, "." or "..".`), or is not well-formed text; a path or query parameter that is `undefined`, `null` or not a finite number (`The id in the address is NaN; give it a value.`); and a body with `NaN`, an infinity or a `bigint` (`fields: { price: 'Send a number.' }`) or an `undefined` in a list, which JSON would send as `null`. A failure that is not in the error shape has the code `http` and the status's text.
+Every rejection is an `ApiError`, with `status`, `code`, `message` and `fields` from the [error shape](validation.md#errors). When nothing could be sent, the status is 0 and the code `network`. What the server would misread is refused before anything is sent, with status 0 and code `bad_request`: a path parameter that is empty, `.` or `..`, which would reach another route (`The id in the address cannot be empty, "." or "..".`), or is not well-formed text; a path or query parameter that is `undefined`, `null` or not a finite number (`The id in the address is NaN; give it a value.`); and a body with `NaN`, an infinity or a `bigint` (`fields: { price: 'Send a number.' }`) or an `undefined` in a list, which JSON would send as `null`. A failure that is not in the error shape has the code `http` and the status's text.
 
 Requests go to the page's own origin, with its cookies. `setBase(url)` puts a path prefix, or an absolute URL of that same origin, in front of every path; an API on another origin is not supported yet.
 

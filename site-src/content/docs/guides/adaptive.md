@@ -1,7 +1,7 @@
 ---
 title: The adaptive model
 description: How Weft's components adapt to touch or pointer, landing or app, and the width they have.
-order: 32
+order: 33
 ---
 
 On this page you learn the three things every Weft component adapts to, how it learns them, and how to set them for part of a page. You write one component; it does not have a mobile version.

@@ -12,7 +12,7 @@ import { request as httpsRequest } from 'node:https'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer, isCSSRequest, normalizePath, type Plugin, type ViteDevServer } from 'vite'
-import { contentType, CSS_MODULE, dropStaticComments } from './build.ts'
+import { contentType, CSS_MODULE, dropStaticComments, URL_QUERY } from './build.ts'
 import { siteConfig } from './config.ts'
 import { escapeHTML, iconTags, pageHTML, readStyles, THEMES, VIEW_TRANSITION, type Theme } from './document.ts'
 import { renderPage } from './render.ts'
@@ -39,6 +39,16 @@ export interface DevServer {
 }
 
 const WHO = 'weft dev'
+
+/** The path the dev server serves a stylesheet's id at: from the root, or under /@fs/ outside it, its query gone but for others than ?url. */
+function devURL(root: string, id: string): string {
+  const q = id.indexOf('?')
+  const file = id.slice(0, q)
+  const rest = id.slice(q + 1).split('&').filter((p) => p && !/^url(?:=|$)/.test(p))
+  const name = relative(root, file).split(sep).join('/')
+  const path = name.startsWith('..') || isAbsolute(name) ? `/@fs${normalizePath(file)}` : `/${name}`
+  return rest.length ? `${path}?${rest.join('&')}` : path
+}
 /** The module that hydrates islands, run in the browser from source. */
 const RUNTIME = normalizePath(fileURLToPath(new URL('./island-runtime.ts', import.meta.url)))
 /** The module script of a page with islands: `?i=` names them, as base64url JSON of name → file. */
@@ -90,12 +100,21 @@ export async function devSite(opts: DevOptions): Promise<DevServer> {
       if (id.startsWith(ISLANDS + '?')) return '\0' + id
       if (id.startsWith(RESOLVED_ISLANDS + '?')) return id
     },
-    load(id) {
-      if (id.startsWith(RESOLVED_ISLANDS + '?')) return islandsModule(id, known)
-      // As in the build, the browser gets no stylesheet: the page's <style>
-      // holds the CSS of all it renders, its islands' included. A CSS module
-      // keeps its class names, the server's, and adds rules the page has.
-      if (this.environment.name === 'client' && isCSSRequest(id) && !CSS_MODULE.test(id)) return { code: '' }
+    load: {
+      // Before any other plugin's, as in the build: a plugin that makes a
+      // stylesheet and answers any query on it still gives the page its URL.
+      order: 'pre',
+      handler(id) {
+        if (id.startsWith(RESOLVED_ISLANDS + '?')) return islandsModule(id, known)
+        // A stylesheet a page links by its URL (x.css?url) is served by Vite at
+        // its own path, as the browser asks for a stylesheet (?direct).
+        if (this.environment.name === 'ssr' && isCSSRequest(id) && URL_QUERY.test(id)) return `export default ${JSON.stringify(devURL(root, id))}`
+        // As in the build, the browser gets no stylesheet: the page's <style>
+        // holds the CSS of all it renders, its islands' included. A CSS module
+        // keeps its class names, the server's, and adds rules the page has.
+        // A stylesheet the browser asks for itself is the one exception.
+        if (this.environment.name === 'client' && isCSSRequest(id) && !CSS_MODULE.test(id) && !/[?&]direct\b/.test(id)) return { code: '' }
+      },
     },
     // Last, after @vitejs/plugin-vue's: every page is rendered on request, so
     // a reload is always right, and no module is replaced in place.

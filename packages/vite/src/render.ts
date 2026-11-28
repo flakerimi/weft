@@ -2,7 +2,7 @@ import { existsSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { createServer, isCSSRequest, normalizePath, type EnvironmentModuleNode, type ViteDevServer } from 'vite'
+import { createServer, isCSSRequest, normalizePath, type EnvironmentModuleNode, type Plugin, type ViteDevServer } from 'vite'
 import { siteConfig } from './config.ts'
 import { exportsOf, importsOf, sideEffectFree } from './imports.ts'
 import { sfcName } from './plugin.ts'
@@ -68,11 +68,13 @@ export interface PageFile {
 /**
  * A Vite dev server in middleware mode for rendering the site's pages: the
  * site's own `vite.config` if it has one, plus what server rendering needs.
- * `mode` is what the pages see as `import.meta.env.MODE`. Close it when done.
+ * `mode` is what the pages see as `import.meta.env.MODE`; `plugins` come after
+ * the site's own. Close it when done.
  */
-export async function createRenderServer(root: string, mode = 'development'): Promise<ViteDevServer> {
+export async function createRenderServer(root: string, mode = 'development', plugins: Plugin[] = []): Promise<ViteDevServer> {
   return createServer(
     await siteConfig(resolve(root), { command: 'serve', mode }, {
+      plugins,
       appType: 'custom',
       logLevel: 'error',
       server: { middlewareMode: true, ws: false },

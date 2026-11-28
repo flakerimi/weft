@@ -1,7 +1,7 @@
 ---
 title: Mail
 description: The mail module - printed to the log while you build, sent over SMTP once configured, from a queue in memory; templates for text and HTML; and mailtest for tests.
-order: 27
+order: 28
 ---
 
 On this page you learn how an app sends mail with the `mail` module, `github.com/flakerimi/weft/warp/mail`. The [login](login.md) mails its invitation, sign-up and reset links through it, and your own modules can too. While you build, it prints each message to the app's log; set `MAIL=smtp` and it sends them.

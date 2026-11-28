@@ -128,7 +128,8 @@ container, so a grid in a side panel lays out narrow on a big screen.
 
 A theme is one token file: colours for light and dark, radius, spacing, type,
 motion. Weft ships `neutral`, `lisa` (generated from LisaOS's token
-contract) and `weft` (weft.base.al's). Components read only `--weft-*` custom properties, so a brand is a
+contract), `weft` (weft.base.al's), and `synthwave`, `editor` and
+`sandstorm`, which weft.base.al's Theme menu shows off. Components read only `--weft-*` custom properties, so a brand is a
 stylesheet, not a fork. Want Tailwind for your own components? Import
 `@weft/themes/tailwind.css` and its colours are Weft's.
 
@@ -138,7 +139,7 @@ Pre-alpha. What exists today:
 
 - `weft` CLI (`create`, `dev`, `build`, `gen`, `routes`, `unpack`,
   `upgrade`, `catalog`, `version`, `update`), which carries Weft's packages, and the curl installer
-- tokens and the `neutral`, `lisa` and `weft` themes
+- tokens and six themes: `neutral`, `lisa`, `weft`, `synthwave`, `editor` and `sandstorm`
 - the adaptive core: `useWeft`, `WeftProvider`, `useWidth`
 - the Vapor components of `@weft/ui`, from layout and forms to dates,
   overlays, navigation and a table, on a headless layer for focus, dismissal,

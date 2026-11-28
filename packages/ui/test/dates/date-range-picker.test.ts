@@ -45,6 +45,8 @@ describe('DateRangePicker', () => {
       expect(start!.value).toBe('21/11/2026')
       expect(end!.value).toBe('25/11/2026')
       expect($('label').getAttribute('for')).toBe(start!.id)
+      expect(end!.id).toMatch(/^date-range-.*-end$/)
+      expect(end!.id).not.toBe(start!.id)
       expect(nameOf(start!)).toBe('Stay Start date')
       expect(nameOf(end!)).toBe('Stay End date')
       expect(start!.getAttribute('aria-describedby')).toBe($('.weft-form-field__description').id)
@@ -52,6 +54,16 @@ describe('DateRangePicker', () => {
       expect(button().getAttribute('aria-haspopup')).toBe('dialog')
       // (ICU puts thin spaces round the dash, or none, by version.)
       expect(button().getAttribute('aria-label')!.replace(/\s*–\s*/g, '–')).toBe('Choose dates, 21–25 November 2026')
+    })
+
+    it('gives every element a unique id when standalone outside a FormField', async () => {
+      await cases({ standalone: true })
+      const withId = $$('[id]')
+      const ids = withId.map((el) => el.id)
+      expect(new Set(ids).size).toBe(ids.length)
+      const [start, end] = fields()
+      expect(start!.id).toMatch(/^date-range-.*-start$/)
+      expect(end!.id).toMatch(/^date-range-.*-end$/)
     })
 
     it('reads typed dates in the locale, refusing an end before the start', async () => {

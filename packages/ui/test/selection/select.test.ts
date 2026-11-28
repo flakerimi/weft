@@ -305,6 +305,7 @@ describe('Select', () => {
         expect(active()).toBe(search)
         expect(search.getAttribute('role')).toBe('combobox')
         expect(search.getAttribute('aria-controls')).toBe(list().id)
+        expect(search.id).toBe(`${list().id}-search`)
         expect(px(getComputedStyle(named('Apple')).minBlockSize)).toBe(48)
         type(search, 'err')
         await settle()

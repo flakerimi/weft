@@ -44,7 +44,7 @@ The login works today, with four roles, sessions, invitations, sign-up, password
 
 ## Scaffolding and app blocks
 
-`weft scaffold`, the app template, `DataTable` (server-side paging, sorting, debounced search and filtering over the list shape) and `EntityDialog` (creating and editing records from a form schema, dates and times included) work today ([CLI](reference/cli.md#weft-scaffold), [Components](/components)).
+`weft scaffold`, the app template, `DataTable` (server-side paging, sorting, debounced search and filtering over the list shape) and `EntityDialog` (creating and editing records from a form schema, dates and times included) work today ([weft scaffold](reference/scaffold.md), [Components](/components)).
 
 ## The browser's rules and Go's
 

@@ -1,7 +1,7 @@
 ---
 title: Accounts
 description: People other than the owner - who may join, invitations, sign-up, password reset by a mailed link, and the routes that manage users.
-order: 26
+order: 27
 ---
 
 On this page you learn how people other than the owner get an account: by an invitation an owner or administrator sends, by signing up when the app allows it, and how anyone gets back in with a password reset. Each is a link the [mail](mail.md) module sends, to one page that sets a password and signs in. Signing in, roles and sessions are on the [Login](login.md) page.
