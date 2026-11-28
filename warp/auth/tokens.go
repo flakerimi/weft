@@ -453,6 +453,8 @@ func isInvalid(err error) bool {
 
 // invite makes an invitation of an address with a role no higher than the
 // inviter's, replacing an earlier one for the address, and mails its link.
+// An earlier invitation is replaced only as removing it could be: one for a
+// role above the inviter's is theirs to keep.
 func (m *module) invite(ctx context.Context, in InviteInput) (Invitation, error) {
 	actor, _ := UserOf(ctx)
 	if m.registration == registrationClosed {
@@ -467,6 +469,16 @@ func (m *module) invite(ctx context.Context, in InviteInput) (Invitation, error)
 	} else if found {
 		return Invitation{}, warp.Invalid(map[string]string{"email": errHasAccount})
 	}
+	higher := func(ctx context.Context) error {
+		old, found, err := m.invitations.First(ctx, "email", email)
+		if err == nil && found && above(old.Role, actor.Role) {
+			err = warp.Forbidden(errHigherInvitation)
+		}
+		return err
+	}
+	if err := higher(ctx); err != nil {
+		return Invitation{}, err
+	}
 	if m.invitePerUser.take(strconv.FormatInt(actor.ID, 10)) == nil {
 		return Invitation{}, warp.TooMany(errTooManyInvites)
 	}
@@ -477,6 +489,9 @@ func (m *module) invite(ctx context.Context, in InviteInput) (Invitation, error)
 		return Invitation{}, err
 	}
 	err = m.db.Tx(ctx, func(ctx context.Context) error {
+		if err := higher(ctx); err != nil { // again, as another inviter may have come between
+			return err
+		}
 		if _, err := m.invitations.DeleteBy(ctx, "email", email); err != nil {
 			return err
 		}

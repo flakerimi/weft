@@ -805,3 +805,27 @@ func TestRemoveInvitationByRank(t *testing.T) {
 	admin.Delete(fmt.Sprintf("/api/auth/invitations/%d", peer.ID)).Want(204)
 	c.Delete(fmt.Sprintf("/api/auth/invitations/%d", boss.ID)).Want(204)
 }
+
+// Final review M1: inviting an address again replaces its invitation only as
+// removing it could, so an administrator cannot void an owner's invitation
+// for a higher role by inviting the address lower; a peer's they may.
+func TestReinviteByRank(t *testing.T) {
+	c, _ := startAuth(t, authEnv(t))
+	authtest.Owner(t, c)
+	admin, _ := authtest.As(t, c, auth.RoleAdministrator)
+	c.Post("/api/auth/invitations", map[string]string{"email": "boss@example.com", "role": "owner"}).Want(201)
+	boss := mailtest.Last(t, c.App, "boss@example.com")
+	wantError(t, admin.Post("/api/auth/invitations", map[string]string{"email": "boss@example.com", "role": "member"}), 403, "forbidden", "Your account cannot remove an invitation for a higher role.")
+	var info auth.TokenInfo
+	tokenInfo(c, mailtest.Token(t, boss)).Want(200).JSON(&info)
+	if info.Purpose != "invite" || info.Role != auth.RoleOwner {
+		t.Fatalf("the owner's invitation is now %+v", info)
+	}
+
+	c.Post("/api/auth/invitations", map[string]string{"email": "peer@example.com", "role": "administrator"}).Want(201)
+	mailtest.Last(t, c.App, "peer@example.com")
+	admin.Post("/api/auth/invitations", map[string]string{"email": "peer@example.com", "role": "member"}).Want(201)
+	if msg := mailtest.Last(t, c.App, "peer@example.com"); !strings.Contains(msg.Text, "as member") {
+		t.Fatalf("the peer's new invitation says %q", msg.Text)
+	}
+}
