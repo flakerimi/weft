@@ -129,6 +129,8 @@ func assertCreated(t *testing.T, dir string) {
 		"go.sum", "web/pages/login.vue", "web/pages/setup.vue", "web/components/LoginForm.vue", "web/components/SetupForm.vue", "web/answers.ts",
 		"web/pages/register.vue", "web/pages/forgot.vue", "web/pages/password.vue", "web/components/RegisterForm.vue", "web/components/ForgotForm.vue", "web/components/PasswordForm.vue",
 		"web/session-check.ts",
+		// The account and users pages, and the front page's links to them.
+		"web/pages/account.vue", "web/pages/users.vue", "web/components/AccountPanel.vue", "web/components/UsersPanel.vue", "web/components/AccountLinks.vue",
 	} {
 		if !exists(t, filepath.Join(dir, p)) {
 			t.Errorf("%s is missing", p)
@@ -835,13 +837,16 @@ func TestCreatedAppIsTheFrame(t *testing.T) {
 		"/register": `<weft-island data-id="RegisterForm"`,
 		"/forgot":   `<weft-island data-id="ForgotForm"`,
 		"/password": `<weft-island data-id="PasswordForm"`,
+		"/account":  `<weft-island data-id="AccountPanel"`,
+		"/users":    `<weft-island data-id="UsersPanel"`,
 	} {
 		code, body := get(t, url+path)
 		if code != 200 || !strings.Contains(body, want) {
 			t.Errorf("GET %s = %d, want 200 with %q: %s", path, code, want, body)
 		}
-		// /password draws its form only once the browser has read the link.
-		if path != "/" && path != "/password" && (!postForm.MatchString(body) || !guardsSubmit(t, body)) {
+		// /password draws its form only once the browser has read the link,
+		// and /account and /users theirs once the session is known.
+		if path != "/" && path != "/password" && path != "/account" && path != "/users" && (!postForm.MatchString(body) || !guardsSubmit(t, body)) {
 			t.Errorf("GET %s: the form is not a POST form behind the inline submit guard: %s", path, body)
 		}
 	}
